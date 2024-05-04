@@ -7,10 +7,10 @@ from numpy import ndarray
 from typing import List
 from tqdm.auto import tqdm
 
-from causallearn.graph.GraphClass import CausalGraph
-from causallearn.utils.PCUtils.BackgroundKnowledge import BackgroundKnowledge
-from causallearn.utils.PCUtils.Helper import append_value
-from causallearn.utils.cit import CIT
+from traderpy.causal.graph.common.graph.GraphClass import CausalGraph
+from traderpy.causal.graph.common.utils.pc_utils.BackgroundKnowledge import BackgroundKnowledge
+from traderpy.causal.graph.common.utils.pc_utils.Helper import append_value
+from traderpy.causal.graph.common.utils.CIT import CIT
 
 
 def skeleton_discovery(

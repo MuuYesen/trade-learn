@@ -1,9 +1,9 @@
 import numpy as np
 
-from causallearn.graph.Dag import Dag
-from causallearn.graph.Edge import Edge
-from causallearn.graph.Endpoint import Endpoint
-from causallearn.graph.GeneralGraph import GeneralGraph
+from traderpy.causal.graph.common.graph.Dag import Dag
+from traderpy.causal.graph.common.graph.Edge import Edge
+from traderpy.causal.graph.common.graph.Endpoint import Endpoint
+from traderpy.causal.graph.common.graph.GeneralGraph import GeneralGraph
 
 
 def dag2cpdag(G: Dag) -> GeneralGraph:

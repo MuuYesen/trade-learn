@@ -16,9 +16,9 @@ from .Endpoint import Endpoint
 from .GeneralGraph import GeneralGraph
 from .GraphNode import GraphNode
 from .Node import Node
-from ..utils.GraphUtils import GraphUtils
-from ..utils.PCUtils.Helper import list_union, powerset
-from ..utils.cit import CIT
+from traderpy.causal.graph.common.utils.GraphUtils import GraphUtils
+from traderpy.causal.graph.common.utils.pc_utils.Helper import list_union, powerset
+from traderpy.causal.graph.common.utils.CIT import CIT
 
 
 class CausalGraph:

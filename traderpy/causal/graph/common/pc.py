@@ -7,14 +7,14 @@ from typing import Dict, List, Tuple
 import networkx as nx
 from numpy import ndarray
 
-from .common.graph.GraphClass import CausalGraph
-from .common.utils.PCUtils.BackgroundKnowledge import BackgroundKnowledge
-from .common.utils.cit import *
-from .common.utils.PCUtils import Helper, Meek, SkeletonDiscovery, UCSepset
-from .common.utils.PCUtils.BackgroundKnowledgeOrientUtils import orient_by_background_knowledge
+from .graph.GraphClass import CausalGraph
+from .utils.pc_utils.BackgroundKnowledge import BackgroundKnowledge
+from .utils.CIT import *
+from .utils.pc_utils import Helper, Meek, SkeletonDiscovery, UCSepset
+from .utils.pc_utils.BackgroundKnowledgeOrientUtils import orient_by_background_knowledge
 
 
-def pc(
+def PC(
     data: ndarray, 
     alpha=0.05, 
     indep_test=fisherz, 

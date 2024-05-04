@@ -1,5 +1,5 @@
-from causallearn.graph.GraphClass import CausalGraph
-from causallearn.utils.PCUtils.BackgroundKnowledge import BackgroundKnowledge
+from traderpy.causal.graph.common.graph.GraphClass import CausalGraph
+from .BackgroundKnowledge import BackgroundKnowledge
 
 
 def orient_by_background_knowledge(cg: CausalGraph, background_knowledge: BackgroundKnowledge):

@@ -51,8 +51,6 @@ class LongBacktest:
         benchmark_ret = base_line.close.pct_change()
         quantstats.reports.html(returns, benchmark=benchmark_ret, output='stats.html', title='Stock Sentiment')
 
-        # cerebro.plot()  # no single no plot
-
 
 class Long(bt.Strategy):
 

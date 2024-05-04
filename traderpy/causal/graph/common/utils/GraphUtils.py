@@ -7,14 +7,14 @@ from typing import List, Tuple, Deque
 
 import pydot
 
-from causallearn.graph.AdjacencyConfusion import AdjacencyConfusion
-from causallearn.graph.ArrowConfusion import ArrowConfusion
-from causallearn.graph.Edge import Edge
-from causallearn.graph.Edges import Edges
-from causallearn.graph.Endpoint import Endpoint
-from causallearn.graph.Graph import Graph
-from causallearn.graph.Node import Node
-from causallearn.graph.NodeType import NodeType
+from traderpy.causal.graph.common.graph.AdjacencyConfusion import AdjacencyConfusion
+from traderpy.causal.graph.common.graph.ArrowConfusion import ArrowConfusion
+from traderpy.causal.graph.common.graph.Edge import Edge
+from traderpy.causal.graph.common.graph.Edges import Edges
+from traderpy.causal.graph.common.graph.Endpoint import Endpoint
+from traderpy.causal.graph.common.graph.Graph import Graph
+from traderpy.causal.graph.common.graph.Node import Node
+from traderpy.causal.graph.common.graph.NodeType import NodeType
 
 
 class GraphUtils:
@@ -467,46 +467,6 @@ class GraphUtils:
 
                 V.append(c)
                 Q.append(c)
-
-    @staticmethod
-    def to_pgv(G: Graph, title: str = ""):
-        # warnings.warn("GraphUtils.to_pgv() is deprecated", DeprecationWarning)
-        import pygraphviz as pgv
-        graphviz_g = pgv.AGraph(directed=True)
-        graphviz_g.graph_attr['label'] = title
-        graphviz_g.graph_attr['labelfontsize'] = 18
-        nodes = G.get_nodes()
-        for i, node in enumerate(nodes):
-            graphviz_g.add_node(i)
-            graphviz_g.get_node(i).attr['label'] = node.get_name()
-            if node.get_node_type() == NodeType.LATENT:
-                graphviz_g.get_node(i).attr['shape'] = 'square'
-
-        def get_g_arrow_type(endpoint):
-            if endpoint == Endpoint.TAIL:
-                return 'none'
-            elif endpoint == Endpoint.ARROW:
-                return 'normal'
-            elif endpoint == Endpoint.CIRCLE:
-                return 'odot'
-            else:
-                raise NotImplementedError()
-
-        for edge in G.get_graph_edges():
-            if not edge:
-                continue
-            node1 = edge.get_node1()
-            node2 = edge.get_node2()
-            node1_id = nodes.index(node1)
-            node2_id = nodes.index(node2)
-            graphviz_g.add_edge(node1_id, node2_id)
-            g_edge = graphviz_g.get_edge(node1_id, node2_id)
-            g_edge.attr['dir'] = 'both'
-
-            g_edge.attr['arrowtail'] = get_g_arrow_type(edge.get_endpoint1())
-            g_edge.attr['arrowhead'] = get_g_arrow_type(edge.get_endpoint2())
-
-        return graphviz_g
 
     @staticmethod
     def to_pydot(G: Graph, edges: List[Edge] | None = None, labels: List[str] | None = None, title: str = "", dpi: float = 200):

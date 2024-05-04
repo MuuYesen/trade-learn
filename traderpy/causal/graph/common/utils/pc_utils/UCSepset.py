@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from causallearn.graph.Edge import Edge
-from causallearn.graph.Endpoint import Endpoint
-from causallearn.graph.GraphClass import CausalGraph
-from causallearn.utils.PCUtils.BackgroundKnowledge import BackgroundKnowledge
-from causallearn.utils.PCUtils.Helper import sort_dict_ascending
+from traderpy.causal.graph.common.graph.Edge import Edge
+from traderpy.causal.graph.common.graph.Endpoint import Endpoint
+from traderpy.causal.graph.common.graph.GraphClass import CausalGraph
+from traderpy.causal.graph.common.utils.pc_utils.BackgroundKnowledge import BackgroundKnowledge
+from traderpy.causal.graph.common.utils.pc_utils.Helper import sort_dict_ascending
 
 
 def uc_sepset(cg: CausalGraph, priority: int = 3,

@@ -5,12 +5,11 @@ from typing import List
 import networkx as nx
 import numpy as np
 
-from causallearn.graph.Edge import Edge
-from causallearn.graph.Endpoint import Endpoint
-from causallearn.graph.GeneralGraph import GeneralGraph
-from causallearn.graph.Graph import Graph
-from causallearn.graph.Node import Node
-from causallearn.utils.GraphUtils import GraphUtils
+from .Edge import Edge
+from .Endpoint import Endpoint
+from .GeneralGraph import GeneralGraph
+from .Node import Node
+from traderpy.causal.graph.common.utils.GraphUtils import GraphUtils
 
 
 # Represents a directed acyclic graph--that is, a graph containing only

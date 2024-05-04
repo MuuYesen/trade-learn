@@ -7,10 +7,10 @@ from sklearn.gaussian_process.kernels import RBF
 from sklearn.gaussian_process.kernels import ConstantKernel as C
 from sklearn.gaussian_process.kernels import WhiteKernel
 
-from causallearn.utils.KCI.GaussianKernel import GaussianKernel
-from causallearn.utils.KCI.Kernel import Kernel
-from causallearn.utils.KCI.LinearKernel import LinearKernel
-from causallearn.utils.KCI.PolynomialKernel import PolynomialKernel
+from traderpy.causal.graph.common.utils.kci.GaussianKernel import GaussianKernel
+from traderpy.causal.graph.common.utils.kci.Kernel import Kernel
+from traderpy.causal.graph.common.utils.kci.LinearKernel import LinearKernel
+from traderpy.causal.graph.common.utils.kci.PolynomialKernel import PolynomialKernel
 
 
 # Cannot find reference 'xxx' in '__init__.pyi | __init__.pyi | __init__.pxd' is a bug in pycharm, please ignore

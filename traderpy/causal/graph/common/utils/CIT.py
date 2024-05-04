@@ -4,8 +4,8 @@ from math import log, sqrt
 from collections.abc import Iterable
 from scipy.stats import chi2, norm
 
-from causallearn.utils.KCI.KCI import KCI_CInd, KCI_UInd
-from causallearn.utils.PCUtils import Helper
+from .kci.KCI import KCI_CInd, KCI_UInd
+from .pc_utils import Helper
 
 CONST_BINCOUNT_UNIQUE_THRESHOLD = 1e5
 NO_SPECIFIED_PARAMETERS_MSG = "NO SPECIFIED PARAMETERS"
