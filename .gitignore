@@ -162,4 +162,4 @@ cython_debug/
 
 zoo_space/
 
-tests/
+traderpy/strategy/preprocess/
