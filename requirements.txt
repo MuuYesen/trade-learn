@@ -1,0 +1,9 @@
+numpy==1.24.3
+pandas
+scipy
+river
+statsmodels
+scikit-learn==1.2.2
+bokeh==3.4.1
+yfinance
+mootdx==0.11.4

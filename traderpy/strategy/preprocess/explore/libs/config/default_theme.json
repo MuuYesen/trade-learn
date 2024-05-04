@@ -1,0 +1,81 @@
+{
+    "figure": {
+        "figsize": [
+            30,
+            10
+        ],
+        "dpi": 150,
+        "facecolor": "#FFFFFF"
+    },
+    "axes": {
+        "grid": true,
+        "labelpad": 7.0,
+        "labelsize": 20,
+        "titlesize": 24,
+        "titlepad": 14.0,
+        "titleweight": "bold",
+        "titlecolor": "#4666ff",
+        "facecolor": "#f5f5f5",
+        "tick_params": {
+            "labelsize": 16,
+            "labelrotation": 0
+        }
+    },
+    "font": {
+        "family": "serif",
+        "serif": "Times New Roman"
+    },
+    "grid": {
+        "linewidth": 1,
+        "color": "#eaeaf2"
+    },
+    "ticks": {
+        "xtick": {
+            "labelsize": 16,
+            "major_pad": 4,
+            "color": "#000000"
+        },
+        "ytick": {
+            "labelsize": 16,
+            "major_pad": 4,
+            "color": "#000000"
+        }
+    },
+    "legend": {
+        "fontsize": 16,
+        "facecolor": "#f5f5f5",
+        "framealpha": 1,
+        "edgecolor": "#f5f5f5",
+        "title_fontsize": 18,
+        "shadow": true,
+        "fancybox": true
+    },
+    "lines": {
+        "linewidth": 3
+    },
+    "text": {
+        "color": "#000000"
+    },
+    "suptitle": {
+        "fontsize": 28,
+        "fontweight": "bold"
+    },
+    "line_colors": [
+        "#8ABDFF",
+        "#FF8AF8",
+        "#FFCC8A",
+        "#8AFF91",
+        "#FFCC8A",
+        "#FF958A",
+        "#111820",
+        "#7D82B8",
+        "#B8A08A",
+        "#82B87D",
+        "#B882B8",
+        "#B87D82",
+        "#8AB882",
+        "#828AB8",
+        "#7DB882",
+        "#B8B882"
+    ]
+}
