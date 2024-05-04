@@ -166,6 +166,8 @@ traderpy/strategy/preprocess/
 !traderpy/strategy/preprocess/derive
 !traderpy/strategy/preprocess/explore
 
+traderpy/automl/
+traderpy/mlops/
 traderpy/causal/inference/
 
 tests/res/
