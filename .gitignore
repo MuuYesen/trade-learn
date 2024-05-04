@@ -167,3 +167,5 @@ traderpy/strategy/preprocess/
 !traderpy/strategy/preprocess/explore
 
 traderpy/causal/inference/
+
+tests/res/
