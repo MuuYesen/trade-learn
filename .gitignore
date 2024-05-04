@@ -170,4 +170,7 @@ traderpy/automl/
 traderpy/mlops/
 traderpy/causal/inference/
 
+traderpy/strategy/backtest/fund.py
+traderpy/strategy/backtest/stop.py
+
 tests/res/
