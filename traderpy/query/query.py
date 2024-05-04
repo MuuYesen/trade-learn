@@ -7,9 +7,9 @@ from multiprocessing import Pool
 import yfinance as yf
 from mootdx.quotes import Quotes
 
-from traderpy.query.libs.alphas101 import Alphas101
-from traderpy.query.libs.alphas191 import Alphas191
-from traderpy.query.libs.mytt import MyTT
+from traderpy.query.common.alphas101 import Alphas101
+from traderpy.query.common.alphas191 import Alphas191
+from traderpy.query.common.mytt import MyTT
 
 
 class Query:

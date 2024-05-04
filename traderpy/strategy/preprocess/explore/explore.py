@@ -1,6 +1,6 @@
 from ydata_profiling import ProfileReport
-from traderpy.strategy.preprocess.explore.libs.ts_plot import TsPlot
-from traderpy.strategy.preprocess.explore.libs.mi_plot import MiPlot
+from traderpy.strategy.preprocess.explore.common.ts_plot import TsPlot
+from traderpy.strategy.preprocess.explore.common.mi_plot import MiPlot
 
 
 import os
@@ -35,7 +35,7 @@ class Explore:
                 vis.full_statistics_plot(ts_fea, save=True, save_path=path)
 
                 from jinja2 import Environment, FileSystemLoader
-                env = Environment(loader=FileSystemLoader(os.path.join(cur_dir_path, './libs/')))
+                env = Environment(loader=FileSystemLoader(os.path.join(cur_dir_path, 'common/')))
                 template = env.get_template('template.html')
                 result = template.render(name=ts_fea+"_Statistics_plot.png")
                 print(result)

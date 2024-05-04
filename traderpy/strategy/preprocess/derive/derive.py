@@ -1,4 +1,4 @@
-from traderpy.strategy.preprocess.derive.libs.gplearn import genetic, fitness, functions
+from traderpy.strategy.preprocess.derive.common.gplearn import genetic, fitness, functions
 
 
 class Derive:
