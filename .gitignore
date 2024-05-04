@@ -173,4 +173,6 @@ traderpy/causal/inference/
 traderpy/strategy/backtest/fund.py
 traderpy/strategy/backtest/stop.py
 
+traderpy/trader/extension/
+
 tests/res/
