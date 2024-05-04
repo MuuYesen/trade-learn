@@ -45,7 +45,10 @@ class Webapp:
 
             # set document template
             now = datetime.now()
-            env = Environment(loader=PackageLoader('btplotting', 'templates'))
+            import os
+            cur_dir_path = os.path.abspath(os.path.dirname(__file__))
+            from jinja2 import Environment, FileSystemLoader
+            env = Environment(loader=FileSystemLoader(os.path.join(cur_dir_path, 'templates')))
             templ = env.get_template(self._html_template)
             templ.globals['now'] = now.strftime('%Y-%m-%d %H:%M:%S')
             doc.template = templ
