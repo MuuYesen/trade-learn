@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from causallearn.graph.Edge import Edge
-from causallearn.graph.Endpoint import Endpoint
-from causallearn.graph.GraphClass import CausalGraph
-from causallearn.utils.PCUtils.BackgroundKnowledge import BackgroundKnowledge
+from traderpy.causal.graph.common.graph.Edge import Edge
+from traderpy.causal.graph.common.graph.Endpoint import Endpoint
+from traderpy.causal.graph.common.graph.GraphClass import CausalGraph
+from .BackgroundKnowledge import BackgroundKnowledge
 
 
 def meek(cg: CausalGraph, background_knowledge: BackgroundKnowledge | None = None) -> CausalGraph:

@@ -5,10 +5,10 @@
  @File    : independence_condition_test.py
  """
 
-from .chi_square_test import chi_square_test
-from .fisher_z_test import cond_indep_fisher_z
-from .chi_square_test import chi_square
-from .common.g2test import g2_test_dis
+from .cit.chi_square_test import chi_square_test
+from .cit.fisher_z_test import cond_indep_fisher_z
+from .cit.chi_square_test import chi_square
+from .cit.g2test import g2_test_dis
 
 
 def cond_indep_test(data, target, var, cond_set=[], is_discrete=True, alpha=0.01):

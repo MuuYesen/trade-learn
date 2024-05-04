@@ -1,14 +1,14 @@
 from typing import Optional
-from causallearn.score.LocalScoreFunctionClass import LocalScoreClass
-from causallearn.graph.GeneralGraph import GeneralGraph
-from causallearn.graph.GraphNode import GraphNode
-from causallearn.utils.DAG2CPDAG import dag2cpdag
-from causallearn.utils.GESUtils import *
-from causallearn.utils.PDAG2DAG import pdag2dag
+from .utils.score.LocalScoreFunctionClass import LocalScoreClass
+from .graph.GeneralGraph import GeneralGraph
+from .graph.GraphNode import GraphNode
+from .utils.DAG2CPDAG import dag2cpdag
+from .utils.GESUtils import *
+from .utils.PDAG2DAG import pdag2dag
 from typing import Union
 
 
-def ges(X: ndarray, score_func: str = 'local_score_BIC', maxP: Optional[float] = None,
+def GES(X: ndarray, score_func: str = 'local_score_BIC', maxP: Optional[float] = None,
         parameters: Optional[Dict[str, Any]] = None, node_names: Union[List[str], None] = None,) -> Dict[str, Any]:
     """
     Perform greedy equivalence search (GES) algorithm

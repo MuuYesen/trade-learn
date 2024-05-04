@@ -1,7 +1,7 @@
 import re
 from typing import Set, Tuple, Dict
 
-from causallearn.graph.Node import Node
+from traderpy.causal.graph.common.graph.Node import Node
 
 
 class BackgroundKnowledge(object):

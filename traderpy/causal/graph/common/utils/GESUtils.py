@@ -1,12 +1,11 @@
 import itertools
 from copy import deepcopy
-from typing import List
 
 import numpy.matlib
 
-from causallearn.graph.Edge import Edge
-from causallearn.graph.Endpoint import Endpoint
-from causallearn.score.LocalScoreFunction import *
+from traderpy.causal.graph.common.graph.Edge import Edge
+from traderpy.causal.graph.common.graph.Endpoint import Endpoint
+from .score.LocalScoreFunction import *
 
 
 def feval(parameters: list):

@@ -7,3 +7,4 @@ scikit-learn==1.2.2
 bokeh==3.4.1
 yfinance
 mootdx==0.11.4
+pydot

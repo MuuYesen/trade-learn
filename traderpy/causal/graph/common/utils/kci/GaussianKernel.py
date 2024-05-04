@@ -4,7 +4,7 @@ from numpy import exp, median, shape, sqrt, ndarray
 from numpy.random import permutation
 from scipy.spatial.distance import cdist, pdist, squareform
 
-from causallearn.utils.KCI.Kernel import Kernel
+from traderpy.causal.graph.common.utils.kci.Kernel import Kernel
 
 
 class GaussianKernel(Kernel):

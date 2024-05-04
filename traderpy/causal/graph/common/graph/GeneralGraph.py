@@ -10,7 +10,7 @@ from .Edge import Edge
 from .Endpoint import Endpoint
 from .Graph import Graph
 from .Node import Node
-from ..utils.GraphUtils import GraphUtils
+from traderpy.causal.graph.common.utils.GraphUtils import GraphUtils
 
 
 # Represents a graph using a matrix. Variables are permitted to be either measured

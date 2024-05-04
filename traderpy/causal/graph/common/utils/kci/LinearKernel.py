@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from numpy import ndarray
 
-from causallearn.utils.KCI.Kernel import Kernel
+from traderpy.causal.graph.common.utils.kci.Kernel import Kernel
 
 
 class LinearKernel(Kernel):
