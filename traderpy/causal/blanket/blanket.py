@@ -8,7 +8,9 @@ class Blanket:
         pass
 
     @staticmethod
-    def fit_causal(data=None, method='iamb', target=0, alpha=0.05, is_discrete=True):
+    def fit_causal(data=None, method='iamb', target_name=None, alpha=0.05, is_discrete=True):
+        target = data.columns.tolist().index(target_name)
+
         res_id = None
         if method == 'iamb':
             res_id = IAMB(data, target, alpha, is_discrete)

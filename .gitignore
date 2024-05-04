@@ -163,3 +163,7 @@ cython_debug/
 zoo_space/
 
 traderpy/strategy/preprocess/
+!traderpy/strategy/preprocess/derive
+!traderpy/strategy/preprocess/explore
+
+traderpy/causal/inference/
