@@ -162,17 +162,19 @@ cython_debug/
 
 zoo_space/
 
-traderpy/strategy/preprocess/
-!traderpy/strategy/preprocess/derive
-!traderpy/strategy/preprocess/explore
+tradelearn/strategy/preprocess/
+!tradelearn/strategy/preprocess/derive
+!tradelearn/strategy/preprocess/explore
 
-traderpy/automl/
-traderpy/mlops/
-traderpy/causal/inference/
+tradelearn/automl/
+tradelearn/mlops/
+tradelearn/causal/inference/
 
-traderpy/strategy/backtest/fund.py
-traderpy/strategy/backtest/stop.py
+tradelearn/strategy/backtest/fund.py
+tradelearn/strategy/backtest/stop.py
+tradelearn/strategy/select
+tradelearn/strategy/weight
 
-traderpy/trader/extension/
+tradelearn/trader/extension/
 
 tests/res/

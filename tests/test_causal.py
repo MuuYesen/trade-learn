@@ -2,9 +2,9 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from traderpy.query.query import Query
-from traderpy.causal.blanket.blanket import Blanket
-from traderpy.causal.graph.graph import Graph
+from tradelearn.query.query import Query
+from tradelearn.causal.blanket.blanket import Blanket
+from tradelearn.causal.graph.graph import Graph
 
 
 class TestCuasal(unittest.TestCase):
