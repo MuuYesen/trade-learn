@@ -1,0 +1,131 @@
+import pandas as pd
+
+import akshare as ak
+import tradelearn.trader as bt
+from tradelearn.strategy.evaluate.common import quantstats
+
+from dateutil.relativedelta import relativedelta
+
+
+class LongBacktest:
+
+    @staticmethod
+    def run(test_data, base_line, model_dict, feature_list, select_func, weight_func):
+
+        cerebro = bt.Cerebro()
+
+        data = bt.feeds.PandasData(dataname=base_line, name='baseline', datetime=None, open=0, high=1,
+                               low=2, close=3, volume=5, openinterest=-1)
+        cerebro.adddata(data, name='baseline')
+
+        re_col = ['open', 'high', 'low', 'close', 'volume'] + test_data.columns.drop(['open', 'high', 'low', 'close', 'volume']).tolist()
+        test_data = test_data.reindex(re_col, axis=1)
+        for symbol in test_data['code'].unique():
+            data = test_data.query(f"code == '{symbol}'")
+            data = data.set_index('date')
+            data = bt.feeds.PandasData(dataname=data, name=symbol, datetime=None, open=0, high=1,
+                               low=2, close=3, volume=4, openinterest=-1)  # 不断添加每个股票数据
+            cerebro.adddata(data, name=symbol)
+
+        cerebro.broker.setcash(1000000.0)
+        cerebro.broker.setcommission(commission=0.001)  # 手续费
+
+        cerebro.addanalyzer(bt.analyzers.PyFolio, _name='_Pyfolio')
+        cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='_SharpeRatio')
+        cerebro.addanalyzer(bt.analyzers.DrawDown, _name='_DrawDown')
+
+        cerebro.addstrategy(Long, model_dict=model_dict, feature_list=feature_list, select_func=select_func, weight_func=weight_func)
+
+        print('初始资金: %.2f' % cerebro.broker.getvalue())
+        results = cerebro.run()
+        print('最终资金: %.2f' % cerebro.broker.getvalue())
+
+        strat = results[0]
+        print('夏普比率:', strat.analyzers._SharpeRatio.get_analysis())
+        print('回撤指标:', strat.analyzers._DrawDown.get_analysis())
+
+        pyfoliozer = strat.analyzers.getbyname('_Pyfolio')
+        returns, positions, transactions, gross_lev = pyfoliozer.get_pf_items()
+        returns.index = returns.index.tz_convert(None)
+
+        benchmark_ret = base_line.close.pct_change()
+        quantstats.reports.html(returns, benchmark=benchmark_ret, output='stats.html', title='Stock Sentiment')
+
+
+class Long(bt.Strategy):
+
+    params = (
+        ("model_dict", None),
+        ("feature_list", None),
+        ("select_func", None),
+        ("weight_func", None)
+    )
+
+    def _getminperstatus(self):
+        return -1
+
+    def log(self, txt):
+        datetime = self.data.datetime[0]
+        dt = bt.num2date(datetime)
+        print('%s, %s' % (dt.isoformat(), txt))
+
+    def __init__(self):
+        self.last = []
+        self.order_list = []
+        self.last_date = None
+        self.tdh = ak.tool_trade_date_hist_sina()
+
+    def next(self):
+
+        cur_date = self.datas[0].datetime.date(0)  # 确定当日投资组合
+
+        if self.last_date is not None and self.last_date == cur_date:
+            return
+
+        if self.last_date is not None and cur_date < self.last_date + relativedelta(days=7):
+            return
+
+        if cur_date not in self.tdh.values.reshape(-1):
+            return
+
+        for order in self.order_list:  # 取消未成交的订单
+            self.cancel(order)
+        self.order_list = []
+
+        m_data = None
+        for i in range(1, len(self.datas)):  # 遍历每一个股票
+            data_i = self.datas[i]._dataname.query(f"index == '{cur_date}'")
+            m_data = pd.concat([m_data, data_i], axis=0)
+        m_data = m_data.set_index('code')[self.params.feature_list]
+        if m_data.empty:
+            return
+
+        prob_df = self.params.model_dict[cur_date.year].predict_proba(m_data)
+        long_list = self.params.select_func(prob_df['1'], low_perc=0.8, high_perc=1)  # 调用选股函数
+
+        for data_id in self.last:  # 若上期股票未出现在本期交易列表中，则平仓
+            if data_id not in long_list:
+                order = self.close(data=data_id)
+                self.order_list.append(order)
+
+        print(cur_date)  #
+
+        if len(long_list):  # 如果存在做多信号，则开仓
+            buy_weight = self.params.weight_func(long_list)  # 调用权重函数
+
+            for i, data_id in enumerate(long_list):
+                target_value = buy_weight[i] * self.broker.get_value()
+                data = self.getdatabyname(data_id)
+                try:
+                    size = int(abs(target_value / data.open[1] // 100 * 100))  # 下一天的开盘价(应为真实价格，而非处理后)买入，100的整数倍
+                except:
+                    try:
+                        size = int(abs(target_value / data.close[0] // 100 * 100))
+                    except:
+                        size = 0
+                order = self.order_target_size(data=data_id, target=size)
+
+                self.order_list.append(order)
+
+        self.last = long_list
+        self.last_date = cur_date

@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from traderpy.query.query import Query
+from tradelearn.query.query import Query
 
 
 class TestQuery(unittest.TestCase):
