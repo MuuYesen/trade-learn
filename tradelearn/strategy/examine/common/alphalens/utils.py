@@ -18,7 +18,7 @@ import numpy as np
 import re
 import warnings
 
-from IPython.display import display
+from IPython.display import display, HTML
 from pandas.tseries.offsets import (
     BaseOffset,
     CustomBusinessDay,
@@ -27,6 +27,8 @@ from pandas.tseries.offsets import (
 )
 from scipy.stats import mode
 
+import os
+import datetime
 
 class NonMatchingTimezoneError(Exception):
     pass
@@ -435,7 +437,7 @@ def demean_forward_returns(factor_data, grouper=None):
     return factor_data
 
 
-def print_table(table, name=None, fmt=None):
+def print_table(table, name=None, fmt=None, save_to_file=True, output_dir='./plots/temp'):
     """
     Pretty print a pandas DataFrame.
 
@@ -459,14 +461,43 @@ def print_table(table, name=None, fmt=None):
     if isinstance(table, pd.DataFrame):
         table.columns.name = name
 
-    prev_option = pd.get_option("display.float_format")
-    if fmt is not None:
-        pd.set_option("display.float_format", lambda x: fmt.format(x))
+    # prev_option = pd.get_option("display.float_format")
+    # if fmt is not None:
+    #     pd.set_option("display.float_format", lambda x: fmt.format(x))
+    #
+    # display(table)
+    #
+    # if fmt is not None:
+    #     pd.set_option("display.float_format", prev_option)
 
-    display(table)
+    html = table.to_html(float_format=fmt, formatters=None)
 
-    if fmt is not None:
-        pd.set_option("display.float_format", prev_option)
+    # if header_rows is not None:
+    #     # Count the number of columns for the text to span
+    #     n_cols = html.split("<thead>")[1].split("</thead>")[0].count("<th>")
+    #
+    #     # Generate the HTML for the extra rows
+    #     rows = ""
+    #     for name, value in header_rows.items():
+    #         rows += '\n    <tr style="text-align: right;"><th>%s</th>' % name
+    #         rows += "<td colspan=%d>%s</td></tr>" % (n_cols, value)
+    #     html = html.replace("<thead>", "<thead>" + rows)
+
+    if save_to_file:
+        # Generate a timestamped filename
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S%f")
+        filename = f"table_{timestamp}.html"
+        file_path = os.path.join(output_dir, filename)
+
+        # Create output directory if it doesn't exist
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        with open(file_path, 'w') as f:
+            f.write(html)
+        print(f"Table saved to {file_path}")
+    else:
+        display(HTML(html))
 
 
 def get_clean_factor(

@@ -1,5 +1,11 @@
+import numpy as np
 import pandas as pd
+from scipy import stats
+import statsmodels.api as sm
 
+from tradelearn.strategy.examine.common.alphalens import performance
+from tradelearn.strategy.examine.common.alphalens import utils
+from tradelearn.strategy.examine.common.alphalens import tears
 
 class Examine:
 
@@ -7,7 +13,20 @@ class Examine:
         pass
 
     @staticmethod
-    def factor_compare(data):
+    def single_factor(data, col):
+        close = data[['date', 'code', 'close']].pivot(index='date', columns='code', values='close')
+
+        data = data.set_index(['date', 'code'], drop=True)
+        data.sort_index(inplace=True)
+        factor_data = utils.get_clean_factor_and_forward_returns(data[col], close, quantiles=5,
+                                                                 periods=(5,), max_loss=1)
+        tears.create_full_tear_sheet(factor_data,
+                                        long_short=True,
+                                        group_neutral=False,
+                                        by_group=False)
+
+    @staticmethod
+    def factor_compare(data, ind: str = None, cir: str = None):
         close = data[['date', 'code', 'close']].pivot(index='date', columns='code', values='close')
 
         data = data.set_index(['date', 'code'], drop=True)
@@ -18,17 +37,35 @@ class Examine:
             if not col.startswith('alpha'):
                 continue
             try:
-                factor_data = al.utils.get_clean_factor_and_forward_returns(data[col], close, quantiles=5,
+                factor_data = utils.get_clean_factor_and_forward_returns(data[col], close, quantiles=5,
                                                                             periods=(5,), max_loss=1)
-                mean_quant_ret, std_quantile = al.performance.mean_return_by_quantile( \
+                mean_quant_ret, std_quantile = performance.mean_return_by_quantile( \
                     factor_data,
                     by_group=False
                 )
                 mean_quant_rateret = mean_quant_ret.apply(
-                    al.utils.rate_of_return, axis=0, base_period=mean_quant_ret.columns[0]
+                    utils.rate_of_return, axis=0, base_period=mean_quant_ret.columns[0]
                 )
 
-                ic = al.performance.factor_information_coefficient(factor_data)
+                ic = performance.factor_information_coefficient(factor_data)
+
+                def regress_t_value(data, fac, ind, cir):
+                    industry_dummies = None
+                    log_cir = None
+                    if ind:
+                        industry_dummies = pd.get_dummies(data[ind], drop_first=True, columns=[ind], dtype=int)
+                    if cir:
+                        log_cir = data[cir].apply(np.log)
+                    x = pd.concat([industry_dummies, log_cir, data[fac]], axis=1)
+                    y = data['return']
+                    result = sm.OLS(y, x).fit()
+                    return result.params[fac], result.tvalues[fac]
+
+                t_stat, p_value = stats.ttest_1samp(ic['5D'], 0)
+
+                res_series = data.groupby('date').apply(lambda x: regress_t_value(x, col, ind, cir))\
+                                         .apply(pd.Series, index=['c_series', 't_series'])
+                c_series, t_series = res_series['c_series'], res_series['t_series']
 
                 res_dict = {
                     'name': col.split('.')[0],
@@ -36,18 +73,20 @@ class Examine:
                     'return_min': mean_quant_rateret['5D'].iloc[0] * 10000,
                     'ic_mean': ic['5D'].mean(),
                     'ic_std': ic['5D'].std(),
-                    'ir': ic['5D'].mean() / ic['5D'].std()
+                    'risk_adjusted_ic(ir)': ic['5D'].mean() / ic['5D'].std(),
+                    'ic_skew': stats.skew(ic['5D']),
+                    'ic_kurtosis': stats.kurtosis(ic['5D']),
+                    't_stat(IC)': t_stat,
+                    'p_value(IC)': p_value,
+                    't_mean': t_series.mean(),
+                    't_std': t_series.std(),
+                    'return_ratio_mean': c_series.mean(),
+                    'return_ratio_std': c_series.std(),
                 }
+
                 print(res_dict)
                 eval_list.append(res_dict)
-            except:
-                print(f'{col} has error!')
+            except Exception as e:
+                print(f'{col} has error!', e)
 
-        return pd.DataFrame(eval_list)
-
-if __name__ == '__main__':
-    s_data = pd.read_csv('../../database/data/000300SH.csv', parse_dates=['date'], dtype={'code': str},
-                         low_memory=True, encoding='utf_8_sig')
-    s_data.rename(columns={'open': 'alpha_open'}, inplace=True)
-    res = Examine.factor_compare(s_data)
-    print(res)
+        return pd.DataFrame(eval_list).set_index('name')

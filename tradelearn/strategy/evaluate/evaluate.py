@@ -1,5 +1,5 @@
-import pandas as pd
-import alphalens as al
+from quantstats import reports
+from .common.pyfolio import create_full_tear_sheet
 
 
 class Evaluate:
@@ -7,11 +7,17 @@ class Evaluate:
     def __init__(self):
         pass
 
-    def quantstats_report(self):
-        pass
+    @staticmethod
+    def analysis_report(pyfoliozer, baseline, engine='quantstats'):
+        returns, positions, transactions, gross_lev = pyfoliozer.get_pf_items()
+        returns.index = returns.index.tz_convert(None)
 
-    def return_analysis(self):
-        pass
+        benchmark_ret = baseline.close.pct_change()
 
-    def risk_analysis(self):
-        pass
+        if engine == 'pyfolio':
+            create_full_tear_sheet(returns,
+                                   benchmark_rets=benchmark_ret,
+                                   positions=positions,
+                                   transactions=transactions)
+        if engine == 'quantstats':
+            reports.html(returns, benchmark=benchmark_ret, output='stats.html', title='Stock Sentiment')

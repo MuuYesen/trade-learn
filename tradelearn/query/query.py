@@ -9,7 +9,7 @@ from mootdx.quotes import Quotes
 
 from tradelearn.query.common.alphas101 import Alphas101
 from tradelearn.query.common.alphas191 import Alphas191
-from tradelearn.query.common.mytt import MyTT
+from tradelearn.query.common.tdx30 import Tdx30
 
 
 class Query:
@@ -47,7 +47,7 @@ class Query:
 
     @staticmethod
     def tec_indicator(stock_data: pd.DataFrame, alpha_name: list = None, **kwargs):
-        mt = MyTT(stock_data)
+        mt = Tdx30(stock_data)
 
         if alpha_name:
             methods = alpha_name
