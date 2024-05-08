@@ -166,7 +166,6 @@ tradelearn/strategy/preprocess/
 !tradelearn/strategy/preprocess/derive/
 !tradelearn/strategy/preprocess/explore/
 
-tradelearn/automl/
 tradelearn/mlops/
 tradelearn/causal/inference/
 
