@@ -13,15 +13,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import warnings
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import pandas as pd
 
+import os
+import glob
+import datetime
+import base64
+
 from . import plotting
 from . import performance as perf
 from . import utils
 
+def save_plot(fig_or_ax, plot_name, directory="./plots/temp"):
+    """Save a matplotlib figure or axes object."""
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    filepath = os.path.join(directory, f"{plot_name}.png")
+    if isinstance(fig_or_ax, plt.Figure):
+        fig_or_ax.savefig(filepath)
+    elif isinstance(fig_or_ax, GridFigure):
+        fig_or_ax.fig.savefig(filepath)
+    else:
+        fig_or_ax.get_figure().savefig(filepath)
+    print(f"Plot saved: {filepath}")
 
 class GridFigure(object):
     """
@@ -291,6 +309,8 @@ def create_returns_tear_sheet(
     )
 
     plt.show()
+    save_plot(gf, 'Return Tear Sheet')
+
     gf.close()
 
     if by_group:
@@ -384,6 +404,9 @@ def create_information_tear_sheet(factor_data, group_neutral=False, by_group=Fal
         plotting.plot_ic_by_group(mean_group_ic, ax=gf.next_row())
 
     plt.show()
+
+    save_plot(gf, 'Infor Tear Sheet')
+
     gf.close()
 
 
@@ -461,6 +484,7 @@ def create_turnover_tear_sheet(factor_data, turnover_periods=None):
         )
 
     plt.show()
+    save_plot(gf, 'Turnover Tear Sheet')
     gf.close()
 
 
@@ -502,6 +526,38 @@ def create_full_tear_sheet(
         factor_data, group_neutral, by_group, set_context=False
     )
     create_turnover_tear_sheet(factor_data, set_context=False)
+
+    # Location where the individual HTML files are saved
+    html_files_dir = './plots/temp'
+    plots_dir = './plots/temp'  # Directory where PNG files are saved
+
+    # Aggregate HTML content from tables
+    aggregated_html_content = ''
+    for html_file in glob.glob(os.path.join(html_files_dir, "*.html")):
+        with open(html_file, 'r') as file:
+            aggregated_html_content += file.read() + '<br><hr><br>'
+
+    # Embed PNG files into HTML content
+    for png_file in glob.glob(os.path.join(plots_dir, "*.png")):
+        with open(png_file, "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode()
+            img_tag = f'<img src="data:image/png;base64,{encoded_string}" style="width:100%"><br><hr><br>'
+            aggregated_html_content += img_tag
+
+    # Save the aggregated content to a new HTML file
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S%f")
+    aggregated_filename = f"full_tearsheet.html"
+    aggregated_file_path = os.path.join('./plots', aggregated_filename)
+    with open(aggregated_file_path, 'w') as file:
+        file.write(aggregated_html_content)
+
+    # Delete individual HTML files to avoid duplication in the future
+    for html_file in glob.glob(os.path.join(html_files_dir, "*.html")):
+        os.remove(html_file)
+    for plot_file in glob.glob(os.path.join(plots_dir, "*.png")):
+        os.remove(plot_file)
+
+    os.rmdir(plots_dir)
 
 
 @plotting.customize

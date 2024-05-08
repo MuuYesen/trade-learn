@@ -163,17 +163,18 @@ cython_debug/
 zoo_space/
 
 tradelearn/strategy/preprocess/
-!tradelearn/strategy/preprocess/derive
-!tradelearn/strategy/preprocess/explore
+!tradelearn/strategy/preprocess/derive/
+!tradelearn/strategy/preprocess/explore/
 
 tradelearn/automl/
 tradelearn/mlops/
 tradelearn/causal/inference/
 
+tradelearn/strategy/examine/common/alphalens_high_freq
 tradelearn/strategy/backtest/fund.py
 tradelearn/strategy/backtest/stop.py
-tradelearn/strategy/select
-tradelearn/strategy/weight
+tradelearn/strategy/select/
+tradelearn/strategy/weight/
 
 tradelearn/trader/extension/
 

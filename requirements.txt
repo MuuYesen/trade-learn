@@ -1,11 +1,12 @@
 numpy==1.24.3
 pandas==2.2.2
 scipy==1.11.4
-river==0.21.1
 statsmodels==0.14.2
 scikit-learn==1.2.2
+seaborn==0.12.2
 bokeh==3.4.1
 yfinance==0.2.38
 mootdx==0.11.4
 pydot==2.0.0
 tabulate==0.9.0
+quantstats==0.0.62
