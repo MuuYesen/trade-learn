@@ -44,11 +44,11 @@ class Query:
                 data = client.ohlc(symbol=symbol, begin=start, end=end, adjust=adjust)
                 data = data.drop(['date'], axis=1).reset_index()
                 data[['open', 'close', 'high', 'low']] = data[['open', 'close', 'high', 'low']].apply(lambda x: x / data['factor'], axis=0)
+                if not data is None:
+                    data['vwap'] = data.amount / data.volume / 100
             except:
                 data = None
 
-        if not data is None:
-            data['vwap'] = data.amount / data.volume / 100
         return data
 
     @staticmethod
