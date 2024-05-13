@@ -160,7 +160,11 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+materials/
 zoo_space/
+
+tests/data/
+tests/res/
 
 tradelearn/strategy/preprocess/
 !tradelearn/strategy/preprocess/derive/
@@ -169,12 +173,9 @@ tradelearn/strategy/preprocess/
 tradelearn/mlops/
 tradelearn/causal/inference/
 
-tradelearn/strategy/examine/common/alphalens_high_freq
-tradelearn/strategy/backtest/fund.py
-tradelearn/strategy/backtest/stop.py
+tradelearn/strategy/signal/
 tradelearn/strategy/select/
 tradelearn/strategy/weight/
 
 tradelearn/trader/extension/
 
-tests/res/

@@ -19,31 +19,53 @@ class Query:
 
     @staticmethod
     def read_csv(data_path, begin, end):
-        data = pd.read_csv(data_path, index_col=['date'], parse_dates=['date'], dtype={'code': str}, low_memory=True, encoding='utf_8_sig')
+        data = pd.read_csv(data_path, parse_dates=['date'], dtype={'code': str}, low_memory=True, encoding='utf_8_sig')
         data = data.query(f"date >= '{begin}' and date <= '{end}'")
         return data
 
     @staticmethod
-    def history_ohlc(engine='tdx', symbol=None, start=None, end=None, adjust='qfq'):
+    def history_ohlc(symbol=None, start=None, end=None, adjust='qfq', engine='tdx'):
         if engine == 'yahoo':
-            tickler = yf.Ticker(symbol)
-            if adjust == 'qfq':
-                auto_adjust = True
-            data = tickler.history(start=start, end=end, interval="1d", auto_adjust=auto_adjust)
+            try:
+                tickler = yf.Ticker(symbol)
+                if adjust == 'qfq':
+                    auto_adjust = True
+                data = tickler.history(start=start, end=end, interval="1d", auto_adjust=auto_adjust)
+                data = data.reset_index()
+                data.columns = [fname.lower() for fname in data.columns]
+                data['code'] = symbol
+                data['date'] = data['date'].dt.tz_localize(None)
+            except:
+                data = None
 
         if engine == 'tdx':
-            client = Quotes.factory(market='std', multithread=True, heartbeat=True, timeout=15, auto_retry=True)
-            data = client.ohlc(symbol=symbol, begin=start, end=end, adjust=adjust)
+            try:
+                client = Quotes.factory(market='std', multithread=True, heartbeat=True, timeout=15, auto_retry=True)
+                data = client.ohlc(symbol=symbol, begin=start, end=end, adjust=adjust)
+                data = data.drop(['date'], axis=1).reset_index()
+                data[['open', 'close', 'high', 'low']] = data[['open', 'close', 'high', 'low']].apply(lambda x: x / data['factor'], axis=0)
+            except:
+                data = None
 
+        if not data is None:
+            data['vwap'] = data.amount / data.volume / 100
         return data
 
     @staticmethod
-    def _calc_func(func, m, kwargs):
+    def _calc_func(func, m, kwargs={}):
         t1 = time.time()
         alpha = func(**kwargs)
         t2 = time.time()
         print(f"{m} time {t2 - t1}")
         return alpha
+
+    # @staticmethod
+    # def _calc_func(func, m):
+    #     t1 = time.time()
+    #     alpha = func()
+    #     t2 = time.time()
+    #     print(f"{m} time {t2 - t1}")
+    #     return alpha
 
     @staticmethod
     def tec_indicator(stock_data: pd.DataFrame, alpha_name: list = None, **kwargs):
@@ -66,13 +88,11 @@ class Query:
             except:
                 traceback.print_exc()
 
-        res = pd.DataFrame({'date':[], 'code':[]})
+        res = pd.DataFrame({'date':[]})
         for m, r in res_list:
-            df = r.get()
-            df['date'] = df.index
-            df = df.melt(id_vars='date', value_vars=df.columns.drop('date'), value_name=m)
-            df.rename(columns={m: m}, inplace=True)
-            res = pd.merge(res, df, how='outer', on=['date', 'code'])
+            ind_nb = r.get()
+            df = pd.DataFrame({'date': stock_data['date'], m: ind_nb})
+            res = pd.merge(res, df, how='outer', on=['date'])
 
         pool.close()
         pool.join()
@@ -81,6 +101,8 @@ class Query:
 
     @staticmethod
     def alphas101(stock_data: pd.DataFrame, alpha_name: list = None):
+
+        stock_data = stock_data.pivot(index='date', columns='code')
 
         af = Alphas101(stock_data)
 
@@ -117,6 +139,7 @@ class Query:
 
     @staticmethod
     def alphas191(stock_data: pd.DataFrame, bench_data: pd.DataFrame, alpha_name: list = None):
+        stock_data = stock_data.pivot(index='date', columns='code')
 
         af = Alphas191(stock_data, bench_data)
 

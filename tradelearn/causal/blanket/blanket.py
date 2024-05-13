@@ -1,5 +1,5 @@
-from .common.iamb import IAMB
-from .common.pcmb import PCMB
+from .pyfeature.iamb import IAMB
+from .pyfeature.pcmb import PCMB
 
 
 class Blanket:
