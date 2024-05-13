@@ -2,4 +2,4 @@ causal-learn is strategy dev system based on alphalens、backtrader、pyfolio an
 
 The function that this package almost proviced as follow:
 
-![img.png](img.png)
+![img.png](docs/img.png)
