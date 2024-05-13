@@ -1,3 +1,4 @@
+import math
 import base64
 from io import BytesIO
 import matplotlib.pyplot as plt
@@ -7,7 +8,6 @@ import os
 cur_dir_path = os.path.abspath(os.path.dirname(__file__))
 
 from jinja2 import Environment, FileSystemLoader
-
 
 class Report:
 
@@ -30,7 +30,7 @@ class Report:
             data_info_str += f"<tr><td>{data.columns[i]}</td><td>{data.dtypes[i]}</td><td>{non_missing_count[i]}</td><td>{missing_count[i]}</td><td>{data.shape[0]}</td></tr>"
         data_info_str += "</table>"
 
-        section_content = '<div><style type="text/css">p{ text-indent:2em;}</style> <br>' + data_info_str + '</div>'
+        section_content = '<div><style type="text/css">p{ text-indent:2em;}</style>' + data_info_str + '</div>'
         part0_html = template('section.html').render(section_content=section_content, section_title='Data Overview',
                                                      section_anchor_id='part0')
 
@@ -40,7 +40,8 @@ class Report:
                                                      section_anchor_id='part1')
 
         # PART2
-        fig, axes = plt.subplots(nrows=5, ncols=2, figsize=(11, 10))
+        nrows = math.ceil(len(data.columns.drop(['code', 'date']))/2)
+        fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(11, 10))
         for i, col in enumerate(data.columns.drop(['code', 'date'])):
             sns.histplot(data[col], kde=True, ax=axes[i//2, i%2])
             axes[i//2, i%2].set_xlabel(col)
@@ -91,7 +92,7 @@ class Report:
                                 format(data[col].min(), '.4f')) + '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 5. skew：' + str(format(data[col].skew(), '.4f')) + '</p>' \
                                                                                                                  '<p>2. std：' + str(
                                 format(data[col].std(), '.4f')) + '&nbsp;&nbsp;&nbsp;&nbsp&nbsp&nbsp&nbsp&nbsp;&nbsp;&nbsp; 4. max：' + str(
-                                format(data[col].max(), '.4f')) + '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 6. kurt：' + str(format(data[col].kurt(), '.4f')) + '</p>'
+                                format(data[col].max(), '.4f')) + '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 6. kurt：' + str(format(data[col].kurt(), '.4f')) + '</p><br>'
 
             tab20_html = template('tabs.html').render(tab_id1='tab_id201' + col, tab_title1='curve_plot',
                                                       tab_content1=curve_plot1,
