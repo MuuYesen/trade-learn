@@ -34,15 +34,17 @@ class Report:
         part0_html = template('section.html').render(section_content=section_content, section_title='Data Overview',
                                                      section_anchor_id='part0')
 
+        data = data.drop(['code', 'date'], axis=1)
+
         # PART1
         descriptive_stats = data.describe().to_html()
         part1_html = template('section.html').render(section_content=descriptive_stats, section_title='Descriptive Statistics',
                                                      section_anchor_id='part1')
 
         # PART2
-        nrows = math.ceil(len(data.columns.drop(['code', 'date']))/2)
+        nrows = math.ceil(len(data.columns)/2)
         fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(11, 10))
-        for i, col in enumerate(data.columns.drop(['code', 'date'])):
+        for i, col in enumerate(data.columns):
             sns.histplot(data[col], kde=True, ax=axes[i//2, i%2])
             axes[i//2, i%2].set_xlabel(col)
             axes[i//2, i%2].set_ylabel('value')
@@ -58,7 +60,7 @@ class Report:
 
         # PART3
         plot_html_str = ''
-        for col in data.columns.drop(['code', 'date']):
+        for col in data.columns:
             plt.figure(figsize=(8, 6))
             plt.plot(data[col])
             plt.ylabel('some numbers')
