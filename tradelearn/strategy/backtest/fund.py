@@ -1,7 +1,5 @@
 import pandas as pd
 
-import numpy as np
-
 import tradelearn.trader as bt
 from dateutil.relativedelta import relativedelta
 
@@ -38,7 +36,6 @@ class LongBacktest:
 
         cerebro.broker.setcash(10000000.0)
         cerebro.broker.setcommission(commission=0.001)  # 手续费
-        cerebro.addsizer(bt.sizers.AllInSizer, percents=95)
 
         cerebro.addanalyzer(bt.analyzers.PyFolio, _name='_Pyfolio')
         cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='_SharpeRatio')
@@ -70,9 +67,15 @@ class Long(bt.Strategy):
         logger.info('%s, %s' % (dt.isoformat(), txt))
 
     def __init__(self, bt_data, model_class, feature_list, begin_date, end_date, **kwargs):
-        self.inds = model_class(bt_begin_date=begin_date, bt_end_date=end_date,
-                                            fina_data=bt_data, fea_list=feature_list,
-                                            stockid=bt_data['code'].iloc[0], **kwargs)
+        self.inds = {}
+        for symbol in bt_data.query(f"date >= '{begin_date}' and date < '{end_date}'")['code'].unique():
+            self.inds[symbol] = model_class(bt_begin_date=begin_date,
+                                            bt_end_date=end_date,
+                                            fina_data=bt_data,
+                                            fea_list=feature_list,
+                                            stockid=symbol,
+                                            **kwargs)
+        self.last = []
         self.order_list = []
         self.last_date = None
 
@@ -103,7 +106,7 @@ class Long(bt.Strategy):
 
     def next(self):
 
-        cur_date = self.datas[0].datetime.date(0)
+        cur_date = self.datas[0].datetime.date(0)  # 确定当日投资组合
 
         if self.last_date is not None and self.last_date == cur_date:
             return
@@ -111,18 +114,39 @@ class Long(bt.Strategy):
         if self.last_date is not None and cur_date < self.last_date + relativedelta(days=5):
             return
 
-        if self.inds.lines.model_indi[0] == np.NAN:
-            return
-
         for order in self.order_list:  # 取消未成交的订单
             self.cancel(order)
         self.order_list = []
 
-        if not self.position:
-            if self.inds.lines.model_indi[0]:
-                self.order = self.buy()
-        else:
-            if not self.inds.lines.model_indi[0]:
-                self.order = self.sell()
+        proba_dict = {}
+        for symbol in self.inds.keys():
+            proba_dict[symbol] = self.inds[symbol].lines.model_indi[0]
+        data = pd.Series(proba_dict)
+        long_list = data[(data >= data.quantile(0.8)) & (data <= data.quantile(1.0))].index.tolist()
 
+        for data_id in self.last:  # 若上期股票未出现在本期交易列表中，则平仓
+            if data_id not in long_list:
+                order = self.close(data=data_id)
+                self.order_list.append(order)
+
+        if len(long_list):  # 如果存在做多信号，则开仓
+            buy_weight = [(1 - 0.05) / len(long_list)]*len(long_list)
+
+            for i, data_id in enumerate(long_list):
+                target_value = buy_weight[i] * self.broker.get_value()
+                data = self.getdatabyname(data_id)
+                try:
+                    size = int(abs(target_value / data.open[1] // 100 * 100))  # 下一天的开盘价(应为真实价格，而非处理后)买入，100的整数倍
+                    price = data.open[1]
+                except:
+                    try:
+                        size = int(abs(target_value / data.close[0] // 100 * 100))
+                        price = data.close[0]
+                    except:
+                        size = 0
+                order = self.order_target_size(data=data_id, target=size, price=price)
+
+                self.order_list.append(order)
+
+        self.last = long_list
         self.last_date = cur_date

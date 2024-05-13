@@ -3,9 +3,9 @@ import pandas as pd
 from scipy import stats
 import statsmodels.api as sm
 
-from tradelearn.strategy.examine.common.alphalens import performance
-from tradelearn.strategy.examine.common.alphalens import utils
-from tradelearn.strategy.examine.common.alphalens import tears
+from tradelearn.strategy.examine.alphalens import performance
+from tradelearn.strategy.examine.alphalens import utils
+from tradelearn.strategy.examine.alphalens import tears
 
 class Examine:
 
@@ -13,20 +13,26 @@ class Examine:
         pass
 
     @staticmethod
-    def single_factor(data, col):
+    def single_factor(data, col, path='./'):
         close = data[['date', 'code', 'close']].pivot(index='date', columns='code', values='close')
 
         data = data.set_index(['date', 'code'], drop=True)
         data.sort_index(inplace=True)
         factor_data = utils.get_clean_factor_and_forward_returns(data[col], close, quantiles=5,
                                                                  periods=(5,), max_loss=1)
-        tears.create_full_tear_sheet(factor_data,
-                                        long_short=True,
-                                        group_neutral=False,
-                                        by_group=False)
+        html = tears.create_full_tear_sheet(factor_data,
+                                     long_short=True,
+                                     group_neutral=False,
+                                     by_group=False)
+
+        with open(path + 'examine.html', 'w+', encoding='utf8') as file:
+            file.write(html)
 
     @staticmethod
-    def factor_compare(data, ind: str = None, cir: str = None):
+    def factor_compare(data, f_col=None, ind: str = None, cir: str = None):
+        if f_col:
+            data = data[f_col]
+
         close = data[['date', 'code', 'close']].pivot(index='date', columns='code', values='close')
 
         data = data.set_index(['date', 'code'], drop=True)
