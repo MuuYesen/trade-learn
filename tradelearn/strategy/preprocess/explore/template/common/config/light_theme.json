@@ -1,0 +1,131 @@
+{
+    "figure": {
+        "figsize": [
+            30,
+            10
+        ],
+        "dpi": 150,
+        "facecolor": "#FFFFFF"
+    },
+    "axes": {
+        "grid": true,
+        "labelpad": 7.0,
+        "labelsize": 20,
+        "titlesize": 24,
+        "titlepad": 14.0,
+        "titleweight": "bold",
+        "titlecolor": "#333333",
+        "facecolor": "#ffffff",
+        "tick_params": {
+            "labelsize": 16,
+            "labelrotation": 0
+        }
+    },
+    "font": {
+        "family": "serif",
+        "serif": "Times New Roman"
+    },
+    "grid": {
+        "linewidth": 1,
+        "color": "#dddddd"
+    },
+    "ticks": {
+        "xtick": {
+            "labelsize": 16,
+            "major_pad": 4,
+            "color": "#000000"
+        },
+        "ytick": {
+            "labelsize": 16,
+            "major_pad": 4,
+            "color": "#000000"
+        }
+    },
+    "legend": {
+        "fontsize": 16,
+        "facecolor": "#ffffff",
+        "framealpha": 1,
+        "edgecolor": "#dddddd",
+        "title_fontsize": 18,
+        "shadow": true,
+        "fancybox": true
+    },
+    "lines": {
+        "linewidth": 3
+    },
+    "text": {
+        "color": "#333333"
+    },
+    "suptitle": {
+        "fontsize": 28,
+        "fontweight": "bold"
+    },
+    "colors": {
+        "line_colors": [
+            "#5678ac",
+            "#806481",
+            "#e68193",
+            "#e28064",
+            "#c68847",
+            "#b08e43",
+            "#9e9140",
+            "#8b953f",
+            "#759b40",
+            "#41a24b",
+            "#42a078",
+            "#439f8a",
+            "#449d97",
+            "#469da3",
+            "#499eb3",
+            "#4e9fca",
+            "#7fa0e3",
+            "#aa99e7",
+            "#c688e4",
+            "#e16edf"
+        ],
+        "bar_colors": [
+            "#5678ac",
+            "#806481",
+            "#e68193",
+            "#e28064",
+            "#c68847",
+            "#b08e43",
+            "#9e9140",
+            "#8b953f",
+            "#759b40",
+            "#41a24b",
+            "#42a078",
+            "#439f8a",
+            "#449d97",
+            "#469da3",
+            "#499eb3",
+            "#4e9fca",
+            "#7fa0e3",
+            "#aa99e7",
+            "#c688e4",
+            "#e16edf"
+        ],
+        "histogram_colors": [
+            "#5678ac",
+            "#806481",
+            "#e68193",
+            "#e28064",
+            "#c68847",
+            "#b08e43",
+            "#9e9140",
+            "#8b953f",
+            "#759b40",
+            "#41a24b",
+            "#42a078",
+            "#439f8a",
+            "#449d97",
+            "#469da3",
+            "#499eb3",
+            "#4e9fca",
+            "#7fa0e3",
+            "#aa99e7",
+            "#c688e4",
+            "#e16edf"
+        ]
+    }
+}
