@@ -63,7 +63,7 @@ if __name__ == '__main__':
                            begin_date=bt_begin_date,
                            end_date=bt_end_date)
 
-    Evaluate.analysis_report(res, baseline, engine='quantstats')
+    Evaluate.analysis_report(res, baseline, engine='pyfolio')
 
 
 

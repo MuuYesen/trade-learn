@@ -190,7 +190,7 @@ def extract_rets_pos_txn_from_zipline(backtest):
 
 def print_table(table, name=None, float_format=None, formatters=None,
                 header_rows=None, save_to_file=True,
-                output_dir='./plots/temp'):
+                output_dir='./temp'):
     """
     Pretty print a pandas DataFrame and optionally save it as an HTML file with a unique timestamped filename.
 

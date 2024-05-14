@@ -17,7 +17,8 @@ init_log_tab([__name__], logging.INFO)
 class LongBacktest:
 
     @staticmethod
-    def run(test_data, base_line, begin_date, end_date, model_class, feature_list, **kwargs):
+    def run(test_data: pd.DataFrame, base_line: pd.DataFrame, begin_date: str, end_date: str,
+            model_class: bt.Indicator, feature_list: list, **kwargs):
 
         cerebro = bt.Cerebro()
 

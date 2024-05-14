@@ -461,27 +461,7 @@ def print_table(table, name=None, fmt=None, save_to_file=True, output_dir='./tem
     if isinstance(table, pd.DataFrame):
         table.columns.name = name
 
-    # prev_option = pd.get_option("display.float_format")
-    # if fmt is not None:
-    #     pd.set_option("display.float_format", lambda x: fmt.format(x))
-    #
-    # display(table)
-    #
-    # if fmt is not None:
-    #     pd.set_option("display.float_format", prev_option)
-
     html = table.to_html(float_format=fmt, formatters=None)
-
-    # if header_rows is not None:
-    #     # Count the number of columns for the text to span
-    #     n_cols = html.split("<thead>")[1].split("</thead>")[0].count("<th>")
-    #
-    #     # Generate the HTML for the extra rows
-    #     rows = ""
-    #     for name, value in header_rows.items():
-    #         rows += '\n    <tr style="text-align: right;"><th>%s</th>' % name
-    #         rows += "<td colspan=%d>%s</td></tr>" % (n_cols, value)
-    #     html = html.replace("<thead>", "<thead>" + rows)
 
     if save_to_file:
         # Generate a timestamped filename

@@ -1,3 +1,5 @@
+import pandas as pd
+
 from .causallearn.pc import PC
 from .causallearn.ges import GES
 from .causallearn.utils.GraphUtils import GraphUtils
@@ -9,7 +11,7 @@ class Graph:
         pass
 
     @staticmethod
-    def fit_causal(data=None, method='pc', is_discrete=True, filename=None):
+    def fit_causal(data: pd.DataFrame = None, method: str = 'pc', is_discrete: bool = True, filename: str = None):
         if method == 'pc':
             ict = "fisherz"
             if is_discrete:
@@ -21,5 +23,5 @@ class Graph:
 
         pdy = GraphUtils.to_pydot(g_pred)
         if filename is None:
-            filename = method + '_dag_res.png'
+            filename = method + '_graph.png'
         pdy.write_png(filename)
