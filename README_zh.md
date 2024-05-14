@@ -4,7 +4,6 @@ trade-learn 是一个基于 alphalens、backtrader、pyfolio 和 quantstats 的�
 
 ![img.png](docs/img.png)
 
-
 ![img_2.png](docs/img_8.png)
 
 下面为大家介绍qstock各模块的具体调用方式和应用举例。
