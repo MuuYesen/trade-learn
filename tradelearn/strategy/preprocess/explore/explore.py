@@ -1,3 +1,5 @@
+import pandas as pd
+
 from tradelearn.strategy.preprocess.explore.template.common.ts_plot import TsPlot
 from tradelearn.strategy.preprocess.explore.template.common.mi_plot import MiPlot
 from tradelearn.strategy.preprocess.explore.template.common.report import Report
@@ -14,9 +16,9 @@ class Explore:
         pass
 
     @staticmethod
-    def analysis_report(data, path='./'):
+    def analysis_report(data: pd.DataFrame, filename: str = './explore.html'):
         html = Report.analysis_report(data)
-        with open(path+'explore_report.html', 'w+', encoding='utf8') as file:
+        with open(filename, 'w+', encoding='utf8') as file:
             file.write(html)
 
     @staticmethod

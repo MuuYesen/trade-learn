@@ -70,7 +70,3 @@ class Derive:
         # gp_features = alpha.transform(dataX)
         #
         # return gp_features
-
-    @staticmethod
-    def compose_generate():
-        pass

@@ -1,3 +1,5 @@
+import pandas as pd
+
 from .pyfeature.iamb import IAMB
 from .pyfeature.pcmb import PCMB
 
@@ -8,7 +10,9 @@ class Blanket:
         pass
 
     @staticmethod
-    def fit_causal(data=None, method='iamb', target_name=None, alpha=0.05, is_discrete=True):
+    def fit_causal(data: pd.DataFrame = None, method: str = 'iamb', target_name: str = None,
+                   alpha: float = 0.05, is_discrete: bool = True):
+
         target = data.columns.tolist().index(target_name)
 
         res_id = None

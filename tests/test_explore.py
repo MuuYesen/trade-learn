@@ -10,7 +10,7 @@ class TestExplore(unittest.TestCase):
 
     def test_explore_report(self):
         data = Query.read_csv('./data/600036SH.csv', begin='2020-01-01', end='2023-06-21')
-        Explore.analysis_report(data, './res/')
+        Explore.analysis_report(data)
 
 
 

@@ -59,7 +59,7 @@ FACTOR_PARTITIONS = {
 }
 
 
-def save_plot(fig_or_ax, plot_name, directory="./plots/temp"):
+def save_plot(fig_or_ax, plot_name, directory="./temp"):
     """Save a matplotlib figure or axes object."""
     if not os.path.exists(directory):
         os.makedirs(directory)
@@ -280,8 +280,8 @@ def create_full_tear_sheet(
             )
 
     # Location where the individual HTML files are saved
-    html_files_dir = './plots/temp'
-    plots_dir = './plots/temp'  # Directory where PNG files are saved
+    html_files_dir = './temp'
+    plots_dir = './temp'  # Directory where PNG files are saved
 
     # Aggregate HTML content from tables
     aggregated_html_content = ''
@@ -293,7 +293,7 @@ def create_full_tear_sheet(
     for png_file in glob.glob(os.path.join(plots_dir, "*.png")):
         with open(png_file, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
-            img_tag = f'<img src="data:image/png;base64,{encoded_string}" style="width:100%"><br><hr><br>'
+            img_tag = f'<center><img style="width:65%;" src="data:image/png;base64,{encoded_string}" style="width:100%"></center><br><hr><br>'
             aggregated_html_content += img_tag
 
     # Delete individual HTML files to avoid duplication in the future

@@ -861,7 +861,7 @@ class Cerebro(with_metaclass(MetaParams, object)):
 
     broker = property(getbroker, setbroker)
 
-    def plot(self, plotter=None, numfigs=1, iplot=False, start=None, end=None, use=None, output_mode='save', filename=None, show_source=True, **kwargs):  # modify
+    def plot(self, plotter=None, numfigs=1, iplot=False, start=None, end=None, use=None, output_mode='save', filename='backtest.html', show_source=True, **kwargs):  # modify
         '''
         Plots the strategies inside cerebro
 
