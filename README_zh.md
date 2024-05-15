@@ -11,18 +11,18 @@ trade-learn 是一个基于 alphalens、backtrader、pyfolio 和 quantstats 的�
 </div>
 
 ## 主要特性
-1. 提供多个不同类型的策略模板，用户只需要给出对应的信号序列即可完成回测评估。
-2. 提供因果分析工具，更加细致地探索因子之间的相互影响机制。
-3. 提供因果特征选择算法，为因子筛选进行因果赋能。
-3. 支持传统指标策略和机器学习策略，单只标的的投机策略和多个标的的投资组合策略。
-4. 提供大量的因子计算公式，包含alpha101、alpha191和tdx30。
-5. 提供外内盘股票行情的接口，同时对标通达信。
-6. 计算结果可以保存成html文件，使用浏览器进行浏览。
-7. 提供探索性分析。
-8. 扩展 gplearn 的函数库，面向时序数据进行特征衍生。
-9. 提供最优模型选择工具，可一览常见统计模型的性能。
-10. 使用足够简单，可以训练加预测一体，也可以加载模型权重再得到信号。
-11. 各组件都进行削减，仅保留需要的功能，减少不必要的依赖下载。
+
+1. 内嵌美国量化交易平台 quantpian 开源的策略研发组件，如 empyrical、alphalens、pyfolio。
+1. 提供雅虎财经的股票行情，以及相应的因子计算公式，包括 alpha101 和 alpha191。
+2. 提供通达信交易软件的股票行情，以及配套的 30 个经验证的技术指标 tdx30，可直接对标通达信平台使用。
+3. 使用信号驱动机制，令用户在信号编制中具有足够的自由度，并支持量价因子与机器学习模型信号，实现一步回测。
+3. 接口调用方式简单，只需提供 ohlc 数据，同时信号计算以及发出统一在单个方法里完成。
+1. 提供多个不同类型的策略模板，快速搭建相应策略回测，目前支持单标的的投机策略和多标的的投资组合策略。
+2. 提供因果图构建和因果特征选择算法，为因子分析增加因果维度的探索，扩展 gplearn 的函数库，面向时序数据进行特征衍生。
+6. 提供探索性分析和最优模型选择工具，迅速预览数据集的规律，以及常见模型在数据集的性能表现。
+12. 裁剪 backtrader 回测框架，减少不必要的依赖安装，改进回测结果至 html 页面展示，具有更友好的可视化互动。
+14. 整个策略搭建过程中，形成机器学习策略搭建的流程闭环，除了模型定义外，无需再引入其余第三方包。
+
 
 ## 下载方法
 
@@ -71,7 +71,7 @@ if __name__ == '__main__':
     rawdata = Align.transform(rawdata, baseline)
 
     # 定义随机森林指标类
-    class RandomForestIndicator(bt.Indicator):
+    class RSI(bt.Indicator):
 
         lines = ("model_indi",)  # 指标线
 
@@ -101,7 +101,7 @@ if __name__ == '__main__':
     # 运行回测
     res = LongBacktest.run(test_data=rawdata,
                            base_line=baseline,
-                           model_class=RandomForestIndicator,
+                           model_class=RSI,
                            feature_list=fea_list,
                            begin_date=bt_begin_date,
                            end_date=bt_end_date)
@@ -156,7 +156,7 @@ if __name__ == '__main__':
     rawdata = Align.transform(rawdata, baseline)
 
     # 定义随机森林指标类
-    class RandomForestIndicator(bt.Indicator):
+    class RandomForest(bt.Indicator):
 
         model_dict = {}  # 模型字典
 
@@ -164,7 +164,7 @@ if __name__ == '__main__':
 
         def __init__(self, stockid, fina_data, bt_begin_date, bt_end_date, fea_list):
 
-            if not RandomForestIndicator.model_dict:
+            if not RandomForest.model_dict:
                 train_data = fina_data.query("is_fake == False")  # 过滤掉测试数据
 
                 # 构建随机森林模型并保存到模型字典中
@@ -174,14 +174,14 @@ if __name__ == '__main__':
 
                     model = RandomForestClassifier(random_state=42, n_jobs=-1)
                     model.fit(bt_x_train, bt_y_train)
-                    RandomForestIndicator.model_dict[date.year] = model
+                    RandomForest.model_dict[date.year] = model
 
             indi_list = []
             # 使用模型进行预测
             for date in pd.date_range(start=bt_begin_date, end=bt_end_date, freq='12MS'):
                 pos_data = fina_data.query(f"code == '{stockid}' and date >= '{date}' and date < '{date + relativedelta(months=12 * 1)}'")
                 bt_x_test = pos_data.set_index(['date'])[fea_list]
-                pre_proba = RandomForestIndicator.model_dict[date.year].predict_proba(bt_x_test)[:, 1]
+                pre_proba = RandomForest.model_dict[date.year].predict_proba(bt_x_test)[:, 1]
 
                 tmp_list = [np.NaN if pos_data['is_fake'].iloc[i] else pre_proba[i] for i in range(len(pre_proba))]
                 indi_list.extend(tmp_list)
@@ -195,7 +195,7 @@ if __name__ == '__main__':
     # 运行回测
     res = LongBacktest.run(test_data=rawdata,
                            base_line=baseline,
-                           model_class=RandomForestIndicator,
+                           model_class=RandomForest,
                            feature_list=fea_list,
                            begin_date=bt_begin_date,
                            end_date=bt_end_date)
