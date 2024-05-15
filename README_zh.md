@@ -39,7 +39,6 @@ pip install https://github.com/MuuYesen/trade-learn.git
 **使用量价指标进行单标的买卖**：
 ```python
 from tradelearn.query.query import Query  # 导入数据查询模块
-from tradelearn.strategy.preprocess.explore.explore import Explore  # 导入数据探索模块
 from tradelearn.trader.utils.align import Align
 from tradelearn.strategy.backtest.single import LongBacktest  # 导入单支股票回测模块
 from tradelearn.strategy.evaluate.evaluate import Evaluate  # 导入策略评估模块
@@ -63,9 +62,6 @@ if __name__ == '__main__':
 
     # 特征列表，去除标签和代码以及日期列
     fea_list = rawdata.columns.drop(['label', 'code', 'date']).tolist()
-
-    # 数据探索
-    Explore.analysis_report(rawdata)
 
     # 数据对齐
     rawdata = Align.transform(rawdata, baseline)
@@ -114,7 +110,6 @@ if __name__ == '__main__':
 **使用机器学习模型进行投资组合的搭建**：  
 ```python
 from tradelearn.query.query import Query  # 导入数据查询模块
-from tradelearn.strategy.preprocess.explore.explore import Explore  # 导入数据探索模块
 from tradelearn.trader.utils.align import Align
 from tradelearn.strategy.backtest.fund import LongBacktest  # 导入长周期回测模块
 from tradelearn.strategy.evaluate.evaluate import Evaluate  # 导入策略评估模块
@@ -148,9 +143,6 @@ if __name__ == '__main__':
 
     # 特征列表，去除标签和代码以及日期列
     fea_list = rawdata.columns.drop(['label', 'code', 'date']).tolist()
-
-    # 数据探索
-    Explore.analysis_report(rawdata)
 
     # 数据对齐
     rawdata = Align.transform(rawdata, baseline)
