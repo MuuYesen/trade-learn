@@ -16,7 +16,7 @@ class LongBacktest:
 
     @staticmethod
     def run(test_data: pd.DataFrame, base_line: pd.DataFrame, begin_date: str, end_date: str,
-            model_class: bt.Indicator, feature_list: list, **kwargs):
+            model_class: bt.Indicator, feature_list: list, show_source=True, **kwargs):
 
         cerebro = bt.Cerebro()
 
@@ -48,7 +48,7 @@ class LongBacktest:
         results = cerebro.run()
         print('最终资金: %.2f' % cerebro.broker.getvalue())
 
-        cerebro.plot(output_mode='show', style='bar', show_source=True)
+        cerebro.plot(output_mode='show', style='bar', show_source=show_source)
 
         strat = results[0]
         print('夏普比率:', strat.analyzers._SharpeRatio.get_analysis())
