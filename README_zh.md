@@ -34,6 +34,38 @@ pip install trade-learn
 pip install https://github.com/MuuYesen/trade-learn.git
 ```
 
+## 使用模板
+```python
+from tradelearn.trader.utils.align import Align
+from tradelearn.strategy.backtest.single import LongBacktest
+
+import tradelearn.trader as bt
+
+# 数据获取
+rawdata, baseline = "标的行情数据", "基准行情数据"
+
+# 数据对齐
+rawdata = Align.transform(rawdata, baseline)
+
+# 特征列表
+fea_list = "用于发出信号的变量名称集合"
+
+# 定义回测起始日期和结束日期
+bt_begin_date, bt_end_date = "回测的开始日期", "回测的结束日期"
+
+# 定义指标类
+class Example(bt.Indicator):
+
+    lines = ("model_indi",)  # 指标线
+
+    def __init__(self, stockid, fina_data, bt_begin_date, bt_end_date, fea_list):
+        tmp_list = "计算出来的信号序列"
+        
+        self.lines.model_indi.array.extend(tmp_list)
+
+# 运行回测
+res = LongBacktest.run(Example, fea_list, rawdata, baseline, bt_begin_date, bt_end_date)
+```
 ## 简单例子
 
 **使用量价指标进行单标的买卖**：
