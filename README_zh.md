@@ -12,7 +12,7 @@ trade-learn 是一个基于 alphalens、backtrader、pyfolio 和 quantstats 的�
 
 ## 主要特性
 
-1. 内嵌美国量化交易平台 quantpian 开源的策略研发组件，如 empyrical、alphalens、pyfolio。
+1. 内嵌美国量化交易平台 quantpian 开源的策略研发组件，如 empyrical、alphalens、pyfolio，保证指标一致性。
 1. 提供「雅虎财经」的股票行情，以及相应的因子计算公式，包括 alpha101 和 alpha191。
 2. 提供「通达信交易软件」的股票行情，以及配套的 30 个经验证的技术指标 tdx30，可直接对标通达信平台使用。
 3. 使用信号驱动机制，令用户在信号编制中具有足够的自由度，并支持量价因子与机器学习模型信号，实现一步回测。
