@@ -1,10 +1,12 @@
-## trade-learn：使用 Python 研发机器学习策略
+## trade-learn：使用 Python 搭建机器学习交易策略
 
 trade-learn 是一个基于 alphalens、backtrader、pyfolio 和 quantstats 的机器学习策略研发工具包，提供因子采集、因子处理、因子评估、因果分析、模型定义和策略回测的全套策略研发流程，并支持可视化结果以 html 文件进行存档分享。
 
-![img.png](docs/img.png)
+<center><img src="docs/img.png" alt="img" width="90%"></center>
 
-![img_2.png](docs/plot_list.png)
+可视化图汇总：
+
+<center><img src="docs/plot_list.png" alt="img" width="90%"></center>
 
 ## 主要特性
 1. 提供多个不同类型的策略模板，用户只需要给出对应的信号序列即可完成回测评估。
@@ -17,7 +19,7 @@ trade-learn 是一个基于 alphalens、backtrader、pyfolio 和 quantstats 的�
 7. 提供探索性分析。
 8. 扩展 gplearn 的函数库，面向时序数据进行特征衍生。
 9. 提供最优模型选择工具，可一览常见统计模型的性能。
-10. 使用足够简单。
+10. 使用足够简单，可以训练加预测一体，也可以加载模型权重再得到信号。
 
 ## 下载方法
 
@@ -85,8 +87,8 @@ if __name__ == '__main__':
 
             # 根据信号生成指标数据
             bt_indi = indi.query(f"date >= '{bt_begin_date}' and date < '{bt_end_date}'").values.reshape(-1)
+            
             tmp_list = [np.NaN if fina_data['is_fake'].iloc[i] else bt_indi[i] for i in range(len(bt_indi))]
-
             self.lines.model_indi.array.extend(tmp_list)
 
     # 定义回测起始日期和结束日期
