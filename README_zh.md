@@ -31,7 +31,7 @@ pip install https://github.com/MuuYesen/trade-learn.git
 
 ## 简单例子
 
-**使用指标进行单标的买卖**：
+**使用量价指标进行单标的买卖**：
 ```python
 from tradelearn.query.query import Query  # 导入数据查询模块
 from tradelearn.strategy.preprocess.explore.explore import Explore  # 导入数据探索模块
@@ -106,7 +106,7 @@ if __name__ == '__main__':
 
 ```
 
-**使用模型进行投资组合的搭建**：  
+**使用机器学习模型进行投资组合的搭建**：  
 ```python
 from tradelearn.query.query import Query  # 导入数据查询模块
 from tradelearn.strategy.preprocess.explore.explore import Explore  # 导入数据探索模块
@@ -117,9 +117,6 @@ from tradelearn.strategy.evaluate.evaluate import Evaluate  # 导入策略评估
 import numpy as np
 import pandas as pd
 from dateutil.relativedelta import relativedelta
-
-import warnings
-warnings.filterwarnings('ignore')  # 忽略警告信息
 
 import tradelearn.trader as bt
 from sklearn.ensemble import RandomForestClassifier  # 导入随机森林分类器
