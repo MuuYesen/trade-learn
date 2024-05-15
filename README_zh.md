@@ -6,7 +6,7 @@ trade-learn 是一个基于 alphalens、backtrader、pyfolio 和 quantstats 的�
 
 可视化图汇总：
 
-<div style="text-align:center;">
+<div align=center>
 <img src="docs/plot_list.png" alt="img" width="70%">
 </div>
 
