@@ -1,4 +1,5 @@
 import unittest
+import pandas as pd
 from tradelearn.query.query import Query
 from tradelearn.strategy.examine.examine import Examine
 

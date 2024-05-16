@@ -15,7 +15,7 @@
 from collections import OrderedDict
 from functools import partial
 
-import empyrical as ep
+import tradelearn.strategy.backtest.empyrical as ep
 import numpy as np
 import pandas as pd
 import scipy as sp
