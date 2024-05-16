@@ -1,6 +1,8 @@
 import pandas as pd
 
 import tradelearn.trader as bt
+from tradelearn.trader.utils.align import Align
+
 from dateutil.relativedelta import relativedelta
 
 import logging
@@ -15,8 +17,8 @@ init_log_tab([__name__], logging.INFO)
 class LongBacktest:
 
     @staticmethod
-    def run(test_data: pd.DataFrame, base_line: pd.DataFrame, begin_date: str, end_date: str,
-            model_class: bt.Indicator, feature_list: list, show_source=True, **kwargs):
+    def run(model_class: bt.Indicator, param_dict: dict, raw_data: pd.DataFrame, base_line: pd.DataFrame,
+            begin_date: str, end_date: str, show_source=True):
 
         cerebro = bt.Cerebro()
 
@@ -26,7 +28,7 @@ class LongBacktest:
                                    low=2, close=3, volume=4, openinterest=-1)
         cerebro.adddata(data, name='baseline')
 
-        bt_test_data = test_data[['open', 'high', 'low', 'close', 'volume', 'date', 'code']]
+        bt_test_data = raw_data[['open', 'high', 'low', 'close', 'volume', 'date', 'code']]
         bt_test_data = bt_test_data.query(f"date >= '{begin_date}' and date < '{end_date}'")
         for symbol in bt_test_data['code'].unique():
             data = bt_test_data.query(f"code == '{symbol}'")
@@ -42,7 +44,7 @@ class LongBacktest:
         cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='_SharpeRatio')
         cerebro.addanalyzer(bt.analyzers.DrawDown, _name='_DrawDown')
 
-        cerebro.addstrategy(Long, bt_data=test_data, model_class=model_class, feature_list=feature_list, begin_date=begin_date, end_date=end_date, **kwargs)
+        cerebro.addstrategy(Long, model_class, param_dict, raw_data, base_line,begin_date, end_date)
 
         print('初始资金: %.2f' % cerebro.broker.getvalue())
         results = cerebro.run()
@@ -67,15 +69,12 @@ class Long(bt.Strategy):
         dt = bt.num2date(datetime)
         logger.info('%s, %s' % (dt.isoformat(), txt))
 
-    def __init__(self, bt_data, model_class, feature_list, begin_date, end_date, **kwargs):
+    def __init__(self, model_class, param_dict, raw_data, base_line, begin_date, end_date):
         self.inds = {}
-        for symbol in bt_data.query(f"date >= '{begin_date}' and date < '{end_date}'")['code'].unique():
-            self.inds[symbol] = model_class(bt_begin_date=begin_date,
-                                            bt_end_date=end_date,
-                                            fina_data=bt_data,
-                                            fea_list=feature_list,
-                                            stockid=symbol,
-                                            **kwargs)
+        for symbol in raw_data.query(f"date >= '{begin_date}' and date < '{end_date}'")['code'].unique():
+            raw_data = Align.transform(raw_data, base_line)
+            self.inds[symbol] = model_class(stockid=symbol, raw_data=raw_data,
+                                            bt_begin_date=begin_date, bt_end_date=end_date, param_dict=param_dict)
         self.last = []
         self.order_list = []
         self.last_date = None
@@ -121,7 +120,7 @@ class Long(bt.Strategy):
 
         proba_dict = {}
         for symbol in self.inds.keys():
-            proba_dict[symbol] = self.inds[symbol].lines.model_indi[0]
+            proba_dict[symbol] = self.inds[symbol].lines.signal[0]
         data = pd.Series(proba_dict)
         long_list = data[(data >= data.quantile(0.8)) & (data <= data.quantile(1.0))].index.tolist()
 
