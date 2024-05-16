@@ -20,6 +20,8 @@ class LongBacktest:
     def run(model_class: bt.Indicator, param_dict: dict, raw_data: pd.DataFrame, base_line: pd.DataFrame,
             begin_date: str, end_date: str, show_source=True):
 
+        al_raw_data = Align.transform(raw_data, base_line)
+
         cerebro = bt.Cerebro()
 
         bt_base_data = base_line[['open', 'high', 'low', 'close', 'volume', 'date', 'code']]
@@ -28,7 +30,7 @@ class LongBacktest:
                                    low=2, close=3, volume=4, openinterest=-1)
         cerebro.adddata(data, name='baseline')
 
-        bt_test_data = raw_data[['open', 'high', 'low', 'close', 'volume', 'date', 'code']]
+        bt_test_data = al_raw_data[['open', 'high', 'low', 'close', 'volume', 'date', 'code']]
         bt_test_data = bt_test_data.query(f"date >= '{begin_date}' and date < '{end_date}'")
         for symbol in bt_test_data['code'].unique():
             data = bt_test_data.query(f"code == '{symbol}'")
@@ -45,7 +47,7 @@ class LongBacktest:
         cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='_SharpeRatio')
         cerebro.addanalyzer(bt.analyzers.DrawDown, _name='_DrawDown')
 
-        cerebro.addstrategy(Long, model_class, param_dict, raw_data, base_line,begin_date, end_date)
+        cerebro.addstrategy(Long, model_class, param_dict, raw_data, bt_base_data, begin_date, end_date)
 
         print('初始资金: %.2f' % cerebro.broker.getvalue())
         results = cerebro.run()
@@ -70,10 +72,10 @@ class Long(bt.Strategy):
         dt = bt.num2date(datetime)
         logger.info('%s, %s' % (dt.isoformat(), txt))
 
-    def __init__(self, model_class, param_dict, raw_data, base_line, begin_date, end_date):
-        raw_data = Align.transform(raw_data, base_line)
+    def __init__(self, model_class, param_dict, raw_data, bt_base_data, begin_date, end_date):
         self.inds = model_class(stockid=raw_data['code'].iloc[0], raw_data=raw_data,
                                 bt_begin_date=begin_date, bt_end_date=end_date, param_dict=param_dict)
+        self.inds.align_signal(bt_base_data)
         self.order_list = []
         self.last_date = None
 

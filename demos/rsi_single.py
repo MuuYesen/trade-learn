@@ -37,14 +37,11 @@ if __name__ == '__main__':
                     return False
                 return np.NAN
             indi = indi.set_index('date').map(signal)
+            bt_indi = indi.query(f"date >= '{bt_begin_date}' and date < '{bt_end_date}'")
 
-            bt_indi = indi.query(f"date >= '{bt_begin_date}' and date < '{bt_end_date}'").values.reshape(-1)
-            tmp_list = [np.NaN if raw_data['is_fake'].iloc[i] else bt_indi[i] for i in range(len(bt_indi))]
+            self.set_signal(bt_indi)
 
-            self.set_signal(tmp_list)
-
-    fea_list = rawdata.columns.drop(['label', 'code', 'date']).tolist()
-    param_dict = {'fea_list': fea_list}
+    param_dict = {}
 
     res = LongBacktest.run(RSI, param_dict, rawdata, baseline, bt_begin_date, bt_end_date)
     Evaluate.analysis_report(res, baseline, engine='pyfolio')

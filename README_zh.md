@@ -49,9 +49,9 @@ bt_begin_date, bt_end_date = "回测的开始日期", "回测的结束日期"
 class Example(Signal):
 
     def __init__(self, stockid, raw_data, bt_begin_date, bt_end_date, param_dict):
-        tmp_list = "计算出来的信号序列，含有 True、False 和 np.NAN 三种值"
+        signal_df = "计算出来的信号序列，含有 True、False 和 np.NAN 三种值，同时将日期设置成索引"
         
-        self.set_signal(tmp_list)
+        self.set_signal(signal_df)
 
 # 信号类参数字典
 param_dict = {'fea_list': "用于发出信号的变量名称集合"}
@@ -64,16 +64,15 @@ res = LongBacktest.run(Example, param_dict, raw_data, base_line, bt_begin_date, 
 **使用量价指标进行单标的买卖**：
 ```python
 from tradelearn.query.query import Query  # 导入数据查询模块
-from tradelearn.trader.utils.align import Align
+from tradelearn.trader.signal import Signal # 导入策略信号类
 from tradelearn.strategy.backtest.single import LongBacktest  # 导入单支股票回测模块
 from tradelearn.strategy.evaluate.evaluate import Evaluate  # 导入策略评估模块
 
 import numpy as np
 
-import tradelearn.trader as bt
-
 
 if __name__ == '__main__':
+    
     # 定义数据起始日期和结束日期
     tn_begin_date = '2017-01-01'
     tn_end_date = '2022-06-22'
@@ -85,22 +84,18 @@ if __name__ == '__main__':
     rawdata = Query.history_ohlc(symbol='600520', start=tn_begin_date, end=tn_end_date, adjust='hfq', engine='tdx')
     rawdata['label'] = rawdata['close'].pct_change(periods=5).shift(-1).map(lambda x: 1 if x > 0 else -1)
 
-    # 特征列表，去除标签和代码以及日期列
-    fea_list = rawdata.columns.drop(['label', 'code', 'date']).tolist()
+    # 定义回测起始日期和结束日期
+    bt_begin_date = '2020-01-01'
+    bt_end_date = '2022-06-22'
+    
+    # 定义RSI信号类
+    class RSI(Signal):
 
-    # 数据对齐
-    rawdata = Align.transform(rawdata, baseline)
-
-    # 定义随机森林指标类
-    class RSI(bt.Indicator):
-
-        lines = ("model_indi",)  # 指标线
-
-        def __init__(self, stockid, fina_data, bt_begin_date, bt_end_date, fea_list):
+        def __init__(self, stockid, raw_data, bt_begin_date, bt_end_date, param_dict):
             
-            indi = Query.tec_indicator(fina_data, ['RSI']) # 计算相对强弱指标RSI
+            indi = Query.tec_indicator(raw_data, ['RSI']) # 计算相对强弱指标RSI
 
-            # 生成信号
+            # 生成全体区间的信号
             def signal(x):
                 if x < 20:
                     return True
@@ -109,23 +104,15 @@ if __name__ == '__main__':
                 return np.NAN
             indi = indi.set_index('date').map(signal)
 
-            # 根据信号生成指标数据
-            bt_indi = indi.query(f"date >= '{bt_begin_date}' and date < '{bt_end_date}'").values.reshape(-1)
-            
-            tmp_list = [np.NaN if fina_data['is_fake'].iloc[i] else bt_indi[i] for i in range(len(bt_indi))]
-            self.lines.model_indi.array.extend(tmp_list)
+            # 保留回测区间的信号
+            bt_indi = indi.query(f"date >= '{bt_begin_date}' and date < '{bt_end_date}'")
 
-    # 定义回测起始日期和结束日期
-    bt_begin_date = '2020-01-01'
-    bt_end_date = '2022-06-22'
-
+            self.set_signal(bt_indi)
+    
+    param_dict = {}
+    
     # 运行回测
-    res = LongBacktest.run(test_data=rawdata,
-                           base_line=baseline,
-                           model_class=RSI,
-                           feature_list=fea_list,
-                           begin_date=bt_begin_date,
-                           end_date=bt_end_date)
+    res = LongBacktest.run(RSI, param_dict, rawdata, baseline, bt_begin_date, bt_end_date)
 
     # 分析回测结果
     Evaluate.analysis_report(res, baseline, engine='quantstats')  # 使用quantstats引擎进行回测结果分析
@@ -135,7 +122,7 @@ if __name__ == '__main__':
 **使用机器学习模型进行投资组合的搭建**：  
 ```python
 from tradelearn.query.query import Query  # 导入数据查询模块
-from tradelearn.trader.utils.align import Align
+from tradelearn.trader.signal import Signal # 导入策略信号类
 from tradelearn.strategy.backtest.fund import LongBacktest  # 导入长周期回测模块
 from tradelearn.strategy.evaluate.evaluate import Evaluate  # 导入策略评估模块
 
@@ -143,16 +130,16 @@ import numpy as np
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 
-import tradelearn.trader as bt
 from sklearn.ensemble import RandomForestClassifier  # 导入随机森林分类器
 
 
 if __name__ == '__main__':
+    
     # 定义数据起始日期和结束日期
     tn_begin_date = '2017-01-01'
     tn_end_date = '2022-06-22'
 
-    # 查询沪深300指数的历史数据作为基准
+    # 查询上证指数的历史数据作为基准
     baseline = Query.history_ohlc(symbol='000001.SS', start=tn_begin_date, end=tn_end_date, engine='yahoo')  ## 两个接口都是右开区间，所有都是包括自定义
 
     rawdata = None
@@ -166,23 +153,20 @@ if __name__ == '__main__':
         temp['label'] = temp['close'].pct_change(periods=5).shift(-1).map(lambda x: 1 if x > 0 else -1)
         rawdata = pd.concat([rawdata, temp], axis=0)
 
-    # 特征列表，去除标签和代码以及日期列
-    fea_list = rawdata.columns.drop(['label', 'code', 'date']).tolist()
-
-    # 数据对齐
-    rawdata = Align.transform(rawdata, baseline)
-
+    # 定义回测起始日期和结束日期
+    bt_begin_date = '2020-01-01'
+    bt_end_date = '2022-06-22'
+    
     # 定义随机森林指标类
-    class RandomForest(bt.Indicator):
+    class RandomForest(Signal):
 
         model_dict = {}  # 模型字典
 
-        lines = ("model_indi",)  # 指标线
-
-        def __init__(self, stockid, fina_data, bt_begin_date, bt_end_date, fea_list):
-
+        def __init__(self, stockid, raw_data, bt_begin_date, bt_end_date, param_dict):
+            fea_list = param_dict['fea_list']
+            
             if not RandomForest.model_dict:
-                train_data = fina_data.query("is_fake == False")  # 过滤掉测试数据
+                train_data = raw_data.query("is_fake == False")  # 过滤掉测试数据
 
                 # 构建随机森林模型并保存到模型字典中
                 for date in pd.date_range(start=bt_begin_date, end=bt_end_date, freq='12MS'):
@@ -196,27 +180,22 @@ if __name__ == '__main__':
             indi_list = []
             # 使用模型进行预测
             for date in pd.date_range(start=bt_begin_date, end=bt_end_date, freq='12MS'):
-                pos_data = fina_data.query(f"code == '{stockid}' and date >= '{date}' and date < '{date + relativedelta(months=12 * 1)}'")
+                pos_data = raw_data.query(f"code == '{stockid}' and date >= '{date}' and date < '{date + relativedelta(months=12 * 1)}'")
                 bt_x_test = pos_data.set_index(['date'])[fea_list]
                 pre_proba = RandomForest.model_dict[date.year].predict_proba(bt_x_test)[:, 1]
 
                 tmp_list = [np.NaN if pos_data['is_fake'].iloc[i] else pre_proba[i] for i in range(len(pre_proba))]
                 indi_list.extend(tmp_list)
 
-            self.lines.model_indi.array.extend(indi_list)
+            self.set_signal(indi_list)
 
-    # 定义回测起始日期和结束日期
-    bt_begin_date = '2020-01-01'
-    bt_end_date = '2022-06-22'
-
+    # 特征列表，去除标签和代码以及日期列
+    fea_list = rawdata.columns.drop(['label', 'code', 'date']).tolist()
+    param_dict = {'fea_list': fea_list}
+    
     # 运行回测
-    res = LongBacktest.run(test_data=rawdata,
-                           base_line=baseline,
-                           model_class=RandomForest,
-                           feature_list=fea_list,
-                           begin_date=bt_begin_date,
-                           end_date=bt_end_date)
-
+    res = LongBacktest.run(RandomForest, param_dict, rawdata, baseline, bt_begin_date, bt_end_date)
+    
     # 分析回测结果
     Evaluate.analysis_report(res, baseline, engine='quantstats')  # 使用quantstats引擎进行回测结果分析
 
