@@ -6,8 +6,12 @@ from tradelearn.strategy.preprocess.explore.explore import Explore
 class TestExplore(unittest.TestCase):
 
     def test_explore_report(self):
-        data = Query.read_csv('./data/600036SH.csv', begin='2020-01-01', end='2023-06-21')
-        Explore.analysis_report(data, filename='res/explore.html')
+        tn_begin_date = '2017-01-01'
+        tn_end_date = '2022-06-22'
+
+        rawdata = Query.history_ohlc(symbol='600520', start=tn_begin_date, end=tn_end_date, adjust='hfq',
+                                     engine='tdx')
+        Explore.analysis_report(rawdata, filename='res/explore.html')
 
 
 

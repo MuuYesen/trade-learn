@@ -2,6 +2,7 @@ import pandas as pd
 
 import tradelearn.trader as bt
 from tradelearn.trader.utils.align import Align
+from tradelearn.trader.signal import Signal
 
 from dateutil.relativedelta import relativedelta
 
@@ -17,7 +18,7 @@ init_log_tab([__name__], logging.INFO)
 class LongBacktest:
 
     @staticmethod
-    def run(model_class: bt.Indicator, param_dict: dict, raw_data: pd.DataFrame, base_line: pd.DataFrame,
+    def run(model_class: Signal, param_dict: dict, raw_data: pd.DataFrame, base_line: pd.DataFrame,
             begin_date: str, end_date: str, show_source=True):
 
         al_raw_data = Align.transform(raw_data, base_line)
