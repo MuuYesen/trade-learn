@@ -166,28 +166,24 @@ if __name__ == '__main__':
             fea_list = param_dict['fea_list']
             
             if not RandomForest.model_dict:
-                train_data = raw_data.query("is_fake == False")  # 过滤掉测试数据
-
                 # 构建随机森林模型并保存到模型字典中
                 for date in pd.date_range(start=bt_begin_date, end=bt_end_date, freq='12MS'):
-                    bt_train_data = train_data.query(f"date >= '{date - relativedelta(months=12 * 3)}' and date < '{date}'")
+                    bt_train_data = raw_data.query(f"date >= '{date - relativedelta(months=12 * 3)}' and date < '{date}'")
                     bt_x_train, bt_y_train = bt_train_data[fea_list], bt_train_data['label']
 
                     model = RandomForestClassifier(random_state=42, n_jobs=-1)
                     model.fit(bt_x_train, bt_y_train)
                     RandomForest.model_dict[date.year] = model
 
-            indi_list = []
+            indi_df = None
             # 使用模型进行预测
             for date in pd.date_range(start=bt_begin_date, end=bt_end_date, freq='12MS'):
                 pos_data = raw_data.query(f"code == '{stockid}' and date >= '{date}' and date < '{date + relativedelta(months=12 * 1)}'")
                 bt_x_test = pos_data.set_index(['date'])[fea_list]
                 pre_proba = RandomForest.model_dict[date.year].predict_proba(bt_x_test)[:, 1]
+                indi_df = pd.concat([indi_df, pd.DataFrame(pre_proba, index=pos_data['date'])])
 
-                tmp_list = [np.NaN if pos_data['is_fake'].iloc[i] else pre_proba[i] for i in range(len(pre_proba))]
-                indi_list.extend(tmp_list)
-
-            self.set_signal(indi_list)
+            self.set_signal(indi_df)
 
     # 特征列表，去除标签和代码以及日期列
     fea_list = rawdata.columns.drop(['label', 'code', 'date']).tolist()
