@@ -268,25 +268,25 @@ from tradelearn.causal.blanket.blanket import Blanket
 
 Blanket.fit_causal(data=rawdata, method='iamb', target_name='volume', is_discrete=False)
 ```
-| 参数名称        | 数据类型      | 备注                      |
-|-------------|-----------|-------------------------|
-| data        | DataFrame | 标的行情数据                  |
-| method      | string    | 选用的因果特征选择算法             |
-| target      | string    | 因变量名称                   |
-| alpha       | float     | 置信度水平，一般设置成 0.05 或 0.01 |
-| is_discrete | bool      | data 数据是离散型变量，则设置为 True |
+| 参数名称        | 数据类型      | 备注                                |
+|-------------|-----------|-----------------------------------|
+| data        | DataFrame | 标的行情数据                            |
+| method      | string    | 选用的因果特征选择算法，可选方法有 'iamb' 和 'pcmb' |
+| target      | string    | 因变量名称                             |
+| alpha       | float     | 置信度水平，一般设置成 0.05 或 0.01           |
+| is_discrete | bool      | data 数据是离散型变量，则设置为 True           |
 ### 因果图构建
 ```python
 from tradelearn.causal.graph.graph import Graph
 
 Graph.fit_causal(data=rawdata, method='pc', is_discrete=False, filename='res/pc.png')
 ```
-| 参数名称        | 数据类型      | 备注                      |
-|-------------|-----------|-------------------------|
-| data        | DataFrame | 标的行情数据                  |
-| method      | string    | 选用的因果图构建算法              |
-| is_discrete | bool      | data 数据是离散型变量，则设置为 True |
-| filename    | string    | 因果图的保存路径及名称，可选          |
+| 参数名称        | 数据类型      | 备注                        |
+|-------------|-----------|---------------------------|
+| data        | DataFrame | 标的行情数据                    |
+| method      | string    | 选用的因果图构建算法，可选方法有 'pc' 和 'ges' |
+| is_discrete | bool      | data 数据是离散型变量，则设置为 True   |
+| filename    | string    | 因果图的保存路径及名称，可选            |
 ### 最优模型选择
 ```python
 from tradelearn.automl.automl import AutoML
