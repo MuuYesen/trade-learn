@@ -36,35 +36,28 @@ pip install https://github.com/MuuYesen/trade-learn.git
 
 ## 使用模板
 ```python
-from tradelearn.trader.utils.align import Align
+from tradelearn.trader.signal import Signal
 from tradelearn.strategy.backtest.single import LongBacktest
 
-import tradelearn.trader as bt
-
 # 数据获取
-rawdata, baseline = "标的行情数据", "基准行情数据"
-
-# 数据对齐
-rawdata = Align.transform(rawdata, baseline)
-
-# 特征列表
-fea_list = "用于发出信号的变量名称集合"
+raw_data, base_line = "标的行情数据", "基准行情数据"
 
 # 定义回测起始日期和结束日期
 bt_begin_date, bt_end_date = "回测的开始日期", "回测的结束日期"
 
-# 定义指标类
-class Example(bt.Indicator):
+# 定义信号类
+class Example(Signal):
 
-    lines = ("model_indi",)  # 指标线
-
-    def __init__(self, stockid, fina_data, bt_begin_date, bt_end_date, fea_list):
-        tmp_list = "计算出来的信号序列"
+    def __init__(self, stockid, raw_data, bt_begin_date, bt_end_date, param_dict):
+        tmp_list = "计算出来的信号序列，含有 True、False 和 np.NAN 三种值"
         
-        self.lines.model_indi.array.extend(tmp_list)
+        self.set_signal(tmp_list)
+
+# 信号类参数字典
+param_dict = {'fea_list': "用于发出信号的变量名称集合"}
 
 # 运行回测
-res = LongBacktest.run(Example, fea_list, rawdata, baseline, bt_begin_date, bt_end_date)
+res = LongBacktest.run(Example, param_dict, raw_data, base_line, bt_begin_date, bt_end_date)
 ```
 ## 简单例子
 
