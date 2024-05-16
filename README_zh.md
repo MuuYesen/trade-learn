@@ -120,7 +120,7 @@ if __name__ == '__main__':
 ```python
 from tradelearn.query.query import Query  # 导入数据查询模块
 from tradelearn.trader.signal import Signal  # 导入策略信号类
-from tradelearn.strategy.backtest.fund import LongBacktest  # 导入长周期回测模块
+from tradelearn.strategy.backtest.fund import LongBacktest  # 导入投资组合回测模块
 from tradelearn.strategy.evaluate.evaluate import Evaluate  # 导入策略评估模块
 
 import numpy as np
@@ -154,7 +154,7 @@ if __name__ == '__main__':
     bt_begin_date = '2020-01-01'
     bt_end_date = '2022-06-22'
     
-    # 定义随机森林指标类
+    # 定义随机森林指标类，并使用滚动预测的方式得到交易信号
     class RandomForest(Signal):
 
         model_dict = {}  # 模型字典
