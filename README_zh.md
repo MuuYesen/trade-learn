@@ -15,7 +15,7 @@ trade-learn 是一个基于 alphalens、backtrader、pyfolio 和 quantstats 的�
 1. 内嵌美国量化交易平台 quantopian 开源的策略研发组件，如 empyrical、alphalens、pyfolio 工具包。
 1. 提供「雅虎财经」的股票行情，以及相应的因子计算公式，包括 alpha101 和 alpha191 因子集合。
 2. 提供「通达信交易软件」的股票行情，以及配套的 30 个经验证的技术指标 tdx30，可直接对标通达信平台使用。
-3. 接口调用方式简单，只需提供 ohlc 数据，交易策略使用信号驱动，计算和发出在单个方法里一共完成，实现一步回测。
+3. 接口调用方式简单，只需提供 ohlc 数据，交易策略使用信号驱动，计算和发出在单个方法里一共完成，实现「一步回测」。
 1. 提供多个不同类型的策略模板，快速搭建相应策略回测，目前支持单标的的「投机策略」和多标的的「投资组合策略」。
 2. 提供「因果图构建」和「因果特征选择」算法，扩展 gplearn 的函数库，实现面向时序数据进行「特征衍生」。
 6. 提供「探索性分析」和「最优模型选择」工具，迅速预览数据集的规律，以及常见模型在数据集的性能表现。
@@ -332,15 +332,14 @@ Evaluate.analysis_report(strat=res, baseline=baseline, filename='./evaluate.html
 | engine   | string    | 回测结果评估，可选择 pyfolio 或 quantstats，分别对应 'pyfolio' 和 'quantstats' |
 ## 致谢
 
-- [Quantopian](https://github.com/quantopian/empyrical)
-- [Trevor Stephens](https://github.com/trevorstephens/gplearn)
-- [PyWhy](https://github.com/py-why/causal-learn)
-- [Kui Yu](https://github.com/kuiy/pyCausalFS)
-
+- [Quantopian](https://github.com/quantopian)
+- [Trevor Stephens](https://github.com/trevorstephens)
+- [PyWhy](https://github.com/py-why)
+- [DRo](https://github.com/mementum)
+- [happydasch](https://github.com/happydasch)
 
 
 ## 联系方式
 
-微信公众号：知守溪的收纳屋。
-电子邮箱：muyes88@gmail.com
+微信公众号：知守溪的收纳屋  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 电子邮箱：muyes88@gmail.com
 
