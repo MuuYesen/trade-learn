@@ -113,7 +113,7 @@ if __name__ == '__main__':
     res = LongBacktest.run(RSI, param_dict, rawdata, baseline, bt_begin_date, bt_end_date)
 
     # 分析回测结果
-    Evaluate.analysis_report(res, baseline, engine='quantstats')  # 使用quantstats引擎进行回测结果分析
+    Evaluate.analysis_report(res, baseline, engine='quantstats')
 ```
 
 **使用机器学习模型进行投资组合的搭建**：  
@@ -123,7 +123,6 @@ from tradelearn.trader.signal import Signal  # 导入策略信号类
 from tradelearn.strategy.backtest.fund import LongBacktest  # 导入投资组合回测模块
 from tradelearn.strategy.evaluate.evaluate import Evaluate  # 导入策略评估模块
 
-import numpy as np
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 
@@ -137,7 +136,7 @@ if __name__ == '__main__':
     tn_end_date = '2022-06-22'
 
     # 查询上证指数的历史数据作为基准
-    baseline = Query.history_ohlc(symbol='000001.SS', start=tn_begin_date, end=tn_end_date, engine='yahoo')  ## 两个接口都是右开区间，所有都是包括自定义
+    baseline = Query.history_ohlc(symbol='000001.SS', start=tn_begin_date, end=tn_end_date, engine='yahoo')
 
     rawdata = None
     # 循环查询多只股票的历史数据并进行处理
@@ -190,12 +189,9 @@ if __name__ == '__main__':
     res = LongBacktest.run(RandomForest, param_dict, rawdata, baseline, bt_begin_date, bt_end_date)
     
     # 分析回测结果
-    Evaluate.analysis_report(res, baseline, engine='quantstats')  # 使用quantstats引擎进行回测结果分析
+    Evaluate.analysis_report(res, baseline, engine='quantstats')
 ```
 ## 方法指南
-
-要求具有 code 和 date 列
-
 ### 原始数据获取
 ```python
 from tradelearn.query.query import Query
@@ -230,10 +226,10 @@ from tradelearn.strategy.preprocess.explore.explore import Explore
 Explore.analysis_report(data=rawdata, filename='res/explore.html')
 ```
 
-| 参数名称     | 数据类型      | 备注              |
-|----------|-----------|-----------------|
-| data     | DataFrame | 标的行情数据          |
-| filename | string    | html 文件的保存路径及名称 |
+| 参数名称     | 数据类型      | 备注                 |
+|----------|-----------|--------------------|
+| data     | DataFrame | 标的行情数据             |
+| filename | string    | html 文件的保存路径及名称，可选 |
 ### 因子衍生
 ```python
 from tradelearn.strategy.preprocess.derive.derive import Derive
@@ -249,11 +245,11 @@ from tradelearn.strategy.examine.examine import Examine
 
 Examine.single_factor(data=data, col='alpha001_101', filename='res/examine.html')
 ```
-| 参数名称     | 数据类型      | 备注                 |
-|----------|-----------|--------------------|
-| data     | DataFrame | 标的行情数据，要求具有两个及以上的股票 |
-| col      | string    | 目标因子名称             |
-| filename | string    | html 文件的保存路径及名称 |
+| 参数名称     | 数据类型      | 备注                        |
+|----------|-----------|---------------------------|
+| data     | DataFrame | 标的行情数据，要求具有两个及以上的股票       |
+| col      | string    | 目标因子名称                    |
+| filename | string    | html 文件的保存路径及名称，可选        |
 ### 多因子比较
 ```python
 from tradelearn.strategy.examine.examine import Examine
@@ -290,7 +286,7 @@ Graph.fit_causal(data=rawdata, method='pc', is_discrete=False, filename='res/pc.
 | data        | DataFrame | 标的行情数据                  |
 | method      | string    | 选用的因果图构建算法              |
 | is_discrete | bool      | data 数据是离散型变量，则设置为 True |
-| filename    | string    | 因果图的保存路径及名称             |
+| filename    | string    | 因果图的保存路径及名称，可选          |
 ### 最优模型选择
 ```python
 from tradelearn.automl.automl import AutoML
@@ -323,11 +319,11 @@ from tradelearn.strategy.evaluate.evaluate import Evaluate
 
 Evaluate.analysis_report(strat=res, baseline=baseline, filename='./evaluate.html', engine='quantstats')
 ```
-| 参数名称        | 数据类型      | 备注                                                            |
-|-------------|-----------|---------------------------------------------------------------|
-| strat | dict      | LongBacktest.run() 返回的数据字典                                    |
-| baseline  | DataFrame | 基准行情数据                                                        |
-| filename    | string    | 生成的 html 文件的路径及名称                                             |
+| 参数名称        | 数据类型      | 备注                                                      |
+|-------------|-----------|---------------------------------------------------------|
+| strat | dict      | LongBacktest.run() 返回的数据字典                              |
+| baseline  | DataFrame | 基准行情数据                                                  |
+| filename    | string    | 生成的 html 文件的路径及名称，可选                                    |
 | engine   | string    | 回测结果评估，可选择 pyfolio 或 quantstats，分别对应 'pyfolio' 和 'quantstats' |
 ## 致谢
 
