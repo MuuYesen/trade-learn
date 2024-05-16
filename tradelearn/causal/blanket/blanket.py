@@ -10,10 +10,10 @@ class Blanket:
         pass
 
     @staticmethod
-    def fit_causal(data: pd.DataFrame = None, method: str = 'iamb', target_name: str = None,
+    def fit_causal(data: pd.DataFrame = None, method: str = 'iamb', target: str = None,
                    alpha: float = 0.05, is_discrete: bool = True):
 
-        target = data.columns.tolist().index(target_name)
+        target = data.columns.tolist().index(target)
 
         res_id = None
         if method == 'iamb':
