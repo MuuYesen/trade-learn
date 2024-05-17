@@ -17,9 +17,9 @@ Summary of visualizations:
 2. Provides stock quotes from "Yahoo Finance" and corresponding factor calculation formulas, including alpha101 and alpha191 factor sets.
 3. Provides stock quotes from "Tongdaxin Trading Software" and 30 verified technical indicators (tdx30), directly usable on the Tongdaxin platform.
 4. Signal-driven trading strategies with multiple templates to quickly build and backtest strategies, supporting both speculative and portfolio strategies.
-5. Causal graph construction and causal feature selection algorithms extend the gplearn function library to achieve "feature derivation" for time-series data.
+5. Causal graph construction and causal feature selection algorithms, and extend the gplearn function library to achieve "feature derivation" for time-series data.
 6. Exploratory analysis and optimal model selection tools to quickly preview data set patterns and common models' performance on the data set.
-7. Trimmed backtrader backtesting framework to reduce unnecessary dependencies and optimize backtest results for HTML display, providing more user-friendly interactive visualization.
+7. Trimmed backtrader backtesting framework to reduce unnecessary dependencies and optimize backtest results for html display, providing more user-friendly interactive visualization.
 8. The entire strategy building process forms a complete loop for machine learning strategy development without introducing additional third-party packages except for model definition.
 
 
