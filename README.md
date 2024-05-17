@@ -242,8 +242,8 @@ res = Derive.generic_generate(data=rawdata)
 | Parameter Name     | Data Type	      | Notes                                                                                                                                             |
 |----------|-----------|---------------------------------------------------------------------------------------------------------------------------------------------------|
 | data     | DataFrame | Target market data                                                                                                                                |
-| f_col   | list      | A list of variable names derived from participating factors, default to all variables except code, date, and label, and evaluated by Sharp metrics |
-| n_alpha | int       | The count derived from the final factor                                                                                                           |
+| f_col   | list      | List of variable names derived from participating factors, and evaluated by Sharpe metrics. default to all variables except code, date, and label |
+| n_alpha | int       | Count derived from the final factor                                                                                                               |
 ### Single Factor Test
 ```python
 from tradelearn.strategy.examine.examine import Examine
