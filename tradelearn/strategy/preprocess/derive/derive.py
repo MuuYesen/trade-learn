@@ -9,7 +9,7 @@ class Derive:
         pass
 
     @staticmethod
-    def generic_generate(data, f_col: list = None, n_alpha: int = 20):
+    def generic_generate(data, f_col: list = None, n_alpha: int = 20, random=None):
 
         if f_col is None:
             try:
@@ -40,7 +40,8 @@ class Derive:
             low_memory=True,
             verbose=1,
             n_jobs=-1,
-            init_method='grow'
+            init_method='grow',
+            random_state=random
         )
 
         c_return = data['close'].shift(-1).dropna()
