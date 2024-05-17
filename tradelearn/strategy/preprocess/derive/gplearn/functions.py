@@ -11,10 +11,12 @@ own custom functions.
 
 import numpy as np
 import pandas as pd
+from scipy.stats import rankdata
+
 from joblib import wrap_non_picklable_objects
 
 __all__ = ['make_function']
-ind_label = pd.DataFrame()
+
 
 class _Function(object):
 
@@ -47,7 +49,7 @@ class _Function(object):
         return self.function(*args)
 
 
-def make_function(function, name, arity, wrap=True):
+def make_function(*, function, name, arity, wrap=True):
     """Make a function node, a representation of a mathematical relationship.
 
     This factory function creates a function node, one of the core nodes in any
@@ -93,7 +95,7 @@ def make_function(function, name, arity, wrap=True):
     args = [np.ones(10) for _ in range(arity)]
     try:
         function(*args)
-    except ValueError:
+    except (ValueError, TypeError):
         raise ValueError('supplied function %s does not support arity of %d.'
                          % (name, arity))
     if not hasattr(function(*args), 'shape'):
@@ -150,185 +152,111 @@ def _sigmoid(x1):
     with np.errstate(over='ignore', under='ignore'):
         return 1 / (1 + np.exp(-x1))
 
+def _rolling_rank(data):
+    value = rankdata(data)[-1]
 
-def _rank(x1):
-    x1 = pd.DataFrame(x1)
-    return x1.rank(pct=True).values
-
-
-def _scale(x1, a=1):
-    a = int(a)
-    return (a * x1 / np.nansum(np.abs(x1)))
+    return value
 
 
-def _signedpower(x1, a=2):
-    a = int(a)
-    return np.sign(x1) * np.power(np.abs(x1), a)
+def _rolling_prod(data):
+    return np.prod(data)
 
 
-def _delay(x1, d=5):
-    x1 = pd.DataFrame(x1)
-    d = 2 if int(d) <= 0 else int(d)
-    return x1.shift(periods=d, axis=1).values.astype(float)
+def _ts_sum(data):
+    window = 10
+    value = np.array(pd.Series(data.flatten()).rolling(window).sum().tolist())
+    value = np.nan_to_num(value)
+
+    return value
 
 
-def _correlation(x1, x2, d=5):
-    return pd.DataFrame(x1).rolling(window=d, axis=1).corr(pd.DataFrame(x2)). \
-        replace([-np.inf, np.inf], [-1, 1]).values
+def _sma(data):
+    window = 10
+    value = np.array(pd.Series(data.flatten()).rolling(window).mean().tolist())
+    value = np.nan_to_num(value)
+
+    return value
 
 
-def _covariance(x1, x2, d=5):
-    return pd.DataFrame(x1).rolling(window=d, axis=1).cov(pd.DataFrame(x2)).values
+def _stddev(data):
+    window = 10
+    value = np.array(pd.Series(data.flatten()).rolling(window).std().tolist())
+    value = np.nan_to_num(value)
+
+    return value
 
 
-def _delta(x1, d=5):
-    d = 2 if int(d) <= 0 else int(d)
-    return x1.astype(float) - pd.DataFrame(x1).shift(periods=d, axis=1).values.astype(float)
+def _ts_rank(data):
+    value = np.array(pd.Series(data.flatten()).rolling(10).apply(_rolling_rank).tolist())
+    value = np.nan_to_num(value)
+
+    return value
 
 
-def _ts_stddev(X, d=5):
-    d = 2 if int(d) <= 0 else int(d)
-    X = pd.DataFrame(X)
-    res = X.rolling(window=d, min_periods=d, axis=1).std()
-    return res.values.astype(float)
+def _product(data):
+    value = np.array(pd.Series(data.flatten()).rolling(10).apply(_rolling_prod).tolist())
+    value = np.nan_to_num(value)
+
+    return value
 
 
-def _ts_product(X, d=5):
-    X = pd.DataFrame(X)
-    res = X.rolling(window=d, min_periods=d, axis=1).apply(np.prod, raw=True)
-    return res.values
+def _ts_min(data):
+    window = 10
+    value = np.array(pd.Series(data.flatten()).rolling(window).min().tolist())
+    value = np.nan_to_num(value)
+
+    return value
 
 
-def _ts_sum(X, d=5):
-    d = 2 if int(d) <= 0 else int(d)
-    X = pd.DataFrame(X)
-    res = X.rolling(window=d, min_periods=d, axis=1).sum()
-    return res.values.astype(float)
+def _ts_max(data):
+    window = 10
+    value = np.array(pd.Series(data.flatten()).rolling(window).max().tolist())
+    value = np.nan_to_num(value)
+
+    return value
 
 
-def _ts_rank(X, d=5):
-    X = pd.DataFrame(X)
-    res = pd.DataFrame(index=range(X.shape[0]), columns=range(X.shape[1]))
-    for i in range(d - 1, X.shape[1]):
-        res[i] = X.iloc[:, i - 4: i + 1].rank(axis=1).iloc[:, -1]
-    return res.values.astype(float)
+def _delta(data):
+    value = np.diff(data.flatten())
+    value = np.append(0, value)
+
+    return value
 
 
-def _ts_argmax(X, d=5):
-    X = pd.DataFrame(X)
-    res = X.rolling(window=d, min_periods=d, axis=1).apply(np.argmax, raw=True)
-    return res.values
+def _delay(data):
+    value = pd.Series(data.flatten()).shift(1)
+    value = np.nan_to_num(value)
+
+    return value
 
 
-def _ts_argmin(X, d=5):
-    X = pd.DataFrame(X)
-    res = X.rolling(window=d, min_periods=d, axis=1).apply(np.argmin, raw=True)
-    return res.values
+def _rank(data):
+    value = np.array(pd.Series(data.flatten()).rank().tolist())
+    value = np.nan_to_num(value)
+
+    return value
 
 
-def _ts_max(X, d=5):
-    d = 2 if int(d) <= 0 else int(d)
-    X = pd.DataFrame(X)
-    res = X.rolling(window=d, min_periods=d, axis=1).max()
-    return res.values.astype(float)
+def _scale(data):
+    data = pd.Series(data.flatten())
+    value = data.mul(1).div(np.abs(data).sum())
+    value = np.nan_to_num(value)
+
+    return value
 
 
-def _ts_min(X, d=5):
-    d = 2 if int(d) <= 0 else int(d)
-    X = pd.DataFrame(X)
-    res = X.rolling(window=d, min_periods=d, axis=1).min()
-    return res.values.astype(float)
+def _ts_argmax(data):
+    value = pd.Series(data.flatten()).rolling(10).apply(np.argmax) + 1
+    value = np.nan_to_num(value)
+
+    return value
 
 
-def _ts_mean(X, d=5):
-    d = 2 if int(d) <= 0 else int(d)
-    X = pd.DataFrame(X)
-    res = X.rolling(window=d, min_periods=d, axis=1).mean()
-    return res.values.astype(float)
+def _ts_argmin(data):
+    value = pd.Series(data.flatten()).rolling(10).apply(np.argmin) + 1
+    value = np.nan_to_num(value)
 
-
-def _ts_sma(x1, n, m):
-    if (int(n) <= 1 or int(m) <= 0):
-        n = 5
-        m = 1
-    elif m / n > 1:
-        m = 1
-    else:
-        n = int(n)
-        m = int(m)
-    x2 = pd.DataFrame(x1.copy())
-    return x2.ewm(axis=1, alpha=m / n).mean().values
-
-
-def _ts_wma(x1, d=5):
-    d = 2 if int(d) <= 0 else int(d)
-    weights = 2 * np.arange(1, d + 1) / (d * (d + 1))
-    x2 = x1.copy()
-    x2[:, 0:d - 1] = np.nan
-    for i in range(d - 1, x1.shape[1]):
-        x2[:, i] = x1[:, i - d + 1:i + 1].dot(weights)
-    return x2.astype(float)
-
-
-def _ifcondition_g(condition_var1, condition_var2, x1, x2):
-    flag = pd.DataFrame(condition_var1 > condition_var2)
-    A = pd.DataFrame(index=flag.index, columns=flag.columns)
-    if type(x1) != float:
-        x1 = pd.DataFrame(x1)
-    if type(x2) != float:
-        x2 = pd.DataFrame(x2)
-    A[flag] = x1
-    A[~flag] = x2
-    return A.values.astype(float)
-
-
-def _ifcondition_ge(condition_var1, condition_var2, x1, x2):
-    flag = pd.DataFrame(condition_var1 >= condition_var2)
-    A = pd.DataFrame(index=flag.index, columns=flag.columns)
-    if type(x1) != float:
-        x1 = pd.DataFrame(x1)
-    if type(x2) != float:
-        x2 = pd.DataFrame(x2)
-    A[flag] = x1
-    A[~flag] = x2
-    return A.values.astype(float)
-
-
-def _ifcondition_e(condition_var1, condition_var2, x1, x2):
-    flag = pd.DataFrame(condition_var1 == condition_var2)
-    A = pd.DataFrame(index=flag.index, columns=flag.columns)
-    if type(x1) != float:
-        x1 = pd.DataFrame(x1)
-    if type(x2) != float:
-        x2 = pd.DataFrame(x2)
-    A[flag] = x1
-    A[~flag] = x2
-    return A.values.astype(float)
-
-
-def _ts_sumif(x1, condition_var1, condition_var2, d=5):
-    d = 2 if int(d) <= 0 else int(d)
-    flag = pd.DataFrame(condition_var1 > condition_var2)
-    A = pd.DataFrame(index=flag.index, columns=flag.columns)
-    x1 = pd.DataFrame(x1)
-    A[flag] = x1
-    A[~flag] = 0
-    return A.rolling(axis=1, window=d).sum().values.astype(float)
-
-
-def _ts_count(condition_var1, condition_var2, d=5):
-    # condition 只传condition_var1 > condition_var2即可
-    d = 2 if int(d) <= 0 else int(d)
-    condition = pd.DataFrame(condition_var1 > condition_var2)
-    return condition.rolling(window=d, axis=1).sum().values.astype(float)
-
-
-def _indneutral(x1):
-    global ind_label
-    A1 = pd.DataFrame(x1)
-    A1.insert(0, "Industry", ind_label.reset_index(drop=True))
-    A2 = A1.groupby(["Industry"]).apply(lambda x: x - x.mean())
-    return A2.values
+    return value
 
 
 add2 = _Function(function=np.add, name='add', arity=2)
@@ -347,33 +275,19 @@ cos1 = _Function(function=np.cos, name='cos', arity=1)
 tan1 = _Function(function=np.tan, name='tan', arity=1)
 sig1 = _Function(function=_sigmoid, name='sig', arity=1)
 
-rank1 = _Function(function=_rank, name='rank', arity=1)
-scale1 = _Function(function=_scale, name='scale', arity=1)
-signedpower1 = _Function(function=_signedpower, name='signedpower', arity=1)
-delay2 = _Function(function=_delay, name='delay', arity=2)
-corr3 = _Function(function=_correlation, name='correlation', arity=3)
-cov3 = _Function(function=_covariance, name='covariance', arity=3)
-delta2 = _Function(function=_delta, name='delta', arity=2)
-ts_min2 = _Function(function=_ts_min, name='ts_min', arity=2)
-ts_max2 = _Function(function=_ts_max, name='ts_max', arity=2)
-ts_argmin2 = _Function(function=_ts_argmin, name='ts_argmin', arity=2)
-ts_argmax2 = _Function(function=_ts_argmax, name='ts_argmax', arity=2)
-ts_rank2 = _Function(function=_ts_rank, name='ts_rank', arity=2)
-ts_sum2 = _Function(function=_ts_sum, name='ts_sum', arity=2)
-ts_mean2 = _Function(function=_ts_mean, name='ts_mean', arity=2)
-ts_product2 = _Function(function=_ts_product, name='ts_product', arity=2)
-ts_stddev2 = _Function(function=_ts_stddev, name='ts_stddev', arity=2)
-ts_sma3 = _Function(function=_ts_sma, name='ts_sma', arity=3)
-ts_wma2 = _Function(function=_ts_wma, name='ts_wma', arity=2)
-sign1 = _Function(function=np.sign, name='sign', arity=1)
-power2 = _Function(function=np.power, name='power', arity=2)
-ifcondition_g4 = _Function(function=_ifcondition_g, name='ifcondition_g', arity=4)
-ifcondition_ge4 = _Function(function=_ifcondition_ge, name='ifcondition_ge', arity=4)
-ifcondition_e4 = _Function(function=_ifcondition_e, name='ifcondition_e', arity=4)
-ts_sumif4 = _Function(function=_ts_sumif, name='ts_sumif', arity=4)
-ts_count3 = _Function(function=_ts_count, name='ts_count', arity=3)
-indneutral1 = _Function(function=_indneutral, name='indneutral', arity=1)
-
+delta = make_function(function=_delta, name='delta', arity=1)
+delay = make_function(function=_delay, name='delay', arity=1)
+rank = make_function(function=_rank, name='rank', arity=1)
+scale = make_function(function=_scale, name='scale', arity=1)
+sma = make_function(function=_sma, name='sma', arity=1)
+stddev = make_function(function=_stddev, name='stddev', arity=1)
+product = make_function(function=_product, name='product', arity=1)
+ts_rank = make_function(function=_ts_rank, name='ts_rank', arity=1)
+ts_min = make_function(function=_ts_min, name='ts_min', arity=1)
+ts_max = make_function(function=_ts_max, name='ts_max', arity=1)
+ts_argmax = make_function(function=_ts_argmax, name='ts_argmax', arity=1)
+ts_argmin = make_function(function=_ts_argmin, name='ts_argmin', arity=1)
+ts_sum = make_function(function=_ts_sum, name='ts_sum', arity=1)
 
 _function_map = {'add': add2,
                  'sub': sub2,
@@ -389,75 +303,16 @@ _function_map = {'add': add2,
                  'sin': sin1,
                  'cos': cos1,
                  'tan': tan1,
-                 'sig': sig1,
-                 'rank': rank1,
-                 'scale': scale1,
-                 'signedpower': signedpower1,
-                 'delay': delay2,
-                 'correlation': corr3,
-                 'covariance': cov3,
-                 'delta': delta2,
-                 'ts_min': ts_min2,
-                 'ts_max': ts_max2,
-                 'ts_argmin': ts_argmin2,
-                 'ts_argmax': ts_argmax2,
-                 'ts_rank': ts_rank2,
-                 'ts_sum': ts_sum2,
-                 'ts_mean': ts_mean2,
-                 'ts_product': ts_product2,
-                 'ts_stddev': ts_stddev2,
-                 'ts_sma': ts_sma3,
-                 'ts_wma': ts_wma2,
-                 'sign': sign1,
-                 'power': power2,
-                 'ifcondition_g': ifcondition_g4,
-                 'ifcondition_e': ifcondition_e4,
-                 'ifcondition_ge': ifcondition_ge4,
-                 'ts_sumif': ts_sumif4,
-                 'ts_count': ts_count3,
-                 'indneutral': indneutral1
-                 }
-
-function_weights = {add2 : 4,
-                    sub2 : 4,
-                    mul2 : 4,
-                    div2 : 4,
-                    sqrt1 : 1,
-                    log1 : 1,
-                    abs1 : 1,
-                    neg1 : 1,
-                    inv1 : 1,
-                    max2 : 3,
-                    min2 : 3,
-                    sin1 : 1,
-                    cos1 : 1,
-                    tan1 : 1,
-                    sig1 : 1,
-                    rank1 : 3,
-                    scale1 : 1,
-                    signedpower1 : 1,
-                    delay2 : 3,
-                    corr3 : 6,
-                    cov3 : 4,
-                    delta2 : 3,
-                    ts_min2 : 1,
-                    ts_max2 : 1,
-                    ts_argmin2: 2,
-                    ts_argmax2: 2,
-                    ts_rank2 : 1,
-                    ts_sum2 : 1,
-                    ts_mean2 : 1,
-                    ts_product2 : 1,
-                    ts_stddev2 : 1,
-                    ts_sma3 : 1,
-                    ts_wma2 : 1,
-                    sign1 : 0,
-                    power2 : 1,
-                    ifcondition_g4 : 4,
-                    ifcondition_e4 : 4,
-                    ifcondition_ge4 : 4,
-                    ts_sumif4 : 2,
-                    ts_count3 : 2,
-                    indneutral1 : 6
-                    }
-
+                 'delta': delta,
+                 'delay': delay,
+                 'rank': rank,
+                 'scale': scale,
+                 'sma': sma,
+                 'stddev': stddev,
+                 'product': product,
+                 'ts_rank': ts_rank,
+                 'ts_min': ts_min,
+                 'ts_max': ts_max,
+                 'ts_argmax': ts_argmax,
+                 'ts_argmin': ts_argmin,
+                 'ts_sum': ts_sum}

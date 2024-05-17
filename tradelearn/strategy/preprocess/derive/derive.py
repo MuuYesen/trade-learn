@@ -1,9 +1,7 @@
-import numpy as np
 import pandas as pd
 
 from tradelearn.strategy.preprocess.derive.gplearn import genetic, fitness, functions
 
-import random
 
 class Derive:
 
@@ -11,62 +9,53 @@ class Derive:
         pass
 
     @staticmethod
-    def generic_generate(dataX, dataY):
-        def _genBetterFormula(fitResult, threshold):
-            '''
-            输入fit后的est_gp和fitness的阈值，从最后一代选出超过阈值的公式
-            '''
-            if fitResult.metric.greater_is_better:
-                better_fitness = [f.__str__() for f in fitResult._programs[-1] if f.fitness_ > threshold]
-            else:
-                better_fitness = [f.__str__() for f in fitResult._programs[-1] if f.fitness_ < threshold]
-            return better_fitness
+    def generic_generate(data, f_col: list = None, n_alpha: int = 20):
 
-        def score_func_basic(y, y_pred, sample_weight):  # 因子评价指标
-            if len(np.unique(y_pred[-1])) <= 10:  # 没办法分组
-                ic = -1
-            else:
-                corr_df = pd.DataFrame(y).corrwith(pd.DataFrame(y_pred), axis=1, method='spearman')
-                ic = abs(corr_df.mean())
-            return ic if not np.isnan(ic) else 0  # pearson
+        if f_col is None:
+            try:
+                f_col = data.columns.drop(['code', 'date', 'label'])
+            except:
+                f_col = data.columns.drop(['code', 'date'])
 
-        # 函数集
-        function_set = ['add', 'sub', 'mul', 'div', 'sqrt', 'log',
-                        'abs', 'neg', 'inv', 'sin', 'cos', 'tan', 'max', 'min'
-                        ]
-
-        feature_names = dataX.columns
+        function_set = functions._function_map.keys()
 
         est_gp = genetic.SymbolicTransformer(
+            function_set=function_set,
+            feature_names=f_col,
+            metric='sharpe ratio',
             hall_of_fame=20,
-            population_size=30,
-            generations=10,
-            tournament_size=10,
-            init_depth=(1, 3),
-            stopping_criteria=500,
+            generations=3,
+            population_size=100,
+            n_components=n_alpha,
+            parsimony_coefficient=0,
+            tournament_size=40,
+            init_depth=(2, 6),
+            const_range=(-1, 1),
+            p_crossover=0.6,
+            p_subtree_mutation=0.01,
+            p_hoist_mutation=0.05,
+            p_point_mutation=0.01,
+            p_point_replace=0.4,
             max_samples=0.9,
             low_memory=True,
-            feature_names=feature_names,
-            function_set=function_set,
-            metric=fitness.make_fitness(score_func_basic, greater_is_better=True),
             verbose=1,
-            const_range=(3, 7),
+            n_jobs=-1,
             init_method='grow'
         )
 
-        # y = data['return']
-        # X = data.drop(['return'], axis=1)
+        c_return = data['close'].shift(-1).dropna()
+        c_data = data[f_col].iloc[:-1]
+        est_gp.fit(c_data, c_return)
+        best_programs = est_gp._best_programs
+        best_programs_dict = {}
 
-        est_gp.fit(dataX, dataY)
+        for p in best_programs:
+            factor_name = 'alpha_' + str(best_programs.index(p) + 1) + '_' + str(round(p.fitness_,2))
+            best_programs_dict[factor_name] = {'fitness': p.fitness_, 'expression': str(p), 'depth': p.depth_, 'length': p.length_}
 
-        for program in est_gp:  # 筛选的最优公式集，相同的公式会对应生成三个相同的特征
-            print(program)
-            print(program.raw_fitness_, '\n')
+        best_programs = pd.DataFrame(best_programs_dict).T.sort_values(by='fitness')
+        print(best_programs)
 
-        return est_gp.transform(dataX)
-        # #获取符合要求的goodAlpha
-        # alpha = _genBetterFormula(est_gp, 0.01)
-        #
-        # gp_features = alpha.transform(dataX)
-        #
-        # return gp_features
+        gp_res = pd.DataFrame(est_gp.transform(data[f_col]), columns=best_programs_dict.keys())
+        res_df = data.merge(gp_res, how='right', left_index=True, right_index=True)
+        return res_df

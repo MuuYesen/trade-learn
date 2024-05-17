@@ -360,7 +360,7 @@ class BaseSymbolic(BaseEstimator, metaclass=ABCMeta):
                 raise ValueError('Unsupported metric: %s' % self.metric)
             self._metric = _fitness_map[self.metric]
         elif isinstance(self, TransformerMixin):
-            if self.metric not in ('pearson', 'spearman'):
+            if self.metric not in ('pearson', 'spearman', 'sharpe ratio'):
                 raise ValueError('Unsupported metric: %s' % self.metric)
             self._metric = _fitness_map[self.metric]
 
