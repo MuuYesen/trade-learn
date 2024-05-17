@@ -2,7 +2,7 @@
 
 trade-learn 是一个基于 alphalens、backtrader、pyfolio 和 quantstats 的机器学习策略研发工具包，提供因子采集、因子处理、因子评估、因果分析、模型定义和策略回测的全套策略研发流程，并支持可视化结果以 html 文件进行存档分享。
 
-<img src="docs/img.png" alt="img" width="100%">
+<img src="docs/img_zh.png" alt="img" width="100%">
 
 可视化图汇总：
 

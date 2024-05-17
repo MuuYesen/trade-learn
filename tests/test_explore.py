@@ -12,6 +12,3 @@ class TestExplore(unittest.TestCase):
         rawdata = Query.history_ohlc(symbol='600520', start=tn_begin_date, end=tn_end_date, adjust='hfq',
                                      engine='tdx')
         Explore.analysis_report(rawdata, filename='res/explore.html')
-
-
-
