@@ -2,7 +2,7 @@
 
 <b>trade-learn</b> is a machine learning strategy development toolkit based on alphalens, backtrader, pyfolio, and quantstats. It provides a <b>complete strategy development process</b>.
 
-The features it provides including factor collection, factor processing, factor evaluation, <b>causal analysis</b>, model definition, and strategy backtesting, and supports visualization results saved as <b>HTML files</b> for sharing.
+The functions it gives including factor collection, factor processing, factor evaluation, <b>causal analysis</b>, model definition, and strategy backtesting, and supports visualization results saved as <b>HTML files</b> for sharing.
 
 <img src="docs/img.png" alt="img" width="100%">
 
@@ -239,9 +239,11 @@ from tradelearn.strategy.preprocess.derive.derive import Derive
 
 res = Derive.generic_generate(data=rawdata)
 ```
-| Parameter Name     | Data Type	      | Notes                |
-|----------|-----------|-------------------|
-| data     | DataFrame | Target market data            |
+| Parameter Name     | Data Type	      | Notes                                                                                                                                             |
+|----------|-----------|---------------------------------------------------------------------------------------------------------------------------------------------------|
+| data     | DataFrame | Target market data                                                                                                                                |
+| f_col   | list      | A list of variable names derived from participating factors, default to all variables except code, date, and label, and evaluated by Sharp metrics |
+| n_alpha | int       | The count derived from the final factor                                                                                                           |
 ### Single Factor Test
 ```python
 from tradelearn.strategy.examine.examine import Examine
