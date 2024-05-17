@@ -1,6 +1,6 @@
 ## trade-learn：Building Trading Strategies in Python with Machine Learning 
 
-trade-learn is a machine learning strategy development toolkit based on alphalens, backtrader, pyfolio, and quantstats. It provides a complete strategy development process, including factor collection, factor processing, factor evaluation, causal analysis, model definition, and strategy backtesting, and supports visualization results saved as HTML files for sharing.
+<b>trade-learn</b> is a machine learning strategy development toolkit based on alphalens, backtrader, pyfolio, and quantstats. It provides a complete strategy development process, including factor collection, factor processing, factor evaluation, causal analysis, model definition, and strategy backtesting, and supports visualization results saved as HTML files for sharing.
 
 <img src="docs/img.png" alt="img" width="100%">
 
