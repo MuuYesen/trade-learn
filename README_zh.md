@@ -234,11 +234,13 @@ Explore.analysis_report(data=rawdata, filename='res/explore.html')
 ```python
 from tradelearn.strategy.preprocess.derive.derive import Derive
 
-res = Derive.generic_generate(data=rawdata)
+res = Derive.generic_generate(data=rawdata, f_col=None, n_alpha=20)
 ```
-| 参数名称     | 数据类型      | 备注                |
-|----------|-----------|-------------------|
-| data     | DataFrame | 标的行情数据            |
+| 参数名称    | 数据类型      | 备注                                                      |
+|---------|-----------|---------------------------------------------------------|
+| data    | DataFrame | 标的行情数据                                                  |
+| f_col   | list      | 参与因子衍生的变量名称集合，默认使用除 code、date 和 label 之外的所有变量，并采用夏普指标评估 |
+| n_alpha | int       | 最终因子衍生的数量                                               |
 ### 单因子检验
 ```python
 from tradelearn.strategy.examine.examine import Examine
@@ -332,7 +334,7 @@ Evaluate.analysis_report(strat=res, baseline=baseline, filename='./evaluate.html
 - [PyWhy](https://github.com/py-why)
 - [DRo](https://github.com/mementum)
 - [happydasch](https://github.com/happydasch)
-
+- [baobao1997](https://github.com/baobao1997)
 
 ## 联系方式
 
