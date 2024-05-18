@@ -44,7 +44,7 @@ class TestExplore(unittest.TestCase):
         param_dict = {}
 
         res = LongBacktest.run(RSI, param_dict, rawdata, baseline, bt_begin_date, bt_end_date)
-        Evaluate.analysis_report(res, baseline, engine='pyfolio', filename='./evaluate.html')
+        Evaluate.analysis_report(res, baseline, engine='pyfolio', filename='./res/evaluate.html')
 
 
     def test_quantstats_explore_report(self):
@@ -82,4 +82,4 @@ class TestExplore(unittest.TestCase):
         param_dict = {}
 
         res = LongBacktest.run(RSI, param_dict, rawdata, baseline, bt_begin_date, bt_end_date)
-        Evaluate.analysis_report(res, baseline, engine='quantstats', filename='./evaluate.html')
+        Evaluate.analysis_report(res, baseline, engine='quantstats', filename='./res/evaluate.html')
