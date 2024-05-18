@@ -36,7 +36,7 @@ class TestExplore(unittest.TestCase):
                         return False
                     return np.NAN
 
-                indi = indi.set_index('date').map(signal)
+                indi = indi.set_index('date').applymap(signal)
                 bt_indi = indi.query(f"date >= '{bt_begin_date}' and date < '{bt_end_date}'")
 
                 self.set_signal(bt_indi)
@@ -74,7 +74,7 @@ class TestExplore(unittest.TestCase):
                         return False
                     return np.NAN
 
-                indi = indi.set_index('date').map(signal)
+                indi = indi.set_index('date').applymap(signal)
                 bt_indi = indi.query(f"date >= '{bt_begin_date}' and date < '{bt_end_date}'")
 
                 self.set_signal(bt_indi)
