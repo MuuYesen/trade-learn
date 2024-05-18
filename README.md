@@ -341,7 +341,9 @@ Evaluate.analysis_report(strat=res, baseline=baseline, filename='./evaluate.html
 - [Trevor Stephens](https://github.com/trevorstephens)
 - [PyWhy](https://github.com/py-why)
 - [DRo](https://github.com/mementum)
+- [DolphinDB](https://github.com/dolphindb)
 - [happydasch](https://github.com/happydasch)
+- [mpquant](https://github.com/mpquant)
 - [baobao1997](https://github.com/baobao1997)
 
 ## Contact Information
