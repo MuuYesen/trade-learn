@@ -27,7 +27,7 @@ setuptools.setup(
         'htmlmin'
     ],
     url='https://github.com/MuuYesen/trade-learn',
-    packages=setuptools.find_packages(include=["tradelearn"]),
+    packages=setuptools.find_packages(include=['tradelearn', 'tradelearn.*']),
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',
