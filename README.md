@@ -237,7 +237,7 @@ Explore.analysis_report(data=rawdata, filename='res/explore.html')
 ```python
 from tradelearn.strategy.preprocess.derive import Derive
 
-res = Derive.generic_generate(data=rawdata)
+res = Derive.generic_generate(data=rawdata, f_col=None, n_alpha=20, random_status=None)
 ```
 | Parameter Name     | Data Type	      | Notes                                                                                                                                          |
 |----------|-----------|------------------------------------------------------------------------------------------------------------------------------------------------|
