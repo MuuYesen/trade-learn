@@ -15,7 +15,7 @@
 import warnings
 
 from collections import OrderedDict
-import empyrical as ep
+import tradelearn.strategy.backtest.empyrical as ep
 import pandas as pd
 import matplotlib.pyplot as plt
 

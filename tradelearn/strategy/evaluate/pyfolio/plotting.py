@@ -17,7 +17,7 @@ import calendar
 from collections import OrderedDict
 from functools import wraps
 
-import empyrical as ep
+import tradelearn.strategy.backtest.empyrical as ep
 import matplotlib
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt

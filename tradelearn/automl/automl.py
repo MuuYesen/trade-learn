@@ -1,3 +1,5 @@
+import pandas as pd
+
 from tradelearn.automl.common.lazy_predict import LazyClassifier
 
 from sklearn.model_selection import train_test_split
@@ -9,7 +11,7 @@ class AutoML:
         pass
 
     @staticmethod
-    def lazy_predict(rawdata):
+    def lazy_predict(rawdata: pd.DataFrame):
 
         dataY = rawdata['label']
         dataX = rawdata.drop(['label'], axis=1)

@@ -1,63 +1,15 @@
-#!/usr/bin/env python
-# -*- coding: utf-8; py-indent-offset:4 -*-
-###############################################################################
-#
-# Copyright (C) 2015-2023 Daniel Rodriguez
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-###############################################################################
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
 import tradelearn.trader as bt
 
-(
-
-    SIGNAL_NONE,
-    SIGNAL_LONGSHORT,
-    SIGNAL_LONG,
-    SIGNAL_LONG_INV,
-    SIGNAL_LONG_ANY,
-    SIGNAL_SHORT,
-    SIGNAL_SHORT_INV,
-    SIGNAL_SHORT_ANY,
-    SIGNAL_LONGEXIT,
-    SIGNAL_LONGEXIT_INV,
-    SIGNAL_LONGEXIT_ANY,
-    SIGNAL_SHORTEXIT,
-    SIGNAL_SHORTEXIT_INV,
-    SIGNAL_SHORTEXIT_ANY,
-
-) = range(14)
-
-
-SignalTypes = [
-    SIGNAL_NONE,
-    SIGNAL_LONGSHORT,
-    SIGNAL_LONG, SIGNAL_LONG_INV, SIGNAL_LONG_ANY,
-    SIGNAL_SHORT, SIGNAL_SHORT_INV, SIGNAL_SHORT_ANY,
-    SIGNAL_LONGEXIT, SIGNAL_LONGEXIT_INV, SIGNAL_LONGEXIT_ANY,
-    SIGNAL_SHORTEXIT, SIGNAL_SHORTEXIT_INV, SIGNAL_SHORTEXIT_ANY
-]
-
+import pandas as pd
 
 class Signal(bt.Indicator):
-    SignalTypes = SignalTypes
-
     lines = ('signal',)
+    signal_df = None
 
-    def __init__(self):
-        self.lines.signal = self.data0.lines[0]
-        self.plotinfo.plotmaster = getattr(self.data0, '_clock', self.data0)
+    def set_signal(self, signal_df):
+        self.signal_df = signal_df
+
+    def align_signal(self, base_line):
+        signal_df = pd.merge(self.signal_df, pd.DataFrame(base_line.index), on=['date'], how='right')
+        signal_df = signal_df.set_index(['date'])
+        self.lines.signal.array.extend(signal_df.values.reshape(-1).tolist())

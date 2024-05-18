@@ -1,4 +1,4 @@
-import empyrical as ep
+import tradelearn.strategy.backtest.empyrical as ep
 import numpy as np
 import pandas as pd
 

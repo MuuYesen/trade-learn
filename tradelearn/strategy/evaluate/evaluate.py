@@ -1,3 +1,4 @@
+import pandas as pd
 from quantstats import reports
 from .pyfolio import create_full_tear_sheet
 
@@ -8,7 +9,11 @@ class Evaluate:
         pass
 
     @staticmethod
-    def analysis_report(strat, baseline, path='./', engine='quantstats'):
+    def analysis_report(strat: dict, baseline: pd.DataFrame, filename: str = None, engine: str = 'quantstats'):
+        tn_begin_date = strat.data.lines.datetime.date(-(strat.data.buflen() - 1))
+        tn_end_date = strat.data.lines.datetime.date((0))
+
+        baseline = baseline.query(f"date >= '{tn_begin_date}' and date <= '{tn_end_date}'")
 
         pyfoliozer = strat.analyzers.getbyname('_Pyfolio')
         returns, positions, transactions, gross_lev = pyfoliozer.get_pf_items()
@@ -22,8 +27,12 @@ class Evaluate:
                                    benchmark_rets=benchmark_ret,
                                    positions=positions,
                                    transactions=transactions)
-            with open(path + 'full_tearsheet.html', 'w') as file:
+            if filename is None:
+                filename = './pyfolio.html'
+            with open(filename, 'w') as file:
                 file.write(html)
 
         if engine == 'quantstats':
-            reports.html(returns, benchmark=benchmark_ret, output=path+'stats.html', title='Stock Sentiment')
+            if filename is None:
+                filename = './quantstats.html'
+            reports.html(returns, benchmark=benchmark_ret, output=filename, title='Stock Sentiment')

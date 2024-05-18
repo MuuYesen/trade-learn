@@ -541,7 +541,7 @@ def create_full_tear_sheet(
     for png_file in glob.glob(os.path.join(plots_dir, "*.png")):
         with open(png_file, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
-            img_tag = f'<img src="data:image/png;base64,{encoded_string}" style="width:100%"><br><hr><br>'
+            img_tag = f'<center><img style="width:65%;" src="data:image/png;base64,{encoded_string}" style="width:100%"></center><br><hr><br>'
             aggregated_html_content += img_tag
 
     # Delete individual HTML files to avoid duplication in the future

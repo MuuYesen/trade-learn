@@ -16,7 +16,7 @@
 import warnings
 from itertools import cycle
 
-import empyrical.utils
+import tradelearn.strategy.backtest.empyrical.utils
 import numpy as np
 import pandas as pd
 from IPython.display import display, HTML
@@ -190,7 +190,7 @@ def extract_rets_pos_txn_from_zipline(backtest):
 
 def print_table(table, name=None, float_format=None, formatters=None,
                 header_rows=None, save_to_file=True,
-                output_dir='./plots/temp'):
+                output_dir='./temp'):
     """
     Pretty print a pandas DataFrame and optionally save it as an HTML file with a unique timestamped filename.
 
@@ -464,7 +464,7 @@ def to_series(df):
 
 # This functions is simply a passthrough to empyrical, but is
 # required by the register_returns_func and get_symbol_rets.
-default_returns_func = empyrical.utils.default_returns_func
+default_returns_func = tradelearn.strategy.backtest.empyrical.utils.default_returns_func
 
 # Settings dict to store functions/values that may
 # need to be overridden depending on the users environment
