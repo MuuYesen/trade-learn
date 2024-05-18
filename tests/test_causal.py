@@ -2,9 +2,9 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from tradelearn.query.query import Query
-from tradelearn.causal.blanket.blanket import Blanket
-from tradelearn.causal.graph.graph import Graph
+from tradelearn.query import Query
+from tradelearn.causal.blanket import Blanket
+from tradelearn.causal.graph import Graph
 
 
 class TestCuasal(unittest.TestCase):
@@ -12,13 +12,13 @@ class TestCuasal(unittest.TestCase):
     def test_causal_blanket_iamb(self):
         data = Query.read_csv('./data/600036SH.csv', begin='2020-01-01', end='2023-06-21')
         data = data.drop(columns=['date', 'code'])
-        data = Blanket.fit_causal(data, method='iamb', target_name='volume', is_discrete=False)
+        data = Blanket.fit_causal(data, method='iamb', target='volume', is_discrete=False)
         print(data)
 
     def test_causal_blanket_pcmb(self):
         data = Query.read_csv('./data/600036SH.csv', begin='2020-01-01', end='2023-06-21')
         data = data.drop(columns=['date', 'code'])
-        data = Blanket.fit_causal(data, method='pcmb', target_name='volume', is_discrete=False)
+        data = Blanket.fit_causal(data, method='pcmb', target='volume', is_discrete=False)
         print(data)
 
     def test_causal_graph_pc(self):

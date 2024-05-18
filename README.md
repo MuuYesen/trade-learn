@@ -64,10 +64,10 @@ res = LongBacktest.run(Example, param_dict, raw_data, base_line, bt_begin_date, 
 
 **Using volume and price indicators for single stock trading**：
 ```python
-from tradelearn.query.query import Query  # Import data query module
+from tradelearn.query import Query  # Import data query module
 from tradelearn.trader.signal import Signal  # Import strategy signal class
 from tradelearn.strategy.backtest.single import LongBacktest  # Import single stock backtest module
-from tradelearn.strategy.evaluate.evaluate import Evaluate  # Import strategy evaluation module
+from tradelearn.strategy.evaluate import Evaluate  # Import strategy evaluation module
 
 import numpy as np
 
@@ -121,10 +121,10 @@ if __name__ == '__main__':
 
 **Using machine learning models to build a portfolio**：  
 ```python
-from tradelearn.query.query import Query  # Import data query module
+from tradelearn.query import Query  # Import data query module
 from tradelearn.trader.signal import Signal  # Import strategy signal class
 from tradelearn.strategy.backtest.fund import LongBacktest  # Import portfolio backtest module
-from tradelearn.strategy.evaluate.evaluate import Evaluate  # Import strategy evaluation module
+from tradelearn.strategy.evaluate import Evaluate  # Import strategy evaluation module
 
 import pandas as pd
 from dateutil.relativedelta import relativedelta
@@ -197,7 +197,7 @@ if __name__ == '__main__':
 ## Method Guide
 ### Retrieving Raw Data
 ```python
-from tradelearn.query.query import Query
+from tradelearn.query import Query
 
 rawdata = Query.history_ohlc(symbol='600520', start='2017-01-01', end='2022-06-22', adjust='hfq',engine='tdx')
 ```
@@ -211,7 +211,7 @@ rawdata = Query.history_ohlc(symbol='600520', start='2017-01-01', end='2022-06-2
 
 ### Factor Generation
 ```python
-from tradelearn.query.query import Query
+from tradelearn.query import Query
 
 res = Query.alphas101(stock_data=rawdata, alpha_name=['alpha001'])
 res = Query.alphas191(stock_data=rawdata, alpha_name=['alpha001'])
@@ -224,7 +224,7 @@ res = Query.tec_indicator(stock_data=rawdata, alpha_name=['ATR', 'RSI'])
 
 ### Exploratory Analysis
 ```python
-from tradelearn.strategy.preprocess.explore.explore import Explore
+from tradelearn.strategy.preprocess.explore import Explore
 
 Explore.analysis_report(data=rawdata, filename='res/explore.html')
 ```
@@ -235,7 +235,7 @@ Explore.analysis_report(data=rawdata, filename='res/explore.html')
 | filename | string    | Path and name of the saved HTML file, optional |
 ### Factor Derivation
 ```python
-from tradelearn.strategy.preprocess.derive.derive import Derive
+from tradelearn.strategy.preprocess.derive import Derive
 
 res = Derive.generic_generate(data=rawdata)
 ```
@@ -246,7 +246,7 @@ res = Derive.generic_generate(data=rawdata)
 | n_alpha | int       | Count derived from the final factor                                                                                                               |
 ### Single Factor Test
 ```python
-from tradelearn.strategy.examine.examine import Examine
+from tradelearn.strategy.examine import Examine
 
 Examine.single_factor(data=data, col='alpha001_101', filename='res/examine.html')
 ```
@@ -257,7 +257,7 @@ Examine.single_factor(data=data, col='alpha001_101', filename='res/examine.html'
 | filename | string    | Path and name of the saved HTML file, optional        |
 ### Multi-Factor Comparison
 ```python
-from tradelearn.strategy.examine.examine import Examine
+from tradelearn.strategy.examine import Examine
 
 res = Examine.factor_compare(data=data, f_col=None, ind=None, cir=None)
 ```
@@ -269,7 +269,7 @@ res = Examine.factor_compare(data=data, f_col=None, ind=None, cir=None)
 | cir   | string    | Market capitalization field name for t-test calculation, optional             |
 ### Causal Feature Selection
 ```python
-from tradelearn.causal.blanket.blanket import Blanket
+from tradelearn.causal.blanket import Blanket
 
 Blanket.fit_causal(data=rawdata, method='iamb', target_name='volume', is_discrete=False)
 ```
@@ -283,7 +283,7 @@ Blanket.fit_causal(data=rawdata, method='iamb', target_name='volume', is_discret
 ### Causal Graph Construction
 
 ```python
-from tradelearn.causal.graph.graph import Graph
+from tradelearn.causal.graph import Graph
 
 Graph.fit_causal(data=rawdata, method='pc', is_discrete=False, filename='res/pc.png')
 ```
@@ -296,7 +296,7 @@ Graph.fit_causal(data=rawdata, method='pc', is_discrete=False, filename='res/pc.
 ### Optimal Model Selection
 
 ```python
-from tradelearn.automl.automl import AutoML
+from tradelearn.automl import AutoML
 
 model = AutoML.lazy_predict(data=data)
 ```
@@ -324,7 +324,7 @@ res = LongBacktest.run(model_class=Example, param_dict=param_dict, raw_data=rawd
 ### Strategy Evaluation
 
 ```python
-from tradelearn.strategy.evaluate.evaluate import Evaluate
+from tradelearn.strategy.evaluate import Evaluate
 
 Evaluate.analysis_report(strat=res, baseline=baseline, filename='./evaluate.html', engine='quantstats')
 ```

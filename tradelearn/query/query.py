@@ -18,8 +18,10 @@ class Query:
         pass
 
     @staticmethod
-    def read_csv(data_path: str, begin: str, end: str):
+    def read_csv(data_path: str, begin: str = None, end: str = None):
         data = pd.read_csv(data_path, parse_dates=['date'], dtype={'code': str}, low_memory=True, encoding='utf_8_sig')
+        if begin is None and end is None:
+            return data
         data = data.query(f"date >= '{begin}' and date <= '{end}'")
         return data
 
