@@ -6,10 +6,6 @@ from tradelearn.strategy.evaluate import Evaluate
 
 import numpy as np
 
-import warnings
-warnings.filterwarnings('ignore')
-
-
 if __name__ == '__main__':
 
     tn_begin_date = '2017-01-01'

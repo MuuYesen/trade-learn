@@ -241,6 +241,7 @@ res = Derive.generic_generate(data=rawdata, f_col=None, n_alpha=20)
 | data    | DataFrame | 标的行情数据                                                  |
 | f_col   | list      | 参与因子衍生的变量名称集合，默认使用除 code、date 和 label 之外的所有变量，并采用夏普指标评估 |
 | n_alpha | int       | 最终因子衍生的数量                                               |
+| random_status | int       | 随机数种子，如果不设置的话，每次执行都会出现不同的结果                             |
 ### 单因子检验
 ```python
 from tradelearn.strategy.examine import Examine
