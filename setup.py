@@ -28,7 +28,7 @@ setuptools.setup(
     ],
     url='https://github.com/MuuYesen/trade-learn',
     packages=setuptools.find_namespace_packages(), #setuptools.find_packages(include=['tradelearn', 'tradelearn.*']),
-    package_data={'': ['*.json', '*.html', '*.js', '*.css']},
+    package_data={'': ['*.json', '*.html', '*.js', '*.css', '*.j2']},
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',
