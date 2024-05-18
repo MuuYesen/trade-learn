@@ -11,7 +11,7 @@ class TestDerive(unittest.TestCase):
 
         data = Query.history_ohlc(symbol='600520', start=tn_begin_date, end=tn_end_date, adjust='hfq',
                                   engine='tdx')
-        res = Derive.generic_generate(data, random=21)
+        res = Derive.generic_generate(data, random_status=21)
         print(res)
 
 
