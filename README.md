@@ -103,7 +103,7 @@ if __name__ == '__main__':
                 if x > 40:
                     return False
                 return np.NAN
-            indi = indi.set_index('date').map(signal)
+            indi = indi.set_index('date').applymap(signal)
 
             # Retain signals for the backtest period
             bt_indi = indi.query(f"date >= '{bt_begin_date}' and date < '{bt_end_date}'")
