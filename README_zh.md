@@ -61,10 +61,10 @@ res = LongBacktest.run(Example, param_dict, raw_data, base_line, bt_begin_date, 
 
 **使用量价指标进行单标的买卖**：
 ```python
-from tradelearn.query.query import Query  # 导入数据查询模块
+from tradelearn.query import Query  # 导入数据查询模块
 from tradelearn.trader.signal import Signal  # 导入策略信号类
 from tradelearn.strategy.backtest.single import LongBacktest  # 导入单支股票回测模块
-from tradelearn.strategy.evaluate.evaluate import Evaluate  # 导入策略评估模块
+from tradelearn.strategy.evaluate import Evaluate  # 导入策略评估模块
 
 import numpy as np
 
@@ -118,10 +118,10 @@ if __name__ == '__main__':
 
 **使用机器学习模型进行投资组合的搭建**：  
 ```python
-from tradelearn.query.query import Query  # 导入数据查询模块
+from tradelearn.query import Query  # 导入数据查询模块
 from tradelearn.trader.signal import Signal  # 导入策略信号类
 from tradelearn.strategy.backtest.fund import LongBacktest  # 导入投资组合回测模块
-from tradelearn.strategy.evaluate.evaluate import Evaluate  # 导入策略评估模块
+from tradelearn.strategy.evaluate import Evaluate  # 导入策略评估模块
 
 import pandas as pd
 from dateutil.relativedelta import relativedelta
@@ -194,7 +194,7 @@ if __name__ == '__main__':
 ## 方法指南
 ### 原始数据获取
 ```python
-from tradelearn.query.query import Query
+from tradelearn.query import Query
 
 rawdata = Query.history_ohlc(symbol='600520', start='2017-01-01', end='2022-06-22', adjust='hfq',engine='tdx')
 ```
@@ -208,7 +208,7 @@ rawdata = Query.history_ohlc(symbol='600520', start='2017-01-01', end='2022-06-2
 
 ### 因子生成
 ```python
-from tradelearn.query.query import Query
+from tradelearn.query import Query
 
 res = Query.alphas101(stock_data=rawdata, alpha_name=['alpha001'])
 res = Query.alphas191(stock_data=rawdata, alpha_name=['alpha001'])
@@ -221,7 +221,7 @@ res = Query.tec_indicator(stock_data=rawdata, alpha_name=['ATR', 'RSI'])
 
 ### 探索性分析
 ```python
-from tradelearn.strategy.preprocess.explore.explore import Explore
+from tradelearn.strategy.preprocess.explore import Explore
 
 Explore.analysis_report(data=rawdata, filename='res/explore.html')
 ```
@@ -232,7 +232,7 @@ Explore.analysis_report(data=rawdata, filename='res/explore.html')
 | filename | string    | html 文件的保存路径及名称，可选 |
 ### 因子衍生
 ```python
-from tradelearn.strategy.preprocess.derive.derive import Derive
+from tradelearn.strategy.preprocess.derive import Derive
 
 res = Derive.generic_generate(data=rawdata, f_col=None, n_alpha=20)
 ```
@@ -243,7 +243,7 @@ res = Derive.generic_generate(data=rawdata, f_col=None, n_alpha=20)
 | n_alpha | int       | 最终因子衍生的数量                                               |
 ### 单因子检验
 ```python
-from tradelearn.strategy.examine.examine import Examine
+from tradelearn.strategy.examine import Examine
 
 Examine.single_factor(data=data, col='alpha001_101', filename='res/examine.html')
 ```
@@ -254,19 +254,19 @@ Examine.single_factor(data=data, col='alpha001_101', filename='res/examine.html'
 | filename | string    | html 文件的保存路径及名称，可选        |
 ### 多因子比较
 ```python
-from tradelearn.strategy.examine.examine import Examine
+from tradelearn.strategy.examine import Examine
 
 res = Examine.factor_compare(data=data, f_col=None, ind=None, cir=None)
 ```
-| 参数名称  | 数据类型      | 备注                                 |
-|-------|-----------|------------------------------------|
-| data  | DataFrame | 标的行情数据，要求具有两个及以上的股票                |
-| f_col | string    | 需要进行比较的因子名称列表，当值为 None 时选择所有变量进行比较 |
-| ind   | string    | 所属行业字段的名称，用于计算 t 检验，可选             |
-| cir   | string    | 市值数据字段的名称，用于计算 t 检验，可选             |
+| 参数名称  | 数据类型      | 备注                                              |
+|-------|-----------|-------------------------------------------------|
+| data  | DataFrame | 标的行情数据，要求具有两个及以上的股票                             |
+| f_col | string    | 需要进行比较的因子名称列表，当值为 None 时选择开头为 'alpha' 前缀的所有变量进行比较 |
+| ind   | string    | 所属行业字段的名称，用于计算 t 检验，可选                          |
+| cir   | string    | 市值数据字段的名称，用于计算 t 检验，可选                          |
 ### 因果特征选择
 ```python
-from tradelearn.causal.blanket.blanket import Blanket
+from tradelearn.causal.blanket import Blanket
 
 Blanket.fit_causal(data=rawdata, method='iamb', target_name='volume', is_discrete=False)
 ```
@@ -279,7 +279,7 @@ Blanket.fit_causal(data=rawdata, method='iamb', target_name='volume', is_discret
 | is_discrete | bool      | data 数据是离散型变量，则设置为 True           |
 ### 因果图构建
 ```python
-from tradelearn.causal.graph.graph import Graph
+from tradelearn.causal.graph import Graph
 
 Graph.fit_causal(data=rawdata, method='pc', is_discrete=False, filename='res/pc.png')
 ```
@@ -291,7 +291,7 @@ Graph.fit_causal(data=rawdata, method='pc', is_discrete=False, filename='res/pc.
 | filename    | string    | 因果图的保存路径及名称，可选            |
 ### 最优模型选择
 ```python
-from tradelearn.automl.automl import AutoML
+from tradelearn.automl import AutoML
 
 model = AutoML.lazy_predict(data=data)
 ```
@@ -317,7 +317,7 @@ res = LongBacktest.run(model_class=Example, param_dict=param_dict, raw_data=rawd
 | show_source | bool      | html 文件是否展示策略源代码，默认为 True |
 ### 策略评估
 ```python
-from tradelearn.strategy.evaluate.evaluate import Evaluate
+from tradelearn.strategy.evaluate import Evaluate
 
 Evaluate.analysis_report(strat=res, baseline=baseline, filename='./evaluate.html', engine='quantstats')
 ```

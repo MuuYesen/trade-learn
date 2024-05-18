@@ -1,5 +1,5 @@
 import unittest
-from tradelearn.query.query import Query
+from tradelearn.query import Query
 
 
 class TestQuery(unittest.TestCase):

@@ -1,9 +1,9 @@
 import unittest
-from tradelearn.query.query import Query
-from tradelearn.strategy.preprocess.explore.explore import Explore
+from tradelearn.query import Query
+from tradelearn.strategy.preprocess.explore import Explore
 from tradelearn.trader.signal import Signal
 
-from tradelearn.strategy.evaluate.evaluate import Evaluate
+from tradelearn.strategy.evaluate import Evaluate
 from tradelearn.strategy.backtest.single import LongBacktest
 import numpy as np
 
@@ -47,7 +47,7 @@ class TestExplore(unittest.TestCase):
         param_dict = {'fea_list': fea_list}
 
         res = LongBacktest.run(RSI, param_dict, rawdata, baseline, bt_begin_date, bt_end_date)
-        Evaluate.analysis_report(res, baseline, engine='pyfolio')
+        Evaluate.analysis_report(res, baseline, engine='pyfolio', filename='./evaluate.html')
 
 
     def test_quantstats_explore_report(self):
@@ -88,4 +88,4 @@ class TestExplore(unittest.TestCase):
         param_dict = {'fea_list': fea_list}
 
         res = LongBacktest.run(RSI, param_dict, rawdata, baseline, bt_begin_date, bt_end_date)
-        Evaluate.analysis_report(res, baseline, engine='quantstats')
+        Evaluate.analysis_report(res, baseline, engine='quantstats', filename='./evaluate.html')

@@ -1,6 +1,6 @@
 import unittest
-from tradelearn.query.query import Query
-from tradelearn.strategy.preprocess.explore.explore import Explore
+from tradelearn.query import Query
+from tradelearn.strategy.preprocess.explore import Explore
 
 
 class TestExplore(unittest.TestCase):

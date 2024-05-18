@@ -1,8 +1,8 @@
-from tradelearn.query.query import Query
-from tradelearn.strategy.preprocess.explore.explore import Explore
+from tradelearn.query import Query
+from tradelearn.strategy.preprocess.explore import Explore
 from tradelearn.trader.signal import Signal
 from tradelearn.strategy.backtest.fund import LongBacktest
-from tradelearn.strategy.evaluate.evaluate import Evaluate
+from tradelearn.strategy.evaluate import Evaluate
 
 import numpy as np
 import pandas as pd

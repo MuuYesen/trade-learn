@@ -1,7 +1,7 @@
 import unittest
 
-from tradelearn.query.query import Query
-from tradelearn.strategy.preprocess.derive.derive import Derive
+from tradelearn.query import Query
+from tradelearn.strategy.preprocess.derive import Derive
 
 class TestDerive(unittest.TestCase):
 
