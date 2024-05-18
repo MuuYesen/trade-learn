@@ -32,7 +32,7 @@ pip install trade-learn
 ```
 
 ```bash
-pip install https://github.com/MuuYesen/trade-learn.git@master
+pip install git+https://github.com/MuuYesen/trade-learn.git@master
 ```
 
 ## Usage Template
