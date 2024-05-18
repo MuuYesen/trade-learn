@@ -18,13 +18,15 @@ class Query:
         pass
 
     @staticmethod
-    def read_csv(data_path, begin, end):
+    def read_csv(data_path: str, begin: str = None, end: str = None):
         data = pd.read_csv(data_path, parse_dates=['date'], dtype={'code': str}, low_memory=True, encoding='utf_8_sig')
+        if begin is None and end is None:
+            return data
         data = data.query(f"date >= '{begin}' and date <= '{end}'")
         return data
 
     @staticmethod
-    def history_ohlc(symbol=None, start=None, end=None, adjust='qfq', engine='tdx'):
+    def history_ohlc(symbol: str = None, start: str = None, end: str = None, adjust: str = 'qfq', engine: str = 'tdx'):
         if engine == 'yahoo':
             try:
                 tickler = yf.Ticker(symbol)
@@ -44,11 +46,11 @@ class Query:
                 data = client.ohlc(symbol=symbol, begin=start, end=end, adjust=adjust)
                 data = data.drop(['date'], axis=1).reset_index()
                 data[['open', 'close', 'high', 'low']] = data[['open', 'close', 'high', 'low']].apply(lambda x: x / data['factor'], axis=0)
+                if not data is None:
+                    data['vwap'] = data.amount / data.volume / 100
             except:
                 data = None
 
-        if not data is None:
-            data['vwap'] = data.amount / data.volume / 100
         return data
 
     @staticmethod
@@ -58,14 +60,6 @@ class Query:
         t2 = time.time()
         print(f"{m} time {t2 - t1}")
         return alpha
-
-    # @staticmethod
-    # def _calc_func(func, m):
-    #     t1 = time.time()
-    #     alpha = func()
-    #     t2 = time.time()
-    #     print(f"{m} time {t2 - t1}")
-    #     return alpha
 
     @staticmethod
     def tec_indicator(stock_data: pd.DataFrame, alpha_name: list = None, **kwargs):

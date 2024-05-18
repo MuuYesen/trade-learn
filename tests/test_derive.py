@@ -1,21 +1,17 @@
 import unittest
 
-from tradelearn.query.query import Query
-from tradelearn.strategy.preprocess.derive.derive import Derive
+from tradelearn.query import Query
+from tradelearn.strategy.preprocess.derive import Derive
 
-from sklearn.model_selection import train_test_split
+class TestDerive(unittest.TestCase):
 
+    def test_derive(self):
+        tn_begin_date = '2017-01-01'
+        tn_end_date = '2022-06-22'
 
-class TestExplore(unittest.TestCase):
-
-    def test_lazy_classifer(self):
-        data = Query.read_csv('./data/600036SH.csv', begin='2020-01-01', end='2023-06-21')
-
-        y = data['close'].pct_change(-1).apply(lambda x: 1 if x>0 else -1)
-        X = data.drop(['date', 'code', 'close'], axis=1)
-
-        res = Derive.generic_generate(X, y)
-
+        data = Query.history_ohlc(symbol='600520', start=tn_begin_date, end=tn_end_date, adjust='hfq',
+                                  engine='tdx')
+        res = Derive.generic_generate(data, random=21)
         print(res)
 
 

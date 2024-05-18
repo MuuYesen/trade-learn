@@ -1,8 +1,5 @@
 import unittest
-import numpy as np
-import pandas as pd
-
-from tradelearn.query.query import Query
+from tradelearn.query import Query
 
 
 class TestQuery(unittest.TestCase):
@@ -16,7 +13,7 @@ class TestQuery(unittest.TestCase):
         tn_end_date = '2022-06-22'
 
         rawdata = Query.history_ohlc(symbol='600520', start=tn_begin_date, end=tn_end_date, adjust='hfq',
-                                  engine='tdx')
+                                     engine='tdx')
         res = Query.alphas101(rawdata, ['alpha001'])
         print(res)
 
@@ -25,6 +22,6 @@ class TestQuery(unittest.TestCase):
         tn_end_date = '2022-06-22'
 
         rawdata = Query.history_ohlc(symbol='600520', start=tn_begin_date, end=tn_end_date, adjust='hfq',
-                                  engine='tdx')
+                                     engine='tdx')
         res = Query.tec_indicator(rawdata, ['ATR', 'RSI'])
         print(res)

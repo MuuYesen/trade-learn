@@ -13,23 +13,23 @@ class Examine:
         pass
 
     @staticmethod
-    def single_factor(data, col, path='./'):
+    def single_factor(data: pd.DataFrame, col: str, filename: str = './examine.html'):
         close = data[['date', 'code', 'close']].pivot(index='date', columns='code', values='close')
 
         data = data.set_index(['date', 'code'], drop=True)
         data.sort_index(inplace=True)
         factor_data = utils.get_clean_factor_and_forward_returns(data[col], close, quantiles=5,
-                                                                 periods=(5,), max_loss=1)
+                                                                 periods=(1, 5, 10), max_loss=1)
         html = tears.create_full_tear_sheet(factor_data,
                                      long_short=True,
                                      group_neutral=False,
                                      by_group=False)
 
-        with open(path + 'examine.html', 'w+', encoding='utf8') as file:
+        with open(filename, 'w+', encoding='utf8') as file:
             file.write(html)
 
     @staticmethod
-    def factor_compare(data, f_col=None, ind: str = None, cir: str = None):
+    def factor_compare(data: pd.DataFrame, f_col: str = None, ind: str = None, cir: str = None):
         if f_col:
             data = data[f_col]
 

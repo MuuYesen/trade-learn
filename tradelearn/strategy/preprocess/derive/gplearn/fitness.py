@@ -11,6 +11,7 @@ the computer programs created by the :mod:`gplearn.genetic` module.
 import numbers
 
 import numpy as np
+import pandas as pd
 from joblib import wrap_non_picklable_objects
 from scipy.stats import rankdata
 
@@ -47,7 +48,6 @@ class _Fitness(object):
 
     def __call__(self, *args):
         return self.function(*args)
-
 
 def make_fitness(function, greater_is_better, wrap=True):
     """Make a fitness measure, a metric scoring the quality of a program's fit.
@@ -136,7 +136,6 @@ def _root_mean_square_error(y, y_pred, w):
     """Calculate the root mean square error."""
     return np.sqrt(np.average(((y_pred - y) ** 2), weights=w))
 
-
 def _log_loss(y, y_pred, w):
     """Calculate the log loss."""
     eps = 1e-15
@@ -145,23 +144,29 @@ def _log_loss(y, y_pred, w):
     score = y * np.log(y_pred) + (1 - y) * np.log(inv_y_pred)
     return np.average(-score, weights=w)
 
+def _sharpe_ratio(y, y_pred, w):
+    y_diff = pd.Series(y.flatten()).diff()
+    direction = pd.Series(y_pred.flatten()).diff().apply(lambda x: 1 if x > 0 else -1)
+    returns = np.multiply(y_diff, direction)
+    sr = returns.mean() / returns.std()
+    return sr
 
-weighted_pearson = _Fitness(function=_weighted_pearson,
-                            greater_is_better=True)
-weighted_spearman = _Fitness(function=_weighted_spearman,
-                             greater_is_better=True)
-mean_absolute_error = _Fitness(function=_mean_absolute_error,
-                               greater_is_better=False)
-mean_square_error = _Fitness(function=_mean_square_error,
-                             greater_is_better=False)
-root_mean_square_error = _Fitness(function=_root_mean_square_error,
-                                  greater_is_better=False)
-log_loss = _Fitness(function=_log_loss,
-                    greater_is_better=False)
+
+weighted_pearson = _Fitness(function=_weighted_pearson, greater_is_better=True)
+weighted_spearman = _Fitness(function=_weighted_spearman, greater_is_better=True)
+mean_absolute_error = _Fitness(function=_mean_absolute_error, greater_is_better=False)
+mean_square_error = _Fitness(function=_mean_square_error, greater_is_better=False)
+root_mean_square_error = _Fitness(function=_root_mean_square_error, greater_is_better=False)
+log_loss = _Fitness(function=_log_loss, greater_is_better=False)
+
+sharpe_ratio = _Fitness(_sharpe_ratio, greater_is_better=True)
+
 
 _fitness_map = {'pearson': weighted_pearson,
                 'spearman': weighted_spearman,
                 'mean absolute error': mean_absolute_error,
                 'mse': mean_square_error,
                 'rmse': root_mean_square_error,
-                'log loss': log_loss}
+                'log loss': log_loss,
+                'sharpe ratio': sharpe_ratio,
+                }

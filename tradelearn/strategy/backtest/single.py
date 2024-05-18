@@ -1,8 +1,9 @@
-import pandas as pd
-
 import numpy as np
-
+import pandas as pd
 import tradelearn.trader as bt
+from tradelearn.trader.utils.align import Align
+from tradelearn.trader.signal import Signal
+
 from dateutil.relativedelta import relativedelta
 
 import logging
@@ -17,7 +18,10 @@ init_log_tab([__name__], logging.INFO)
 class LongBacktest:
 
     @staticmethod
-    def run(test_data, base_line, begin_date, end_date, model_class, feature_list, **kwargs):
+    def run(model_class: Signal, param_dict: dict, raw_data: pd.DataFrame, base_line: pd.DataFrame,
+            begin_date: str, end_date: str, show_source=True):
+
+        al_raw_data = Align.transform(raw_data, base_line)
 
         cerebro = bt.Cerebro()
 
@@ -27,7 +31,7 @@ class LongBacktest:
                                    low=2, close=3, volume=4, openinterest=-1)
         cerebro.adddata(data, name='baseline')
 
-        bt_test_data = test_data[['open', 'high', 'low', 'close', 'volume', 'date', 'code']]
+        bt_test_data = al_raw_data[['open', 'high', 'low', 'close', 'volume', 'date', 'code']]
         bt_test_data = bt_test_data.query(f"date >= '{begin_date}' and date < '{end_date}'")
         for symbol in bt_test_data['code'].unique():
             data = bt_test_data.query(f"code == '{symbol}'")
@@ -44,13 +48,13 @@ class LongBacktest:
         cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='_SharpeRatio')
         cerebro.addanalyzer(bt.analyzers.DrawDown, _name='_DrawDown')
 
-        cerebro.addstrategy(Long, bt_data=test_data, model_class=model_class, feature_list=feature_list, begin_date=begin_date, end_date=end_date, **kwargs)
+        cerebro.addstrategy(Long, model_class, param_dict, raw_data, bt_base_data, begin_date, end_date)
 
         print('初始资金: %.2f' % cerebro.broker.getvalue())
         results = cerebro.run()
         print('最终资金: %.2f' % cerebro.broker.getvalue())
 
-        cerebro.plot(output_mode='show', style='bar', show_source=True)
+        cerebro.plot(output_mode='show', style='bar', show_source=show_source)
 
         strat = results[0]
         print('夏普比率:', strat.analyzers._SharpeRatio.get_analysis())
@@ -69,10 +73,10 @@ class Long(bt.Strategy):
         dt = bt.num2date(datetime)
         logger.info('%s, %s' % (dt.isoformat(), txt))
 
-    def __init__(self, bt_data, model_class, feature_list, begin_date, end_date, **kwargs):
-        self.inds = model_class(bt_begin_date=begin_date, bt_end_date=end_date,
-                                            fina_data=bt_data, fea_list=feature_list,
-                                            stockid=bt_data['code'].iloc[0], **kwargs)
+    def __init__(self, model_class, param_dict, raw_data, bt_base_data, begin_date, end_date):
+        self.inds = model_class(stockid=raw_data['code'].iloc[0], raw_data=raw_data,
+                                bt_begin_date=begin_date, bt_end_date=end_date, param_dict=param_dict)
+        self.inds.align_signal(bt_base_data)
         self.order_list = []
         self.last_date = None
 
@@ -111,7 +115,7 @@ class Long(bt.Strategy):
         if self.last_date is not None and cur_date < self.last_date + relativedelta(days=5):
             return
 
-        if self.inds.lines.model_indi[0] == np.NAN:
+        if self.inds.lines.signal[0] == np.NAN:
             return
 
         for order in self.order_list:  # 取消未成交的订单
@@ -119,10 +123,10 @@ class Long(bt.Strategy):
         self.order_list = []
 
         if not self.position:
-            if self.inds.lines.model_indi[0]:
+            if self.inds.lines.signal[0]:
                 self.order = self.buy()
         else:
-            if not self.inds.lines.model_indi[0]:
+            if not self.inds.lines.signal[0]:
                 self.order = self.sell()
 
         self.last_date = cur_date
