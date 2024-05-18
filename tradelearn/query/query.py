@@ -45,7 +45,7 @@ class Query:
                 client = Quotes.factory(market='std', multithread=True, heartbeat=True, timeout=15, auto_retry=True)
                 data = client.ohlc(symbol=symbol, begin=start, end=end, adjust=adjust)
                 data = data.drop(['date'], axis=1).reset_index()
-                data[['open', 'close', 'high', 'low']] = data[['open', 'close', 'high', 'low']].apply(lambda x: x / data['adj'], axis=0)
+                data[['open', 'close', 'high', 'low']] = data[['open', 'close', 'high', 'low']].apply(lambda x: x / data['factor'], axis=0)
                 if not data is None:
                     data['vwap'] = data.amount / data.volume / 100
             except:
