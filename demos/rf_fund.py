@@ -4,12 +4,8 @@ from tradelearn.trader.signal import Signal
 from tradelearn.strategy.backtest.fund import LongBacktest
 from tradelearn.strategy.evaluate import Evaluate
 
-import numpy as np
 import pandas as pd
 from dateutil.relativedelta import relativedelta
-
-import warnings
-warnings.filterwarnings('ignore')
 
 from sklearn.ensemble import RandomForestClassifier
 

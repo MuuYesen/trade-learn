@@ -239,11 +239,12 @@ from tradelearn.strategy.preprocess.derive import Derive
 
 res = Derive.generic_generate(data=rawdata)
 ```
-| Parameter Name     | Data Type	      | Notes                                                                                                                                             |
-|----------|-----------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| data     | DataFrame | Target market data                                                                                                                                |
+| Parameter Name     | Data Type	      | Notes                                                                                                                                          |
+|----------|-----------|------------------------------------------------------------------------------------------------------------------------------------------------|
+| data     | DataFrame | Target market data                                                                                                                             |
 | f_col   | list      | List of variable names derived from participating factors, and evaluated by Sharpe metrics. default to all variables except code, date, and label |
-| n_alpha | int       | Count derived from the final factor                                                                                                               |
+| n_alpha | int       | Count derived from the final factor                                                                                                            |
+| random_status | int       | Random number seed, if not set, each execution will appear different results                          |
 ### Single Factor Test
 ```python
 from tradelearn.strategy.examine import Examine
