@@ -8,9 +8,9 @@ import yfinance as yf
 from mootdx.quotes import Quotes
 from tvDatafeed import TvDatafeed, Interval
 
-from tradelearn.query.common.alphas101 import Alphas101
-from tradelearn.query.common.alphas191 import Alphas191
-from tradelearn.query.common.tdx30 import Tdx30
+from tradelearn.query.alpha.alphas101 import Alphas101
+from tradelearn.query.alpha.alphas191 import Alphas191
+from tradelearn.query.tec.mytt.tdx30 import Tdx30
 
 
 class Query:
