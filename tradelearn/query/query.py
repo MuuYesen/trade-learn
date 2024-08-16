@@ -6,6 +6,7 @@ from multiprocessing import Pool
 
 import yfinance as yf
 from mootdx.quotes import Quotes
+from tvDatafeed import TvDatafeed, Interval
 
 from tradelearn.query.common.alphas101 import Alphas101
 from tradelearn.query.common.alphas191 import Alphas191
@@ -26,7 +27,9 @@ class Query:
         return data
 
     @staticmethod
-    def history_ohlc(symbol: str = None, start: str = None, end: str = None, adjust: str = 'qfq', engine: str = 'tdx'):
+    def history_ohlc(symbol: str = None, start: str = None, end: str = None, adjust: str = 'qfq',
+                     engine: str = 'tdx', username: str = None, password: str = None):
+
         if engine == 'yahoo':
             try:
                 tickler = yf.Ticker(symbol)
@@ -48,6 +51,14 @@ class Query:
                 data[['open', 'close', 'high', 'low']] = data[['open', 'close', 'high', 'low']].apply(lambda x: x / data['factor'], axis=0)
                 if not data is None:
                     data['vwap'] = data.amount / data.volume / 100
+            except:
+                data = None
+
+        if engine == 'tv':
+            try:
+                tv = TvDatafeed(username, password)
+                data = tv.get_hist(symbol='SR', exchange='ZCE', interval=Interval.in_daily, n_bars=10000,
+                                   fut_contract=1)
             except:
                 data = None
 

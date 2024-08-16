@@ -3,7 +3,7 @@ import setuptools
 with open('README.md', 'r') as fh:
     README = fh.read()
 
-VERSION = '0.1.1.8'
+VERSION = '0.1.2.0'
 
 setuptools.setup(
     name='trade-learn',
@@ -22,12 +22,13 @@ setuptools.setup(
         'bokeh',
         'yfinance',
         'mootdx',
+        'tvDatafeed',
         'pydot',
         'quantstats',
         'htmlmin'
     ],
     url='https://github.com/MuuYesen/trade-learn',
-    packages=setuptools.find_namespace_packages(), #setuptools.find_packages(include=['tradelearn', 'tradelearn.*']),
+    packages=setuptools.find_namespace_packages(),
     package_data={'': ['*.json', '*.html', '*.js', '*.css', '*.j2']},
     classifiers=[
         'Programming Language :: Python :: 3',
