@@ -6,7 +6,7 @@ from numpy import power as npPower
 from numpy import sqrt as npSqrt
 from numpy import zeros_like as npZeroslike
 from pandas import Series
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def jma(close, length=None, phase=None, offset=None, **kwargs):

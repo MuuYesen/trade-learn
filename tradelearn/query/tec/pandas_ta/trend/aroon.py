@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from pandas import DataFrame
-from pandas_ta import Imports
-from pandas_ta.utils import get_offset, verify_series
-from pandas_ta.utils import recent_maximum_index, recent_minimum_index
+from tradelearn.query.tec.pandas_ta import Imports
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import recent_maximum_index, recent_minimum_index
 
 
 def aroon(high, low, length=None, scalar=None, talib=None, offset=None, **kwargs):

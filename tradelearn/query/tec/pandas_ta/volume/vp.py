@@ -2,7 +2,7 @@
 from numpy import array_split
 from numpy import mean
 from pandas import cut, concat, DataFrame
-from pandas_ta.utils import signed_series, verify_series
+from tradelearn.query.tec.pandas_ta.utils import signed_series, verify_series
 
 
 def vp(close, volume, width=None, **kwargs):

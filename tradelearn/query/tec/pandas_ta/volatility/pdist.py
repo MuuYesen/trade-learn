@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pandas_ta.utils import get_drift, get_offset, non_zero_range, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, non_zero_range, verify_series
 
 
 def pdist(open_, high, low, close, drift=None, offset=None, **kwargs):

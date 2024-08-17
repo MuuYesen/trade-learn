@@ -6,7 +6,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Union, cast
 
 import numpy as np
 import pandas as pd
-from prepare.minitrade.pandas_ta import AnalysisIndicators
+from tradelearn.query.tec.pandas_ta import AnalysisIndicators
 
 
 def try_(lazy_func, default=None, exception=Exception):
@@ -22,7 +22,7 @@ def _as_str(value) -> str:
     if isinstance(value, pd.DataFrame):
         return value.attrs.get('name', None) or 'df'
     name = str(getattr(value, 'name', '') or '')
-    if name in ('Open', 'High', 'Low', 'Close', 'Volume'):
+    if name in ('open', 'high', 'low', 'close', 'volume'):
         return name[:1]
     if callable(value):
         name = getattr(value, '__name__', value.__class__.__name__).replace('<lambda>', 'λ')
@@ -157,7 +157,7 @@ class _Data:
     def pip(self) -> float:
         if self.__pip is None:
             self.__pip = float(10**-np.median([len(s.partition('.')[-1])
-                                               for s in self.__arrays['Close'][0].ravel().astype(str)]))
+                                               for s in self.__arrays['close'][0].ravel().astype(str)]))
         return self.__pip
 
     def __get_array(self, key) -> _Array:
@@ -171,24 +171,24 @@ class _Data:
         return arr
 
     @property
-    def Open(self) -> _Array:
-        return self.__get_array('Open')
+    def open(self) -> _Array:
+        return self.__get_array('open')
 
     @property
-    def High(self) -> _Array:
-        return self.__get_array('High')
+    def high(self) -> _Array:
+        return self.__get_array('high')
 
     @property
-    def Low(self) -> _Array:
-        return self.__get_array('Low')
+    def low(self) -> _Array:
+        return self.__get_array('low')
 
     @property
-    def Close(self) -> _Array:
-        return self.__get_array('Close')
+    def close(self) -> _Array:
+        return self.__get_array('close')
 
     @property
-    def Volume(self) -> _Array:
-        return self.__get_array('Volume')
+    def volume(self) -> _Array:
+        return self.__get_array('volume')
 
     @property
     def index(self) -> pd.DatetimeIndex:

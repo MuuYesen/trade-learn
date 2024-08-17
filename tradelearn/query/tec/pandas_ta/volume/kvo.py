@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from pandas import DataFrame
-from pandas_ta.overlap import hlc3, ma
-from pandas_ta.utils import get_drift, get_offset, signed_series, verify_series
+from tradelearn.query.tec.pandas_ta.overlap import hlc3, ma
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, signed_series, verify_series
 
 
 def kvo(high, low, close, volume, fast=None, slow=None, signal=None, mamode=None, drift=None, offset=None, **kwargs):

@@ -5,7 +5,7 @@ from typing import Tuple
 
 from pandas import DataFrame, Timestamp
 
-from pandas_ta import EXCHANGE_TZ, RATE
+from tradelearn.query.tec.pandas_ta import EXCHANGE_TZ, RATE
 
 
 def df_dates(df: DataFrame, dates: Tuple[str, list] = None) -> DataFrame:

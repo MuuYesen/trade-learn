@@ -29,11 +29,11 @@ __pdoc__ = {}
 
 
 OHLCV_AGG = OrderedDict((
-    ('Open', 'first'),
-    ('High', 'max'),
-    ('Low', 'min'),
-    ('Close', 'last'),
-    ('Volume', 'sum'),
+    ('open', 'first'),
+    ('high', 'max'),
+    ('low', 'min'),
+    ('close', 'last'),
+    ('volume', 'sum'),
 ))
 """Dictionary of rules for aggregating resampled OHLCV data frames,
 e.g.
@@ -74,7 +74,7 @@ def barssince(condition: Sequence[bool], default=np.inf) -> int:
     Return the number of bars since `condition` sequence was last `True`,
     or if never, return `default`.
 
-        >>> barssince(self.data.Close > self.data.Open)
+        >>> barssince(self.data.close > self.data.open)
         3
     """
     return next(compress(range(len(condition)), reversed(condition)), default)
@@ -85,7 +85,7 @@ def cross(series1: Sequence, series2: Sequence) -> bool:
     Return `True` if `series1` and `series2` just crossed
     (above or below) each other.
 
-        >>> cross(self.data.Close, self.sma)
+        >>> cross(self.data.close, self.sma)
         True
 
     """
@@ -97,7 +97,7 @@ def crossover(series1: Sequence, series2: Sequence) -> bool:
     Return `True` if `series1` just crossed over (above)
     `series2`.
 
-        >>> crossover(self.data.Close, self.sma)
+        >>> crossover(self.data.close, self.sma)
         True
     """
     series1 = (
@@ -152,9 +152,9 @@ def quantile(series: Sequence, quantile: Union[None, float] = None):
     `series` at this quantile. If used to working with percentiles, just
     divide your percentile amount with 100 to obtain quantiles.
 
-        >>> quantile(self.data.Close[-20:], .1)
+        >>> quantile(self.data.close[-20:], .1)
         162.130
-        >>> quantile(self.data.Close)
+        >>> quantile(self.data.close)
         0.13
     """
     if quantile is None:
@@ -247,7 +247,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
         class System(Strategy):
             def init(self):
                 self.sma = resample_apply(
-                    'D', SMA, self.data.Close, 10, plot=False)
+                    'D', SMA, self.data.close, 10, plot=False)
 
     The above short snippet is roughly equivalent to:
 
@@ -255,7 +255,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
             def init(self):
                 # Strategy exposes `self.data` as raw NumPy arrays.
                 # Let's convert closing prices back to pandas Series.
-                close = self.data.Close.s
+                close = self.data.close.s
 
                 # Resample to daily resolution. Aggregate groups
                 # using their last value (i.e. closing price at the end
@@ -347,16 +347,16 @@ def random_ohlc_data(example_data: pd.DataFrame, *,
     def shuffle(x):
         return x.sample(frac=frac, replace=frac > 1, random_state=random_state)
 
-    if len(example_data.columns.intersection({'Open', 'High', 'Low', 'Close'})) != 4:
+    if len(example_data.columns.intersection({'open', 'high', 'low', 'close'})) != 4:
         raise ValueError("`data` must be a pandas.DataFrame with columns "
-                         "'Open', 'High', 'Low', 'Close'")
+                         "'open', 'high', 'low', 'close'")
     while True:
         df = shuffle(example_data)
         df.index = example_data.index
-        padding = df.Close - df.Open.shift(-1)
-        gaps = shuffle(example_data.Open.shift(-1) - example_data.Close)
+        padding = df.close - df.open.shift(-1)
+        gaps = shuffle(example_data.open.shift(-1) - example_data.close)
         deltas = (padding + gaps).shift(1).fillna(0).cumsum()
-        for key in ('Open', 'High', 'Low', 'Close'):
+        for key in ('open', 'high', 'low', 'close'):
             df[key] += deltas
         yield df
 
@@ -461,7 +461,7 @@ class TrailingStrategy(Strategy):
         Set the lookback period for computing ATR. The default value
         of 100 ensures a _stable_ ATR.
         """
-        hi, lo, c_prev = self.data.High, self.data.Low, pd.Series(self.data.Close).shift(1)
+        hi, lo, c_prev = self.data.high, self.data.low, pd.Series(self.data.close).shift(1)
         tr = np.max([hi - lo, (c_prev - hi).abs(), (c_prev - lo).abs()], axis=0)
         atr = pd.Series(tr).rolling(periods).mean().bfill().values
         self.__atr = atr
@@ -480,10 +480,10 @@ class TrailingStrategy(Strategy):
         for trade in self.trades():
             if trade.is_long:
                 trade.sl = max(trade.sl or -np.inf,
-                               self.data.Close[index] - self.__atr[index] * self.__n_atr)
+                               self.data.close[index] - self.__atr[index] * self.__n_atr)
             else:
                 trade.sl = min(trade.sl or np.inf,
-                               self.data.Close[index] + self.__atr[index] * self.__n_atr)
+                               self.data.close[index] + self.__atr[index] * self.__n_atr)
 
 
 # Prevent pdoc3 documenting __init__ signature of Strategy subclasses

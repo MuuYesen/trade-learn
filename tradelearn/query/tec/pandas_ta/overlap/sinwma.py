@@ -2,7 +2,7 @@
 from numpy import pi as npPi
 from numpy import sin as npSin
 from pandas import Series
-from pandas_ta.utils import get_offset, verify_series, weights
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series, weights
 
 
 def sinwma(close, length=None, offset=None, **kwargs):

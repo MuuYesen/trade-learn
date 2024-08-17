@@ -7,8 +7,8 @@ import types
 from os.path import abspath, join, exists, basename, splitext
 from glob import glob
 
-import pandas_ta
-from pandas_ta import AnalysisIndicators
+import tradelearn.query.tec.pandas_ta
+from tradelearn.query.tec.pandas_ta import AnalysisIndicators
 
 
 def bind(function_name, function, method):
@@ -152,7 +152,7 @@ A brief example of usage:
 
 1. Loading the 'ta' module:
 >>> import pandas as pd
->>> import pandas_ta as ta
+>>> import tradelearn.query.tec.pandas_ta as ta
 
 2. Create an empty directory on your machine where you want to work with your
 indicators. Invoke pandas_ta.custom.import_dir once to pre-populate it with
@@ -160,12 +160,12 @@ sub-folders for all available indicator categories, e.g.:
 
 >>> import os
 >>> from os.path import abspath, join, expanduser
->>> from pandas_ta.custom import create_dir, import_dir
+>>> from tradelearn.query.tec.pandas_ta.custom import create_dir, import_dir
 >>> ta_dir = abspath(join(expanduser("~"), "my_indicators"))
 >>> create_dir(ta_dir)
 
 3. You can now create your own custom indicator e.g. by copying existing
-ones from pandas_ta core module and modifying them.
+ones from tradelearn.query.tec.pandas_ta core module and modifying them.
 
 IMPORTANT: Each custom indicator should have a unique name and have both
 a) a function named exactly as the module, e.g. 'ni' if the module is ni.py

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from pandas import Series
-from pandas_ta import Imports
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta import Imports
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def wma(close, length=None, asc=None, talib=None, offset=None, **kwargs):

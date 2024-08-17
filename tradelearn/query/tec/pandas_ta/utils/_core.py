@@ -6,7 +6,7 @@ from sys import float_info as sflt
 from numpy import argmax, argmin
 from pandas import DataFrame, Series
 from pandas.api.types import is_datetime64_any_dtype
-from pandas_ta import Imports
+from tradelearn.query.tec.pandas_ta import Imports
 
 
 def _camelCase2Title(x: str):

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from numpy import log as npLog
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def entropy(close, length=None, base=None, offset=None, **kwargs):

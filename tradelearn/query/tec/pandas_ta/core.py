@@ -11,18 +11,18 @@ from numpy import log10 as npLog10
 from numpy import ndarray as npNdarray
 from pandas.core.base import PandasObject
 
-from pandas_ta import Category, Imports, version
-from pandas_ta.candles.cdl_pattern import ALL_PATTERNS
-from pandas_ta.candles import *
-from pandas_ta.cycles import *
-from pandas_ta.momentum import *
-from pandas_ta.overlap import *
-from pandas_ta.performance import *
-from pandas_ta.statistics import *
-from pandas_ta.trend import *
-from pandas_ta.volatility import *
-from pandas_ta.volume import *
-from pandas_ta.utils import *
+from tradelearn.query.tec.pandas_ta import Category, Imports, version
+from tradelearn.query.tec.pandas_ta.candles.cdl_pattern import ALL_PATTERNS
+from tradelearn.query.tec.pandas_ta.candles import *
+from tradelearn.query.tec.pandas_ta.cycles import *
+from tradelearn.query.tec.pandas_ta.momentum import *
+from tradelearn.query.tec.pandas_ta.overlap import *
+from tradelearn.query.tec.pandas_ta.performance import *
+from tradelearn.query.tec.pandas_ta.statistics import *
+from tradelearn.query.tec.pandas_ta.trend import *
+from tradelearn.query.tec.pandas_ta.volatility import *
+from tradelearn.query.tec.pandas_ta.volume import *
+from tradelearn.query.tec.pandas_ta.utils import *
 
 
 df = pd.DataFrame()

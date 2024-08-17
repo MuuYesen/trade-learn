@@ -179,7 +179,7 @@ def plot(*, results: pd.Series,
     equity_data = results['_equity_curve'].copy(deep=False)
     trades = results['_trades']
 
-    plot_volume = plot_volume and not baseline.Volume.isnull().all()
+    plot_volume = plot_volume and not baseline.volume.isnull().all()
     plot_equity = plot_equity and not trades.empty
     plot_return = plot_return and not trades.empty
     plot_pl = plot_pl and not trades.empty
@@ -188,12 +188,12 @@ def plot(*, results: pd.Series,
     from .lib import OHLCV_AGG
 
     # ohlc df may contain many columns. We're only interested in, and pass on to Bokeh, these
-    if 'Volume' not in baseline:
-        baseline['Volume'] = 0
+    if 'volume' not in baseline:
+        baseline['volume'] = 0
     baseline = baseline[list(OHLCV_AGG.keys())].copy(deep=False)
 
     # Buy-and-hold cumulative returns
-    bnh_perf = baseline['Close'] / baseline['Close'].iloc[results['_trade_start_bar']]
+    bnh_perf = baseline['close'] / baseline['close'].iloc[results['_trade_start_bar']]
     bnh_perf.iloc[:results['_trade_start_bar']] = 1.0
 
     # Limit data to max_candles
@@ -226,7 +226,7 @@ def plot(*, results: pd.Series,
     figs_above_ohlc, figs_below_ohlc = [], []
 
     source = ColumnDataSource(baseline)
-    source.add((baseline.Close >= baseline.Open).values.astype(np.uint8).astype(str), 'inc')
+    source.add((baseline.close >= baseline.open).values.astype(np.uint8).astype(str), 'inc')
     source.add(bnh_perf, 'bnh_perf')
 
     trade_source = ColumnDataSource(dict(
@@ -258,15 +258,15 @@ return this.labels[index] || "";
         ''')
 
     NBSP = '\N{NBSP}' * 4  # noqa: E999
-    ohlc_extreme_values = baseline[['High', 'Low']].copy(deep=False)
+    ohlc_extreme_values = baseline[['high', 'low']].copy(deep=False)
     ohlc_tooltips = [
         ('x, y', NBSP.join(('$index',
                             '$y{0,0.0[0000]}'))),
-        ('OHLC', NBSP.join(('@Open{0,0.0[0000]}',
-                            '@High{0,0.0[0000]}',
-                            '@Low{0,0.0[0000]}',
-                            '@Close{0,0.0[0000]}'))),
-        ('Volume', '@Volume{0,0}')]
+        ('OHLC', NBSP.join(('@open{0,0.0[0000]}',
+                            '@high{0,0.0[0000]}',
+                            '@low{0,0.0[0000]}',
+                            '@close{0,0.0[0000]}'))),
+        ('Volume', '@volume{0,0}')]
 
     def new_indicator_figure(**kwargs):
         kwargs.setdefault('height', 80)
@@ -340,7 +340,7 @@ return this.labels[index] || "";
             y_axis_label=yaxis_label,
             **({} if plot_drawdown else dict(height=110)))
 
-        # High-watermark drawdown dents
+        # high-watermark drawdown dents
         fig.patch('index', 'equity_dd',
                   source=ColumnDataSource(dict(
                       index=np.r_[index, index[::-1]],
@@ -467,13 +467,13 @@ return this.labels[index] || "";
         return fig
 
     def _plot_volume_section():
-        """Volume section"""
+        """volume section"""
         fig = new_indicator_figure(y_axis_label="Volume")
         fig.xaxis.formatter = fig_ohlc.xaxis[0].formatter
         fig.xaxis.visible = True
-        fig_ohlc.xaxis.visible = False  # Show only Volume's xaxis
-        r = fig.vbar('index', BAR_WIDTH, 'Volume', source=source, color=inc_cmap)
-        set_tooltips(fig, [('Volume', '@Volume{0.00 a}')], renderers=[r])
+        fig_ohlc.xaxis.visible = False  # Show only volume's xaxis
+        r = fig.vbar('index', BAR_WIDTH, 'volume', source=source, color=inc_cmap)
+        set_tooltips(fig, [('Volume', '@volume{0.00 a}')], renderers=[r])
         fig.yaxis.formatter = NumeralTickFormatter(format="0 a")
         return fig
 
@@ -511,19 +511,19 @@ return this.labels[index] || "";
         df2.index += df2['_width'] / 2 - .5
         df2['_width'] -= .1  # Candles don't touch
 
-        df2['inc'] = (df2.Close >= df2.Open).astype(int).astype(str)
+        df2['inc'] = (df2.close >= df2.open).astype(int).astype(str)
         df2.index.name = None
         source2 = ColumnDataSource(df2)
-        fig_ohlc.segment('index', 'High', 'index', 'Low', source=source2, color='#bbbbbb')
+        fig_ohlc.segment('index', 'high', 'index', 'low', source=source2, color='#bbbbbb')
         colors_lighter = [lightness(BEAR_COLOR, .92),
                           lightness(BULL_COLOR, .92)]
-        fig_ohlc.vbar('index', '_width', 'Open', 'Close', source=source2, line_color=None,
+        fig_ohlc.vbar('index', '_width', 'open', 'close', source=source2, line_color=None,
                       fill_color=factor_cmap('inc', colors_lighter, ['0', '1']))
 
     def _plot_ohlc():
         """Main OHLC bars"""
-        fig_ohlc.segment('index', 'High', 'index', 'Low', source=source, color="black")
-        r = fig_ohlc.vbar('index', BAR_WIDTH, 'Open', 'Close', source=source,
+        fig_ohlc.segment('index', 'high', 'index', 'low', source=source, color="black")
+        r = fig_ohlc.vbar('index', BAR_WIDTH, 'open', 'close', source=source,
                           line_color="black", fill_color=inc_cmap)
         return r
 
@@ -543,7 +543,7 @@ return this.labels[index] || "";
         for ticker in data.columns.levels[0][:10]:
             color = next(ohlc_colors)
             source_name = ticker
-            arr = data.loc[:, (ticker, 'Close')]
+            arr = data.loc[:, (ticker, 'close')]
             source.add(arr, source_name)
             label_tooltip_pairs.append((source_name, f'@{{{source_name}}}{{0,0.0[0000]}}'))
             ohlc_extreme_values[source_name] = arr.reset_index(drop=True)

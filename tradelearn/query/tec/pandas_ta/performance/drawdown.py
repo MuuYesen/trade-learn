@@ -2,7 +2,7 @@
 from numpy import log as nplog
 from numpy import seterr
 from pandas import DataFrame
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def drawdown(close, offset=None, **kwargs) -> DataFrame:

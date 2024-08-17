@@ -28,7 +28,7 @@ class Query:
 
     @staticmethod
     def history_ohlc(symbol: str = None, start: str = None, end: str = None, adjust: str = 'qfq',
-                     engine: str = 'tdx', username: str = None, password: str = None):
+                     engine: str = 'tdx', username: str = None, password: str = None, exchange: str = None):
 
         if engine == 'yahoo':
             try:
@@ -57,8 +57,7 @@ class Query:
         if engine == 'tv':
             try:
                 tv = TvDatafeed(username, password)
-                data = tv.get_hist(symbol='SR', exchange='ZCE', interval=Interval.in_daily, n_bars=10000,
-                                   fut_contract=1)
+                data = tv.get_hist(symbol=symbol, exchange=exchange, interval=Interval.in_daily, n_bars=10000)
             except:
                 data = None
 

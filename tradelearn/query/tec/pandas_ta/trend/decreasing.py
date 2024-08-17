@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pandas_ta.utils import get_drift, get_offset, is_percent, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, is_percent, verify_series
 
 def decreasing(close, length=None, strict=None, asint=None, percent=None, drift=None, offset=None, **kwargs):
     """Indicator: Decreasing"""

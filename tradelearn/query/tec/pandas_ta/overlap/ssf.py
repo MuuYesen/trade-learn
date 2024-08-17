@@ -3,7 +3,7 @@ from numpy import cos as npCos
 from numpy import exp as npExp
 from numpy import pi as npPi
 from numpy import sqrt as npSqrt
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def ssf(close, length=None, poles=None, offset=None, **kwargs):

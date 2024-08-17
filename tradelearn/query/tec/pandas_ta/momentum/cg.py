@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pandas_ta.utils import get_offset, verify_series, weights
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series, weights
 
 
 def cg(close, length=None, offset=None, **kwargs):

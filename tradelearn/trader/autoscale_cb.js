@@ -28,7 +28,7 @@ window._bt_autoscale_timeout = setTimeout(function () {
     _bt_scale_range(ohlc_range, min, max, true);
 
     if (volume_range) {
-        max = Math.max.apply(null, source.data['Volume'].slice(i, j));
+        max = Math.max.apply(null, source.data['volume'].slice(i, j));
         _bt_scale_range(volume_range, 0, max * 1.03, false);
     }
 

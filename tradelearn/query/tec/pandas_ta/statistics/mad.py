@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from numpy import fabs as npfabs
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def mad(close, length=None, offset=None, **kwargs):

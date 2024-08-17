@@ -5,8 +5,8 @@ from numpy import nan as npNaN
 from pandas import DataFrame, Series
 
 from .rsi import rsi
-from pandas_ta.overlap import ma
-from pandas_ta.utils import get_drift, get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.overlap import ma
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, verify_series
 
 
 def qqe(close, length=None, smooth=None, factor=None, mamode=None, drift=None, offset=None, **kwargs):

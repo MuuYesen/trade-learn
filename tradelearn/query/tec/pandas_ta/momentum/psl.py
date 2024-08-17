@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from numpy import sign as npSign
-from pandas_ta.utils import get_drift, get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, verify_series
 
 
 def psl(close, open_=None, length=None, scalar=None, drift=None, offset=None, **kwargs):

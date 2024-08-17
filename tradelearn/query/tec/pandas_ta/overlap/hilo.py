@@ -2,7 +2,7 @@
 from numpy import nan as npNaN
 from pandas import DataFrame, Series
 from .ma import ma
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def hilo(high, low, close, high_length=None, low_length=None, mamode=None, offset=None, **kwargs):

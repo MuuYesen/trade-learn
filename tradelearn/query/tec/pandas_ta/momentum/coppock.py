@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from .roc import roc
-from pandas_ta.overlap import wma
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.overlap import wma
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def coppock(close, length=None, fast=None, slow=None, offset=None, **kwargs):

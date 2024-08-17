@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from pandas import DataFrame
-from pandas_ta.overlap import rma
-from pandas_ta.utils import get_offset, non_zero_range, verify_series
+from tradelearn.query.tec.pandas_ta.overlap import rma
+from tradelearn.query.tec.pandas_ta.utils import get_offset, non_zero_range, verify_series
 
 
 def kdj(high=None, low=None, close=None, length=None, signal=None, offset=None, **kwargs):

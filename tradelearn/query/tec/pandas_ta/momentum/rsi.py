@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from pandas import DataFrame, concat
-from pandas_ta import Imports
-from pandas_ta.overlap import rma
-from pandas_ta.utils import get_drift, get_offset, verify_series, signals
+from tradelearn.query.tec.pandas_ta import Imports
+from tradelearn.query.tec.pandas_ta.overlap import rma
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, verify_series, signals
 
 
 def rsi(close, length=None, scalar=None, talib=None, drift=None, offset=None, **kwargs):

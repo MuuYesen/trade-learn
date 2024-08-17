@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from numpy import sqrt as npSqrt
 from .wma import wma
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def hma(close, length=None, offset=None, **kwargs):

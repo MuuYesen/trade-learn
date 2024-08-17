@@ -5,7 +5,7 @@ from numpy import polyfit as npPolyfit
 from numpy import std as npStd
 from pandas import DataFrame, DatetimeIndex, Series
 from .stdev import stdev as stdev
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 def tos_stdevall(close, length=None, stds=None, ddof=None, offset=None, **kwargs):
     """Indicator: TD Ameritrade's Think or Swim Standard Deviation All"""

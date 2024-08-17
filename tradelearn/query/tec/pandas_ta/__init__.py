@@ -115,4 +115,4 @@ RATE = {
     "YEARLY": 1,
 }
 
-from pandas_ta.core import *
+from tradelearn.query.tec.pandas_ta.core import *
