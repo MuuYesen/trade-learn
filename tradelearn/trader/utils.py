@@ -14,7 +14,8 @@ import pandas as pd
 import seaborn as sns
 from tqdm.auto import tqdm
 
-from tradelearn.trader import Backtest, Strategy
+from .backtest import Backtest
+from .strategy import Strategy
 
 plt.rcParams["figure.figsize"] = (20, 3)
 plt.rcParams['axes.grid'] = True
