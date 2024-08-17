@@ -15,7 +15,7 @@ class TestCuasal(unittest.TestCase):
 
         # GOOG = _read_file('data/GOOG.csv')
 
-        GOOG = Query.history_ohlc(symbol='GOOG', engine='tv', username='muyes88', password='toxka2-ternez-cakZah', exchange='NASDAQ')
+        GOOG = Query.history_ohlc(symbol='GOOG', engine='tv', username='', password='', exchange='NASDAQ')
         GOOG.index = GOOG.index.map(lambda x: np.datetime64(x.date()))
 
         def SMA(arr: pd.Series, n: int) -> pd.Series:
