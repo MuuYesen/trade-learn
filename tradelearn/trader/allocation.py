@@ -1,5 +1,4 @@
 import functools
-from functools import partial
 from numbers import Number
 
 import pandas as pd

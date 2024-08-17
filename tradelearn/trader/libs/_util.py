@@ -1,8 +1,7 @@
-import warnings
 from datetime import datetime
 from functools import partial
 from numbers import Number
-from typing import Callable, Dict, List, Optional, Sequence, Union, cast
+from typing import Callable, Dict, List, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd

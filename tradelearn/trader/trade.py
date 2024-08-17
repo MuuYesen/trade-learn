@@ -1,5 +1,4 @@
 from copy import copy
-from functools import partial
 from math import copysign
 from typing import Optional, Union
 

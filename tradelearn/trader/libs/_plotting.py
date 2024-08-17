@@ -5,7 +5,7 @@ import warnings
 from colorsys import hls_to_rgb, rgb_to_hls
 from functools import partial
 from itertools import combinations, cycle
-from typing import Callable, Dict, List, Union
+from typing import Callable, List, Union
 
 import numpy as np
 import pandas as pd
@@ -29,9 +29,9 @@ from bokeh.layouts import gridplot
 from bokeh.palettes import Category10
 from bokeh.transform import factor_cmap
 
-from ._util import _as_list, _data_period, _Indicator
+from ._util import _as_list, _data_period
 
-with open(os.path.join(os.path.dirname(__file__), 'autoscale_cb.js'),
+with open(os.path.join(os.path.dirname(__file__), './autoscale_cb.js'),
           encoding='utf-8') as _f:
     _AUTOSCALE_JS_CALLBACK = _f.read()
 

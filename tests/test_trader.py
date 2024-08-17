@@ -1,31 +1,21 @@
 import unittest
 from tradelearn.trader import Backtest, Strategy
-from tradelearn.trader.lib import crossover
+from tradelearn.trader.libs.lib import crossover
 from tradelearn.query.query import Query
 
 class TestCuasal(unittest.TestCase):
 
     def test_trader_backtest(self):
-        import numpy as np
-        import pandas as pd
-
-        def _read_file(filename):
-            from os.path import dirname, join
-            return pd.read_csv(join(dirname(__file__), filename), index_col=0, parse_dates=True)
-
-        # GOOG = _read_file('data/GOOG.csv')
-
-        GOOG = Query.history_ohlc(symbol='GOOG', engine='tv', username='', password='', exchange='NASDAQ')
-        GOOG.index = GOOG.index.map(lambda x: np.datetime64(x.date()))
-
-        def SMA(arr: pd.Series, n: int) -> pd.Series:
-            return arr.rolling(n).mean()
+        GOOG = Query.history_ohlc(engine='tv', symbol='GOOG', exchange='NASDAQ')
 
         class SmaCross(Strategy):
             fast = 10
             slow = 20
 
             def init(self):
+                def SMA(arr, n):
+                    return arr.rolling(n).mean()
+
                 price = self.data.close.df  # 2
                 self.ma1 = self.I(SMA, price, self.fast, overlay=True)  # 3
                 self.ma2 = self.I(SMA, price, self.slow, overlay=True)  # 3

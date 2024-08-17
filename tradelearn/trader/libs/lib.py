@@ -23,7 +23,7 @@ import pandas as pd
 from ._plotting import plot_heatmaps as _plot_heatmaps
 from ._stats import compute_stats as _compute_stats
 from ._util import _as_str
-from .strategy import Strategy
+from ..strategy import Strategy
 
 __pdoc__ = {}
 

@@ -20,13 +20,15 @@ except ImportError:
     def _tqdm(seq, **_):
         return seq
 
-from ._plotting import plot  # noqa: I001
-from ._stats import compute_stats
-from ._util import _Data, _Indicator
+from .libs._plotting import plot  # noqa: I001
+from .libs._stats import compute_stats
+from .libs._util import _Data, _Indicator
 from .strategy import Strategy
-from .broker import _Broker
+from .broker import Broker
 from .order import Order
 
+class _OutOfMoneyError(Exception):
+    pass
 
 class Backtest:
     """
@@ -175,7 +177,7 @@ class Backtest:
 
         self._data = data
         self._broker = partial(
-            _Broker, cash=cash, holding=holding, commission=commission, margin=margin,
+            Broker, cash=cash, holding=holding, commission=commission, margin=margin,
             trade_on_close=trade_on_close, hedging=hedging,
             exclusive_orders=exclusive_orders,
             trade_start_date=datetime.strptime(trade_start_date, '%Y-%m-%d') if trade_start_date else None,
@@ -244,7 +246,7 @@ class Backtest:
             Obviously, this can affect results.
         """
         data = _Data(self._data.copy(deep=False))
-        broker: _Broker = self._broker(data=data)
+        broker: Broker = self._broker(data=data)
         strategy: Strategy = self._strategy(broker, data, kwargs)
         processed_orders: List[Order] = []
         final_positions = None
