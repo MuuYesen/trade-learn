@@ -1,12 +1,11 @@
 import warnings
-from functools import partial
 from math import copysign
 from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
-from ._util import _Data
+from .libs._util import _Data
 from .order import Order
 from .trade import Trade
 from .position import Position
@@ -17,7 +16,7 @@ class _OutOfMoneyError(Exception):
     pass
 
 
-class _Broker:
+class Broker:
     def __init__(self, *, data: _Data, cash, holding, commission, margin, trade_on_close, hedging, exclusive_orders,
                  trade_start_date, lot_size, fail_fast, storage):
         assert 0 < cash, f"cash should be >0, is {cash}"

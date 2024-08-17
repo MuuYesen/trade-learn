@@ -1,6 +1,7 @@
 import os
 import time
 import traceback
+import numpy as np
 import pandas as pd
 from multiprocessing import Pool
 
@@ -58,6 +59,7 @@ class Query:
             try:
                 tv = TvDatafeed(username, password)
                 data = tv.get_hist(symbol=symbol, exchange=exchange, interval=Interval.in_daily, n_bars=10000)
+                data.index = data.index.map(lambda x: np.datetime64(x.date()))
             except:
                 data = None
 

@@ -1,15 +1,14 @@
 import sys
 from abc import ABC, abstractmethod
-from functools import partial
 from itertools import chain
 from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 
-from ._util import _as_str, _Data, try_
+from .libs._util import _as_str, _Data, try_
 from .allocation import Allocation
-from .broker import _Broker
+from .broker import Broker
 
 
 class Strategy(ABC):
@@ -23,7 +22,7 @@ class Strategy(ABC):
 
     def __init__(self, broker, data, params):
         self._indicators = []
-        self._broker: _Broker = broker
+        self._broker: Broker = broker
         self._data: _Data = data
         self._params = self._check_params(params)
         self._alloc = Allocation(data.tickers)

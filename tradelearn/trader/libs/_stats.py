@@ -7,7 +7,9 @@ import pandas as pd
 from ._util import _data_period
 
 if TYPE_CHECKING:
-    from .backtesting import Order, Strategy, Trade
+    from ..order import Order
+    from ..strategy import Strategy
+    from ..trade import Trade
 
 
 def compute_drawdown_duration_peaks(dd: pd.Series):
