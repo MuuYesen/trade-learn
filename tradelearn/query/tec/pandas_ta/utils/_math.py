@@ -22,7 +22,7 @@ from numpy import sum as npSum
 
 from pandas import DataFrame, Series
 
-from pandas_ta import Imports
+from tradelearn.query.tec.pandas_ta import Imports
 from ._core import verify_series
 
 

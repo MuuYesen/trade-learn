@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from pandas import DataFrame
 from .tsi import tsi
-from pandas_ta.overlap import ema
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.overlap import ema
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def smi(close, fast=None, slow=None, signal=None, scalar=None, offset=None, **kwargs):

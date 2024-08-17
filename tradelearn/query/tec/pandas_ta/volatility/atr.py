@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from .true_range import true_range
-from pandas_ta import Imports
-from pandas_ta.overlap import ma
-from pandas_ta.utils import get_drift, get_offset, verify_series
+from tradelearn.query.tec.pandas_ta import Imports
+from tradelearn.query.tec.pandas_ta.overlap import ma
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, verify_series
 
 
 def atr(high, low, close, length=None, mamode=None, talib=None, drift=None, offset=None, **kwargs):

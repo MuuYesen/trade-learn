@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 from numpy import NaN as npNaN
 from pandas import DataFrame
-from pandas_ta.momentum import mom
-from pandas_ta.overlap import ema, sma
-from pandas_ta.trend import decreasing, increasing
-from pandas_ta.volatility import bbands, kc
-from pandas_ta.utils import get_offset
-from pandas_ta.utils import unsigned_differences, verify_series
+from tradelearn.query.tec.pandas_ta.momentum import mom
+from tradelearn.query.tec.pandas_ta.overlap import ema, sma
+from tradelearn.query.tec.pandas_ta.trend import decreasing, increasing
+from tradelearn.query.tec.pandas_ta.volatility import bbands, kc
+from tradelearn.query.tec.pandas_ta.utils import get_offset
+from tradelearn.query.tec.pandas_ta.utils import unsigned_differences, verify_series
 
 
 def squeeze_pro(high, low, close, bb_length=None, bb_std=None, kc_length=None, kc_scalar_wide=None, kc_scalar_normal=None, kc_scalar_narrow=None, mom_length=None, mom_smooth=None, use_tr=None, mamode=None, offset=None, **kwargs):

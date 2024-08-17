@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pandas_ta.utils import get_offset, symmetric_triangle, verify_series, weights
+from tradelearn.query.tec.pandas_ta.utils import get_offset, symmetric_triangle, verify_series, weights
 
 
 def swma(close, length=None, asc=None, offset=None, **kwargs):

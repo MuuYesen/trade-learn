@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from pandas import DataFrame
-from pandas_ta import Imports
-from pandas_ta.utils import get_drift, get_offset, verify_series
+from tradelearn.query.tec.pandas_ta import Imports
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, verify_series
 
 
 def uo(high, low, close, fast=None, medium=None, slow=None, fast_w=None, medium_w=None, slow_w=None, talib=None, drift=None, offset=None, **kwargs):

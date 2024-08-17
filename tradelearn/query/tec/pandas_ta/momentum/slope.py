@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from numpy import arctan as npAtan
 from numpy import pi as npPi
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def slope( close, length=None, as_angle=None, to_degrees=None, vertical=None, offset=None, **kwargs):

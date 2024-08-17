@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 from pandas import DataFrame
 from .obv import obv
-from pandas_ta.overlap import ma
-from pandas_ta.trend import long_run, short_run
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.overlap import ma
+from tradelearn.query.tec.pandas_ta.trend import long_run, short_run
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def aobv(close, volume, fast=None, slow=None, max_lookback=None, min_lookback=None, mamode=None, offset=None, **kwargs):

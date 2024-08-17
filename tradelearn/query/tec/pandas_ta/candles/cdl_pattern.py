@@ -3,8 +3,8 @@ from typing import Sequence, Union
 from pandas import Series, DataFrame
 
 from . import cdl_doji, cdl_inside
-from pandas_ta.utils import get_offset, verify_series
-from pandas_ta import Imports
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta import Imports
 
 
 ALL_PATTERNS = [

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from pandas import DataFrame
-from pandas_ta.volatility import atr
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.volatility import atr
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def cksp(high, low, close, p=None, x=None, q=None, tvmode=None, offset=None, **kwargs):

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from pandas import DataFrame, concat
-from pandas_ta.utils import get_drift, get_offset, verify_series, signals
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, verify_series, signals
 
 
 def er(close, length=None, drift=None, offset=None, **kwargs):

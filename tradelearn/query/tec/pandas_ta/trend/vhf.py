@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from numpy import fabs as npFabs
-from pandas_ta.utils import get_drift, get_offset, non_zero_range, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, non_zero_range, verify_series
 
 
 def vhf(close, length=None, drift=None, offset=None, **kwargs):

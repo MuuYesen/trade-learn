@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from .hlc3 import hlc3
-from pandas_ta.utils import get_offset, is_datetime_ordered, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, is_datetime_ordered, verify_series
 
 def vwap(high, low, close, volume, anchor=None, offset=None, **kwargs):
     """Indicator: Volume Weighted Average Price (VWAP)"""

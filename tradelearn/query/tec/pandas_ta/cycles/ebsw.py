@@ -6,7 +6,7 @@ from numpy import pi as npPi
 from numpy import sin as npSin
 from numpy import sqrt as npSqrt
 from pandas import Series
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def ebsw(close, length=None, bars=None, offset=None, **kwargs):

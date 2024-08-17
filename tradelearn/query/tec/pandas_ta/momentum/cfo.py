@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-from pandas_ta.overlap import linreg
-from pandas_ta.utils import get_drift, get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.overlap import linreg
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, verify_series
 
 
 def cfo(close, length=None, scalar=None, drift=None, offset=None, **kwargs):

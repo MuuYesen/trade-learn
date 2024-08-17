@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-from pandas_ta.overlap import ema
-from pandas_ta.utils import get_offset, non_zero_range, verify_series
+from tradelearn.query.tec.pandas_ta.overlap import ema
+from tradelearn.query.tec.pandas_ta.utils import get_offset, non_zero_range, verify_series
 
 
 def massi(high, low, fast=None, slow=None, offset=None, **kwargs):

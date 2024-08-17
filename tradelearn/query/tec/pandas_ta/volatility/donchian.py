@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from pandas import DataFrame
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def donchian(high, low, lower_length=None, upper_length=None, offset=None, **kwargs):

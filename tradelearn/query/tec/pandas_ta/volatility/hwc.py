@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from numpy import sqrt as npSqrt
 from pandas import DataFrame, Series
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def hwc(close, na=None, nb=None, nc=None, nd=None, scalar=None, channel_eval=None, offset=None, **kwargs):

@@ -2,8 +2,8 @@
 from pandas import DataFrame
 from .long_run import long_run
 from .short_run import short_run
-from pandas_ta.overlap import ma
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.overlap import ma
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def amat(close=None, fast=None, slow=None, lookback=None, mamode=None, offset=None, **kwargs):

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from pandas import DataFrame
 from .true_range import true_range
-from pandas_ta.overlap import ma
-from pandas_ta.utils import get_offset, high_low_range, verify_series
+from tradelearn.query.tec.pandas_ta.overlap import ma
+from tradelearn.query.tec.pandas_ta.utils import get_offset, high_low_range, verify_series
 
 
 def kc(high, low, close, length=None, scalar=None, mamode=None, offset=None, **kwargs):

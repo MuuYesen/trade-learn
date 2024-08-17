@@ -14,7 +14,7 @@ import pandas as pd
 import seaborn as sns
 from tqdm.auto import tqdm
 
-from minitrade.backtest.core import Backtest, Strategy
+from tradelearn.trader import Backtest, Strategy
 
 plt.rcParams["figure.figsize"] = (20, 3)
 plt.rcParams['axes.grid'] = True
@@ -213,7 +213,7 @@ def calculate_trade_stats(data: pd.DataFrame, cash: int, orders: list[dict], hol
                     break
         return closed_trades, order
 
-    close_prices = data.xs('Close', axis=1, level=1)
+    close_prices = data.xs('close', axis=1, level=1)
     orders = orders.copy()
     orders.sort(key=lambda x: x['entry_time'])
     open_orders = []
@@ -306,17 +306,17 @@ def shuffle_ohlcv(data: pd.DataFrame, in_sync: bool = False, random_state: int =
     Generate shuffled OHLCV time-series with the same statistics as the original.
     '''
     def to_rr(df):
-        rr = df[['Open', 'High', 'Low', 'Close']].div(df['Close'], axis=0) - 1
-        rr['Close'] = df['Close'].pct_change().fillna(0)
-        rr['Volume'] = df['Volume']
+        rr = df[['open', 'high', 'low', 'close']].div(df['close'], axis=0) - 1
+        rr['close'] = df['close'].pct_change().fillna(0)
+        rr['volume'] = df['volume']
         return rr
 
     def to_ohlcv(df):
         df = df.copy()
-        df['Close'] = (df['Close_rr'] + 1).cumprod() * df['Close'][0]
-        df[['Open', 'High', 'Low']] = (df[['Open_rr', 'High_rr', 'Low_rr']]+1).mul(df['Close'], axis=0)
-        df['Volume'] = df['Volume_rr']
-        return df[['Open', 'High', 'Low', 'Close', 'Volume']]
+        df['close'] = (df['close_rr'] + 1).cumprod() * df['close'][0]
+        df[['open', 'high', 'low']] = (df[['open_rr', 'high_rr', 'low_rr']]+1).mul(df['close'], axis=0)
+        df['volume'] = df['volume_rr']
+        return df[['open', 'high', 'low', 'close', 'volume']]
 
     rr = data.ta.apply(to_rr)
     if in_sync:

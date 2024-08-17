@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from pandas import DataFrame
-from pandas_ta import Imports, RATE, version
+from tradelearn.query.tec.pandas_ta import Imports, RATE, version
 from .._core import _camelCase2Title
 from .._time import ytd
 

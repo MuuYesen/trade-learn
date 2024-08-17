@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-from pandas_ta.overlap import linreg
-from pandas_ta.volatility import rvi
-from pandas_ta.utils import get_drift, get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.overlap import linreg
+from tradelearn.query.tec.pandas_ta.volatility import rvi
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, verify_series
 
 
 def inertia(close=None, high=None, low=None, length=None, rvi_length=None, scalar=None, refined=None, thirds=None, mamode=None, drift=None, offset=None, **kwargs):

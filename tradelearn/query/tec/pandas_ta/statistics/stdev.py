@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from numpy import sqrt as npsqrt
 from .variance import variance
-from pandas_ta import Imports
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta import Imports
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def stdev(close, length=None, ddof=None, talib=None, offset=None, **kwargs):

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-from pandas_ta.momentum import roc
-from pandas_ta.utils import get_offset, signed_series, verify_series
+from tradelearn.query.tec.pandas_ta.momentum import roc
+from tradelearn.query.tec.pandas_ta.utils import get_offset, signed_series, verify_series
 
 
 def nvi(close, volume, length=None, initial=None, offset=None, **kwargs):

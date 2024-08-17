@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-from pandas_ta.overlap import ma
-from pandas_ta.statistics import stdev
-from pandas_ta.utils import get_drift, get_offset
-from pandas_ta.utils import unsigned_differences, verify_series
+from tradelearn.query.tec.pandas_ta.overlap import ma
+from tradelearn.query.tec.pandas_ta.statistics import stdev
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset
+from tradelearn.query.tec.pandas_ta.utils import unsigned_differences, verify_series
 
 
 def rvi(close, high=None, low=None, length=None, scalar=None, refined=None, thirds=None, mamode=None, drift=None, offset=None, **kwargs):

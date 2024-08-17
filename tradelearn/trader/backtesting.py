@@ -619,7 +619,7 @@ class Strategy(ABC):
         For example, using simple moving average function from TA-Lib:
 
             def init():
-                self.sma = self.I(ta.SMA, self.data.Close, self.n_sma)
+                self.sma = self.I(ta.SMA, self.data.close, self.n_sma)
         """
         if callable(funcval):
             if name is None:
@@ -847,11 +847,11 @@ class Strategy(ABC):
           price point revelation. In each call of
           `minitrade.backtest.core.backtesting.Strategy.next` (iteratively called by
           `minitrade.backtest.core.backtesting.Backtest` internally),
-          the last array value (e.g. `data.Close[-1]`)
+          the last array value (e.g. `data.close[-1]`)
           is always the _most recent_ value.
-        * If you need data arrays (e.g. `data.Close`) to be indexed
+        * If you need data arrays (e.g. `data.close`) to be indexed
           **Pandas Series or DataFrame**, you can call their `.df` accessor
-          (e.g. `data.Close.df`). If you need the whole of data
+          (e.g. `data.close.df`). If you need the whole of data
           as a **DataFrame**, use `.df` accessor (i.e. `data.df`).
         """
         return self._data
@@ -983,7 +983,7 @@ class Position:
 
     def close(self, portion: float = 1.):
         """
-        Close portion of position by closing `portion` of each active trade. See `Trade.close`.
+        close portion of position by closing `portion` of each active trade. See `Trade.close`.
         """
         for trade in self.__broker.trades[self.__ticker]:
             trade.close(portion)
@@ -1388,9 +1388,9 @@ class _Broker:
             for ticker, size in self._holding.items():
                 if size:
                     self.trades[ticker].append(Trade(self, ticker=ticker, size=size, entry_price=self._data[
-                        ticker, 'Close'][self._trade_start_bar], entry_bar=0, tag='preexisting'))
+                        ticker, 'close'][self._trade_start_bar], entry_bar=0, tag='preexisting'))
                     # add the cost for preexisting positions to initial cash
-                    self._cash += size * self._data[ticker, 'Close'][self._trade_start_bar]
+                    self._cash += size * self._data[ticker, 'close'][self._trade_start_bar]
         self.positions: Dict[str, Position] = {ticker: Position(self, ticker) for ticker in self._data.tickers}
         self.closed_trades: List[Trade] = []
 
@@ -1498,7 +1498,7 @@ class _Broker:
 
     def last_price(self, ticker) -> float:
         """ Price at the last (current) close. """
-        return self._data[ticker, 'Close'][-1]
+        return self._data[ticker, 'close'][-1]
 
     def _adjusted_price(self, ticker: str, size=None, price=None) -> float:
         """
@@ -1534,7 +1534,7 @@ class _Broker:
         # true since market order can still execute if trade_on_close=True.
         # But we ignore this since it won't affect the strategy performance.
 
-        # Close any remaining open trades so they produce some stats
+        # close any remaining open trades so they produce some stats
         final_orders = [trade.close(finalize=True) for trade in self.all_trades]
         for order in final_orders:
             price = self.last_price(order.ticker)
@@ -1574,10 +1574,10 @@ class _Broker:
 
             data = self._data
             open_, high, low = (
-                data[order.ticker, 'Open'][-1],
-                data[order.ticker, 'High'][-1],
-                data[order.ticker, 'Low'][-1])
-            prev_close = data[order.ticker, 'Close'][-2]
+                data[order.ticker, 'open'][-1],
+                data[order.ticker, 'high'][-1],
+                data[order.ticker, 'low'][-1])
+            prev_close = data[order.ticker, 'close'][-2]
 
             # Related SL/TP order was already removed
             if order not in self.orders:
@@ -1628,10 +1628,13 @@ class _Broker:
                 _prev_size = trade.size
                 # If order.size is "greater" than trade.size, this order is a trade.close()
                 # order and part of the trade was already closed beforehand
+
+                adjusted_price = self._adjusted_price(order.ticker, order.size, price)  #
                 size = copysign(min(abs(_prev_size), abs(order.size)), order.size)
                 # If this trade isn't already closed (e.g. on multiple `trade.close(.5)` calls)
                 if trade in self.trades[order.ticker]:
-                    self._reduce_trade(trade, price, size, time_index)
+                    self._reduce_trade(trade, adjusted_price, size, time_index)  #
+                    # self._reduce_trade(trade, price, size, time_index)
                     assert order.size != -_prev_size or trade not in self.trades[order.ticker]
                 if order in (trade._sl_order, trade._tp_order):
                     assert order.size == -trade.size
@@ -1697,7 +1700,7 @@ class _Broker:
                     self.orders.remove(order)
                     continue
 
-            # Open a new trade
+            # open a new trade
             if need_size:
                 self._open_trade(order.ticker, adjusted_price, need_size, order.sl, order.tp, time_index, order.tag)
 
@@ -1803,13 +1806,13 @@ class Backtest:
 
         `data` is a `pd.DataFrame` with 2-level columns:
         1st level is a list of tickers, and 
-        2nd level is `Open`, `High`, `Low`, `Close`, and `Volume`.
+        2nd level is `open`, `high`, `low`, `close`, and `volume`.
         If the strategy works only on one asset, the 1st level can be dropped.
         If any columns are missing, set them to what you have available,
         e.g.
 
-            df['Open'] = df['High'] = df['Low'] = df['Close']
-            df['Volumn'] = 0
+            df['open'] = df['high'] = df['low'] = df['close']
+            df['volumn'] = 0
 
         The passed data frame can contain additional columns that
         can be used by the strategy (e.g. sentiment info).
@@ -1876,7 +1879,8 @@ class Backtest:
                             'entry order price')
 
         data = data.copy(deep=False)
-        ohlc = ['Open', 'High', 'Low', 'Close']
+        ohlc = ['open', 'high', 'low', 'close']
+        ohlcv = ['open', 'high', 'low', 'close'] + ['volume']
 
         # Convert single asset data into 2-level column index
         if data.columns.nlevels == 1:
@@ -1893,10 +1897,10 @@ class Backtest:
             except ValueError:
                 pass
         if not set(data.columns.levels[1]).issuperset(set(ohlc)):
-            raise ValueError("`data` must be a pandas.DataFrame containing columns 'Open', 'High', 'Low', 'Close'")
+            raise ValueError("`data` must be a pandas.DataFrame containing columns 'open', 'high', 'low', 'close'")
         if len(data) == 0:
             raise ValueError("`data` cannot be empty")
-        if np.any(data.xs('Close', axis=1, level=1) > cash):
+        if np.any(data.xs('close', axis=1, level=1) > cash):
             warnings.warn('Some prices are larger than initial cash value. Note that fractional '
                           'trading is not supported. If you want to trade Bitcoin, '
                           'increase initial cash, or trade μBTC or satoshis instead (GH-134).',
@@ -1927,13 +1931,13 @@ class Backtest:
         self._results: Optional[pd.Series] = None
 
         # equal weighed average, as if buy and hold an equal weighed portfolio
-        weights = 1 / self._data.xs('Close', axis=1, level=1).iloc[0]
+        weights = 1 / self._data.xs('close', axis=1, level=1).iloc[0]
         weighted_data = self._data.copy()
-        weighted_data = weighted_data.loc[:, (slice(None), ohlc)]
+        weighted_data = weighted_data.loc[:, (slice(None), ohlcv)]
         for ticker in weights.index:
             weighted_data[ticker] = weighted_data[ticker] * weights[ticker]
         weighted_data = weighted_data.T.groupby(level=1).agg('sum').T / weights.sum()
-        self._ohlc_ref_data = weighted_data
+        self._ohlcv_ref_data = weighted_data
 
     def run(self, **kwargs) -> pd.Series:
         """
@@ -2055,7 +2059,7 @@ class Backtest:
                 orders=processed_orders,
                 trades=broker.closed_trades,
                 equity=equity,
-                ohlc_data=self._ohlc_ref_data,
+                ohlc_data=self._ohlcv_ref_data,
                 risk_free_rate=0.0,
                 strategy_instance=strategy,
                 positions=final_positions,
@@ -2478,7 +2482,7 @@ class Backtest:
         return plot(
             results=results,
             data=self._data,
-            baseline=self._ohlc_ref_data,
+            baseline=self._ohlcv_ref_data,
             indicators=indicators,
             filename=filename,
             plot_width=plot_width,

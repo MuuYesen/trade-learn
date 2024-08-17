@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from pandas import DataFrame
-from pandas_ta.overlap import ma
-from pandas_ta.volatility import atr
-from pandas_ta.utils import get_drift, get_offset, verify_series, zero
+from tradelearn.query.tec.pandas_ta.overlap import ma
+from tradelearn.query.tec.pandas_ta.volatility import atr
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, verify_series, zero
 
 
 def adx(high, low, close, length=None, lensig=None, scalar=None, mamode=None, drift=None, offset=None, **kwargs):

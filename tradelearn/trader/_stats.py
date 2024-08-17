@@ -104,7 +104,7 @@ def compute_stats(
     s.loc['Equity Final [$]'] = equity['Equity'].iloc[-1]
     s.loc['Equity Peak [$]'] = equity['Equity'].max()
     s.loc['Return [%]'] = (equity['Equity'].iloc[-1] - equity['Equity'].iloc[0]) / equity['Equity'].iloc[0] * 100
-    c = ohlc_data.Close.values
+    c = ohlc_data.close.values
     s.loc['Buy & Hold Return [%]'] = (c[-1] - c[trade_start_bar]) / c[trade_start_bar] * 100  # long-only return
 
     gmean_period_return: float = 0

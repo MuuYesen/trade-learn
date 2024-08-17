@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from pandas import date_range, DataFrame, RangeIndex, Timedelta
 from .midprice import midprice
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def ichimoku(high, low, close, tenkan=None, kijun=None, senkou=None, include_chikou=True, offset=None, **kwargs):

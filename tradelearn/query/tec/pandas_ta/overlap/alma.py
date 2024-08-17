@@ -2,7 +2,7 @@
 from numpy import exp as npExp
 from numpy import nan as npNaN
 from pandas import Series
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def alma(close, length=None, sigma=None, distribution_offset=None, offset=None, **kwargs):

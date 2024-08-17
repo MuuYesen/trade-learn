@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from numpy import nan as npNaN
 from pandas import DataFrame, Series
-from pandas_ta.utils import get_offset, verify_series, zero
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series, zero
 
 
 def psar(high, low, close=None, af0=None, af=None, max_af=None, offset=None, **kwargs):

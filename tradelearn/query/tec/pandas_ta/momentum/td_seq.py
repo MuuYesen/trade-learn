@@ -2,7 +2,7 @@
 # import numpy as np
 from numpy import where as npWhere
 from pandas import DataFrame, Series
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def td_seq(close, asint=None, offset=None, **kwargs):

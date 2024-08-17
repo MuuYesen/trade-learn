@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-from pandas_ta import Imports
-from pandas_ta.overlap import hlc3, sma
-from pandas_ta.statistics.mad import mad
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta import Imports
+from tradelearn.query.tec.pandas_ta.overlap import hlc3, sma
+from tradelearn.query.tec.pandas_ta.statistics.mad import mad
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def cci(high, low, close, length=None, c=None, talib=None, offset=None, **kwargs):

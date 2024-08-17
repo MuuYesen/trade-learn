@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from pandas import DataFrame
 from .roc import roc
-from pandas_ta.utils import get_drift, get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, verify_series
 
 
 def kst(close, roc1=None, roc2=None, roc3=None, roc4=None, sma1=None, sma2=None, sma3=None, sma4=None, signal=None, drift=None, offset=None, **kwargs):

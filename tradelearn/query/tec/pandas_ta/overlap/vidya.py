@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from numpy import nan as npNaN
 from pandas import Series
-from pandas_ta.utils import get_drift, get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_drift, get_offset, verify_series
 
 
 def vidya(close, length=None, drift=None, offset=None, **kwargs):
@@ -16,9 +16,9 @@ def vidya(close, length=None, drift=None, offset=None, **kwargs):
 
     def _cmo(source: Series, n:int , d: int):
         """Chande Momentum Oscillator (CMO) Patch
-        For some reason: from pandas_ta.momentum import cmo causes
+        For some reason: from tradelearn.query.tec.pandas_ta.momentum import cmo causes
         pandas_ta.momentum.coppock to not be able to import it's
-        wma like from pandas_ta.overlap import wma?
+        wma like from tradelearn.query.tec.pandas_ta.overlap import wma?
         Weird Circular TypeError!?!
         """
         mom = source.diff(d)

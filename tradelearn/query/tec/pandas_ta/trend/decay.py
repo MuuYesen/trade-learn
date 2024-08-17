@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from numpy import exp as npExp
 from pandas import DataFrame
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def decay(close, kind=None, length=None, mode=None, offset=None, **kwargs):

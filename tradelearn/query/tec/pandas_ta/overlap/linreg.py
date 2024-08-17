@@ -5,7 +5,7 @@ from numpy import nan as npNaN
 from numpy import pi as npPi
 from numpy.version import version as npVersion
 from pandas import Series
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def linreg(close, length=None, offset=None, **kwargs):

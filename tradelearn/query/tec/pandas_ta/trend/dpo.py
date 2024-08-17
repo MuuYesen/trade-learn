@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-from pandas_ta.overlap import sma
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.overlap import sma
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def dpo(close, length=None, centered=True, offset=None, **kwargs):

@@ -2,8 +2,8 @@
 # from numpy import sqrt as npsqrt
 from pandas import DataFrame
 from .atr import atr
-from pandas_ta.overlap import hlc3, sma
-from pandas_ta.utils import get_offset, verify_series
+from tradelearn.query.tec.pandas_ta.overlap import hlc3, sma
+from tradelearn.query.tec.pandas_ta.utils import get_offset, verify_series
 
 
 def aberration(high, low, close, length=None, atr_length=None, offset=None, **kwargs):
