@@ -173,7 +173,7 @@ class Backtest:
             warnings.warn('Data index is not datetime. Assuming simple periods, '
                           'but `pd.DateTimeIndex` is advised.',
                           stacklevel=2)
-        data.index.name = 'Date'
+        data.index.name = 'date'
 
         self._data = data
         self._broker = partial(
@@ -321,6 +321,7 @@ class Backtest:
                 positions=final_positions,
                 trade_start_bar=start,
             )
+        print(self._results)
 
         return self._results.copy()
 
