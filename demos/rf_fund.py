@@ -2,7 +2,6 @@ from tradelearn.query import Query
 from tradelearn.strategy.backtest import Backtest, Strategy
 
 import pandas as pd
-
 from sklearn.ensemble import RandomForestClassifier
 
 

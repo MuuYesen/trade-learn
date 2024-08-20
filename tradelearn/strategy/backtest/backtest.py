@@ -20,12 +20,12 @@ except ImportError:
     def _tqdm(seq, **_):
         return seq
 
-from .libs._plotting import plot  # noqa: I001
-from .libs._stats import compute_stats
-from .libs._util import _Data, _Indicator
-from .strategy import Strategy
-from .broker import Broker
-from .order import Order
+from .backtesting_py.libs._plotting import plot
+from .backtesting_py.libs._stats import compute_stats
+from .backtesting_py.libs._util import _Data, _Indicator
+from .backtesting_py.strategy import Strategy
+from .backtesting_py.broker import Broker
+from .backtesting_py.order import Order
 
 class _OutOfMoneyError(Exception):
     pass
