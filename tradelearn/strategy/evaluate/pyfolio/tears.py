@@ -15,7 +15,7 @@
 import warnings
 from time import time
 
-import tradelearn.strategy.backtest.empyrical as ep
+import tradelearn.strategy.evaluate.empyrical as ep
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import pandas as pd
