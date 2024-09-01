@@ -1,0 +1,15 @@
+numpy==1.26.4
+pandas
+scipy
+statsmodels
+scikit-learn
+seaborn
+bokeh
+yfinance
+mootdx
+pydot
+quantstats
+htmlmin
+IPython
+pandas_datareader
+git+https://github.com/rongardF/tvdatafeed.git

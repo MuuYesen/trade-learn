@@ -1,199 +1,245 @@
-## trade-learn：Building Trading Strategies in Python with Machine Learning 
+## trade-learn：Building Trading Strategies in Closed-Loop with Machine Learning
 
 <b>trade-learn</b> is a machine learning strategy development toolkit based on alphalens, backtrader, pyfolio, and quantstats. It provides a <b>complete strategy development process</b>. &nbsp;&nbsp;&nbsp; [[ 中文版介绍 ]](./README_zh.md)
 
 The functions it gives including factor collection, factor processing, factor evaluation, <b>causal analysis</b>, model definition, and strategy backtesting, and supports visualization results saved as <b>HTML files</b> for sharing.
 
-<img src="docs/img.png" alt="img" width="100%">
+<img src="docs/flow.png" alt="img" width="100%">
 
 Summary of visualizations:
 
+<img src="docs/plot_list.png" alt="img" width="100%">
 
-<div align=center>
-<img src="docs/plot_list.png" alt="img" width="70%">
-</div>
 
 ## Key Features
 
-1. Integrated with strategy development components from the Quantopian open-source platform, such as empyrical, alphalens, and pyfolio toolkits.
-2. Provides stock quotes from "Yahoo Finance" and corresponding factor calculation formulas, including alpha101 and alpha191 factor sets.
-3. Provides stock quotes from "Tongdaxin Trading Software" and 30 verified technical indicators (tdx30), directly usable on the Tongdaxin platform.
-4. Signal-driven trading strategies with multiple templates to quickly build and backtest strategies, supporting both speculative and portfolio strategies.
-5. Causal graph construction and causal feature selection algorithms, and extend the gplearn function library to achieve "feature derivation" for time-series data.
-6. Exploratory analysis and optimal model selection tools to quickly preview data set patterns and common models' performance on the data set.
-7. Trimmed backtrader backtesting framework to reduce unnecessary dependencies and optimize backtest results for HTML display, providing more user-friendly interactive visualization.
-8. The entire strategy building process forms a complete loop for machine learning strategy development without introducing additional third-party packages except for model definition.
-
+1. Provides stock market data from "Tongdaxin Trading Software" along with 30 proven technical indicators (tdx30) that can be used directly with the Tongdaxin platform.
+2. Offers stock market data from "TradingView," leveraging its advanced data visualization to quickly generate and validate trading insights.
+3. Includes stock market data from "Yahoo Finance" and factor calculation formulas, such as the alpha101 and alpha191 factor sets from WorldQuant LLC.
+4. Provides tools for "Exploratory Analysis" and "Optimal Model Selection" to rapidly identify patterns in the dataset and assess the performance of various models.
+5. Features algorithms for "Causal Graph Construction" and "Causal Feature Selection," extending the gplearn library to support "Feature Derivation" for time series data.
+6. Integrates open-source strategy development components from the Quantopian platform, including tools like empyrical, alphalens, and pyfolio.
+7. Enhances the backtesting.py framework to support portfolio strategy development in addition to single-asset strategies.
+8. Ensures a closed-loop process for machine learning strategy development by eliminating the need for additional third-party packages beyond the user-customized model.
 
 ## Download
-
+Requires VPN:
 ```bash
 pip install trade-learn
 ```
-
+Recommended (for the latest version):
 ```bash
 pip install git+https://github.com/MuuYesen/trade-learn.git@master
 ```
 
 ## Usage Template
 ```python
-from tradelearn.trader.signal import Signal
-from tradelearn.strategy.backtest.single import LongBacktest
-
-# Data retrieval
-raw_data, base_line = "Target stock data", "Benchmark stock data"
-
-# Define backtest start and end dates
-bt_begin_date, bt_end_date = "Backtest start date", "Backtest end date"
-
-# Define Signal class
-class Example(Signal):
-
-    def __init__(self, stockid, raw_data, bt_begin_date, bt_end_date, param_dict):
-        signal_df = "Computed signal series containing True, False, and np.NAN values, with dates set as index"
-        
-        self.set_signal(signal_df)
-
-# Signal class parameter dictionary
-param_dict = {'fea_list': "Set of variable names used to generate signals"}
-
-# Run backtest
-res = LongBacktest.run(Example, param_dict, raw_data, base_line, bt_begin_date, bt_end_date)
-```
-## Simple Example
-
-**Using volume and price indicators for single stock trading**：
-```python
-from tradelearn.query import Query  # Import data query module
-from tradelearn.trader.signal import Signal  # Import strategy signal class
-from tradelearn.strategy.backtest.single import LongBacktest  # Import single stock backtest module
-from tradelearn.strategy.evaluate import Evaluate  # Import strategy evaluation module
-
-import numpy as np
-
+from tradelearn.query import Query
+from tradelearn.strategy.backtest import Backtest, Strategy
+from tradelearn.strategy.evaluate import Evaluate
 
 if __name__ == '__main__':
-    
-    # Define data start and end dates
-    tn_begin_date = '2017-01-01'
-    tn_end_date = '2022-06-22'
 
-    # Query historical data for stock 600520 as the benchmark
-    baseline = Query.history_ohlc(symbol='600520', start=tn_begin_date, end=tn_end_date, adjust='hfq', engine='tdx')
+    # Obtain asset market data from TradingView
+    GOOG = Query.history_ohlc(engine='tv', symbol='GOOG', exchange='NASDAQ')
 
-    # Retrieve raw data and add labels
-    rawdata = Query.history_ohlc(symbol='600520', start=tn_begin_date, end=tn_end_date, adjust='hfq', engine='tdx')
-    rawdata['label'] = rawdata['close'].pct_change(periods=5).shift(-1).map(lambda x: 1 if x > 0 else -1)
+    def crossover(series1, series2):
+        return series1[-2] < series2[-2] and series1[-1] > series2[-1]
 
-    # Define backtest start and end dates
-    bt_begin_date = '2020-01-01'
-    bt_end_date = '2022-06-22'
-    
-    # Define RSI signal class
-    class RSI(Signal):
+    # Define the strategy class
+    class SmaCross(Strategy):
+        fast = 10
+        slow = 20
 
-        def __init__(self, stockid, raw_data, bt_begin_date, bt_end_date, param_dict):
+        # Compute the indicator data needed for the strategy
+        def init(self):
+            def SMA(arr, n):
+                return arr.rolling(n).mean()
             
-            indi = Query.tec_indicator(raw_data, ['RSI']) # Calculate Relative Strength Index (RSI)
+            price = self.data.close.df
+            self.ma1 = self.I(SMA, price, self.fast, overlay=True)
+            self.ma2 = self.I(SMA, price, self.slow, overlay=True)
 
-            # Generate signals for the entire period
-            def signal(x):
-                if x < 20:
-                    return True
-                if x > 40:
-                    return False
-                return np.NAN
-            indi = indi.set_index('date').applymap(signal)
+        # Generate trading signals based on the indicators and execute trades
+        def next(self):
+            
+            if crossover(self.ma1, self.ma2):
+                self.position().close()
+                self.buy()
+            elif crossover(self.ma2, self.ma1):
+                self.position().close()
+                self.sell()
 
-            # Retain signals for the backtest period
-            bt_indi = indi.query(f"date >= '{bt_begin_date}' and date < '{bt_end_date}'")
+    # Run the backtest and plot the results
+    bt = Backtest(GOOG, SmaCross, cash=1000000, commission=.002, trade_on_close=False)
+    stats = bt.run()
+    bt.plot(plot_volume=True, superimpose=True)
 
-            self.set_signal(bt_indi)
-    
-    param_dict = {}
-    
-    # Run backtest
-    res = LongBacktest.run(RSI, param_dict, rawdata, baseline, bt_begin_date, bt_end_date)
-
-    # Analyze backtest results
-    Evaluate.analysis_report(res, baseline, engine='quantstats')
+    # Analyze the backtest results
+    Evaluate.analysis_report(stats, GOOG, engine='quantstats')
 ```
+```
+Start                     2014-03-27 00:00:00
+End                       2024-08-16 00:00:00
+Duration                   3795 days 00:00:00
+Exposure Time [%]                   98.509174
+Equity Final [$]                233497.861225
+Equity Peak [$]                1043778.801501
+Return [%]                         -76.650214
+Buy & Hold Return [%]              529.083876
+Return (Ann.) [%]                  -13.163701
+Volatility (Ann.) [%]               24.393102
+Sharpe Ratio                        -0.539648
+Sortino Ratio                       -0.680248
+Calmar Ratio                        -0.154556
+Max. Drawdown [%]                    -85.1713
+Avg. Drawdown [%]                    -85.1713
+Max. Drawdown Duration     3734 days 00:00:00
+Avg. Drawdown Duration     3734 days 00:00:00
+# Trades                                  146
+Win Rate [%]                        33.561644
+Best Trade [%]                      20.325583
+Worst Trade [%]                    -15.835971
+Avg. Trade [%]                      -0.991343
+Max. Trade Duration         116 days 00:00:00
+Avg. Trade Duration          26 days 00:00:00
+Profit Factor                        0.702201
+Expectancy [%]                      -0.808854
+SQN                                 -2.538763
+Kelly Criterion                     -0.272909
+_strategy                            SmaCross
+_equity_curve                             ...
+_trades                        EntryBar  E...
+_orders                              Ticke...
+_positions                {'Asset': -1154,...
+_trade_start_bar                           19
+```
+![docs/res2.png](docs/single_res1.png)
+![docs/res3.png](docs/single_res2.png)
+
+## Further Example
 
 **Using machine learning models to build a portfolio**：  
 ```python
-from tradelearn.query import Query  # Import data query module
-from tradelearn.trader.signal import Signal  # Import strategy signal class
-from tradelearn.strategy.backtest.fund import LongBacktest  # Import portfolio backtest module
-from tradelearn.strategy.evaluate import Evaluate  # Import strategy evaluation module
+from tradelearn.query import Query
+from tradelearn.strategy.backtest import Backtest, Strategy
 
 import pandas as pd
-from dateutil.relativedelta import relativedelta
-
-from sklearn.ensemble import RandomForestClassifier  # Import Random Forest classifier
+from sklearn.ensemble import RandomForestClassifier
 
 
 if __name__ == '__main__':
     
-    # Define data start and end dates
+    # Define a RandomForest indicator class, using predictions to generate trading signals and conduct portfolio backtesting
+    class RandomForest(Strategy):
+        def init(self):
+            # Obtain the raw data and feature set
+            data = self.data.df.swaplevel(0, 1, axis=1).stack().reset_index(level=1)
+            fea_list = data.columns.drop(['label', 'code']).tolist()
+
+            # Split the training set and train the model
+            train_data = data.query(f"date >= '{tn_begin_date}' and date < '{bt_begin_date}'")
+            bt_x_train, bt_y_train = train_data[fea_list], train_data['label']
+            model = RandomForestClassifier(random_state=42, n_jobs=-1)
+            model.fit(bt_x_train, bt_y_train)
+
+            # Predict the probability of price increases for each asset in the portfolio during the backtesting period
+            test_data = data.query(f"date >= '{bt_begin_date}' and date < '{bt_end_date}'")
+            ind_df = pd.DataFrame({'date': data.index.unique()}).set_index('date')
+            for symbol in test_data['code'].unique():
+                bt_x_test = test_data.query(f"code == '{symbol}'")[fea_list]
+                pre_proba = model.predict_proba(bt_x_test)[:, 1]
+                ind_df = pd.merge(pd.DataFrame(pre_proba, index=bt_x_test.index, columns=[symbol]),
+                                  ind_df, on=['date'], how='right')
+
+            # Package the probability predictions as indicators for use in the next method
+            self.proba = self.I(ind_df, overlay=False)
+
+        def next(self):
+            # Reset the portfolio's position weights
+            self.alloc.assume_zero()
+
+            # Get the predicted probabilities for each asset on the current day
+            proba = self.proba.df.iloc[-1]
+
+            # Select a subset of assets based on the probability indicator and set position weights
+            bucket = self.alloc.bucket['equity']
+            bucket.append(proba.sort_values(ascending=False))
+            bucket.trim(limit=3)
+            bucket.weight_explicitly(weight=1/3)
+            bucket.apply(method='update')
+
+            # Update the portfolio's position weights
+            self.rebalance(cash_reserve=0.1)
+
+
+    # Define the start and end dates for the data
     tn_begin_date = '2017-01-01'
     tn_end_date = '2022-06-22'
 
-    # Query historical data for the Shanghai Composite Index as the benchmark
-    baseline = Query.history_ohlc(symbol='000001.SS', start=tn_begin_date, end=tn_end_date, engine='yahoo')
-
+    # Loop through multiple stocks to query historical data and process it
     rawdata = None
-    # Loop to query historical data for multiple stocks and process
-    for i in range(10):
+    for i in range(7):
         temp = Query.history_ohlc(symbol='60052' + str(i), start=tn_begin_date, end=tn_end_date, adjust='hfq', engine='tdx')
         if temp is None:
             continue
 
-        # Label the data
-        temp['label'] = temp['close'].pct_change(periods=5).shift(-1).map(lambda x: 1 if x > 0 else -1)
+        # Label the data with price change tags
+        temp['label'] = temp['close'].pct_change(periods=1).shift(-1).map(lambda x: 1 if x > 0 else -1)
         rawdata = pd.concat([rawdata, temp], axis=0)
 
-    # Define backtest start and end dates
+    # Convert the dataset format and handle missing values
+    btdata = rawdata.pivot_table(index='date', columns='code').swaplevel(0, 1, axis=1)
+    btdata = btdata.sort_values(by='code', axis=1).fillna(method='ffill')
+
+    # Define the start and end dates for the backtest
     bt_begin_date = '2020-01-01'
     bt_end_date = '2022-06-22'
-    
-    # Define Random Forest indicator class and use rolling prediction to generate trading signals
-    class RandomForest(Signal):
 
-        model_dict = {}  # Model dictionary
-
-        def __init__(self, stockid, raw_data, bt_begin_date, bt_end_date, param_dict):
-            fea_list = param_dict['fea_list']
-            
-            if not RandomForest.model_dict:
-                # Build Random Forest models and save to the model dictionary
-                for date in pd.date_range(start=bt_begin_date, end=bt_end_date, freq='12MS'):
-                    bt_train_data = raw_data.query(f"date >= '{date - relativedelta(months=12 * 3)}' and date < '{date}'")
-                    bt_x_train, bt_y_train = bt_train_data[fea_list], bt_train_data['label']
-
-                    model = RandomForestClassifier(random_state=42, n_jobs=-1)
-                    model.fit(bt_x_train, bt_y_train)
-                    RandomForest.model_dict[date.year] = model
-
-            # Use models for prediction
-            indi_df = None
-            for date in pd.date_range(start=bt_begin_date, end=bt_end_date, freq='12MS'):
-                pos_data = raw_data.query(f"code == '{stockid}' and date >= '{date}' and date < '{date + relativedelta(months=12 * 1)}'")
-                bt_x_test = pos_data.set_index(['date'])[fea_list]
-                pre_proba = RandomForest.model_dict[date.year].predict_proba(bt_x_test)[:, 1]
-                indi_df = pd.concat([indi_df, pd.DataFrame(pre_proba, index=pos_data['date'])])
-
-            self.set_signal(indi_df)
-
-    # Feature list, excluding labels and code and date columns
-    fea_list = rawdata.columns.drop(['label', 'code', 'date']).tolist()
-    param_dict = {'fea_list': fea_list}
-    
-    # Run backtest
-    res = LongBacktest.run(RandomForest, param_dict, rawdata, baseline, bt_begin_date, bt_end_date)
-    
-    # Analyze backtest results
-    Evaluate.analysis_report(res, baseline, engine='quantstats')
+    # Run the backtest and plot the results, with the default benchmark being an equal-weighted portfolio
+    bt = Backtest(btdata, RandomForest, cash=1000000, commission=.002, trade_on_close=False)
+    bt.run()
+    bt.plot(plot_volume=True, superimpose=False, plot_allocation=True)
 ```
+```
+Start                     2017-01-03 00:00:00
+End                       2022-06-21 00:00:00
+Duration                   1995 days 00:00:00
+Exposure Time [%]                    44.83798
+Equity Final [$]                 515002.86814
+Equity Peak [$]                 1014662.65544
+Return [%]                         -48.499713
+Buy & Hold Return [%]               44.762561
+Return (Ann.) [%]                  -24.465092
+Volatility (Ann.) [%]               23.349782
+Sharpe Ratio                        -1.047765
+Sortino Ratio                       -1.083421
+Calmar Ratio                        -0.397371
+Max. Drawdown [%]                  -61.567329
+Avg. Drawdown [%]                  -15.734656
+Max. Drawdown Duration      890 days 00:00:00
+Avg. Drawdown Duration      225 days 00:00:00
+# Trades                                 1490
+Win Rate [%]                        47.919463
+Best Trade [%]                      63.422669
+Worst Trade [%]                    -34.094076
+Avg. Trade [%]                      -0.150202
+Max. Trade Duration          98 days 00:00:00
+Avg. Trade Duration           8 days 00:00:00
+Profit Factor                        1.040877
+Expectancy [%]                       0.082296
+SQN                                 -1.906885
+Kelly Criterion                     -0.116659
+_strategy                        RandomForest
+_equity_curve                             ...
+_trades                         EntryBar  ...
+_orders                               Tick...
+_positions                {'600520': 0, '6...
+_trade_start_bar                          731
+dtype: object
+```
+![docs/res4.png](docs/port_res1.png)
+
 ## Method Guide
 ### Retrieving Raw Data
 ```python
@@ -201,13 +247,13 @@ from tradelearn.query import Query
 
 rawdata = Query.history_ohlc(symbol='600520', start='2017-01-01', end='2022-06-22', adjust='hfq',engine='tdx')
 ```
-| Parameter Name   | Data Type	   | Notes                                        |
-|--------|--------|-------------------------------------------|
-| symbol | string | Stock ticker                                   |
-| start  | string | Start date                                      |
-| end    | string | End date                                      |
-| adjust | string | Adjustment method, can choose forward or backward adjustment, corresponding to 'qfq' and 'hfq' respectively     |
-| engine | string | Third-party data source, can choose Yahoo Finance or Tongdaxin, corresponding to 'yahoo' and 'tdx' respectively |
+| Parameter Name   | Data Type	   | Notes                                                                                                                |
+|--------|--------|----------------------------------------------------------------------------------------------------------------------|
+| symbol | string | Stock ticker                                                                                                         |
+| start  | string | Start date                                                                                                           |
+| end    | string | End date                                                                                                             |
+| adjust | string | Adjustment method, can choose forward or backward adjustment, corresponding to 'qfq' and 'hfq' respectively          |
+| engine | string | Third-party data source, can choose Yahoo Finance or Tongdaxin, corresponding to 'yahoo'、'tv' and 'tdx' respectively |
 
 ### Factor Generation
 ```python
@@ -307,21 +353,17 @@ model = AutoML.lazy_predict(data=data)
 ### Backtest Validation
 
 ```python
-from tradelearn.strategy.backtest.single import LongBacktest  # Template call for single target speculative trading strategy, choose one of two
-from tradelearn.strategy.backtest.fund import LongBacktest    # Template call for multi-target portfolio strategy, choose one of two
+from tradelearn.strategy.backtest import Backtest
 
-res = LongBacktest.run(model_class=Example, param_dict=param_dict, raw_data=rawdata, base_line=baseline,
-                       begin_date=bt_begin_date, end_date=bt_end_date, show_source=True)
+bt = Backtest(data=data, strategy=Example, cash=1000000, commission=.002, trade_on_close=False)
 ```
 | Parameter Name        | Data Type	      | Notes                        |
 |-------------|-----------|---------------------------|
-| model_class | Signal    | Implementation of signal class, user-defined             |
-| param_dict  | dict      | Dictionary of parameters to pass to signal class              |
-| raw_data    | DataFrame | Target market data                    |
-| base_line   | DataFrame | Baseline market data                    |
-| begin_date  | string    | Start date of backtest                    |
-| end_date    | string    | End date of backtest                   |
-| show_source | bool      | Whether to show strategy source code in HTML file, default is True |
+| data | DataFrame | Asset market data |
+| strategy | Strategy | Strategy class implementation, needs to be customized by the user |
+| cash | DataFrame | Initial amount for backtesting |
+| commission | DataFrame | Transaction fee per trade | 
+| trade_on_close | string | Whether to use the previous day's closing price for buying; if not, the next day's opening price is used |
 ### Strategy Evaluation
 
 ```python
@@ -340,7 +382,7 @@ Evaluate.analysis_report(strat=res, baseline=baseline, filename='./evaluate.html
 - [Quantopian](https://github.com/quantopian)
 - [Trevor Stephens](https://github.com/trevorstephens)
 - [PyWhy](https://github.com/py-why)
-- [DRo](https://github.com/mementum)
+- [dodid](https://github.com/dodid)
 - [DolphinDB](https://github.com/dolphindb)
 - [happydasch](https://github.com/happydasch)
 - [mpquant](https://github.com/mpquant)
