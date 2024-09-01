@@ -33,7 +33,6 @@ if __name__ == '__main__':
 
     bt = Backtest(GOOG, SmaCross, cash=1000000, commission=.002, trade_on_close=False)
     stats = bt.run()
-    print(stats)
     bt.plot(plot_volume=True, superimpose=True)
 
     Evaluate.analysis_report(stats, GOOG, engine='quantstats')
