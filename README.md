@@ -1,4 +1,4 @@
-## trade-learn：Building Trading Strategies in Closed-Loop with Machine Learning
+## trade-learn：Building Trading Strategies with Machine Learning in Closed-Loop 
 
 <b>trade-learn</b> is a machine learning strategy development toolkit based on alphalens, backtrader, pyfolio, and quantstats. It provides a <b>complete strategy development process</b>. &nbsp;&nbsp;&nbsp; [[ 中文版介绍 ]](./README_zh.md)
 
