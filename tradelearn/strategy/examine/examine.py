@@ -29,7 +29,7 @@ class Examine:
             file.write(html)
 
     @staticmethod
-    def factor_compare(data: pd.DataFrame, f_col: str = None, ind: str = None, cir: str = None):
+    def factor_compare(data: pd.DataFrame, ind: str = None, cir: str = None, f_col: str = None):
         if f_col:
             data = data[f_col]
 

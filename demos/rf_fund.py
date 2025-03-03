@@ -48,7 +48,6 @@ if __name__ == '__main__':
             # 更新投资组合持仓权重
             self.rebalance(cash_reserve=0.1)
 
-
     # 定义数据起始日期和结束日期
     tn_begin_date = '2017-01-01'
     tn_end_date = '2022-06-22'

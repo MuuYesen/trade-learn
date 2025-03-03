@@ -28,6 +28,13 @@ class Query:
         return data
 
     @staticmethod
+    def to_csv(data: pd.DataFrame, file_path: str):
+        data.reset_index(drop=False, inplace=True)
+        data.rename(columns={'datetime': 'date'}, inplace=True)
+        data.rename(columns={'symbol': 'code'}, inplace=True)
+        data.to_csv(file_path, encoding='utf_8_sig', index=False)
+
+    @staticmethod
     def history_ohlc(symbol: str = None, start: str = None, end: str = None, adjust: str = 'qfq',
                      engine: str = 'tdx', username: str = None, password: str = None, exchange: str = None):
 

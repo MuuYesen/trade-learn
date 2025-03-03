@@ -5,7 +5,6 @@ from tradelearn.strategy.evaluate import Evaluate
 if __name__ == '__main__':
 
     GOOG = Query.history_ohlc(engine='tv', symbol='GOOG', exchange='NASDAQ')
-
     def crossover(series1, series2):
         return series1[-2] < series2[-2] and series1[-1] > series2[-1]
 
@@ -36,5 +35,4 @@ if __name__ == '__main__':
     bt.plot(plot_volume=True, superimpose=True)
 
     Evaluate.analysis_report(stats, GOOG, engine='quantstats')
-    Evaluate.analysis_report(stats, GOOG, engine='pyfolio')
 
