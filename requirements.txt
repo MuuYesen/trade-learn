@@ -6,7 +6,7 @@ requests
 pandas
 scipy
 statsmodels
-scikit-learn
+scikit-learn==1.5.2
 seaborn
 bokeh
 yfinance

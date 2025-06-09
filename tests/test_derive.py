@@ -1,7 +1,7 @@
 import unittest
 
 from tradelearn.query import Query
-from tradelearn.strategy.preprocess.derive import Derive
+from tradelearn.strategy.preprocess import Derive
 
 class TestDerive(unittest.TestCase):
 
@@ -14,4 +14,7 @@ class TestDerive(unittest.TestCase):
         res = Derive.generic_generate(data, random_status=21)
         print(res)
 
+
+if __name__ == '__main__':
+    unittest.main() 
 
