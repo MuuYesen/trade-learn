@@ -167,9 +167,6 @@ zoo_space/
 tests/data/
 tests/res/
 
-tradelearn/strategy/preprocess/
-!tradelearn/strategy/preprocess/derive/
-!tradelearn/strategy/preprocess/explore/
 
 tradelearn/mlops/
 tradelearn/causal/inference/

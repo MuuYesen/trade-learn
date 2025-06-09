@@ -1,0 +1,32 @@
+<div>
+  <style type="text/css">
+    p { text-indent: 2em; }
+  </style>
+
+  <center><h4>dataset include {{ total_rows }} rows and {{ total_columns }} columns.</h4></center><br>
+
+  <table>
+    <tr style="background-color:#CCE8EB">
+      <th></th>
+      <th>data type</th>
+      <th>non missing count</th>
+      <th>missing count</th>
+      <th>Total sample size</th>
+      <th>missing ratio</th>
+    </tr>
+    {% for col in columns_info %}
+    <tr>
+      <td style="font-weight: bold;">{{ col.name }}</td>
+      <td>{{ col.dtype }}</td>
+      <td>{{ col.non_missing }}</td>
+      <td>{{ col.missing }}</td>
+      <td>{{ total_rows }}</td>
+      <td>{{ col.missing_ratio }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+<br>
+<div class="image-block">
+  <img src="data:image/png;base64,{{ img.img_base64 }}" style="max-width:100%;" alt="{{ img.alt }}">
+</div>

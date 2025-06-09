@@ -1,0 +1,42 @@
+{# templates/all_variable_blocks.html #}
+{% for var in variables %}
+<a class="anchor-pos" id="var-{{ var.col_name }}"></a>
+<h2>Variable: {{ var.col_name }}</h2><br>
+
+<table style="border-collapse: collapse; width: 100%; border: 1px solid #ccc;">
+  <tr style="background-color:#CCE8EB">
+    <th>Mean</th><th>Std</th><th>Skew</th><th>Kurt</th><th>Min</th><th>25%</th></th><th>50%</th><th>75%</th><th>Max</th>
+  </tr>
+  <tr>
+    <td>{{ var.stats.mean }}</td>
+    <td>{{ var.stats.std }}</td>
+    <td>{{ var.stats.skew }}</td>
+    <td>{{ var.stats.kurt }}</td>
+    <td>{{ var.stats.min }}</td>
+    <td>{{ var.stats.quantile25 }}</td>
+    <td>{{ var.stats.quantile50 }}</td>
+    <td>{{ var.stats.quantile75 }}</td>
+    <td>{{ var.stats.max }}</td>
+  </tr>
+</table>
+
+<center>
+  <div style="display: flex; justify-content: space-between; gap: 20px; margin: 20px 0;">
+    <div style="flex: 1;">
+      <img src="data:image/png;base64,{{ var.curve_plot }}" alt="Curve Plot" style="width:100%; max-width:500px;">
+    </div>
+    <div style="flex: 1;">
+      <img src="data:image/png;base64,{{ var.box_plot }}" alt="Box Plot" style="width:100%; max-width:500px;">
+    </div>
+    <div style="flex: 1;">
+      <img src="data:image/png;base64,{{ var.line_plot }}" alt="Line Plot" style="width:100%;">
+    </div>
+  </div>
+</center>
+
+{% if var.ts_plot %}
+  <div><img src="data:image/png;base64,{{ var.ts_plot }}" alt="Time Series Statistics" style="max-width:100%;"></div>
+{% endif %}
+
+<hr style="border:1px solid #d0d0d5; height:1px">
+{% endfor %}

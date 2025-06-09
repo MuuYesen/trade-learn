@@ -1,0 +1,7 @@
+{% for img in img_list %}
+<div class="image-block">
+    <img src="data:image/png;base64,{{ img.img_base64 }}" style="max-width:100%;" alt="{{ img.alt }}">
+</div>
+<br>
+{% endfor %}
+

@@ -14,7 +14,7 @@ class TestExplore(unittest.TestCase):
                                      engine='tdx')
 
         ex = Explore(rawdata, 'date')
-        ex.report(filename='./res/explore.html')
+        ex.report(filename='explore.html')
 
 
 if __name__ == '__main__':
