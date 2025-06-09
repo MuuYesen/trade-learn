@@ -9,10 +9,10 @@ def read_file(filename):
     return desc
 def read_requirements(filename):
     return [line.strip() for line in read_file(filename).splitlines()
-            if (not line.startswith('#')) and ('==' in line)]
+            if (not line.startswith('#'))]
 
 
-with open('README.md', 'r') as fh:
+with open('README.md', 'r', encoding='utf-8') as fh:
     README = fh.read()
 
 VERSION = '0.1.2.0'

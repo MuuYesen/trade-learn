@@ -7,7 +7,7 @@ from multiprocessing import Pool
 
 import yfinance as yf
 from mootdx.quotes import Quotes
-from tvDatafeed import TvDatafeed, Interval
+from tradelearn.query.tvDatafeed.main import TvDatafeed, Interval
 
 from tradelearn.query.alpha.alphas101 import Alphas101
 from tradelearn.query.alpha.alphas191 import Alphas191

@@ -1,6 +1,6 @@
 import pandas as pd
 from quantstats import reports
-from .pyfolio import create_returns_tear_sheet
+from tradelearn.strategy.evaluate.pyfolio import create_returns_tear_sheet
 
 
 class Evaluate:
@@ -16,10 +16,10 @@ class Evaluate:
         if engine == 'pyfolio':
             html = create_returns_tear_sheet(returns=strat_rets, benchmark_rets=benchmark_ret)
 
-            # if filename is None:
-            #     filename = './pyfolio.html'
-            # with open(filename, 'w') as file:
-            #     file.write(html)
+            if filename is None:
+                filename = './pyfolio.html'
+            with open(filename, 'w') as file:
+                file.write(html)
 
         if engine == 'quantstats':
             if filename is None:

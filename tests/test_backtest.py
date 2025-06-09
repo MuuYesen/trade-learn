@@ -1,6 +1,6 @@
 import unittest
 from tradelearn.strategy.backtest import Backtest, Strategy
-from tradelearn.strategy.backtest.libs.lib import crossover
+from tradelearn.strategy.backtest.backtesting_py.libs.lib import crossover
 from tradelearn.query.query import Query
 
 class TestCuasal(unittest.TestCase):

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Profile report generated with the `AQI`">
+    <meta name="author" content="linfanli.">
+    <meta name="generator" content="Report Profiling {{ version }}" />
+
+    <style>
+        body {
+            padding-top: 80px;
+        }
+        {% include 'assets/bootstrap.min.css' %}
+        {% include 'assets/bootstrap-theme.min.css' %}
+        {% include 'assets/style.css' %}
+    </style>
+
+    <title>{{ title }}</title>
+
+</head>
+
+<body>
+    {% include './navigation.html' %}
+
+    <div class="content">
+        <div class="container">
+        {{ part0_html }}
+
+        {{ part1_html }}
+
+        {{ part2_html }}
+
+        {{ part3_html }}
+        </div>
+    </div>
+
+    {% include './footer.html' %}
+
+    <script>
+    {% include 'assets/jquery-latest.min.js' %}
+    {% include 'assets/bootstrap.min.js' %}
+    </script>
+</body>
+</html>

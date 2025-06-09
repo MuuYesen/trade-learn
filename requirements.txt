@@ -1,8 +1,12 @@
 numpy==1.26.4
+setuptools~=49.2.0
+pandas~=1.0.5
+websocket-client~=0.57.0
+requests
 pandas
 scipy
 statsmodels
-scikit-learn
+scikit-learn==1.5.2
 seaborn
 bokeh
 yfinance
@@ -12,4 +16,4 @@ quantstats
 htmlmin
 IPython
 pandas_datareader
-git+https://github.com/rongardF/tvdatafeed.git
+networkx
