@@ -15,20 +15,57 @@ from tradelearn.query.tec.mytt.tdx30 import Tdx30
 
 
 class Query:
+    """A class to handle data queries and calculations for stock market analysis."""
 
     def __init__(self):
+        """Initializes the Query class."""
         pass
 
     @staticmethod
-    def read_csv(data_path: str, begin: str = None, end: str = None):
-        data = pd.read_csv(data_path, parse_dates=['date'], dtype={'code': str}, low_memory=True, encoding='utf_8_sig')
-        if begin is None and end is None:
-            return data
-        data = data.query(f"date >= '{begin}' and date <= '{end}'")
-        return data
+    def read_csv(data_path_list: list, begin: str = None, end: str = None, date_key: str = None):
+        """Reads a CSV file and filters the data by date range.
+
+        Args:
+            data_path (str): The path to the CSV file.
+            begin (str): The start date for filtering (inclusive).
+            end (str): The end date for filtering (inclusive).
+
+        Returns:
+            pd.DataFrame: The filtered data as a DataFrame.
+        """
+        fina_res = None
+        if data_path_list is not list:
+            data = pd.read_csv(data_path_list, parse_dates=['date'], dtype={'code': str}, low_memory=True, encoding='utf_8_sig')
+            if begin is None and end is None:
+                return data
+            data = data.query(f"date >= '{begin}' and date <= '{end}'")
+            if date_key is not None:
+                data.set_index('date', inplace=True)
+            fina_res = data
+        else:
+            data_list = []
+            for data_path in data_path_list:
+                data = pd.read_csv(data_path, parse_dates=['date'], dtype={'code': str}, low_memory=True, encoding='utf_8_sig')
+                if begin is None and end is None:
+                    return data
+                data = data.query(f"date >= '{begin}' and date <= '{end}'")
+                if date_key is not None:
+                    data.set_index('date', inplace=True)
+                data_list.append(data)
+            fina_res = data_list
+        return fina_res
 
     @staticmethod
     def to_csv(data: pd.DataFrame, file_path: str):
+        """Saves a DataFrame to a CSV file after renaming columns.
+
+        Args:
+            data (pd.DataFrame): The DataFrame to save.
+            file_path (str): The path to save the CSV file.
+
+        Returns:
+            None
+        """
         data.reset_index(drop=False, inplace=True)
         data.rename(columns={'datetime': 'date'}, inplace=True)
         data.rename(columns={'symbol': 'code'}, inplace=True)
@@ -37,6 +74,21 @@ class Query:
     @staticmethod
     def history_ohlc(symbol: str = None, start: str = None, end: str = None, adjust: str = 'qfq',
                      engine: str = 'tdx', username: str = None, password: str = None, exchange: str = None):
+        """Fetches historical OHLC data for a given stock symbol.
+
+        Args:
+            symbol (str): The stock symbol to query.
+            start (str): The start date for the data.
+            end (str): The end date for the data.
+            adjust (str): The adjustment method for the data (e.g., 'qfq').
+            engine (str): The data source engine ('yahoo', 'tdx', or 'tv').
+            username (str): The username for the TV data feed (if applicable).
+            password (str): The password for the TV data feed (if applicable).
+            exchange (str): The exchange for the TV data feed (if applicable).
+
+        Returns:
+            pd.DataFrame: The historical OHLC data as a DataFrame.
+        """
 
         if engine == 'yahoo':
             try:
@@ -74,6 +126,16 @@ class Query:
 
     @staticmethod
     def _calc_func(func, m, kwargs={}):
+        """Calculates a function and measures its execution time.
+
+        Args:
+            func (callable): The function to execute.
+            m (str): The name of the function for logging purposes.
+            kwargs (dict): The keyword arguments to pass to the function.
+
+        Returns:
+            The result of the function call.
+        """
         t1 = time.time()
         alpha = func(**kwargs)
         t2 = time.time()
@@ -82,6 +144,16 @@ class Query:
 
     @staticmethod
     def tec_indicator(stock_data: pd.DataFrame, alpha_name: list = None, **kwargs):
+        """Calculates technical indicators for the given stock data.
+
+        Args:
+            stock_data (pd.DataFrame): The stock data to analyze.
+            alpha_name (list): A list of specific indicator names to calculate.
+            **kwargs: Additional keyword arguments for the indicator functions.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing the calculated indicators.
+        """
         mt = Tdx30(stock_data)
 
         if alpha_name:
@@ -114,6 +186,15 @@ class Query:
 
     @staticmethod
     def alphas101(stock_data: pd.DataFrame, alpha_name: list = None):
+        """Calculates Alpha 101 factors for the given stock data.
+
+        Args:
+            stock_data (pd.DataFrame): The stock data to analyze.
+            alpha_name (list): A list of specific alpha names to calculate.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing the calculated Alpha 101 factors.
+        """
 
         stock_data = stock_data.pivot(index='date', columns='code')
 
@@ -152,6 +233,16 @@ class Query:
 
     @staticmethod
     def alphas191(stock_data: pd.DataFrame, bench_data: pd.DataFrame, alpha_name: list = None):
+        """Calculates Alpha 191 factors for the given stock data against a benchmark.
+
+        Args:
+            stock_data (pd.DataFrame): The stock data to analyze.
+            bench_data (pd.DataFrame): The benchmark data to compare against.
+            alpha_name (list): A list of specific alpha names to calculate.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing the calculated Alpha 191 factors.
+        """
         stock_data = stock_data.pivot(index='date', columns='code')
 
         af = Alphas191(stock_data, bench_data)

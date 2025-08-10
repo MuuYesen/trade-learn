@@ -3,7 +3,7 @@ from tradelearn.strategy.backtest import Backtest, Strategy
 from tradelearn.strategy.backtest.backtesting_py.libs.lib import crossover
 from tradelearn.query.query import Query
 
-class TestCuasal(unittest.TestCase):
+class TestBackTest(unittest.TestCase):
 
     def test_trader_backtest(self):
         GOOG = Query.history_ohlc(engine='tv', symbol='GOOG', exchange='NASDAQ')
