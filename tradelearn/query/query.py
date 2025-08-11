@@ -22,7 +22,7 @@ class Query:
         pass
 
     @staticmethod
-    def read_csv(data_path_list: list, begin: str = None, end: str = None, date_key: str = None):
+    def read_csv_from_tongdaxin(data_path_list: list, begin: str = None, end: str = None, data_symbol_list: list = []):
         """Reads a CSV file and filters the data by date range.
 
         Args:
@@ -33,28 +33,91 @@ class Query:
         Returns:
             pd.DataFrame: The filtered data as a DataFrame.
         """
-        fina_res = None
-        if data_path_list is not list:
-            data = pd.read_csv(data_path_list, parse_dates=['date'], dtype={'code': str}, low_memory=True, encoding='utf_8_sig')
-            if begin is None and end is None:
-                return data
-            data = data.query(f"date >= '{begin}' and date <= '{end}'")
-            if date_key is not None:
-                data.set_index('date', inplace=True)
-            fina_res = data
-        else:
-            data_list = []
-            for data_path in data_path_list:
-                data = pd.read_csv(data_path, parse_dates=['date'], dtype={'code': str}, low_memory=True, encoding='utf_8_sig')
-                if begin is None and end is None:
-                    return data
-                data = data.query(f"date >= '{begin}' and date <= '{end}'")
-                if date_key is not None:
-                    data.set_index('date', inplace=True)
-                data_list.append(data)
-            fina_res = data_list
+        path_list, symbol_list = data_path_list, data_symbol_list
+
+        if isinstance(path_list, str):
+            path_list = [path_list]
+        if isinstance(symbol_list, str):
+            symbol_list = [symbol_list]
+  
+        rename_dict = {'日期':'date', '开盘':'open', '最高':'high', '最低':'low', '收盘':'close',
+                       '成交量':'volume', '持仓量':'open_interest', '结算价':'settlement_price'}		
+        date_key, symbol_key = 'date', 'code'
+
+        data_list = []
+        for i, data_path in enumerate(path_list):
+
+            data = pd.read_csv(data_path, low_memory=True, encoding='gbk', skiprows=2, skipfooter=1, names=rename_dict.keys())
+            data.rename(columns=rename_dict, inplace=True)
+            data[date_key] = pd.to_datetime(data[date_key])
+
+            if len(symbol_list) == len(path_list):
+                data[symbol_key] = symbol_list[i]
+
+            if symbol_key in data.columns:
+                data[symbol_key] = data[symbol_key].astype(str)
+            if begin is not None and end is not None:
+                data = data.query(f"{date_key} >= '{begin}' and {date_key} <= '{end}'")
+
+            data.set_index(date_key, inplace=True)
+            data.index = data.index.map(lambda x: np.datetime64(x.date()))
+            data_list.append(data)
+
+        fina_res = data_list
+        if not isinstance(data_path_list, list):
+            fina_res = data_list[0]
+        return fina_res
+    
+    @staticmethod
+    def read_csv_from_tradingview(data_path_list: list, begin: str = None, end: str = None):
+        """Reads a CSV file and filters the data by date range.
+
+        Args:
+            data_path (str): The path to the CSV file.
+            begin (str): The start date for filtering (inclusive).
+            end (str): The end date for filtering (inclusive).
+
+        Returns:
+            pd.DataFrame: The filtered data as a DataFrame.
+        """
+        path_list = data_path_list
+
+        if isinstance(path_list, str):
+            path_list = [path_list]
+
+        rename_dict = {'datetime':'date', 'symbol':'code'}
+        date_key, symbol_key = 'date', 'code'
+
+        data_list = []
+        for data_path in path_list:
+
+            data = pd.read_csv(data_path, low_memory=True, encoding='utf_8_sig')
+            data.rename(columns=rename_dict, inplace=True)
+            data[date_key] = pd.to_datetime(data[date_key])
+
+            if symbol_key in data.columns:
+                data[symbol_key] = data[symbol_key].astype(str)
+            if begin is not None and end is not None:
+                data = data.query(f"{date_key} >= '{begin}' and {date_key} <= '{end}'")
+                print(data)
+            data.set_index(date_key, inplace=True)
+            data.index = data.index.map(lambda x: np.datetime64(x.date()))
+            # print(data)
+            data_list.append(data)
+
+        fina_res = data_list
+        if isinstance(data_path_list, str):
+            fina_res = data_list[0]
         return fina_res
 
+    @staticmethod
+    def read_csv(data_path: str, begin: str = None, end: str = None):
+        data = pd.read_csv(data_path, parse_dates=['date'], dtype={'code': str}, low_memory=True, encoding='utf_8_sig')
+        if begin is None and end is None:
+            return data
+        data = data.query(f"date >= '{begin}' and date <= '{end}'")
+        return data
+    
     @staticmethod
     def to_csv(data: pd.DataFrame, file_path: str):
         """Saves a DataFrame to a CSV file after renaming columns.
