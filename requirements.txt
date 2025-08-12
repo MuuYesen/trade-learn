@@ -1,6 +1,6 @@
 numpy==1.26.4
 setuptools>=67.0
-pandas>=1.1,<2.0
+pandas==2.2.2
 websocket-client~=0.57.0
 requests
 scipy
@@ -11,7 +11,7 @@ bokeh
 yfinance
 mootdx
 pydot
-quantstats
+quantstats==0.0.70
 htmlmin
 IPython
 pandas_datareader

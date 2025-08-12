@@ -11,7 +11,6 @@ from tradelearn.query.tvDatafeed.main import TvDatafeed, Interval
 
 from tradelearn.query.alpha.alphas101 import Alphas101
 from tradelearn.query.alpha.alphas191 import Alphas191
-from tradelearn.query.tec.mytt.tdx30 import Tdx30
 
 
 class Query:
@@ -99,10 +98,9 @@ class Query:
                 data[symbol_key] = data[symbol_key].astype(str)
             if begin is not None and end is not None:
                 data = data.query(f"{date_key} >= '{begin}' and {date_key} <= '{end}'")
-                print(data)
+
             data.set_index(date_key, inplace=True)
             data.index = data.index.map(lambda x: np.datetime64(x.date()))
-            # print(data)
             data_list.append(data)
 
         fina_res = data_list
@@ -204,48 +202,6 @@ class Query:
         t2 = time.time()
         print(f"{m} time {t2 - t1}")
         return alpha
-
-    @staticmethod
-    def tec_indicator(stock_data: pd.DataFrame, alpha_name: list = None, **kwargs):
-        """Calculates technical indicators for the given stock data.
-
-        Args:
-            stock_data (pd.DataFrame): The stock data to analyze.
-            alpha_name (list): A list of specific indicator names to calculate.
-            **kwargs: Additional keyword arguments for the indicator functions.
-
-        Returns:
-            pd.DataFrame: A DataFrame containing the calculated indicators.
-        """
-        mt = Tdx30(stock_data)
-
-        if alpha_name:
-            methods = alpha_name
-        else:
-            methods = (list(filter(lambda m: (not m.startswith("_")) and callable(getattr(mt, m)),
-                            dir(mt))))
-        res_list = []
-        pool = Pool(processes=os.cpu_count())
-        for m in methods:
-            fac_func = getattr(mt, m)
-            try:
-                def print_error(value):
-                    print("error: ", value)
-                res = pool.apply_async(Query._calc_func, (fac_func, m, kwargs), error_callback=print_error)
-                res_list.append([m, res])
-            except:
-                traceback.print_exc()
-
-        res = pd.DataFrame({'date':[]})
-        for m, r in res_list:
-            ind_nb = r.get()
-            df = pd.DataFrame({'date': stock_data['date'], m: ind_nb})
-            res = pd.merge(res, df, how='outer', on=['date'])
-
-        pool.close()
-        pool.join()
-
-        return res
 
     @staticmethod
     def alphas101(stock_data: pd.DataFrame, alpha_name: list = None):
