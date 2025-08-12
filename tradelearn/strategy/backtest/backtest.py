@@ -47,7 +47,8 @@ class Backtest:
                  *,
                  cash: float = 10_000,
                  holding: dict = {},
-                 commission: float = .0,
+                 spread: float = .0,
+                 commission: Union[float, Tuple[float, float]] = .0,
                  margin: float = 1.,
                  trade_on_close=False,
                  hedging=False,
@@ -85,11 +86,25 @@ class Backtest:
 
             {'AAPL': 10, 'MSFT': 5}
 
-        `commission` is the commission ratio. E.g. if your broker's commission
-        is 1% of trade value, set commission to `0.01`. Note, if you wish to
-        account for bid-ask spread, you can approximate doing so by increasing
-        the commission, e.g. set it to `0.0002` for commission-less forex
-        trading where the average spread is roughly 0.2‰ of asking price.
+        `spread` is the the constant bid-ask spread rate (relative to the price).
+        E.g. set it to `0.0002` for commission-less forex
+        trading where the average spread is roughly 0.2‰ of the asking price.
+
+        `commission` is the commission rate. E.g. if your broker's commission
+        is 1% of order value, set commission to `0.01`.
+        The commission is applied twice: at trade entry and at trade exit.
+        Besides one single floating value, `commission` can also be a tuple of floating
+        values `(fixed, relative)`. E.g. set it to `(100, .01)`
+        if your broker charges minimum $100 + 1%.
+        Additionally, `commission` can be a callable
+        `func(order_size: int, price: float) -> float`
+        (note, order size is negative for short orders),
+        which can be used to model more complex commission structures.
+        Negative commission values are interpreted as market-maker's rebates.
+
+        .. note::
+            Before v0.4.0, the commission was only applied once, like `spread` is now.
+            If you want to keep the old behavior, simply set `spread` instead.
 
         `margin` is the required margin (ratio) of a leveraged account.
         No difference is made between initial and maintenance margins.
@@ -130,9 +145,14 @@ class Backtest:
             raise TypeError('`strategy` must be a Strategy sub-type')
         if not isinstance(data, pd.DataFrame):
             raise TypeError("`data` must be a pandas.DataFrame with columns")
-        if not isinstance(commission, Number):
-            raise TypeError('`commission` must be a float value, percent of '
+        if not isinstance(spread, Number):
+            raise TypeError('`spread` must be a float value, percent of '
                             'entry order price')
+        if not isinstance(commission, (Number, tuple)) and not callable(commission):
+            raise TypeError('`commission` must be a float percent of order value, '
+                            'a tuple of `(fixed, relative)` commission, '
+                            'or a function that takes `(order_size, price)`'
+                            'and returns commission dollar value')
 
         data = data.copy(deep=False)
         ohlc = ['open', 'high', 'low', 'close']
@@ -177,7 +197,7 @@ class Backtest:
 
         self._data = data
         self._broker = partial(
-            Broker, cash=cash, holding=holding, commission=commission, margin=margin,
+            Broker, cash=cash, holding=holding, spread=spread, commission=commission, margin=margin,
             trade_on_close=trade_on_close, hedging=hedging,
             exclusive_orders=exclusive_orders,
             trade_start_date=datetime.strptime(trade_start_date, '%Y-%m-%d') if trade_start_date else None,

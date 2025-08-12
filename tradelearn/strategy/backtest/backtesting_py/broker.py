@@ -17,17 +17,27 @@ class _OutOfMoneyError(Exception):
 
 
 class Broker:
-    def __init__(self, *, data: _Data, cash, holding, commission, margin, trade_on_close, hedging, exclusive_orders,
+    def __init__(self, *, data: _Data, cash, holding, spread, commission, margin, trade_on_close, hedging, exclusive_orders,
                  trade_start_date, lot_size, fail_fast, storage):
         assert 0 < cash, f"cash should be >0, is {cash}"
-        assert -.1 <= commission < .1, \
-            ("commission should be between -10% "
-             f"(e.g. market-maker's rebates) and 10% (fees), is {commission}")
         assert 0 < margin <= 1, f"margin should be between 0 and 1, is {margin}"
         self._data = data
         self._cash = cash
         self._holding = holding
-        self._commission = commission
+        if callable(commission):
+            self._commission = commission
+        else:
+            try:
+                self._commission_fixed, self._commission_relative = commission
+            except TypeError:
+                self._commission_fixed, self._commission_relative = 0, commission
+            assert self._commission_fixed >= 0, 'Need fixed cash commission in $ >= 0'
+            assert -.1 <= self._commission_relative < .1, \
+                ("commission should be between -10% "
+                 f"(e.g. market-maker's rebates) and 10% (fees), is {self._commission_relative}")
+            self._commission = self._commission_func
+
+        self._spread = spread
         self._leverage = 1 / margin
         self._trade_on_close = trade_on_close
         self._hedging = hedging
@@ -56,6 +66,9 @@ class Broker:
         self.positions: Dict[str, Position] = {ticker: Position(self, ticker) for ticker in self._data.tickers}
         self.closed_trades: List[Trade] = []
 
+    def _commission_func(self, order_size, price):
+        return self._commission_fixed + abs(order_size) * price * self._commission_relative
+    
     def __repr__(self):
         pos = ','.join([f'{k}:{p.size}' for k, p in self.positions.items()])
         return f'<Broker: margin_available:{self.margin_available:.0f},{pos} ({len(self.all_trades)} trades)>'
@@ -164,10 +177,10 @@ class Broker:
 
     def _adjusted_price(self, ticker: str, size=None, price=None) -> float:
         """
-        Long/short `price`, adjusted for commisions.
+        Long/short `price`, adjusted for spread.
         In long positions, the adjusted price is a fraction higher, and vice versa.
         """
-        return (price or self.last_price(ticker)) * (1 + copysign(self._commission, size))
+        return (price or self.last_price(ticker)) * (1 + copysign(self._spread, size))
 
     def equity(self, ticker: str = None) -> float:
         if ticker:
@@ -312,15 +325,18 @@ class Broker:
             # Adjust price to include commission (or bid-ask spread).
             # In long positions, the adjusted price is a fraction higher, and vice versa.
             adjusted_price = self._adjusted_price(order.ticker, order.size, price)
+            adjusted_price_plus_commission = \
+                adjusted_price + self._commission(order.size, price) / abs(order.size)
 
             # If order size was specified proportionally,
             # precompute true size in units, accounting for margin and spread/commissions
             size = order.size
             if -1 < size < 1:
                 size = copysign(int((self.margin_available * self._leverage * abs(size))
-                                    // adjusted_price), size)
+                                    // adjusted_price_plus_commission), size)
                 # Not enough cash/margin even for a single unit
                 if not size:
+                    # XXX: The order is canceled by the broker?
                     self.orders.remove(order)
                     continue
                 else:
@@ -353,7 +369,7 @@ class Broker:
                         break
 
             # If we don't have enough liquidity to cover for the order, abort the backtest
-            if abs(need_size) * adjusted_price > self.margin_available * self._leverage:
+            if abs(need_size) * adjusted_price_plus_commission > self.margin_available * self._leverage:
                 if self._fail_fast:
                     raise RuntimeError(
                         f'Not enough liquidity for {order}, has {int(self.margin_available * self._leverage)},'
@@ -420,12 +436,14 @@ class Broker:
             self.orders.remove(trade._tp_order)
 
         self.closed_trades.append(trade._replace(exit_price=price, exit_bar=time_index))
-        self._cash += trade.pl
+        self._cash += trade.pl - self._commission(trade.size, price)
 
     def _open_trade(self, ticker: str, price: float, size: int,
                     sl: Optional[float], tp: Optional[float], time_index: int, tag):
         trade = Trade(self, ticker, size, price, time_index, tag)
         self.trades[ticker].append(trade)
+        # Apply broker commission at trade open
+        self._cash -= self._commission(size, price)
         # Create SL/TP (bracket) orders.
         # Make sure SL order is created first so it gets adversarially processed before TP order
         # in case of an ambiguous tie (both hit within a single bar).
