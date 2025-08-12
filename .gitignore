@@ -163,7 +163,7 @@ cython_debug/
 
 materials/
 zoo_space/
-
+resources/
 tests/data/
 tests/res/
 
