@@ -162,6 +162,8 @@ cython_debug/
 .idea/
 
 materials/
+wechat_docs/
+zoo/
 zoo_space/
 
 tests/data/
@@ -179,4 +181,3 @@ tradelearn/strategy/select/
 tradelearn/strategy/weight/
 
 tradelearn/trader/extension/
-
