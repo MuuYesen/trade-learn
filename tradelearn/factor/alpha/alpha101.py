@@ -81,6 +81,7 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha078",
         "alpha081",
         "alpha083",
+        "alpha084",
         "alpha085",
         "alpha086",
         "alpha088",
@@ -704,6 +705,12 @@ class Alpha101Factors:
         numerator = _rank(_delay(price_range, 2)) * _rank(_rank(self.volume))
         denominator = price_range / (self.vwap - self.close)
         return numerator / denominator
+
+    def alpha084(self) -> pd.DataFrame:
+        """Return Alpha#84."""
+        base = _ts_rank(self.vwap - _ts_max(self.vwap, 15), 21)
+        exponent = _delta(self.close, 5)
+        return base.pow(exponent)
 
     def alpha085(self) -> pd.DataFrame:
         """Return Alpha#85."""

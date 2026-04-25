@@ -187,6 +187,22 @@ def test_validate_alpha_formula_metadata_rejects_wrong_total_count() -> None:
         alpha_package.validate_alpha_formula_metadata(metadata)
 
 
+def test_validate_alpha_formula_metadata_rejects_incomplete_formula_universe() -> None:
+    """The validator rejects metadata that omits formulas from a known Alpha family."""
+    import tradelearn.factor.alpha as alpha_package
+
+    metadata = alpha_package.alpha_formula_metadata()
+    metadata["alpha191"]["supported"] = metadata["alpha191"]["supported"][:-1]
+    metadata["alpha191"]["supported_count"] -= 1
+    metadata["alpha191"]["total_count"] -= 1
+
+    with pytest.raises(
+        ValueError,
+        match="alpha191 total_count must be 191",
+    ):
+        alpha_package.validate_alpha_formula_metadata(metadata)
+
+
 def test_check_alpha_metadata_script_reports_validated_counts() -> None:
     """The metadata check script reports counts from validated metadata."""
     from tradelearn.factor.alpha import validated_alpha_formula_metadata

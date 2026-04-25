@@ -6,6 +6,11 @@ from typing import TypedDict
 from tradelearn.factor.alpha.alpha101 import ALPHA101_SKIPPED, ALPHA101_SUPPORTED, alpha101
 from tradelearn.factor.alpha.alpha191 import ALPHA191_SKIPPED, ALPHA191_SUPPORTED, alpha191
 
+_EXPECTED_ALPHA_TOTALS = {
+    "alpha101": 101,
+    "alpha191": 191,
+}
+
 
 class AlphaFormulaFamilyMetadata(TypedDict):
     """Metadata for a single Alpha formula family."""
@@ -90,6 +95,9 @@ def validate_alpha_formula_metadata(
             raise ValueError(
                 f"{family_name} total_count does not match supported plus skipped formulas"
             )
+        expected_total = _EXPECTED_ALPHA_TOTALS.get(family_name)
+        if expected_total is not None and family_metadata["total_count"] != expected_total:
+            raise ValueError(f"{family_name} total_count must be {expected_total}")
 
 
 def validated_alpha_formula_metadata() -> dict[str, AlphaFormulaFamilyMetadata]:
