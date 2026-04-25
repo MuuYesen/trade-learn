@@ -334,7 +334,9 @@ def test_render_alpha_known_differences_script_check_passes_when_content_exists(
         check=True,
     )
 
-    assert result.stdout == f"Alpha known differences are present in {target}\n"
+    assert result.stdout == (
+        f"Alpha known differences sections present in {target}: alpha101\n"
+    )
     assert result.stderr == ""
 
 
@@ -362,6 +364,39 @@ def test_render_alpha_known_differences_script_check_fails_for_missing_content(
     assert result.returncode == 1
     assert result.stdout == ""
     assert result.stderr == "Missing Alpha known differences sections: alpha191\n"
+
+
+def test_render_alpha_known_differences_script_check_reports_all_families(
+    tmp_path: Path,
+) -> None:
+    """The known differences script reports every checked Alpha family."""
+    rendered = subprocess.run(
+        [sys.executable, "scripts/render_alpha_known_differences.py"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    target = tmp_path / "MIGRATION.md"
+    target.write_text(f"# MIGRATION\n\n{rendered}", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--check",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout == (
+        f"Alpha known differences sections present in {target}: alpha101, alpha191\n"
+    )
+    assert result.stderr == ""
 
 
 def test_validate_alpha_formula_metadata_rejects_inconsistent_counts() -> None:

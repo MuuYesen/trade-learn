@@ -61,7 +61,10 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        print(f"Alpha known differences are present in {args.check}")
+        print(
+            f"Alpha known differences sections present in {args.check}: "
+            + ", ".join(families)
+        )
         return 0
 
     for family in families:
