@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from tradelearn import metrics
+from tradelearn.report.excel import write_excel_report
 
 
 class Reporter:
@@ -65,6 +66,10 @@ class Reporter:
     def drawdown(self) -> pd.Series:
         """Return drawdown series."""
         return metrics.drawdown_series(self._get("returns"))
+
+    def excel(self, path: str) -> Any:
+        """Write an Excel report."""
+        return write_excel_report(self, path)
 
     def _get(self, name: str, default: Any = None) -> Any:
         """Read a field from mapping or object stats."""
