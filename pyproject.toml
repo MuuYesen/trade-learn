@@ -1,0 +1,97 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trade-learn"
+version = "0.1.2.0"
+description = "Python quantitative research framework for traditional and ML strategies."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "trade-learn contributors" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy>=1.26",
+    "pandas",
+    "scipy",
+    "statsmodels",
+    "scikit-learn",
+    "pytdx2",
+    "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git",
+    "pyarrow",
+    "pandas-ta-classic",
+    "pynesys-pynecore; python_version >= '3.11'",
+    "xlsxwriter",
+    "bokeh",
+    "causal-learn",
+    "mlflow",
+    "mcp",
+    "httpx",
+    "tqdm",
+    "typer",
+    "pydantic",
+    "pyyaml",
+]
+
+[project.urls]
+Homepage = "https://github.com/MuuYesen/trade-learn"
+Documentation = "https://github.com/MuuYesen/trade-learn/tree/main/docs"
+
+[project.optional-dependencies]
+lab = [
+    "jupyterlab",
+    "jupyterlab-git",
+    "ipywidgets",
+    "jupyter-ai",
+    "pygwalker",
+]
+dev = [
+    "pytest",
+    "ruff",
+    "interrogate",
+]
+docs = [
+    "mkdocs-material",
+    "mkdocstrings-python",
+]
+
+[dependency-groups]
+oracle = [
+    "yfinance",
+    "mootdx",
+    "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git",
+]
+
+[tool.setuptools.packages.find]
+include = ["tradelearn*"]
+exclude = ["reference*", "tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/golden", "tests/consistency"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.interrogate]
+ignore-init-method = true
+ignore-init-module = false
+ignore-magic = true
+ignore-semiprivate = false
+ignore-private = false
+fail-under = 90
+exclude = ["setup.py", "reference", "tests"]

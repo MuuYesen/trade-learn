@@ -1,0 +1,28 @@
+{
+  "version": "0.1-alpha",
+  "source": "docs/specs/CONSISTENCY.md",
+  "datasets": [
+    {"symbol": "GOOG", "engine": "tv", "start": "2020-01-01", "end": "2024-12-31", "freq": "1d"},
+    {"symbol": "AAPL", "engine": "tv", "start": "2020-01-01", "end": "2024-12-31", "freq": "1d"},
+    {"symbol": "MSFT", "engine": "tv", "start": "2020-01-01", "end": "2024-12-31", "freq": "1d"},
+    {"symbol": "SPY", "engine": "tv", "start": "2020-01-01", "end": "2024-12-31", "freq": "1d"},
+    {"symbol": "BTCUSDT", "engine": "tv", "start": "2020-01-01", "end": "2024-12-31", "freq": "1d"},
+    {"symbol": "000001", "engine": "tdx", "start": "2020-01-01", "end": "2024-12-31", "freq": "1d"},
+    {"symbol": "600519", "engine": "tdx", "start": "2020-01-01", "end": "2024-12-31", "freq": "1d"},
+    {"symbol": "000300", "engine": "tdx", "start": "2020-01-01", "end": "2024-12-31", "freq": "1d"},
+    {"symbol": "510300", "engine": "tdx", "start": "2020-01-01", "end": "2024-12-31", "freq": "1d"},
+    {"symbol": "159919", "engine": "tdx", "start": "2020-01-01", "end": "2024-12-31", "freq": "1d"}
+  ],
+  "strategies": [
+    {"name": "sma_cross", "description": "Single-symbol moving average crossover"},
+    {"name": "rsi_oversold", "description": "RSI oversold reversal"},
+    {"name": "bollinger_breakout", "description": "Bollinger breakout"},
+    {"name": "macd_cross", "description": "MACD crossover"},
+    {"name": "tdx30_kdj", "description": "A-share KDJ"},
+    {"name": "supertrend_tv", "description": "TradingView Supertrend"},
+    {"name": "pairs_trading", "description": "Multi-asset pairs trading"},
+    {"name": "equal_weight", "description": "Equal-weight rotation"},
+    {"name": "alpha101_ml", "description": "ML plus Alpha101"},
+    {"name": "momentum_portfolio", "description": "Portfolio momentum"}
+  ]
+}

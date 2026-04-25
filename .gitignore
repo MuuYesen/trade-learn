@@ -177,3 +177,13 @@ tradelearn/strategy/weight/
 
 tradelearn/trader/extension/
 
+# trade-learn 2.0 local artifacts
+.worktrees/
+worktrees/
+.ruff_cache/
+.interrogate
+data/
+.tradelearn/
+tests/golden/datasets/**/*.parquet
+tests/golden/expected/**/*.json
+tests/golden/indicators/**/*.parquet

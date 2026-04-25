@@ -1,0 +1,20 @@
+trade-learn
+Copyright 2026 trade-learn contributors
+
+This product is licensed under the Apache License, Version 2.0.
+
+Stage 0 attribution register, as required by docs/specs/ARCHITECTURE.md
+and docs/VISION.md:
+
+- empyrical (Apache-2.0): planned metrics reference/fusion source.
+- alphalens (Apache-2.0): planned factor analysis reference/fusion source.
+- pyfolio (Apache-2.0): planned reporting reference/fusion source.
+- quantstats: planned HTML/reporting reference/fusion source.
+- MyTT (MIT): planned ta.tdx algorithm source.
+- DolphinDB wq101alpha: planned Alpha101/191 formula reference.
+- pyneCore: planned TradingView-compatible indicator backend evaluation.
+- backtesting.py (AGPL-3.0): inspired-by reference for clean-room design notes only.
+- backtrader (GPL-3.0): public API compatibility target only; no source copying.
+- causallearn (MIT): planned causal module dependency/fusion source.
+- mlflow (Apache-2.0): planned experiment tracking client dependency.
+- pandas-ta-classic (MIT): planned common indicator dependency.

@@ -1,0 +1,10 @@
+{
+  "version": "0.1-alpha",
+  "source": "docs/specs/ARCHITECTURE.md",
+  "targets": {
+    "single_symbol_10y_daily_ms": 50,
+    "portfolio_500_symbols_10y_daily_s": 5,
+    "stream_bar_ms": 1
+  },
+  "measured": {}
+}

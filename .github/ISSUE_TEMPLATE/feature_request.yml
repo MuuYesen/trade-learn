@@ -1,0 +1,19 @@
+name: Feature request
+description: Propose work traceable to the roadmap or specs.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: spec
+    attributes:
+      label: Spec or roadmap reference
+      description: Link to the relevant docs/specs section.
+    validations:
+      required: true

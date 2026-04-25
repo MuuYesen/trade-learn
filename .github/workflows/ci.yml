@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, v2, master, main]
+
+jobs:
+  test:
+    name: ${{ matrix.os }} py${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --extra dev
+      - run: uv run ruff check tradelearn/core tests/unit/core tests/golden tests/consistency scripts
+      - run: uv run pytest
+      - run: uv run pytest tests/unit/core --doctest-modules tradelearn/core
+      - run: uv run interrogate tradelearn/core --fail-under 90
+
+  consistency:
+    name: consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --extra dev
+      - run: uv run pytest tests/consistency/ -v --tb=short
+      - run: uv run pytest tests/golden/ -v
+
+  oracle:
+    name: oracle-readiness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --group oracle --extra dev
+      - run: uv run python scripts/check_oracle.py
