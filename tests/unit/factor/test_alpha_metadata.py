@@ -300,6 +300,70 @@ def test_render_alpha_known_differences_script_filters_family() -> None:
     assert result.stderr == ""
 
 
+def test_render_alpha_known_differences_script_check_passes_when_content_exists(
+    tmp_path: Path,
+) -> None:
+    """The known differences script can verify rendered content in a file."""
+    rendered = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha101",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    target = tmp_path / "MIGRATION.md"
+    target.write_text(f"# MIGRATION\n\n{rendered}", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha101",
+            "--check",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout == f"Alpha known differences are present in {target}\n"
+    assert result.stderr == ""
+
+
+def test_render_alpha_known_differences_script_check_fails_for_missing_content(
+    tmp_path: Path,
+) -> None:
+    """The known differences script reports missing rendered content."""
+    target = tmp_path / "MIGRATION.md"
+    target.write_text("# MIGRATION\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha191",
+            "--check",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == "Missing Alpha known differences sections: alpha191\n"
+
+
 def test_validate_alpha_formula_metadata_rejects_inconsistent_counts() -> None:
     """The validator catches stale counts before docs consume metadata."""
     import tradelearn.factor.alpha as alpha_package
