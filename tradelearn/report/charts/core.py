@@ -201,6 +201,33 @@ def quantile_returns(returns: pd.DataFrame):
     return plot
 
 
+def factor_long_short_returns(returns: pd.DataFrame):
+    """Return a factor long-short returns figure."""
+    frame = returns.reset_index().rename(columns={returns.index.name or "index": "date"})
+    if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
+        frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
+    plot = figure(
+        title="Factor Long-Short Returns",
+        x_axis_type="datetime",
+        height=240,
+        sizing_mode="stretch_width",
+    )
+    colors = {
+        "long": "#2ca02c",
+        "short": "#d62728",
+        "spread": "#1f77b4",
+    }
+    for column in returns.columns:
+        plot.line(
+            frame["date"],
+            frame[column],
+            line_width=2,
+            color=colors.get(str(column), "#9467bd"),
+            legend_label=str(column),
+        )
+    return plot
+
+
 def factor_ic(ic: pd.Series):
     """Return a factor IC figure."""
     frame = _plot_frame(ic, "ic").dropna()

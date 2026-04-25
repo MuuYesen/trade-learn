@@ -38,6 +38,7 @@ def write_html_report(
     factor_rank_ic = reporter.factor_rank_ic()
     factor_turnover = reporter.factor_turnover()
     factor_autocorrelation = reporter.factor_autocorrelation()
+    factor_long_short_returns = reporter.factor_long_short_returns()
     factor_quantile_returns = reporter.factor_quantile_returns()
     summary = reporter.summary(benchmark=benchmark_returns)
     config = reporter._get("config", default={}) or {}
@@ -58,6 +59,8 @@ def write_html_report(
         plots.append(charts.factor_rank_ic(factor_rank_ic))
     if not factor_turnover.empty or not factor_autocorrelation.empty:
         plots.append(charts.factor_turnover(factor_turnover, factor_autocorrelation))
+    if not factor_long_short_returns.empty:
+        plots.append(charts.factor_long_short_returns(factor_long_short_returns))
     if not factor_quantile_returns.empty:
         plots.append(charts.quantile_returns(factor_quantile_returns))
     script, chart_components = components(
@@ -78,6 +81,7 @@ def write_html_report(
             factor_rank_ic=factor_rank_ic,
             factor_turnover=factor_turnover,
             factor_autocorrelation=factor_autocorrelation,
+            factor_long_short_returns=factor_long_short_returns,
             factor_quantile_returns=factor_quantile_returns,
             trades=trades,
             returns=returns,
@@ -95,6 +99,7 @@ def write_html_report(
         factor_rank_ic=factor_rank_ic,
         factor_turnover=factor_turnover,
         factor_autocorrelation=factor_autocorrelation,
+        factor_long_short_returns=factor_long_short_returns,
         factor_quantile_returns=factor_quantile_returns,
     )
     return output
@@ -112,6 +117,7 @@ def _write_artifacts(
     factor_rank_ic: pd.Series,
     factor_turnover: pd.Series,
     factor_autocorrelation: pd.Series,
+    factor_long_short_returns: pd.DataFrame,
     factor_quantile_returns: pd.DataFrame,
 ) -> None:
     """Write colocated machine-readable report artifacts."""
@@ -127,6 +133,8 @@ def _write_artifacts(
         factor_autocorrelation.to_frame("autocorrelation").to_parquet(
             directory / "factor_autocorrelation.parquet"
         )
+    if not factor_long_short_returns.empty:
+        factor_long_short_returns.to_parquet(directory / "factor_long_short_returns.parquet")
     if not factor_quantile_returns.empty:
         factor_quantile_returns.to_parquet(directory / "factor_quantile_returns.parquet")
     (directory / "stats.json").write_text(
@@ -157,6 +165,7 @@ def _render_html(
     factor_rank_ic: pd.Series,
     factor_turnover: pd.Series,
     factor_autocorrelation: pd.Series,
+    factor_long_short_returns: pd.DataFrame,
     factor_quantile_returns: pd.DataFrame,
     trades: pd.DataFrame,
     returns: pd.Series,
@@ -178,6 +187,7 @@ def _render_html(
             factor_turnover,
             factor_autocorrelation,
         ),
+        factor_long_short_section=_factor_long_short_section(factor_long_short_returns),
         factor_section=_factor_section(factor_quantile_returns),
         metadata={key: escape(value) for key, value in metadata.items()},
         returns_count=len(returns),
@@ -296,6 +306,14 @@ def _factor_turnover_section(
         return ""
     observations = max(len(factor_turnover), len(factor_autocorrelation))
     return f"<h2>Factor Turnover</h2><p>Observations: {observations}</p>"
+
+
+def _factor_long_short_section(factor_long_short_returns: pd.DataFrame) -> str:
+    """Return the optional factor long-short section heading."""
+    if factor_long_short_returns.empty:
+        return ""
+    columns = ", ".join(escape(str(column)) for column in factor_long_short_returns.columns)
+    return f"<h2>Factor Long-Short Returns</h2><p>Series: {columns}</p>"
 
 
 def _has_multi_asset_exposure(exposure: pd.DataFrame) -> bool:

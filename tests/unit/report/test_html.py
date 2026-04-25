@@ -148,10 +148,12 @@ def test_reporter_html_adds_factor_quantile_chart_when_analyzer_exists(tmp_path)
     assert "Factor IC" in html
     assert "Factor Rank IC" in html
     assert "Factor Turnover" in html
+    assert "Factor Long-Short Returns" in html
     assert (tmp_path / "factor_ic.parquet").exists()
     assert (tmp_path / "factor_rank_ic.parquet").exists()
     assert (tmp_path / "factor_turnover.parquet").exists()
     assert (tmp_path / "factor_autocorrelation.parquet").exists()
+    assert (tmp_path / "factor_long_short_returns.parquet").exists()
     assert (tmp_path / "factor_quantile_returns.parquet").exists()
 
 
@@ -192,6 +194,17 @@ class _FactorAnalyzerStub:
         """Return factor quantile cumulative returns for report tests."""
         return pd.DataFrame(
             {1: [0.01, 0.02], 2: [0.03, 0.04]},
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+        )
+
+    def long_short_cumulative_returns(self) -> pd.DataFrame:
+        """Return factor long-short cumulative returns for report tests."""
+        return pd.DataFrame(
+            {
+                "long": [0.03, 0.04],
+                "short": [0.01, 0.02],
+                "spread": [0.02, 0.02],
+            },
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
         )
 

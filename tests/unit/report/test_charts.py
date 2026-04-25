@@ -9,6 +9,7 @@ from tradelearn.report.charts import (
     equity_curve,
     exposure,
     factor_ic,
+    factor_long_short_returns,
     factor_rank_ic,
     factor_turnover,
     monthly_heatmap,
@@ -32,6 +33,7 @@ def test_report_charts_return_bokeh_figures() -> None:
         factor_ic(_series("ic")),
         factor_rank_ic(_series("rank_ic")),
         factor_turnover(_series("turnover"), _series("autocorrelation")),
+        factor_long_short_returns(_long_short_returns()),
     ]
 
     assert all(isinstance(plot, type(figure())) for plot in plots)
@@ -70,5 +72,16 @@ def _correlation() -> pd.DataFrame:
 def _quantile_returns() -> pd.DataFrame:
     return pd.DataFrame(
         {1: [0.01, 0.03], 2: [0.02, 0.05]},
+        index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+    )
+
+
+def _long_short_returns() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "long": [0.01, 0.04],
+            "short": [-0.01, -0.02],
+            "spread": [0.02, 0.06],
+        },
         index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
     )
