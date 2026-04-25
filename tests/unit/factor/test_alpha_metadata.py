@@ -1,5 +1,6 @@
 """Tests for Alpha formula metadata helpers."""
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -122,6 +123,29 @@ def test_check_alpha_metadata_script_reports_validated_counts() -> None:
         f"skipped={family_metadata['skipped_count']}"
         for family, family_metadata in sorted(metadata.items())
     ]
+    assert result.stderr == ""
+
+
+def test_check_alpha_metadata_script_reports_json_counts() -> None:
+    """The metadata check script can emit machine-readable counts."""
+    from tradelearn.factor.alpha import validated_alpha_formula_metadata
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_alpha_metadata.py", "--json"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    metadata = validated_alpha_formula_metadata()
+
+    assert json.loads(result.stdout) == {
+        family: {
+            "supported_count": family_metadata["supported_count"],
+            "skipped_count": family_metadata["skipped_count"],
+        }
+        for family, family_metadata in sorted(metadata.items())
+    }
     assert result.stderr == ""
 
 
