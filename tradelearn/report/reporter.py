@@ -11,6 +11,7 @@ import pandas as pd
 from tradelearn import metrics
 from tradelearn.report.excel import write_excel_report
 from tradelearn.report.explore import explore_trades
+from tradelearn.report.html import write_html_report
 
 
 class Reporter:
@@ -71,6 +72,10 @@ class Reporter:
     def excel(self, path: str) -> Any:
         """Write an Excel report."""
         return write_excel_report(self, path)
+
+    def html(self, path: str) -> Any:
+        """Write an HTML report."""
+        return write_html_report(self, path)
 
     def explore(self) -> Any:
         """Open an interactive pygwalker explorer for trades."""
