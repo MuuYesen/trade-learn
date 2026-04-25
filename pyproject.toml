@@ -68,7 +68,6 @@ docs = [
 
 [dependency-groups]
 oracle = [
-    "yfinance",
     "mootdx",
     "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git",
 ]

@@ -1,13 +1,7 @@
-import os
 import time
-import traceback
 import numpy as np
 import pandas as pd
 from multiprocessing import Pool
-
-import yfinance as yf
-from mootdx.quotes import Quotes
-from tradelearn.query.tvDatafeed.main import TvDatafeed, Interval
 
 from tradelearn.query.alpha.alphas101 import Alphas101
 from tradelearn.query.alpha.alphas191 import Alphas191
@@ -153,6 +147,8 @@ class Query:
 
         if engine == 'yahoo':
             try:
+                import yfinance as yf
+
                 tickler = yf.Ticker(symbol)
                 if adjust == 'qfq':
                     auto_adjust = True
@@ -166,6 +162,8 @@ class Query:
 
         if engine == 'tdx':
             try:
+                from mootdx.quotes import Quotes
+
                 client = Quotes.factory(market='std', multithread=True, heartbeat=True, timeout=15, auto_retry=True)
                 data = client.ohlc(symbol=symbol, begin=start, end=end, adjust=adjust)
                 data = data.drop(['date'], axis=1).reset_index()
@@ -177,6 +175,8 @@ class Query:
 
         if engine == 'tv':
             try:
+                from tradelearn.query.tvDatafeed.main import Interval, TvDatafeed
+
                 tv = TvDatafeed(username, password)
                 data = tv.get_hist(symbol=symbol, exchange=exchange, interval=Interval.in_daily, n_bars=10000)
                 data.index = data.index.map(lambda x: np.datetime64(x.date()))

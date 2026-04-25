@@ -24,7 +24,6 @@ from tradelearn.core import GoldenDataError  # noqa: E402
 REFERENCE = ROOT / "reference" / "tradelearn_1x"
 MANIFEST = ROOT / "tests" / "golden" / "manifest.json"
 PROVIDER_MODULES = {
-    "yahoo": "yfinance",
     "tdx": "mootdx.quotes",
     "tv": "tvDatafeed",
 }

@@ -40,7 +40,7 @@ def test_check_oracle_cli_prints_oracle_group_hint_when_provider_missing() -> No
     )
 
     assert result.returncode == 0
-    if "provider:yahoo=missing" in result.stdout:
+    if "provider:" in result.stdout and "=missing" in result.stdout:
         assert "hint=uv sync --group oracle --extra dev" in result.stdout
 
 
@@ -48,7 +48,7 @@ def test_pyproject_has_oracle_dependency_group() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     oracle = pyproject["dependency-groups"]["oracle"]
 
-    assert any(dep.startswith("yfinance") for dep in oracle)
+    assert not any(dep.startswith("yfinance") for dep in oracle)
     assert any(dep.startswith("mootdx") for dep in oracle)
     tvdatafeed = "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git"
     assert any(dep.startswith(tvdatafeed) for dep in oracle)
