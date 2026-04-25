@@ -9,6 +9,7 @@ from tradelearn.report.charts import (
     equity_curve,
     exposure,
     monthly_heatmap,
+    quantile_returns,
     rolling_sharpe,
     trade_distribution,
 )
@@ -24,6 +25,7 @@ def test_report_charts_return_bokeh_figures() -> None:
         trade_distribution(_trade_distribution()),
         exposure(_exposure()),
         correlation_matrix(_correlation()),
+        quantile_returns(_quantile_returns()),
     ]
 
     assert all(isinstance(plot, type(figure())) for plot in plots)
@@ -57,3 +59,10 @@ def _exposure() -> pd.DataFrame:
 
 def _correlation() -> pd.DataFrame:
     return pd.DataFrame({"AAA": [1.0, -1.0], "BBB": [-1.0, 1.0]}, index=["AAA", "BBB"])
+
+
+def _quantile_returns() -> pd.DataFrame:
+    return pd.DataFrame(
+        {1: [0.01, 0.03], 2: [0.02, 0.05]},
+        index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+    )

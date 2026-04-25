@@ -6,6 +6,7 @@ from tradelearn.report.charts.core import (
     equity_curve,
     exposure,
     monthly_heatmap,
+    quantile_returns,
     rolling_sharpe,
     trade_distribution,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "equity_curve",
     "exposure",
     "monthly_heatmap",
+    "quantile_returns",
     "rolling_sharpe",
     "trade_distribution",
 ]

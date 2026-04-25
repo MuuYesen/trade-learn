@@ -178,6 +178,29 @@ def correlation_matrix(correlation: pd.DataFrame):
     return plot
 
 
+def quantile_returns(returns: pd.DataFrame):
+    """Return a factor quantile returns figure."""
+    frame = returns.reset_index().rename(columns={returns.index.name or "index": "date"})
+    if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
+        frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
+    plot = figure(
+        title="Factor Quantile Returns",
+        x_axis_type="datetime",
+        height=240,
+        sizing_mode="stretch_width",
+    )
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#8c564b", "#e377c2"]
+    for index, column in enumerate(returns.columns):
+        plot.line(
+            frame["date"],
+            frame[column],
+            line_width=2,
+            color=colors[index % len(colors)],
+            legend_label=f"Q{column}",
+        )
+    return plot
+
+
 def _plot_frame(series: pd.Series, name: str) -> pd.DataFrame:
     """Return a timezone-naive plotting frame."""
     frame = series.to_frame(name).reset_index()
