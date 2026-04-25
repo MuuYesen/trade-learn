@@ -683,3 +683,49 @@ def test_check_design_notes_json_reports_failures_on_stdout(
         "errors": ["missing design note: portfolio.md"],
     }
     assert result.stderr == ""
+
+
+def test_check_design_notes_summary_reports_ready_counts(tmp_path: Path) -> None:
+    """Summary output reports compact readiness counts for humans."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    for filename, title in [
+        ("matching-design.md", "Matching Design"),
+        ("event-loop.md", "Event Loop"),
+        ("portfolio.md", "Portfolio"),
+    ]:
+        write_design_note(docs_internal / filename, title)
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--summary", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout == (
+        "design-note-summary:required=3 existing=3 missing=0 errors=0 strict=False\n"
+    )
+    assert result.stderr == ""
+
+
+def test_check_design_notes_summary_reports_failure_counts(tmp_path: Path) -> None:
+    """Summary output returns nonzero while still printing compact counts."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    write_design_note(docs_internal / "matching-design.md", "Matching Design")
+    write_design_note(docs_internal / "event-loop.md", "Event Loop")
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--summary", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == (
+        "design-note-summary:required=3 existing=2 missing=1 errors=1 strict=False\n"
+    )
+    assert result.stderr == ""

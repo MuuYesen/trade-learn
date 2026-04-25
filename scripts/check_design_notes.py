@@ -270,6 +270,26 @@ def design_note_report(directory: Path, *, strict: bool = False) -> dict[str, ob
     }
 
 
+def design_note_summary(report: dict[str, object]) -> str:
+    """Return a compact human-readable summary for a readiness report."""
+    notes = report["notes"]
+    if not isinstance(notes, list):
+        msg = "design note report has invalid notes"
+        raise TypeError(msg)
+    existing_count = sum(
+        bool(note["exists"])
+        for note in notes
+        if isinstance(note, dict)
+    )
+    return (
+        f"design-note-summary:required={len(notes)} "
+        f"existing={existing_count} "
+        f"missing={report['missing_count']} "
+        f"errors={report['error_count']} "
+        f"strict={report['strict']}"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the design note readiness check."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -300,6 +320,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print a machine-readable readiness report.",
     )
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Print a compact readiness summary.",
+    )
     args = parser.parse_args(argv)
 
     if args.list:
@@ -313,6 +338,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         report = design_note_report(args.directory, strict=args.strict)
         print(json.dumps(report, indent=2))
+        return 0 if report["ok"] else 1
+
+    if args.summary:
+        report = design_note_report(args.directory, strict=args.strict)
+        print(design_note_summary(report))
         return 0 if report["ok"] else 1
 
     errors = check_design_notes(args.directory, strict=args.strict)
