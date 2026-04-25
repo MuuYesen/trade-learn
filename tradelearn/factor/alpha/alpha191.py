@@ -88,6 +88,16 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha078",
         "alpha079",
         "alpha080",
+        "alpha081",
+        "alpha082",
+        "alpha083",
+        "alpha084",
+        "alpha085",
+        "alpha086",
+        "alpha087",
+        "alpha088",
+        "alpha089",
+        "alpha090",
     }
 )
 
@@ -838,6 +848,85 @@ class Alpha191Factors:
         delayed_volume = _delay(self.volume, 5)
         return (self.volume - delayed_volume) / delayed_volume * 100
 
+    def alpha081(self) -> pd.DataFrame:
+        """Return Alpha#81."""
+        return _sma(self.volume, 21, 2)
+
+    def alpha082(self) -> pd.DataFrame:
+        """Return Alpha#82."""
+        return _sma(
+            (_ts_max(self.high, 6) - self.close)
+            / (_ts_max(self.high, 6) - _ts_min(self.low, 6))
+            * 100,
+            20,
+            1,
+        )
+
+    def alpha083(self) -> pd.DataFrame:
+        """Return Alpha#83."""
+        return -1 * _rank(_covariance(_rank(self.high), _rank(self.volume), 5))
+
+    def alpha084(self) -> pd.DataFrame:
+        """Return Alpha#84."""
+        cond1 = self.close > _delay(self.close, 1)
+        cond2 = self.close < _delay(self.close, 1)
+        cond3 = self.close == _delay(self.close, 1)
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond1] = self.volume
+        part[cond2] = 0
+        part[cond3] = -self.volume
+        return _ts_sum(part, 20)
+
+    def alpha085(self) -> pd.DataFrame:
+        """Return Alpha#85."""
+        return _ts_rank(self.volume / _mean(self.volume, 20), 20) * _ts_rank(
+            -1 * _delta(self.close, 7),
+            8,
+        )
+
+    def alpha086(self) -> pd.DataFrame:
+        """Return Alpha#86."""
+        values = ((_delay(self.close, 20) - _delay(self.close, 10)) / 10) - (
+            (_delay(self.close, 10) - self.close) / 10
+        )
+        cond1 = values > 0.25
+        cond2 = values < 0.0
+        cond3 = (0 <= values) & (values <= 0.25)
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond1] = -1
+        part[cond2] = 1
+        part[cond3] = -1 * (self.close - _delay(self.close, 1))
+        return part
+
+    def alpha087(self) -> pd.DataFrame:
+        """Return Alpha#87."""
+        left = _rank(_decay_linear(_delta(self.vwap, 4), 7))
+        right = _ts_rank(
+            _decay_linear(
+                (((self.low * 0.9) + (self.low * 0.1)) - self.vwap)
+                / (self.open - ((self.high + self.low) / 2)),
+                11,
+            ),
+            7,
+        )
+        return (left + right) * -1
+
+    def alpha088(self) -> pd.DataFrame:
+        """Return Alpha#88."""
+        delayed_close = _delay(self.close, 20)
+        return (self.close - delayed_close) / delayed_close * 100
+
+    def alpha089(self) -> pd.DataFrame:
+        """Return Alpha#89."""
+        macd_like = _sma(self.close, 13, 2) - _sma(self.close, 27, 2)
+        return 2 * (macd_like - _sma(macd_like, 10, 2))
+
+    def alpha090(self) -> pd.DataFrame:
+        """Return Alpha#90."""
+        return _rank(_correlation(_rank(self.vwap), _rank(self.volume), 5)) * -1
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha191 formula layout."""
@@ -883,6 +972,11 @@ def _correlation(left: pd.DataFrame, right: pd.DataFrame, window: int) -> pd.Dat
     result = left.rolling(window).corr(right).fillna(0)
     result.iloc[: (window - 1), :] = np.nan
     return result
+
+
+def _covariance(left: pd.DataFrame, right: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return rolling covariance."""
+    return left.rolling(window).cov(right)
 
 
 def _ts_sum(frame: pd.DataFrame, window: int) -> pd.DataFrame:
