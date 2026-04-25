@@ -8,7 +8,9 @@ import numpy as np
 import pandas as pd
 from scipy.stats import rankdata
 
-ALPHA101_SUPPORTED = frozenset({"alpha001", "alpha002", "alpha003"})
+ALPHA101_SUPPORTED = frozenset(
+    {"alpha001", "alpha002", "alpha003", "alpha004", "alpha005", "alpha006"}
+)
 
 
 def alpha101(stock_data: pd.DataFrame, names: Iterable[str] | None = None) -> pd.DataFrame:
@@ -39,9 +41,11 @@ class Alpha101Factors:
     def __init__(self, data: pd.DataFrame) -> None:
         """Create a factor calculator from ``data.pivot(index='date', columns='code')``."""
         self.open = data["open"]
+        self.low = data["low"]
         self.close = data["close"]
         self.volume = data["volume"]
         self.returns = _returns(data["close"])
+        self.vwap = data["vwap"]
 
     def alpha001(self) -> pd.DataFrame:
         """Return Alpha#1."""
@@ -63,10 +67,25 @@ class Alpha101Factors:
         values = -1 * _correlation(_rank(self.open), _rank(self.volume), 10)
         return values.replace([-np.inf, np.inf], 0).fillna(value=0)
 
+    def alpha004(self) -> pd.DataFrame:
+        """Return Alpha#4."""
+        return -1 * _ts_rank(_rank(self.low), 9)
+
+    def alpha005(self) -> pd.DataFrame:
+        """Return Alpha#5."""
+        return _rank(self.open - (_ts_sum(self.vwap, 10) / 10)) * (
+            -1 * np.abs(_rank(self.close - self.vwap))
+        )
+
+    def alpha006(self) -> pd.DataFrame:
+        """Return Alpha#6."""
+        values = -1 * _correlation(self.open, self.volume, 10)
+        return values.replace([-np.inf, np.inf], 0).fillna(value=0)
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha101 formula layout."""
-    required = {"date", "code", "open", "close", "volume"}
+    required = {"date", "code", "open", "low", "close", "volume", "vwap"}
     missing = required.difference(stock_data.columns)
     if missing:
         raise ValueError(f"stock_data is missing required columns: {sorted(missing)}")
@@ -81,6 +100,11 @@ def _returns(frame: pd.DataFrame) -> pd.DataFrame:
 def _stddev(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling sample standard deviation."""
     return frame.rolling(window).std()
+
+
+def _ts_sum(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return rolling sum."""
+    return frame.rolling(window).sum()
 
 
 def _correlation(left: pd.DataFrame, right: pd.DataFrame, window: int) -> pd.DataFrame:
@@ -106,3 +130,8 @@ def _rolling_rank(values: np.ndarray) -> float:
 def _ts_argmax(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return the one-based position of the rolling maximum."""
     return frame.rolling(window).apply(np.argmax) + 1
+
+
+def _ts_rank(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return rolling rank of the latest value."""
+    return frame.rolling(window).apply(_rolling_rank)

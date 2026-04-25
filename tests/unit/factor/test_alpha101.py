@@ -10,9 +10,10 @@ from tradelearn.query.alpha.alphas101 import Alphas101 as LegacyAlphas101
 def test_alpha101_exports_first_three_formulas_like_legacy_query() -> None:
     """The v2 Alpha101 facade returns legacy-compatible long-form columns."""
     data = _stock_data()
-    expected = _legacy_alpha101(data, ["alpha001", "alpha002", "alpha003"])
+    names = ["alpha001", "alpha002", "alpha003", "alpha004", "alpha005", "alpha006"]
+    expected = _legacy_alpha101(data, names)
 
-    result = alpha101(data, names=["alpha001", "alpha002", "alpha003"])
+    result = alpha101(data, names=names)
 
     pd.testing.assert_frame_equal(
         result.sort_values(["date", "code"]).reset_index(drop=True),
@@ -23,9 +24,10 @@ def test_alpha101_exports_first_three_formulas_like_legacy_query() -> None:
 def test_query_alphas101_delegates_supported_formulas_to_v2_facade() -> None:
     """Query.alphas101 keeps its output contract while using the v2 facade."""
     data = _stock_data()
+    names = ["alpha001", "alpha002", "alpha003", "alpha004", "alpha005", "alpha006"]
 
-    result = Query.alphas101(data, ["alpha001", "alpha002", "alpha003"])
-    expected = alpha101(data, names=["alpha001", "alpha002", "alpha003"])
+    result = Query.alphas101(data, names)
+    expected = alpha101(data, names=names)
 
     pd.testing.assert_frame_equal(
         result.sort_values(["date", "code"]).reset_index(drop=True),
