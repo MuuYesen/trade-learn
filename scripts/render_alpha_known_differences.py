@@ -12,6 +12,9 @@ sys.path.insert(0, str(ROOT))
 
 from tradelearn.factor.alpha import validated_alpha_formula_metadata  # noqa: E402
 
+MIGRATION_KNOWN_DIFFERENCES_HEADING = "### 3.2 登记示例(待填充)"
+MIGRATION_KNOWN_DIFFERENCES_END = "\n---"
+
 
 def render_family(family: str, skipped: dict[str, str]) -> str:
     """Render one Alpha family skipped formula table."""
@@ -24,6 +27,19 @@ def render_family(family: str, skipped: dict[str, str]) -> str:
         "",
     ]
     return "\n".join(lines) + "\n"
+
+
+def update_migration_known_differences(content: str, rendered: str) -> str:
+    """Replace the MIGRATION known-differences block with rendered Alpha content."""
+    heading_start = content.find(MIGRATION_KNOWN_DIFFERENCES_HEADING)
+    if heading_start == -1:
+        raise ValueError("missing known differences heading")
+    heading_end = heading_start + len(MIGRATION_KNOWN_DIFFERENCES_HEADING)
+    block_end = content.find(MIGRATION_KNOWN_DIFFERENCES_END, heading_end)
+    if block_end == -1:
+        raise ValueError("missing known differences block delimiter")
+    replacement = "\n\n" + rendered.rstrip() + "\n\n"
+    return content[:heading_end] + replacement + content[block_end:]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -44,13 +60,29 @@ def main(argv: list[str] | None = None) -> int:
         help="write the rendered Markdown to a file",
     )
     parser.add_argument(
+        "--update",
+        type=Path,
+        help="replace the MIGRATION known differences block in a file",
+    )
+    parser.add_argument(
         "--list-families",
         action="store_true",
         help="list available Alpha formula families",
     )
     args = parser.parse_args(argv)
-    if args.check is not None and args.output is not None:
+    write_modes = [
+        mode
+        for enabled, mode in (
+            (args.check is not None, "--check"),
+            (args.output is not None, "--output"),
+            (args.update is not None, "--update"),
+        )
+        if enabled
+    ]
+    if args.check is not None and args.output is not None and args.update is None:
         parser.error("--output cannot be used with --check")
+    if len(write_modes) > 1:
+        parser.error(", ".join(write_modes) + " cannot be used together")
 
     metadata = validated_alpha_formula_metadata()
     if args.list_families:
@@ -109,6 +141,23 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(
             f"Alpha known differences sections written to {args.output}: "
+            + ", ".join(families)
+        )
+        return 0
+
+    if args.update is not None:
+        try:
+            content = args.update.read_text(encoding="utf-8")
+            updated = update_migration_known_differences(content, rendered_output)
+            args.update.write_text(updated, encoding="utf-8")
+        except (OSError, ValueError):
+            print(
+                f"Cannot update Alpha known differences target: {args.update}",
+                file=sys.stderr,
+            )
+            return 1
+        print(
+            f"Alpha known differences sections updated in {args.update}: "
             + ", ".join(families)
         )
         return 0

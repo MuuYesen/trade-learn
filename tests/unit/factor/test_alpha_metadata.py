@@ -625,6 +625,81 @@ def test_render_alpha_known_differences_script_writes_output_file(
     assert result.stderr == ""
 
 
+def test_render_alpha_known_differences_script_updates_migration_section(
+    tmp_path: Path,
+) -> None:
+    """The known differences script can update the MIGRATION known-differences block."""
+    rendered = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha101",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    target = tmp_path / "MIGRATION.md"
+    target.write_text(
+        "# MIGRATION\n\n"
+        "### 3.2 登记示例(待填充)\n\n"
+        "_此部分在阶段 1 起按进度追加。当前为空。_\n\n"
+        "---\n\n"
+        "#### 模板条目(示例,尚未实际发生)\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha101",
+            "--update",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    updated = target.read_text(encoding="utf-8")
+    assert rendered in updated
+    assert "_此部分在阶段 1 起按进度追加。当前为空。_" not in updated
+    assert updated.endswith("#### 模板条目(示例,尚未实际发生)\n")
+    assert result.stdout == (
+        f"Alpha known differences sections updated in {target}: alpha101\n"
+    )
+    assert result.stderr == ""
+
+
+def test_render_alpha_known_differences_script_update_reports_missing_anchor(
+    tmp_path: Path,
+) -> None:
+    """The known differences script reports MIGRATION files without the section anchor."""
+    target = tmp_path / "MIGRATION.md"
+    target.write_text("# MIGRATION\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--update",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == f"Cannot update Alpha known differences target: {target}\n"
+
+
 def test_render_alpha_known_differences_script_creates_output_parent_dirs(
     tmp_path: Path,
 ) -> None:
