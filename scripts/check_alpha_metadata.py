@@ -32,6 +32,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="include supported formula names in JSON output",
     )
+    parser.add_argument(
+        "--include-all",
+        action="store_true",
+        help="include supported and skipped formula details in JSON output",
+    )
     args = parser.parse_args(argv)
 
     metadata = validated_alpha_formula_metadata()
@@ -41,9 +46,9 @@ def main(argv: list[str] | None = None) -> int:
             "supported_count": family_metadata["supported_count"],
             "skipped_count": family_metadata["skipped_count"],
         }
-        if args.include_supported:
+        if args.include_supported or args.include_all:
             family_counts["supported"] = list(family_metadata["supported"])
-        if args.include_skipped:
+        if args.include_skipped or args.include_all:
             family_counts["skipped"] = family_metadata["skipped"]
         counts[family] = family_counts
     if args.json:
