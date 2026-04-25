@@ -4,6 +4,7 @@ import math
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from tradelearn.metrics.trade import (
     avg_loss,
@@ -74,5 +75,13 @@ def test_trade_metrics_return_nan_for_empty_or_missing_sides() -> None:
     only_wins = pd.Series([10.0, 20.0])
 
     assert np.isnan(win_rate(empty))
+    assert np.isnan(avg_win(empty))
     assert np.isnan(avg_loss(only_wins))
+    assert np.isnan(expectancy(empty))
     assert np.isnan(profit_factor(only_wins))
+
+
+def test_dataframe_trade_metrics_require_pnl_column() -> None:
+    """DataFrame inputs must expose a pnl column."""
+    with pytest.raises(ValueError, match="pnl"):
+        win_rate(pd.DataFrame({"profit": [1.0]}))

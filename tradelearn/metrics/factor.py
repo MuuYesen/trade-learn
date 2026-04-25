@@ -118,7 +118,7 @@ def ic_ir(
     validate_periods(periods)
     clean = apply_nan_policy(ic_series, nan_policy)
     std = clean.std(ddof=1)
-    if std == 0:
+    if np.isclose(std, 0.0):
         return np.nan
     return float(clean.mean() / std * math.sqrt(periods))
 

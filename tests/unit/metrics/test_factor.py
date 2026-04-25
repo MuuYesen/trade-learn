@@ -3,6 +3,7 @@
 import math
 
 import pandas as pd
+import pytest
 
 from tradelearn.metrics.factor import (
     autocorrelation,
@@ -119,6 +120,27 @@ def test_autocorrelation_and_turnover_track_rank_changes() -> None:
     )
     pd.testing.assert_series_equal(corr, expected_corr)
     pd.testing.assert_series_equal(turns, expected_turnover)
+
+
+def test_factor_metrics_return_nan_or_raise_for_undefined_inputs() -> None:
+    """Factor metrics handle undefined ratios and invalid arguments."""
+    constant_ic = pd.Series([0.1, 0.1, 0.1])
+    factor = _series(
+        [
+            ("2024-01-01", "AAA", 1.0),
+            ("2024-01-01", "BBB", 2.0),
+            ("2024-01-02", "AAA", 1.0),
+            ("2024-01-02", "BBB", 2.0),
+        ]
+    )
+
+    assert math.isnan(ic_ir(constant_ic, periods=12))
+    with pytest.raises(ValueError, match="quantiles"):
+        quantile_returns(factor, factor, quantiles=0)
+    with pytest.raises(ValueError, match="lag"):
+        autocorrelation(factor, lag=0)
+    with pytest.raises(ValueError, match="MultiIndex"):
+        autocorrelation(pd.Series([1.0, 2.0]))
 
 
 def _factor_and_forward_returns() -> tuple[pd.Series, pd.Series]:

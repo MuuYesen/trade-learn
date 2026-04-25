@@ -57,6 +57,7 @@ lab = [
 ]
 dev = [
     "pytest",
+    "pytest-cov",
     "ruff",
     "interrogate",
 ]

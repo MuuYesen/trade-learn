@@ -101,7 +101,10 @@ def annual_return(
 
     total_return = (1.0 + clean).prod()
     years = len(clean) / periods
-    return total_return ** (1.0 / years) - 1.0
+    result = total_return ** (1.0 / years) - 1.0
+    if isinstance(result, pd.Series):
+        return result
+    return float(result)
 
 
 def log_to_simple(log_returns: pd.Series | pd.DataFrame) -> pd.Series | pd.DataFrame:

@@ -20,10 +20,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --extra dev
-      - run: uv run ruff check tradelearn/core tests/unit/core tests/golden tests/consistency scripts
+      - run: uv run ruff check tradelearn/core tradelearn/metrics tests/unit/core tests/unit/metrics tests/golden tests/consistency scripts
       - run: uv run pytest
+      - run: uv run pytest tests/unit/metrics tests/consistency/test_metrics.py --cov=tradelearn.metrics --cov-report=term-missing --cov-fail-under=100
       - run: uv run pytest tests/unit/core --doctest-modules tradelearn/core
-      - run: uv run interrogate tradelearn/core --fail-under 90
+      - run: uv run pytest --doctest-modules tradelearn/metrics
+      - run: uv run interrogate tradelearn/core tradelearn/metrics --fail-under 90
 
   consistency:
     name: consistency

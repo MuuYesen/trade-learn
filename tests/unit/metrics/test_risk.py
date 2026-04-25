@@ -4,6 +4,7 @@ import math
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from tradelearn.metrics.risk import (
     alpha,
@@ -111,6 +112,36 @@ def test_omega_uses_gain_loss_ratio_above_threshold() -> None:
     adjusted = returns - per_period_threshold
     expected = adjusted[adjusted > 0].sum() / abs(adjusted[adjusted < 0].sum())
     assert math.isclose(result, expected, rel_tol=1e-12)
+
+
+def test_risk_metrics_return_nan_for_undefined_ratios() -> None:
+    """Undefined risk ratios return NaN."""
+    constant = pd.Series([0.01, 0.01, 0.01])
+    no_drawdown = pd.Series([0.01, 0.02, 0.03])
+    flat_active = pd.Series([0.01, 0.01, 0.01])
+    zero_benchmark = pd.Series([0.0, 0.0, 0.0])
+    lower_zero = pd.Series([0.0, 0.0, 0.01, 0.02])
+    only_gains = pd.Series([0.01, 0.02, 0.03])
+
+    assert np.isnan(sharpe(constant, periods=252))
+    assert np.isnan(sortino(only_gains, periods=252))
+    assert np.isnan(calmar(no_drawdown, periods=252))
+    assert np.isnan(beta(constant, zero_benchmark))
+    assert np.isnan(information_ratio(constant, flat_active, periods=252))
+    assert np.isnan(tail_ratio(lower_zero))
+    assert np.isnan(omega(only_gains, periods=252))
+
+
+def test_nan_policy_raise_and_invalid_policy() -> None:
+    """NaN policy errors are surfaced consistently through public metrics."""
+    returns = pd.Series([0.01, np.nan, 0.02])
+
+    with pytest.raises(ValueError, match="NaN"):
+        volatility(returns, periods=252, nan_policy="raise")
+    result = volatility(pd.Series([0.01, 0.02]), periods=252, nan_policy="raise")
+    assert math.isclose(result, 0.11224972160321825)
+    with pytest.raises(ValueError, match="nan_policy"):
+        volatility(returns, periods=252, nan_policy="invalid")
 
 
 def annual_return_for_test(returns: pd.Series, periods: int) -> float:

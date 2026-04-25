@@ -56,12 +56,34 @@ def test_annual_return_uses_explicit_periods() -> None:
     assert math.isclose(result, expected, rel_tol=1e-12)
 
 
+def test_annual_return_handles_dataframe_columns() -> None:
+    """annual_return preserves DataFrame columns as a Series result."""
+    returns = pd.DataFrame(
+        {
+            "asset_a": [0.01, 0.02, -0.005],
+            "asset_b": [-0.01, 0.03, 0.004],
+        }
+    )
+
+    result = annual_return(returns, periods=252)
+
+    expected = (1.0 + returns).prod() ** (252 / len(returns)) - 1.0
+    pd.testing.assert_series_equal(result, expected)
+
+
 def test_annual_return_rejects_missing_or_invalid_periods() -> None:
     """periods is required and must be positive."""
     returns = pd.Series([0.01, 0.02])
 
     with pytest.raises(ValueError, match="periods"):
         annual_return(returns, periods=0)
+
+
+def test_annual_return_returns_nan_for_empty_returns() -> None:
+    """annual_return returns NaN for empty input."""
+    result = annual_return(pd.Series([], dtype=float), periods=252)
+
+    assert math.isnan(result)
 
 
 def test_log_to_simple_converts_log_returns() -> None:

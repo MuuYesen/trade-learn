@@ -28,6 +28,14 @@ from tradelearn.metrics import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
+if not hasattr(np, "NINF"):
+    np.NINF = -np.inf
+ipython = types.ModuleType("IPython")
+ipython_display = types.ModuleType("IPython.display")
+ipython_display.display = lambda *args, **kwargs: None
+ipython_display.HTML = str
+sys.modules.setdefault("IPython", ipython)
+sys.modules.setdefault("IPython.display", ipython_display)
 sys.modules.setdefault("yfinance", types.ModuleType("yfinance"))
 sys.modules.setdefault("pandas_datareader", types.ModuleType("pandas_datareader"))
 sys.modules.setdefault("pandas_datareader.data", types.ModuleType("pandas_datareader.data"))
