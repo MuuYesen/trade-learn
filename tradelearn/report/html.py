@@ -34,6 +34,7 @@ def write_html_report(
     trades = pd.DataFrame(reporter._get("trades", default=pd.DataFrame())).copy()
     exposure = reporter.exposure()
     correlation = reporter.correlation_matrix()
+    factor_quantile_returns = _factor_quantile_returns(reporter)
     summary = reporter.summary(benchmark=benchmark_returns)
     config = reporter._get("config", default={}) or {}
     metadata = _metadata(summary, returns, config)
@@ -47,6 +48,8 @@ def write_html_report(
     if _has_multi_asset_exposure(exposure):
         plots.append(charts.correlation_matrix(correlation))
         plots.append(charts.exposure(exposure))
+    if not factor_quantile_returns.empty:
+        plots.append(charts.quantile_returns(factor_quantile_returns))
     script, chart_components = components(
         column(*plots)
     )
@@ -61,6 +64,7 @@ def write_html_report(
             benchmark=benchmark_returns,
             correlation=correlation,
             exposure=exposure,
+            factor_quantile_returns=factor_quantile_returns,
             trades=trades,
             returns=returns,
             config=config,
@@ -73,6 +77,7 @@ def write_html_report(
         metadata=metadata,
         summary=summary,
         trades=trades,
+        factor_quantile_returns=factor_quantile_returns,
     )
     return output
 
@@ -85,10 +90,13 @@ def _write_artifacts(
     metadata: dict[str, str],
     summary: dict[str, Any],
     trades: pd.DataFrame,
+    factor_quantile_returns: pd.DataFrame,
 ) -> None:
     """Write colocated machine-readable report artifacts."""
     equity.to_frame("equity").to_parquet(directory / "equity.parquet")
     trades.to_parquet(directory / "trades.parquet", index=False)
+    if not factor_quantile_returns.empty:
+        factor_quantile_returns.to_parquet(directory / "factor_quantile_returns.parquet")
     (directory / "stats.json").write_text(
         json.dumps(
             {
@@ -113,6 +121,7 @@ def _render_html(
     benchmark: pd.Series | None,
     correlation: pd.DataFrame,
     exposure: pd.DataFrame,
+    factor_quantile_returns: pd.DataFrame,
     trades: pd.DataFrame,
     returns: pd.Series,
     config: dict[str, Any],
@@ -127,6 +136,7 @@ def _render_html(
         correlation_section=_correlation_section(correlation),
         drawdowns_table=_frame_table(drawdowns),
         exposure_section=_exposure_section(exposure),
+        factor_section=_factor_section(factor_quantile_returns),
         metadata={key: escape(value) for key, value in metadata.items()},
         returns_count=len(returns),
         script=script,
@@ -211,6 +221,25 @@ def _benchmark_section(benchmark: pd.Series | None) -> str:
         return ""
     name = escape(str(benchmark.name or "benchmark"))
     return f"<section><h2>Benchmark</h2><p>{name}</p></section>"
+
+
+def _factor_section(factor_quantile_returns: pd.DataFrame) -> str:
+    """Return the optional factor quantile section heading."""
+    if factor_quantile_returns.empty:
+        return ""
+    quantiles = ", ".join(escape(str(column)) for column in factor_quantile_returns.columns)
+    return f"<h2>Factor Quantile Returns</h2><p>Quantiles: {quantiles}</p>"
+
+
+def _factor_quantile_returns(reporter: Any) -> pd.DataFrame:
+    """Return factor quantile cumulative returns from configured analyzers."""
+    analyzers = reporter._get("analyzers", default={}) or {}
+    factor_analyzer = analyzers.get("factor") if isinstance(analyzers, dict) else None
+    if factor_analyzer is None:
+        factor_analyzer = reporter._get("factor", default=None)
+    if factor_analyzer is None or not hasattr(factor_analyzer, "quantile_cumulative_returns"):
+        return pd.DataFrame()
+    return pd.DataFrame(factor_analyzer.quantile_cumulative_returns()).copy()
 
 
 def _has_multi_asset_exposure(exposure: pd.DataFrame) -> bool:

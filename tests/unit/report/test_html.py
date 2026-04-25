@@ -128,6 +128,35 @@ def test_reporter_html_accepts_benchmark_series(tmp_path) -> None:
     assert "information_ratio" in html
 
 
+def test_reporter_html_adds_factor_quantile_chart_when_analyzer_exists(tmp_path) -> None:
+    """Reporter.html adds factor quantile chart and artifacts from analyzers."""
+    path = tmp_path / "factor-report.html"
+
+    Reporter(
+        {
+            "returns": _returns(),
+            "trades": _trades(),
+            "analyzers": {"factor": _FactorAnalyzerStub()},
+            "summary": {"strategy_name": "factor-demo"},
+            "config": {"strategy": "factor-demo"},
+        },
+        periods=252,
+    ).html(path)
+
+    html = path.read_text()
+    assert "Factor Quantile Returns" in html
+    assert (tmp_path / "factor_quantile_returns.parquet").exists()
+
+
+class _FactorAnalyzerStub:
+    def quantile_cumulative_returns(self) -> pd.DataFrame:
+        """Return factor quantile cumulative returns for report tests."""
+        return pd.DataFrame(
+            {1: [0.01, 0.02], 2: [0.03, 0.04]},
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+        )
+
+
 def _stats() -> SimpleNamespace:
     returns = _returns()
     return SimpleNamespace(
