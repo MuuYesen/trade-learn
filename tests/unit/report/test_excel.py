@@ -66,6 +66,19 @@ def test_reporter_excel_writes_factor_quantile_sheet_when_analyzer_exists(tmp_pa
     assert "factor_quantiles" in _sheet_names(path)
 
 
+def test_reporter_excel_accepts_benchmark_series(tmp_path) -> None:
+    """Reporter.excel writes benchmark metrics and rolling beta when provided."""
+    path = tmp_path / "benchmark-report.xlsx"
+
+    Reporter(_stats(), periods=252).excel(path, benchmark=_benchmark())
+
+    assert "rolling_beta" in _sheet_names(path)
+    workbook_text = _workbook_text(path)
+    assert "alpha" in workbook_text
+    assert "beta" in workbook_text
+    assert "information_ratio" in workbook_text
+
+
 def _sheet_names(path) -> list[str]:
     with ZipFile(path) as workbook:
         xml = workbook.read("xl/workbook.xml").decode()
@@ -76,6 +89,15 @@ def _sheet_names(path) -> list[str]:
         end = chunk.index('"', start)
         names.append(chunk[start:end])
     return names
+
+
+def _workbook_text(path) -> str:
+    with ZipFile(path) as workbook:
+        return "\n".join(
+            workbook.read(name).decode(errors="ignore")
+            for name in workbook.namelist()
+            if name.endswith(".xml")
+        )
 
 
 def _stats() -> SimpleNamespace:
@@ -97,6 +119,14 @@ def _returns() -> pd.Series:
         [0.02, -0.01, 0.015, -0.03, 0.04],
         index=pd.date_range("2024-01-01", periods=5, tz="UTC"),
         name="returns",
+    )
+
+
+def _benchmark() -> pd.Series:
+    return pd.Series(
+        [0.01, -0.005, 0.01, -0.02, 0.03],
+        index=pd.date_range("2024-01-01", periods=5, tz="UTC"),
+        name="benchmark",
     )
 
 

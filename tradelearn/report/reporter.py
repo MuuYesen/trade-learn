@@ -149,9 +149,9 @@ class Reporter:
             return pd.Series(dtype="float64", name="autocorrelation")
         return pd.Series(factor_analyzer.autocorrelation()).copy()
 
-    def excel(self, path: str) -> Any:
+    def excel(self, path: str, benchmark: pd.Series | None = None) -> Any:
         """Write an Excel report."""
-        return write_excel_report(self, path)
+        return write_excel_report(self, path, benchmark=benchmark)
 
     def html(self, path: str, benchmark: pd.Series | None = None) -> Any:
         """Write an HTML report."""

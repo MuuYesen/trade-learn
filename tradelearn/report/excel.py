@@ -23,11 +23,21 @@ REPORT_SHEETS = [
 ]
 
 
-def write_excel_report(reporter: Any, path: str | Path) -> Path:
+def write_excel_report(
+    reporter: Any,
+    path: str | Path,
+    benchmark: pd.Series | None = None,
+) -> Path:
     """Write a multi-sheet Excel report and return the output path."""
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     returns = _series(reporter._get("returns"), name="returns")
+    benchmark_returns = None if benchmark is None else _series(benchmark, name="benchmark")
+    rolling_beta = (
+        pd.Series(dtype="float64", name="rolling_beta")
+        if benchmark_returns is None
+        else reporter.rolling_beta(benchmark_returns)
+    )
     trades = _frame(reporter._get("trades", default=pd.DataFrame()))
     positions = _frame(reporter._get("positions", default=pd.DataFrame()))
     orders = _frame(reporter._get("orders", default=pd.DataFrame()))
@@ -40,9 +50,23 @@ def write_excel_report(reporter: Any, path: str | Path) -> Path:
     config = reporter._get("config", default={}) or {}
 
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        _summary_frame(reporter.summary()).to_excel(writer, sheet_name="summary", index=False)
+        _summary_frame(reporter.summary(benchmark=benchmark_returns)).to_excel(
+            writer,
+            sheet_name="summary",
+            index=False,
+        )
         _excel_safe_frame(trades).to_excel(writer, sheet_name="trades", index=False)
         _excel_safe_frame(returns.to_frame()).to_excel(writer, sheet_name="daily_returns")
+        if benchmark_returns is not None:
+            _excel_safe_frame(benchmark_returns.to_frame()).to_excel(
+                writer,
+                sheet_name="benchmark_returns",
+            )
+        if not rolling_beta.empty:
+            _excel_safe_frame(rolling_beta.to_frame()).to_excel(
+                writer,
+                sheet_name="rolling_beta",
+            )
         monthly_returns_matrix(returns).to_excel(writer, sheet_name="monthly_returns")
         _excel_safe_frame(_drawdowns(returns)).to_excel(
             writer,
