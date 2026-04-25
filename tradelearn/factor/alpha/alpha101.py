@@ -76,6 +76,14 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha072",
         "alpha073",
         "alpha074",
+        "alpha075",
+        "alpha077",
+        "alpha078",
+        "alpha081",
+        "alpha083",
+        "alpha085",
+        "alpha086",
+        "alpha088",
     }
 )
 
@@ -621,6 +629,82 @@ class Alpha101Factors:
         right = _rank(_correlation(_rank(price_mix), _rank(self.volume), 11))
         return (left < right) * -1
 
+    def alpha075(self) -> pd.DataFrame:
+        """Return Alpha#75."""
+        adv50 = _sma(self.volume, 50)
+        left = _rank(_correlation(self.vwap, self.volume, 4))
+        right = _rank(_correlation(_rank(self.low), _rank(adv50), 12))
+        return (left < right).astype("int")
+
+    def alpha077(self) -> pd.DataFrame:
+        """Return Alpha#77."""
+        adv40 = _sma(self.volume, 40)
+        price_spread = (((self.high + self.low) / 2) + self.high) - (
+            self.vwap + self.high
+        )
+        left = _rank(_decay_linear(price_spread, 20))
+        right = _rank(_decay_linear(_correlation((self.high + self.low) / 2, adv40, 3), 6))
+        return _elementwise_min(left, right)
+
+    def alpha078(self) -> pd.DataFrame:
+        """Return Alpha#78."""
+        adv40 = _sma(self.volume, 40)
+        price_mix = (self.low * 0.352233) + (self.vwap * (1 - 0.352233))
+        base = _rank(_correlation(_ts_sum(price_mix, 20), _ts_sum(adv40, 20), 7))
+        exponent = _rank(_correlation(_rank(self.vwap), _rank(self.volume), 6))
+        return base.pow(exponent)
+
+    def alpha081(self) -> pd.DataFrame:
+        """Return Alpha#81."""
+        adv10 = _sma(self.volume, 10)
+        base = _rank(_correlation(self.vwap, _ts_sum(adv10, 50), 8)).pow(4)
+        left = _rank(_log(_product(_rank(base), 15)))
+        right = _rank(_correlation(_rank(self.vwap), _rank(self.volume), 5))
+        return (left < right) * -1
+
+    def alpha083(self) -> pd.DataFrame:
+        """Return Alpha#83."""
+        price_range = (self.high - self.low) / (_ts_sum(self.close, 5) / 5)
+        numerator = _rank(_delay(price_range, 2)) * _rank(_rank(self.volume))
+        denominator = price_range / (self.vwap - self.close)
+        return numerator / denominator
+
+    def alpha085(self) -> pd.DataFrame:
+        """Return Alpha#85."""
+        adv30 = _sma(self.volume, 30)
+        price_mix = (self.high * 0.876703) + (self.close * (1 - 0.876703))
+        left = _rank(_correlation(price_mix, adv30, 10))
+        right = _rank(
+            _correlation(_ts_rank((self.high + self.low) / 2, 4), _ts_rank(self.volume, 10), 7)
+        )
+        return left.pow(right)
+
+    def alpha086(self) -> pd.DataFrame:
+        """Return Alpha#86."""
+        adv20 = _sma(self.volume, 20)
+        left = _ts_rank(_correlation(self.close, _sma(adv20, 15), 6), 20)
+        right = _rank((self.open + self.close) - (self.vwap + self.open)) * 20
+        return (left < right) * -1
+
+    def alpha088(self) -> pd.DataFrame:
+        """Return Alpha#88."""
+        adv60 = _sma(self.volume, 60)
+        left = _rank(
+            _decay_linear(
+                (_rank(self.open) + _rank(self.low))
+                - (_rank(self.high) + _rank(self.close)),
+                8,
+            )
+        )
+        right = _ts_rank(
+            _decay_linear(
+                _correlation(_ts_rank(self.close, 8), _ts_rank(adv60, 21), 8),
+                7,
+            ),
+            3,
+        )
+        return _elementwise_min(left, right)
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha101 formula layout."""
@@ -644,6 +728,16 @@ def _stddev(frame: pd.DataFrame, window: int) -> pd.DataFrame:
 def _ts_sum(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling sum."""
     return frame.rolling(window).sum()
+
+
+def _product(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return rolling product."""
+    return frame.rolling(window).apply(np.prod)
+
+
+def _log(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return natural logarithm."""
+    return np.log(frame)
 
 
 def _sma(frame: pd.DataFrame, window: int) -> pd.DataFrame:
@@ -716,3 +810,8 @@ def _ts_max(frame: pd.DataFrame, window: int) -> pd.DataFrame:
 def _elementwise_max(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
     """Return element-wise maximum matching the Alpha101 legacy helper."""
     return pd.DataFrame(np.maximum(left, right), index=left.index, columns=left.columns)
+
+
+def _elementwise_min(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
+    """Return element-wise minimum matching the Alpha101 legacy helper."""
+    return pd.DataFrame(np.minimum(left, right), index=left.index, columns=left.columns)
