@@ -128,6 +128,20 @@ class Reporter:
             return pd.Series(dtype="float64", name="rank_ic")
         return pd.Series(factor_analyzer.rank_ic()).copy()
 
+    def factor_turnover(self) -> pd.Series:
+        """Return factor turnover series from analyzers."""
+        factor_analyzer = self._factor_analyzer()
+        if factor_analyzer is None or not hasattr(factor_analyzer, "turnover"):
+            return pd.Series(dtype="float64", name="turnover")
+        return pd.Series(factor_analyzer.turnover()).copy()
+
+    def factor_autocorrelation(self) -> pd.Series:
+        """Return factor autocorrelation series from analyzers."""
+        factor_analyzer = self._factor_analyzer()
+        if factor_analyzer is None or not hasattr(factor_analyzer, "autocorrelation"):
+            return pd.Series(dtype="float64", name="autocorrelation")
+        return pd.Series(factor_analyzer.autocorrelation()).copy()
+
     def excel(self, path: str) -> Any:
         """Write an Excel report."""
         return write_excel_report(self, path)
