@@ -158,6 +158,16 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha150",
         "alpha151",
         "alpha152",
+        "alpha153",
+        "alpha154",
+        "alpha155",
+        "alpha156",
+        "alpha157",
+        "alpha158",
+        "alpha159",
+        "alpha160",
+        "alpha161",
+        "alpha162",
     }
 )
 
@@ -1496,6 +1506,110 @@ class Alpha191Factors:
         delayed_smoothed = _delay(smoothed, 1)
         return _sma(_mean(delayed_smoothed, 12) - _mean(delayed_smoothed, 26), 9, 1)
 
+    def alpha153(self) -> pd.DataFrame:
+        """Return Alpha#153."""
+        return (
+            _mean(self.close, 3)
+            + _mean(self.close, 6)
+            + _mean(self.close, 12)
+            + _mean(self.close, 24)
+        ) / 4
+
+    def alpha154(self) -> pd.DataFrame:
+        """Return Alpha#154."""
+        cond = (self.vwap - _ts_min(self.vwap, 16)) < _correlation(
+            self.vwap,
+            _mean(self.volume, 180),
+            18,
+        )
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond] = 1
+        part[~cond] = 0
+        return part
+
+    def alpha155(self) -> pd.DataFrame:
+        """Return Alpha#155."""
+        diff = _sma(self.volume, 13, 2) - _sma(self.volume, 27, 2)
+        return diff - _sma(diff, 10, 2)
+
+    def alpha156(self) -> pd.DataFrame:
+        """Return Alpha#156."""
+        mixed_price = self.open * 0.15 + self.low * 0.85
+        left = _rank(_decay_linear(_delta(self.vwap, 5), 3))
+        right = _rank(
+            _decay_linear(_delta(mixed_price, 2) / mixed_price * -1, 3),
+        )
+        return _elementwise_max(left, right) * -1
+
+    def alpha157(self) -> pd.DataFrame:
+        """Return Alpha#157."""
+        nested_rank = _rank(
+            _rank(
+                -1 * _rank(_delta(self.close - 1, 5)),
+            ),
+        )
+        logged = np.log(_ts_sum(_ts_min(nested_rank, 2), 1))
+        left = _ts_min(_prod(_rank(_rank(logged)), 1), 5)
+        right = _ts_rank(_delay(-1 * self.returns, 6), 5)
+        return left + right
+
+    def alpha158(self) -> pd.DataFrame:
+        """Return Alpha#158."""
+        smoothed_close = _sma(self.close, 15, 2)
+        return ((self.high - smoothed_close) - (self.low - smoothed_close)) / self.close
+
+    def alpha159(self) -> pd.DataFrame:
+        """Return Alpha#159."""
+        delayed_close = _delay(self.close, 1)
+        low_or_close = _elementwise_min(self.low, delayed_close)
+        high_or_close = _elementwise_max(self.high, delayed_close)
+        range_sum = high_or_close - low_or_close
+        part6 = (self.close - _ts_sum(low_or_close, 6)) / _ts_sum(range_sum, 6) * 12 * 24
+        part12 = (
+            (self.close - _ts_sum(low_or_close, 12))
+            / _ts_sum(range_sum, 12)
+            * 6
+            * 24
+        )
+        part24 = (
+            (self.close - _ts_sum(low_or_close, 24))
+            / _ts_sum(range_sum, 24)
+            * 6
+            * 24
+        )
+        return (part6 + part12 + part24) * 100 / (6 * 12 + 6 * 24 + 12 * 24)
+
+    def alpha160(self) -> pd.DataFrame:
+        """Return Alpha#160."""
+        cond = self.close <= _delay(self.close, 1)
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond] = _stddev(self.close, 20)
+        part[~cond] = 0
+        return _sma(part, 20, 1)
+
+    def alpha161(self) -> pd.DataFrame:
+        """Return Alpha#161."""
+        delayed_close = _delay(self.close, 1)
+        return _mean(
+            _elementwise_max(
+                _elementwise_max(self.high - self.low, (delayed_close - self.high).abs()),
+                (delayed_close - self.low).abs(),
+            ),
+            12,
+        )
+
+    def alpha162(self) -> pd.DataFrame:
+        """Return Alpha#162."""
+        close_delta = self.close - _delay(self.close, 1)
+        ratio = (
+            _sma(_elementwise_max(close_delta, close_delta * 0), 12, 1)
+            / _sma(close_delta.abs(), 12, 1)
+            * 100
+        )
+        return (ratio - _ts_min(ratio, 12)) / (_sma(ratio, 12, 1) - _ts_min(ratio, 12))
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha191 formula layout."""
@@ -1551,6 +1665,11 @@ def _covariance(left: pd.DataFrame, right: pd.DataFrame, window: int) -> pd.Data
 def _ts_sum(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling sum."""
     return frame.rolling(window).sum()
+
+
+def _prod(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return rolling product."""
+    return frame.rolling(window).apply(lambda values: np.prod(values))
 
 
 def _count(cond: pd.DataFrame, window: int) -> pd.DataFrame:
