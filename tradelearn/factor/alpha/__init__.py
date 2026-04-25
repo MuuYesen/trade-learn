@@ -50,6 +50,7 @@ def alpha_formula_blockers(
 ) -> tuple[AlphaFormulaBlocker, ...]:
     """Return intentionally skipped Alpha formulas as a flat blocker list."""
     families = validated_alpha_formula_metadata() if metadata is None else metadata
+    validate_alpha_formula_metadata(families)
     return tuple(
         {
             "family": family_name,

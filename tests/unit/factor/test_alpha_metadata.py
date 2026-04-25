@@ -81,6 +81,20 @@ def test_alpha_formula_blockers_flattens_skipped_formulas() -> None:
     assert "alpha_formula_blockers" in alpha_package.__all__
 
 
+def test_alpha_formula_blockers_validates_custom_metadata() -> None:
+    """Custom blocker metadata must pass the same consistency checks."""
+    from tradelearn.factor import alpha as alpha_package
+
+    metadata = alpha_package.alpha_formula_metadata()
+    metadata["alpha191"]["skipped_count"] += 1
+
+    with pytest.raises(
+        ValueError,
+        match="alpha191 skipped_count does not match skipped formulas",
+    ):
+        alpha_package.alpha_formula_blockers(metadata)
+
+
 def test_alpha_formula_metadata_includes_formula_counts() -> None:
     """Metadata exposes deterministic counts for progress and docs checks."""
     from tradelearn.factor import alpha as alpha_package
