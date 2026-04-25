@@ -72,6 +72,15 @@ def test_alpha_formula_metadata_uses_public_typed_dict() -> None:
     assert "AlphaFormulaFamilyMetadata" in alpha_package.__all__
 
 
+def test_alpha_formula_metadata_type_is_exported_from_factor_package() -> None:
+    """The top-level factor facade exposes the metadata type contract."""
+    import tradelearn.factor as factor_package
+    import tradelearn.factor.alpha as alpha_package
+
+    assert factor_package.AlphaFormulaFamilyMetadata is alpha_package.AlphaFormulaFamilyMetadata
+    assert "AlphaFormulaFamilyMetadata" in factor_package.__all__
+
+
 def test_alpha_formula_metadata_is_exported_from_package_all() -> None:
     """The helper is part of the public alpha facade."""
     import tradelearn.factor.alpha as alpha_package

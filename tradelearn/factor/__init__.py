@@ -5,6 +5,7 @@ from tradelearn.factor.alpha import (
     ALPHA101_SUPPORTED,
     ALPHA191_SKIPPED,
     ALPHA191_SUPPORTED,
+    AlphaFormulaFamilyMetadata,
     alpha101,
     alpha191,
     alpha_formula_metadata,
@@ -12,6 +13,7 @@ from tradelearn.factor.alpha import (
 from tradelearn.factor.analyzer import FactorAnalyzer
 
 __all__ = [
+    "AlphaFormulaFamilyMetadata",
     "ALPHA101_SKIPPED",
     "ALPHA101_SUPPORTED",
     "ALPHA191_SKIPPED",
