@@ -69,6 +69,7 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha061",
         "alpha062",
         "alpha064",
+        "alpha065",
     }
 )
 
@@ -543,6 +544,14 @@ class Alpha101Factors:
             self.vwap * (1 - 0.178404)
         )
         right = _rank(_delta(right_mix, 4))
+        return (left < right) * -1
+
+    def alpha065(self) -> pd.DataFrame:
+        """Return Alpha#65."""
+        adv60 = _sma(self.volume, 60)
+        left_mix = (self.open * 0.00817205) + (self.vwap * (1 - 0.00817205))
+        left = _rank(_correlation(left_mix, _sma(adv60, 9), 6))
+        right = _rank(self.open - _ts_min(self.open, 14))
         return (left < right) * -1
 
 
