@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -225,4 +226,63 @@ def test_check_design_notes_strict_accepts_filled_design_notes(tmp_path: Path) -
         "design-note:event-loop.md=ok",
         "design-note:portfolio.md=ok",
     ]
+    assert result.stderr == ""
+
+
+def test_check_design_notes_json_reports_all_note_statuses(tmp_path: Path) -> None:
+    """JSON output reports machine-readable status for all design notes."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    for filename, title in [
+        ("matching-design.md", "Matching Design"),
+        ("event-loop.md", "Event Loop"),
+        ("portfolio.md", "Portfolio"),
+    ]:
+        write_design_note(docs_internal / filename, title)
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--json", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "directory": str(docs_internal),
+        "strict": False,
+        "ok": True,
+        "notes": [
+            {"file": "matching-design.md", "errors": []},
+            {"file": "event-loop.md", "errors": []},
+            {"file": "portfolio.md", "errors": []},
+        ],
+    }
+    assert result.stderr == ""
+
+
+def test_check_design_notes_json_reports_failures_on_stdout(
+    tmp_path: Path,
+) -> None:
+    """JSON output keeps failures on stdout for automation consumers."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    write_design_note(docs_internal / "matching-design.md", "Matching Design")
+    write_design_note(docs_internal / "event-loop.md", "Event Loop")
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--json", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(result.stdout)
+    assert result.returncode == 1
+    assert payload["ok"] is False
+    assert payload["notes"][-1] == {
+        "file": "portfolio.md",
+        "errors": ["missing design note: portfolio.md"],
+    }
     assert result.stderr == ""

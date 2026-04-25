@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -87,6 +88,23 @@ def check_design_notes(directory: Path, *, strict: bool = False) -> list[str]:
     return errors
 
 
+def design_note_report(directory: Path, *, strict: bool = False) -> dict[str, object]:
+    """Return a machine-readable readiness report for all design notes."""
+    notes = [
+        {
+            "file": filename,
+            "errors": note_errors(directory, filename, strict=strict),
+        }
+        for filename in REQUIRED_DESIGN_NOTES
+    ]
+    return {
+        "directory": str(directory),
+        "strict": strict,
+        "ok": all(not note["errors"] for note in notes),
+        "notes": notes,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the design note readiness check."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -107,11 +125,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Also fail if generated template prompts have not been replaced.",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print a machine-readable readiness report.",
+    )
     args = parser.parse_args(argv)
 
     if args.init:
         print("\n".join(init_design_notes(args.directory)))
         return 0
+
+    if args.json:
+        report = design_note_report(args.directory, strict=args.strict)
+        print(json.dumps(report, indent=2))
+        return 0 if report["ok"] else 1
 
     errors = check_design_notes(args.directory, strict=args.strict)
     if errors:
