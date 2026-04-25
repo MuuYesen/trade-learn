@@ -314,6 +314,129 @@ def _roc(
     return _frame({"ROC": roc_value, "MAROC": maroc}, index=_index(close))
 
 
+def _taq(
+    high: pd.Series | Sequence[float],
+    low: pd.Series | Sequence[float],
+    n: int = 20,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """TAQ channel using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    _unexpected(kwargs)
+    up, mid, down = MyTT.TAQ(_array(high), _array(low), N=n)
+    return _frame({"UP": up, "MID": mid, "DOWN": down}, index=_index(high))
+
+
+def _ktn(
+    close: pd.Series | Sequence[float],
+    high: pd.Series | Sequence[float],
+    low: pd.Series | Sequence[float],
+    n: int = 20,
+    m: int = 10,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """Keltner channel using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    m = kwargs.pop("M", m)
+    _unexpected(kwargs)
+    upper, mid, lower = MyTT.KTN(_array(close), _array(high), _array(low), N=n, M=m)
+    return _frame({"UPPER": upper, "MID": mid, "LOWER": lower}, index=_index(close))
+
+
+def _cr(
+    close: pd.Series | Sequence[float],
+    high: pd.Series | Sequence[float],
+    low: pd.Series | Sequence[float],
+    n: int = 20,
+    **kwargs: int,
+) -> pd.Series:
+    """CR using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    _unexpected(kwargs)
+    values = MyTT.CR(_array(close), _array(high), _array(low), N=n)
+    return _series(values, index=_index(close), name=f"CR_{n}")
+
+
+def _emv(
+    high: pd.Series | Sequence[float],
+    low: pd.Series | Sequence[float],
+    volume: pd.Series | Sequence[float],
+    n: int = 14,
+    m: int = 9,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """EMV using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    m = kwargs.pop("M", m)
+    _unexpected(kwargs)
+    emv_value, maemv = MyTT.EMV(_array(high), _array(low), _array(volume), N=n, M=m)
+    return _frame({"EMV": emv_value, "MAEMV": maemv}, index=_index(high))
+
+
+def _dpo(
+    close: pd.Series | Sequence[float],
+    m1: int = 20,
+    m2: int = 10,
+    m3: int = 6,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """DPO using Tongdaxin semantics."""
+    m1 = kwargs.pop("M1", m1)
+    m2 = kwargs.pop("M2", m2)
+    m3 = kwargs.pop("M3", m3)
+    _unexpected(kwargs)
+    dpo_value, madpo = MyTT.DPO(_array(close), M1=m1, M2=m2, M3=m3)
+    return _frame({"DPO": dpo_value, "MADPO": madpo}, index=_index(close))
+
+
+def _brar(
+    open_: pd.Series | Sequence[float],
+    close: pd.Series | Sequence[float],
+    high: pd.Series | Sequence[float],
+    low: pd.Series | Sequence[float],
+    m1: int = 26,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """BRAR using Tongdaxin semantics."""
+    m1 = kwargs.pop("M1", m1)
+    _unexpected(kwargs)
+    ar, br = MyTT.BRAR(_array(open_), _array(close), _array(high), _array(low), M1=m1)
+    return _frame({"AR": ar, "BR": br}, index=_index(close))
+
+
+def _dfma(
+    close: pd.Series | Sequence[float],
+    n1: int = 10,
+    n2: int = 50,
+    m: int = 10,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """DFMA using Tongdaxin semantics."""
+    n1 = kwargs.pop("N1", n1)
+    n2 = kwargs.pop("N2", n2)
+    m = kwargs.pop("M", m)
+    _unexpected(kwargs)
+    dif, difma = MyTT.DFMA(_array(close), N1=n1, N2=n2, M=m)
+    return _frame({"DIF": dif, "DIFMA": difma}, index=_index(close))
+
+
+def _mass(
+    high: pd.Series | Sequence[float],
+    low: pd.Series | Sequence[float],
+    n1: int = 9,
+    n2: int = 25,
+    m: int = 6,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """MASS using Tongdaxin semantics."""
+    n1 = kwargs.pop("N1", n1)
+    n2 = kwargs.pop("N2", n2)
+    m = kwargs.pop("M", m)
+    _unexpected(kwargs)
+    mass_value, ma_mass = MyTT.MASS(_array(high), _array(low), N1=n1, N2=n2, M=m)
+    return _frame({"MASS": mass_value, "MA_MASS": ma_mass}, index=_index(high))
+
+
 def _expma(
     close: pd.Series | Sequence[float],
     n1: int = 12,
@@ -350,6 +473,46 @@ def _mfi(
     _unexpected(kwargs)
     values = MyTT.MFI(_array(close), _array(high), _array(low), _array(volume), N=n)
     return _series(values, index=_index(close), name=f"MFI_{n}")
+
+
+def _asi(
+    open_: pd.Series | Sequence[float],
+    close: pd.Series | Sequence[float],
+    high: pd.Series | Sequence[float],
+    low: pd.Series | Sequence[float],
+    m1: int = 26,
+    m2: int = 10,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """ASI using Tongdaxin semantics."""
+    m1 = kwargs.pop("M1", m1)
+    m2 = kwargs.pop("M2", m2)
+    _unexpected(kwargs)
+    asi_value, asit = MyTT.ASI(
+        _array(open_),
+        _array(close),
+        _array(high),
+        _array(low),
+        M1=m1,
+        M2=m2,
+    )
+    return _frame({"ASI": asi_value, "ASIT": asit}, index=_index(close))
+
+
+def _xsii(
+    close: pd.Series | Sequence[float],
+    high: pd.Series | Sequence[float],
+    low: pd.Series | Sequence[float],
+    n: int = 102,
+    m: int = 7,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """XSII using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    m = kwargs.pop("M", m)
+    _unexpected(kwargs)
+    td1, td2, td3, td4 = MyTT.XSII(_array(close), _array(high), _array(low), N=n, M=m)
+    return _frame({"TD1": td1, "TD2": td2, "TD3": td3, "TD4": td4}, index=_index(close))
 
 
 ma = FunctionIndicator("tdx.ma", _ma, {"n": 5})
@@ -390,25 +553,53 @@ mtm = FunctionIndicator("tdx.mtm", _mtm, {"n": 12, "m": 6})
 MTM = FunctionIndicator("tdx.MTM", _mtm, {"N": 12, "M": 6})
 roc = FunctionIndicator("tdx.roc", _roc, {"n": 12, "m": 6})
 ROC = FunctionIndicator("tdx.ROC", _roc, {"N": 12, "M": 6})
+taq = FunctionIndicator("tdx.taq", _taq, {"n": 20})
+TAQ = FunctionIndicator("tdx.TAQ", _taq, {"N": 20})
+ktn = FunctionIndicator("tdx.ktn", _ktn, {"n": 20, "m": 10})
+KTN = FunctionIndicator("tdx.KTN", _ktn, {"N": 20, "M": 10})
+cr = FunctionIndicator("tdx.cr", _cr, {"n": 20})
+CR = FunctionIndicator("tdx.CR", _cr, {"N": 20})
+emv = FunctionIndicator("tdx.emv", _emv, {"n": 14, "m": 9})
+EMV = FunctionIndicator("tdx.EMV", _emv, {"N": 14, "M": 9})
+dpo = FunctionIndicator("tdx.dpo", _dpo, {"m1": 20, "m2": 10, "m3": 6})
+DPO = FunctionIndicator("tdx.DPO", _dpo, {"M1": 20, "M2": 10, "M3": 6})
+brar = FunctionIndicator("tdx.brar", _brar, {"m1": 26})
+BRAR = FunctionIndicator("tdx.BRAR", _brar, {"M1": 26})
+dfma = FunctionIndicator("tdx.dfma", _dfma, {"n1": 10, "n2": 50, "m": 10})
+DFMA = FunctionIndicator("tdx.DFMA", _dfma, {"N1": 10, "N2": 50, "M": 10})
+mass = FunctionIndicator("tdx.mass", _mass, {"n1": 9, "n2": 25, "m": 6})
+MASS = FunctionIndicator("tdx.MASS", _mass, {"N1": 9, "N2": 25, "M": 6})
 expma = FunctionIndicator("tdx.expma", _expma, {"n1": 12, "n2": 50})
 EXPMA = FunctionIndicator("tdx.EXPMA", _expma, {"N1": 12, "N2": 50})
 obv = FunctionIndicator("tdx.obv", _obv, {})
 OBV = FunctionIndicator("tdx.OBV", _obv, {})
 mfi = FunctionIndicator("tdx.mfi", _mfi, {"n": 14})
 MFI = FunctionIndicator("tdx.MFI", _mfi, {"N": 14})
+asi = FunctionIndicator("tdx.asi", _asi, {"m1": 26, "m2": 10})
+ASI = FunctionIndicator("tdx.ASI", _asi, {"M1": 26, "M2": 10})
+xsii = FunctionIndicator("tdx.xsii", _xsii, {"n": 102, "m": 7})
+XSII = FunctionIndicator("tdx.XSII", _xsii, {"N": 102, "M": 7})
 
 __all__ = [
+    "ASI",
     "ATR",
     "BBI",
     "BIAS",
     "BOLL",
+    "BRAR",
     "CCI",
+    "CR",
+    "DFMA",
     "DMI",
+    "DPO",
     "EMA",
+    "EMV",
     "EXPMA",
     "KDJ",
+    "KTN",
     "MA",
     "MACD",
+    "MASS",
     "MFI",
     "MTM",
     "OBV",
@@ -416,21 +607,31 @@ __all__ = [
     "ROC",
     "RSI",
     "SMA",
+    "TAQ",
     "TRIX",
     "VR",
-    "WR",
     "WMA",
+    "WR",
+    "XSII",
+    "asi",
     "atr",
     "bbi",
     "bias",
     "boll",
+    "brar",
     "cci",
+    "cr",
+    "dfma",
     "dmi",
+    "dpo",
     "ema",
+    "emv",
     "expma",
     "kdj",
+    "ktn",
     "ma",
     "macd",
+    "mass",
     "mfi",
     "mtm",
     "obv",
@@ -438,8 +639,10 @@ __all__ = [
     "roc",
     "rsi",
     "sma",
+    "taq",
     "trix",
     "vr",
-    "wr",
     "wma",
+    "wr",
+    "xsii",
 ]
