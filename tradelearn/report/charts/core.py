@@ -201,6 +201,27 @@ def quantile_returns(returns: pd.DataFrame):
     return plot
 
 
+def factor_ic(ic: pd.Series):
+    """Return a factor IC figure."""
+    frame = _plot_frame(ic, "ic").dropna()
+    plot = figure(
+        title="Factor IC",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not frame.empty:
+        plot.line(frame["date"], frame["ic"], line_width=2, color="#1f77b4")
+        plot.line(
+            frame["date"],
+            frame["ic"].expanding(min_periods=1).mean(),
+            line_width=2,
+            color="#ff7f0e",
+            legend_label="Expanding Mean",
+        )
+    return plot
+
+
 def _plot_frame(series: pd.Series, name: str) -> pd.DataFrame:
     """Return a timezone-naive plotting frame."""
     frame = series.to_frame(name).reset_index()
