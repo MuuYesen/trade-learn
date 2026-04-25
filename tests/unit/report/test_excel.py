@@ -59,6 +59,7 @@ def test_reporter_excel_writes_factor_quantile_sheet_when_analyzer_exists(tmp_pa
     Reporter(stats).excel(path)
 
     assert "factor_ic" in _sheet_names(path)
+    assert "factor_rank_ic" in _sheet_names(path)
     assert "factor_quantiles" in _sheet_names(path)
 
 
@@ -107,6 +108,14 @@ class _FactorAnalyzerStub:
             [0.10, 0.20],
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
             name="ic",
+        )
+
+    def rank_ic(self) -> pd.Series:
+        """Return factor rank IC series for Excel tests."""
+        return pd.Series(
+            [0.15, 0.25],
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+            name="rank_ic",
         )
 
     def quantile_cumulative_returns(self) -> pd.DataFrame:
