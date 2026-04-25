@@ -61,6 +61,23 @@ def init_design_notes(directory: Path) -> list[str]:
     return statuses
 
 
+def section_body(content: str, section: str) -> str:
+    """Return the body text under a required markdown section."""
+    start = content.find(section)
+    if start == -1:
+        return ""
+    body_start = start + len(section)
+    next_section_starts = [
+        position
+        for other_section in REQUIRED_SECTIONS
+        if other_section != section
+        for position in [content.find(other_section, body_start)]
+        if position != -1
+    ]
+    body_end = min(next_section_starts) if next_section_starts else len(content)
+    return content[body_start:body_end].strip()
+
+
 def note_errors(directory: Path, filename: str, *, strict: bool = False) -> list[str]:
     """Return readiness errors for one required design note."""
     path = directory / filename
@@ -78,6 +95,11 @@ def note_errors(directory: Path, filename: str, *, strict: bool = False) -> list
             f"untouched template prompt in {filename}: {section}"
             for section, prompt in SECTION_PROMPTS.items()
             if prompt in content
+        )
+        errors.extend(
+            f"empty section body in {filename}: {section}"
+            for section in REQUIRED_SECTIONS
+            if section in content and not section_body(content, section)
         )
         errors.extend(
             f"placeholder token in {filename}: {token}"

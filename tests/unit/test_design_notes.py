@@ -258,6 +258,52 @@ def test_check_design_notes_strict_rejects_placeholder_tokens(
     ]
 
 
+def test_check_design_notes_strict_rejects_empty_section_body(
+    tmp_path: Path,
+) -> None:
+    """Strict mode fails when a required section has no body content."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    write_design_note(docs_internal / "matching-design.md", "Matching Design")
+    write_design_note(docs_internal / "event-loop.md", "Event Loop")
+    (docs_internal / "portfolio.md").write_text(
+        "\n".join(
+            [
+                "# Portfolio",
+                "",
+                "## Scope",
+                "Captures the design boundary.",
+                "",
+                "## Clean-room Boundary",
+                "Records source separation rules.",
+                "",
+                "## Source Notes",
+                "",
+                "## Implementation Decisions",
+                "Records independent implementation decisions.",
+                "",
+                "## Open Questions",
+                "Tracks unresolved follow-up items.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--strict", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr.splitlines() == [
+        "empty section body in portfolio.md: ## Source Notes"
+    ]
+
+
 def test_check_design_notes_json_reports_all_note_statuses(tmp_path: Path) -> None:
     """JSON output reports machine-readable status for all design notes."""
     docs_internal = tmp_path / "docs" / "internal"
