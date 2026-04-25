@@ -100,9 +100,9 @@ class Reporter:
         """Write an Excel report."""
         return write_excel_report(self, path)
 
-    def html(self, path: str) -> Any:
+    def html(self, path: str, benchmark: pd.Series | None = None) -> Any:
         """Write an HTML report."""
-        return write_html_report(self, path)
+        return write_html_report(self, path, benchmark=benchmark)
 
     def explore(self) -> Any:
         """Open an interactive pygwalker explorer for trades."""

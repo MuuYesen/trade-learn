@@ -16,17 +16,22 @@ from bokeh.resources import INLINE
 from bokeh.transform import linear_cmap
 
 
-def write_html_report(reporter: Any, path: str | Path) -> Path:
+def write_html_report(
+    reporter: Any,
+    path: str | Path,
+    benchmark: pd.Series | None = None,
+) -> Path:
     """Write a single-file HTML tear sheet and return the output path."""
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     returns = pd.Series(reporter._get("returns")).copy()
+    benchmark_returns = None if benchmark is None else pd.Series(benchmark).copy()
     trades = pd.DataFrame(reporter._get("trades", default=pd.DataFrame())).copy()
     exposure = reporter.exposure()
     correlation = reporter.correlation_matrix()
-    summary = reporter.summary()
+    summary = reporter.summary(benchmark=benchmark_returns)
     plots = [
-        _equity_plot(reporter.equity_curve()),
+        _equity_plot(reporter.equity_curve(), benchmark_returns),
         _drawdown_plot(reporter.drawdown()),
         _monthly_heatmap_plot(reporter.monthly_heatmap()),
         _rolling_sharpe_plot(reporter.rolling_sharpe()),
@@ -46,6 +51,7 @@ def write_html_report(reporter: Any, path: str | Path) -> Path:
             bokeh_resources=INLINE.render(),
             metadata=_metadata(summary, returns, reporter._get("config", default={}) or {}),
             drawdowns=reporter.top_drawdowns(limit=10),
+            benchmark=benchmark_returns,
             correlation=correlation,
             exposure=exposure,
             trades=trades,
@@ -56,7 +62,7 @@ def write_html_report(reporter: Any, path: str | Path) -> Path:
     return output
 
 
-def _equity_plot(equity: pd.Series):
+def _equity_plot(equity: pd.Series, benchmark: pd.Series | None = None):
     """Return an equity curve figure."""
     frame = _plot_frame(equity, "equity")
     plot = figure(
@@ -66,6 +72,16 @@ def _equity_plot(equity: pd.Series):
         sizing_mode="stretch_width",
     )
     plot.line(frame["date"], frame["equity"], line_width=2, color="#1f77b4")
+    if benchmark is not None:
+        benchmark_equity = (1.0 + benchmark).cumprod()
+        benchmark_frame = _plot_frame(benchmark_equity, "benchmark")
+        plot.line(
+            benchmark_frame["date"],
+            benchmark_frame["benchmark"],
+            line_width=2,
+            color="#ff7f0e",
+            legend_label="Benchmark",
+        )
     return plot
 
 
@@ -232,6 +248,7 @@ def _render_html(
     bokeh_resources: str,
     metadata: dict[str, str],
     drawdowns: pd.DataFrame,
+    benchmark: pd.Series | None,
     correlation: pd.DataFrame,
     exposure: pd.DataFrame,
     trades: pd.DataFrame,
@@ -265,6 +282,7 @@ def _render_html(
     <h2>Summary Stats</h2>
     {_summary_table(summary)}
   </section>
+  {_benchmark_section(benchmark)}
   <section>
     <h2>Equity Curve</h2>
     <h2>Drawdown</h2>
@@ -350,6 +368,14 @@ def _correlation_section(correlation: pd.DataFrame) -> str:
         return ""
     symbols = ", ".join(escape(str(symbol)) for symbol in correlation.columns)
     return f"<h2>Correlation Matrix</h2><p>Symbols: {symbols}</p>"
+
+
+def _benchmark_section(benchmark: pd.Series | None) -> str:
+    """Return the optional benchmark section heading."""
+    if benchmark is None:
+        return ""
+    name = escape(str(benchmark.name or "benchmark"))
+    return f"<section><h2>Benchmark</h2><p>{name}</p></section>"
 
 
 def _has_multi_asset_exposure(exposure: pd.DataFrame) -> bool:

@@ -79,6 +79,32 @@ def test_reporter_html_adds_exposure_chart_for_multi_asset_positions(tmp_path) -
     assert "BBB" in html
 
 
+def test_reporter_html_accepts_benchmark_series(tmp_path) -> None:
+    """Reporter.html adds benchmark metrics and equity overlay when provided."""
+    path = tmp_path / "benchmark-report.html"
+    benchmark = pd.Series(
+        [0.01, -0.005, 0.01, -0.02, 0.03],
+        index=pd.date_range("2024-01-01", periods=5, tz="UTC"),
+        name="benchmark",
+    )
+
+    Reporter(
+        {
+            "returns": _returns(),
+            "trades": _trades(),
+            "summary": {"strategy_name": "benchmark-demo"},
+            "config": {"strategy": "benchmark-demo"},
+        },
+        periods=252,
+    ).html(path, benchmark=benchmark)
+
+    html = path.read_text()
+    assert "Benchmark" in html
+    assert "alpha" in html
+    assert "beta" in html
+    assert "information_ratio" in html
+
+
 def _stats() -> SimpleNamespace:
     returns = _returns()
     return SimpleNamespace(
