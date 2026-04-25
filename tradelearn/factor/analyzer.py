@@ -152,7 +152,12 @@ class FactorAnalyzer:
         if self.forward_returns is not None:
             return self.forward_returns
         if self.prices is not None:
-            forward = self.prices.groupby(level=1).pct_change().shift(-1)
+            forward = (
+                self.prices.groupby(level=1, group_keys=False)
+                .pct_change()
+                .groupby(level=1)
+                .shift(-1)
+            )
             forward.name = "forward_returns"
             return forward
         raise ValueError("FactorAnalyzer requires forward_returns or prices")

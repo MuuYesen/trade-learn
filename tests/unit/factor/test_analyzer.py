@@ -59,6 +59,39 @@ def test_factor_analyzer_computes_returns_from_prices() -> None:
     )
 
 
+def test_factor_analyzer_price_derived_ic_uses_symbol_forward_returns() -> None:
+    """Price-derived IC aligns each symbol to its own next-period return."""
+    factor = _series(
+        [
+            ("2024-01-01", "AAA", 1.0),
+            ("2024-01-01", "BBB", 2.0),
+            ("2024-01-02", "AAA", 1.0),
+            ("2024-01-02", "BBB", 2.0),
+        ]
+    )
+    prices = _series(
+        [
+            ("2024-01-01", "AAA", 100.0),
+            ("2024-01-01", "BBB", 100.0),
+            ("2024-01-02", "AAA", 110.0),
+            ("2024-01-02", "BBB", 90.0),
+            ("2024-01-03", "AAA", 99.0),
+            ("2024-01-03", "BBB", 99.0),
+        ]
+    )
+    expected_forward = _series(
+        [
+            ("2024-01-01", "AAA", 0.10),
+            ("2024-01-01", "BBB", -0.10),
+            ("2024-01-02", "AAA", -0.10),
+            ("2024-01-02", "BBB", 0.10),
+        ]
+    )
+    analyzer = FactorAnalyzer(factor, prices=prices)
+
+    pd.testing.assert_series_equal(analyzer.ic(), factor_metrics.ic(factor, expected_forward))
+
+
 def test_factor_analyzer_summary_contains_stable_keys() -> None:
     """summary returns scalar diagnostics useful for reports."""
     factor, forward = _factor_and_forward_returns()
