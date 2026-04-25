@@ -57,6 +57,10 @@ class FactorAnalyzer:
         """Return per-date asset counts by factor quantile."""
         if self.quantiles <= 0:
             raise ValueError("quantiles must be a positive integer")
+        aligned = pd.concat(
+            {"factor": self.factor, "returns": self._forward_returns()},
+            axis=1,
+        ).dropna()
 
         def _assign_quantiles(frame: pd.Series) -> pd.Series:
             labels = pd.qcut(
@@ -66,7 +70,7 @@ class FactorAnalyzer:
             )
             return labels.astype(int) + 1
 
-        quantiles = self.factor.groupby(level=0, group_keys=False).apply(_assign_quantiles)
+        quantiles = aligned["factor"].groupby(level=0, group_keys=False).apply(_assign_quantiles)
         counts = quantiles.groupby([quantiles.index.get_level_values(0), quantiles]).size()
         result = counts.unstack(fill_value=0).sort_index(axis=1)
         result.index.name = self.factor.index.names[0]

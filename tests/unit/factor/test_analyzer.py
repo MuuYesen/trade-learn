@@ -149,6 +149,30 @@ def test_factor_analyzer_quantile_counts_returns_daily_group_sizes() -> None:
     assert counts.loc[pd.Timestamp("2024-01-02"), 2] == 1
 
 
+def test_factor_analyzer_quantile_counts_uses_valid_forward_return_sample() -> None:
+    """quantile_counts ignores factor rows without usable forward returns."""
+    factor = _series(
+        [
+            ("2024-01-01", "AAA", 1.0),
+            ("2024-01-01", "BBB", 2.0),
+            ("2024-01-01", "CCC", 3.0),
+        ]
+    )
+    forward = _series(
+        [
+            ("2024-01-01", "AAA", 0.01),
+            ("2024-01-01", "BBB", 0.02),
+        ]
+    )
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=3)
+
+    counts = analyzer.quantile_counts()
+
+    assert list(counts.columns) == [1, 2]
+    assert counts.loc[pd.Timestamp("2024-01-01"), 1] == 1
+    assert counts.loc[pd.Timestamp("2024-01-01"), 2] == 1
+
+
 def test_factor_analyzer_quantile_decay_returns_rolling_group_means() -> None:
     """quantile_decay returns rolling mean returns by quantile."""
     factor, forward = _factor_and_forward_returns()
