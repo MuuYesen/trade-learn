@@ -60,6 +60,15 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha049",
         "alpha050",
         "alpha051",
+        "alpha052",
+        "alpha053",
+        "alpha054",
+        "alpha055",
+        "alpha056",
+        "alpha057",
+        "alpha058",
+        "alpha059",
+        "alpha060",
     }
 )
 
@@ -519,6 +528,106 @@ class Alpha191Factors:
         )
         return _ts_sum(part1, 12) / (_ts_sum(part1, 12) + _ts_sum(part2, 12))
 
+    def alpha052(self) -> pd.DataFrame:
+        """Return Alpha#52."""
+        typical_price = (self.high + self.low + self.close) / 3
+        return (
+            _ts_sum(_elementwise_max(self.high - _delay(typical_price, 1), 0), 26)
+            / _ts_sum(_elementwise_max(_delay(typical_price, 1) - self.low, 0), 26)
+            * 100
+        )
+
+    def alpha053(self) -> pd.DataFrame:
+        """Return Alpha#53."""
+        return _count(self.close > _delay(self.close, 1), 12) / 12 * 100
+
+    def alpha054(self) -> pd.DataFrame:
+        """Return Alpha#54."""
+        spread = self.close - self.open
+        return -1 * _rank(spread.abs().std() + spread + _correlation(self.close, self.open, 10))
+
+    def alpha055(self) -> pd.DataFrame:
+        """Return Alpha#55."""
+        high_close = (self.high - _delay(self.close, 1)).abs()
+        low_close = (self.low - _delay(self.close, 1)).abs()
+        high_low = (self.high - _delay(self.low, 1)).abs()
+        cond1 = (high_close > low_close) & (high_close > high_low)
+        cond2 = (low_close > high_low) & (low_close > high_close)
+        cond3 = (high_low >= high_close) & (high_low >= low_close)
+        numerator = 16 * (self.close + (self.close - self.open) / 2 - _delay(self.open, 1))
+        denominator = self.close.copy(deep=True)
+        denominator.loc[:, :] = 0
+        denominator[cond1] = (
+            high_close
+            + low_close / 2
+            + (_delay(self.close, 1) - _delay(self.open, 1)).abs() / 4
+        )
+        denominator[cond2] = (
+            low_close
+            + high_close / 2
+            + (_delay(self.close, 1) - _delay(self.open, 1)).abs() / 4
+        )
+        denominator[cond3] = (
+            high_low + (_delay(self.close, 1) - _delay(self.open, 1)).abs() / 4
+        )
+        multiplier = _elementwise_max(high_close, low_close)
+        return _ts_sum(numerator / denominator * multiplier, 20)
+
+    def alpha056(self) -> pd.DataFrame:
+        """Return Alpha#56."""
+        left = _rank(self.open - _ts_min(self.open, 12))
+        right = _rank(
+            _rank(
+                _correlation(
+                    _ts_sum((self.high + self.low) / 2, 19),
+                    _ts_sum(_mean(self.volume, 40), 19),
+                    13,
+                )
+            )
+            ** 5
+        )
+        cond = left < right
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond] = 1
+        part[~cond] = 0
+        return part
+
+    def alpha057(self) -> pd.DataFrame:
+        """Return Alpha#57."""
+        return _sma(
+            (self.close - _ts_min(self.low, 9))
+            / (_ts_max(self.high, 9) - _ts_min(self.low, 9))
+            * 100,
+            3,
+            1,
+        )
+
+    def alpha058(self) -> pd.DataFrame:
+        """Return Alpha#58."""
+        return _count(self.close > _delay(self.close, 1), 20) / 20 * 100
+
+    def alpha059(self) -> pd.DataFrame:
+        """Return Alpha#59."""
+        cond1 = self.close == _delay(self.close, 1)
+        cond2 = self.close > _delay(self.close, 1)
+        cond3 = self.close < _delay(self.close, 1)
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond1] = 0
+        part[cond2] = self.close - _elementwise_min(self.low, _delay(self.close, 1))
+        part[cond3] = self.close - _elementwise_max(self.low, _delay(self.close, 1))
+        return _ts_sum(part, 20)
+
+    def alpha060(self) -> pd.DataFrame:
+        """Return Alpha#60."""
+        return _ts_sum(
+            ((self.close - self.low) - (self.high - self.close))
+            / (self.high - self.low)
+            * self.volume,
+            20,
+        )
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha191 formula layout."""
@@ -569,6 +678,11 @@ def _correlation(left: pd.DataFrame, right: pd.DataFrame, window: int) -> pd.Dat
 def _ts_sum(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling sum."""
     return frame.rolling(window).sum()
+
+
+def _count(cond: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return rolling count of true values."""
+    return cond.rolling(window).apply(lambda values: values.sum())
 
 
 def _stddev(frame: pd.DataFrame, window: int) -> pd.DataFrame:
