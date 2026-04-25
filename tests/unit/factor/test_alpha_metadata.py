@@ -676,6 +676,44 @@ def test_render_alpha_known_differences_script_updates_migration_section(
     assert result.stderr == ""
 
 
+def test_render_alpha_known_differences_script_update_is_idempotent(
+    tmp_path: Path,
+) -> None:
+    """Running the MIGRATION update repeatedly should leave content unchanged."""
+    target = tmp_path / "MIGRATION.md"
+    target.write_text(
+        "# MIGRATION\n\n"
+        "### 3.2 登记示例(待填充)\n\n"
+        "_此部分在阶段 1 起按进度追加。当前为空。_\n\n"
+        "---\n\n"
+        "#### 模板条目(示例,尚未实际发生)\n",
+        encoding="utf-8",
+    )
+
+    command = [
+        sys.executable,
+        "scripts/render_alpha_known_differences.py",
+        "--update",
+        str(target),
+    ]
+    subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=True)
+    once = target.read_text(encoding="utf-8")
+
+    result = subprocess.run(
+        command,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert target.read_text(encoding="utf-8") == once
+    assert result.stdout == (
+        f"Alpha known differences sections updated in {target}: alpha101, alpha191\n"
+    )
+    assert result.stderr == ""
+
+
 def test_render_alpha_known_differences_script_update_reports_missing_anchor(
     tmp_path: Path,
 ) -> None:
