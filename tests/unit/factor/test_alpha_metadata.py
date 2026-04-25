@@ -149,6 +149,35 @@ def test_check_alpha_metadata_script_reports_json_counts() -> None:
     assert result.stderr == ""
 
 
+def test_check_alpha_metadata_script_reports_json_skipped_reasons() -> None:
+    """The metadata check script can include skipped reasons in JSON output."""
+    from tradelearn.factor.alpha import validated_alpha_formula_metadata
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/check_alpha_metadata.py",
+            "--json",
+            "--include-skipped",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    metadata = validated_alpha_formula_metadata()
+
+    assert json.loads(result.stdout) == {
+        family: {
+            "supported_count": family_metadata["supported_count"],
+            "skipped_count": family_metadata["skipped_count"],
+            "skipped": family_metadata["skipped"],
+        }
+        for family, family_metadata in sorted(metadata.items())
+    }
+    assert result.stderr == ""
+
+
 def test_validate_alpha_formula_metadata_rejects_inconsistent_counts() -> None:
     """The validator catches stale counts before docs consume metadata."""
     import tradelearn.factor.alpha as alpha_package

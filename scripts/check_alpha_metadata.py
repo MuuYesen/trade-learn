@@ -22,16 +22,23 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="emit metadata counts as JSON",
     )
+    parser.add_argument(
+        "--include-skipped",
+        action="store_true",
+        help="include skipped formula reasons in JSON output",
+    )
     args = parser.parse_args(argv)
 
     metadata = validated_alpha_formula_metadata()
-    counts = {
-        family: {
+    counts = {}
+    for family, family_metadata in sorted(metadata.items()):
+        family_counts = {
             "supported_count": family_metadata["supported_count"],
             "skipped_count": family_metadata["skipped_count"],
         }
-        for family, family_metadata in sorted(metadata.items())
-    }
+        if args.include_skipped:
+            family_counts["skipped"] = family_metadata["skipped"]
+        counts[family] = family_counts
     if args.json:
         print(json.dumps(counts, sort_keys=True))
         return 0
