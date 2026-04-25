@@ -138,6 +138,16 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha128",
         "alpha129",
         "alpha130",
+        "alpha131",
+        "alpha132",
+        "alpha133",
+        "alpha134",
+        "alpha135",
+        "alpha136",
+        "alpha137",
+        "alpha138",
+        "alpha139",
+        "alpha140",
     }
 )
 
@@ -1311,6 +1321,108 @@ class Alpha191Factors:
         )
         return left / right
 
+    def alpha131(self) -> pd.DataFrame:
+        """Return Alpha#131."""
+        return _rank(_delta(self.vwap, 1)) ** _ts_rank(
+            _correlation(self.close, _mean(self.volume, 50), 18),
+            18,
+        )
+
+    def alpha132(self) -> pd.DataFrame:
+        """Return Alpha#132."""
+        return _mean(self.amount, 20)
+
+    def alpha133(self) -> pd.DataFrame:
+        """Return Alpha#133."""
+        return ((20 - _highday(self.high, 20)) / 20) * 100 - (
+            (20 - _lowday(self.low, 20)) / 20
+        ) * 100
+
+    def alpha134(self) -> pd.DataFrame:
+        """Return Alpha#134."""
+        return (self.close - _delay(self.close, 12)) / _delay(self.close, 12) * self.volume
+
+    def alpha135(self) -> pd.DataFrame:
+        """Return Alpha#135."""
+        return _sma(_delay(self.close / _delay(self.close, 20), 1), 20, 1)
+
+    def alpha136(self) -> pd.DataFrame:
+        """Return Alpha#136."""
+        return -1 * _rank(_delta(self.returns, 3)) * _correlation(
+            self.open,
+            self.volume,
+            10,
+        )
+
+    def alpha137(self) -> pd.DataFrame:
+        """Return Alpha#137."""
+        high_close = (self.high - _delay(self.close, 1)).abs()
+        low_close = (self.low - _delay(self.close, 1)).abs()
+        high_low = (self.high - _delay(self.low, 1)).abs()
+        close_open = (_delay(self.close, 1) - _delay(self.open, 1)).abs()
+        cond1 = (high_close > low_close) & (high_close > high_low)
+        cond2 = (low_close > high_low) & (low_close > high_close)
+        cond3 = ~cond1 & ~cond2
+        numerator = 16 * (
+            self.close
+            + (self.close - self.open) / 2
+            - _delay(self.open, 1)
+        )
+        denominator = self.close.copy(deep=True)
+        denominator.loc[:, :] = np.nan
+        denominator[cond1] = high_close + low_close / 2 + close_open / 4
+        denominator[cond2] = low_close + high_close / 2 + close_open / 4
+        denominator[cond3] = high_low + close_open / 4
+        denominator.replace({0: np.nan}, inplace=True)
+        return numerator / denominator * _elementwise_max(high_close, low_close)
+
+    def alpha138(self) -> pd.DataFrame:
+        """Return Alpha#138."""
+        left = _rank(
+            _decay_linear(_delta((self.low * 0.7) + (self.vwap * 0.3), 3), 20)
+        )
+        right = _ts_rank(
+            _decay_linear(
+                _ts_rank(
+                    _correlation(
+                        _ts_rank(self.low, 8),
+                        _ts_rank(_mean(self.volume, 60), 17),
+                        5,
+                    ),
+                    19,
+                ),
+                16,
+            ),
+            7,
+        )
+        return (left - right) * -1
+
+    def alpha139(self) -> pd.DataFrame:
+        """Return Alpha#139."""
+        return -1 * _correlation(self.open, self.volume, 10)
+
+    def alpha140(self) -> pd.DataFrame:
+        """Return Alpha#140."""
+        left = _rank(
+            _decay_linear(
+                (_rank(self.open) + _rank(self.low))
+                - (_rank(self.high) + _rank(self.close)),
+                8,
+            )
+        )
+        right = _ts_rank(
+            _decay_linear(
+                _correlation(
+                    _ts_rank(self.close, 8),
+                    _ts_rank(_mean(self.volume, 60), 20),
+                    8,
+                ),
+                7,
+            ),
+            3,
+        )
+        return _elementwise_min(left, right)
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha191 formula layout."""
@@ -1431,6 +1543,11 @@ def _ts_min(frame: pd.DataFrame, window: int) -> pd.DataFrame:
 def _lowday(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return days since the rolling minimum, matching legacy Lowday."""
     return frame.rolling(window).apply(lambda values: len(values) - values.argmin())
+
+
+def _highday(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return days since the rolling maximum, matching legacy Highday."""
+    return frame.rolling(window).apply(lambda values: len(values) - values.argmax())
 
 
 def _elementwise_max(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
