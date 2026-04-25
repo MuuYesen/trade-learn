@@ -128,15 +128,23 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        missing = [
-            family
-            for family, rendered in rendered_by_family.items()
-            if alpha_known_differences_section(content, family)
-            != rendered.rstrip() + "\n"
-        ]
+        missing = []
+        outdated = []
+        for family, rendered in rendered_by_family.items():
+            section = alpha_known_differences_section(content, family)
+            if section is None:
+                missing.append(family)
+            elif section != rendered.rstrip() + "\n":
+                outdated.append(family)
         if missing:
             print(
                 "Missing Alpha known differences sections: " + ", ".join(missing),
+                file=sys.stderr,
+            )
+            return 1
+        if outdated:
+            print(
+                "Outdated Alpha known differences sections: " + ", ".join(outdated),
                 file=sys.stderr,
             )
             return 1

@@ -579,7 +579,7 @@ def test_render_alpha_known_differences_script_check_fails_for_stale_section(
 
     assert result.returncode == 1
     assert result.stdout == ""
-    assert result.stderr == "Missing Alpha known differences sections: alpha101\n"
+    assert result.stderr == "Outdated Alpha known differences sections: alpha101\n"
 
 
 def test_render_alpha_known_differences_script_check_fails_for_missing_file(
