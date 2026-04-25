@@ -30,6 +30,15 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha018",
         "alpha019",
         "alpha020",
+        "alpha021",
+        "alpha022",
+        "alpha023",
+        "alpha024",
+        "alpha025",
+        "alpha026",
+        "alpha027",
+        "alpha028",
+        "alpha029",
     }
 )
 
@@ -231,6 +240,85 @@ class Alpha191Factors:
         delayed_close = _delay(self.close, 6)
         return (self.close - delayed_close) / delayed_close * 100
 
+    def alpha021(self) -> pd.DataFrame:
+        """Return Alpha#21."""
+        return _regbeta(_mean(self.close, 6), _sequence(6))
+
+    def alpha022(self) -> pd.DataFrame:
+        """Return Alpha#22."""
+        close_mean = _mean(self.close, 6)
+        ratio = (self.close - close_mean) / close_mean
+        return _sma(ratio - _delay(ratio, 3), 12, 1)
+
+    def alpha023(self) -> pd.DataFrame:
+        """Return Alpha#23."""
+        cond = self.close > _delay(self.close, 1)
+        part1 = self.close.copy(deep=True)
+        part1.loc[:, :] = np.nan
+        part1[cond] = _stddev(self.close, 20)
+        part1[~cond] = 0
+        part2 = self.close.copy(deep=True)
+        part2.loc[:, :] = np.nan
+        part2[~cond] = _stddev(self.close, 20)
+        part2[cond] = 0
+        return 100 * _sma(part1, 20, 1) / (_sma(part1, 20, 1) + _sma(part2, 20, 1))
+
+    def alpha024(self) -> pd.DataFrame:
+        """Return Alpha#24."""
+        return _sma(self.close - _delay(self.close, 5), 5, 1)
+
+    def alpha025(self) -> pd.DataFrame:
+        """Return Alpha#25."""
+        return (
+            -1
+            * _rank(
+                _delta(self.close, 7)
+                * (1 - _rank(_decay_linear(self.volume / _mean(self.volume, 20), 9)))
+            )
+            * (1 + _rank(_ts_sum(self.returns, 250)))
+        )
+
+    def alpha026(self) -> pd.DataFrame:
+        """Return Alpha#26."""
+        return ((_ts_sum(self.close, 7) / 7) - self.close) + _correlation(
+            self.vwap,
+            _delay(self.close, 5),
+            230,
+        )
+
+    def alpha027(self) -> pd.DataFrame:
+        """Return Alpha#27."""
+        values = (
+            (self.close - _delay(self.close, 3)) / _delay(self.close, 3) * 100
+            + (self.close - _delay(self.close, 6)) / _delay(self.close, 6) * 100
+        )
+        return _wma(values, 12)
+
+    def alpha028(self) -> pd.DataFrame:
+        """Return Alpha#28."""
+        return 3 * _sma(
+            (self.close - _ts_min(self.low, 9))
+            / (_ts_max(self.high, 9) - _ts_min(self.low, 9))
+            * 100,
+            3,
+            1,
+        ) - 2 * _sma(
+            _sma(
+                (self.close - _ts_min(self.low, 9))
+                / (_ts_max(self.high, 9) - _ts_max(self.low, 9))
+                * 100,
+                3,
+                1,
+            ),
+            3,
+            1,
+        )
+
+    def alpha029(self) -> pd.DataFrame:
+        """Return Alpha#29."""
+        delayed_close = _delay(self.close, 6)
+        return (self.close - delayed_close) / delayed_close * self.volume
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha191 formula layout."""
@@ -274,7 +362,7 @@ def _delay(frame: pd.DataFrame, period: int) -> pd.DataFrame:
 def _correlation(left: pd.DataFrame, right: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling correlation matching the legacy Alpha191 warmup behavior."""
     result = left.rolling(window).corr(right).fillna(0)
-    result.iloc[: (window - 1), :] = None
+    result.iloc[: (window - 1), :] = np.nan
     return result
 
 
@@ -288,9 +376,39 @@ def _stddev(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     return frame.rolling(window).std()
 
 
+def _mean(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return rolling mean."""
+    return frame.rolling(window).mean()
+
+
 def _sma(frame: pd.DataFrame, window: int, weight: int = 1) -> pd.DataFrame:
     """Return Alpha191 SMA implemented with exponentially weighted mean."""
     return frame.ewm(alpha=weight / window, adjust=False).mean()
+
+
+def _sequence(size: int) -> np.ndarray:
+    """Return the 1-based sequence used by legacy regression formulas."""
+    return np.arange(1, size + 1)
+
+
+def _regbeta(frame: pd.DataFrame, x_values: np.ndarray) -> pd.DataFrame:
+    """Return rolling linear-regression slope against ``x_values``."""
+    window = len(x_values)
+    return frame.rolling(window).apply(lambda values: np.polyfit(x_values, values, 1)[0])
+
+
+def _decay_linear(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return rolling linear weighted average."""
+    weights = np.arange(1, window + 1)
+    weight_sum = np.sum(weights)
+    return frame.rolling(window).apply(lambda values: np.sum(weights * values) / weight_sum)
+
+
+def _wma(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return legacy exponentially decayed weighted moving average."""
+    weights = np.power(0.9, np.arange(window - 1, -1, -1))
+    weight_sum = np.sum(weights)
+    return frame.rolling(window).apply(lambda values: np.sum(weights * values) / weight_sum)
 
 
 def _ts_rank(frame: pd.DataFrame, window: int) -> pd.DataFrame:
