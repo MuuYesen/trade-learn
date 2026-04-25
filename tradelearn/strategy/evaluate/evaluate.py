@@ -1,27 +1,40 @@
+"""Legacy Evaluate facade backed by the v2 report layer."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
 import pandas as pd
-from quantstats import reports
-from tradelearn.strategy.evaluate.pyfolio import create_returns_tear_sheet
+
+from tradelearn.report import Reporter
 
 
 class Evaluate:
-
-    def __init__(self):
-        pass
+    """Compatibility entry point for historical strategy evaluation reports."""
 
     @staticmethod
-    def analysis_report(stats: dict, baseline: pd.DataFrame, filename: str = None, engine: str = 'quantstats'):
-        strat_rets = stats._equity_curve.Equity.pct_change()
-        benchmark_ret = baseline.close.pct_change()
+    def analysis_report(
+        stats: Any,
+        baseline: pd.DataFrame,
+        filename: str | None = None,
+        engine: str = "quantstats",
+    ) -> None:
+        """Write an HTML report using the v2 Reporter facade.
 
-        if engine == 'pyfolio':
-            html = create_returns_tear_sheet(returns=strat_rets, benchmark_rets=benchmark_ret)
-
-            if filename is None:
-                filename = './pyfolio.html'
-            with open(filename, 'w') as file:
-                file.write(html)
-
-        if engine == 'quantstats':
-            if filename is None:
-                filename = './quantstats.html'
-            reports.html(strat_rets, benchmark=benchmark_ret, output=filename, title='Stock Sentiment')
+        The legacy ``pyfolio`` and ``quantstats`` engine names are accepted as
+        compatibility aliases; both now route through ``tradelearn.report``.
+        """
+        if engine not in {"pyfolio", "quantstats"}:
+            raise ValueError("engine must be 'pyfolio' or 'quantstats'")
+        output = Path(filename or f"./{engine}.html")
+        returns = pd.Series(stats._equity_curve.Equity).pct_change().dropna()
+        benchmark = pd.Series(baseline.close).pct_change().dropna()
+        Reporter(
+            {
+                "returns": returns,
+                "trades": pd.DataFrame(),
+                "summary": {"strategy_name": engine},
+                "config": {"strategy": engine},
+            }
+        ).html(output, benchmark=benchmark)

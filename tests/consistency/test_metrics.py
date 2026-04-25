@@ -1,4 +1,4 @@
-"""Consistency checks for metrics against the 1.x vendored empyrical code."""
+"""Consistency checks for metrics against the frozen 1.x oracle code."""
 
 import importlib.util
 import sys
@@ -39,12 +39,13 @@ sys.modules.setdefault("IPython.display", ipython_display)
 sys.modules.setdefault("yfinance", types.ModuleType("yfinance"))
 sys.modules.setdefault("pandas_datareader", types.ModuleType("pandas_datareader"))
 sys.modules.setdefault("pandas_datareader.data", types.ModuleType("pandas_datareader.data"))
-sys.path.insert(0, str(ROOT / "tradelearn" / "strategy" / "evaluate"))
+LEGACY_ROOT = ROOT / "reference" / "tradelearn_1x"
+sys.path.insert(0, str(LEGACY_ROOT / "strategy" / "evaluate"))
 from empyrical import stats as empyrical  # noqa: E402
 
 
 def test_return_metrics_match_vendored_empyrical() -> None:
-    """Implemented return metrics match the 1.x oracle."""
+    """Implemented return metrics match the frozen 1.x oracle."""
     prices = pd.Series([100.0, 95.0, 101.0, 99.0, 105.0])
     returns = simple_returns(prices)
 
@@ -58,7 +59,7 @@ def test_return_metrics_match_vendored_empyrical() -> None:
 
 
 def test_risk_metrics_match_vendored_empyrical() -> None:
-    """Implemented risk metrics match the 1.x oracle on a drawdown-heavy fixture."""
+    """Implemented risk metrics match the frozen 1.x oracle on a drawdown-heavy fixture."""
     returns = pd.Series([-0.10, 0.05, -0.03, 0.08, -0.02, 0.04])
 
     assert np.isclose(max_drawdown(returns), empyrical.max_drawdown(returns), rtol=1e-10)
@@ -131,10 +132,10 @@ def test_factor_rank_ic_matches_vendored_alphalens() -> None:
 
 
 def _load_legacy_alphalens_performance() -> types.ModuleType:
-    """Load vendored alphalens performance without importing old package initializers."""
+    """Load frozen 1.x alphalens performance without importing old package initializers."""
     package_name = "legacy_alphalens"
     package = types.ModuleType(package_name)
-    package.__path__ = [str(ROOT / "tradelearn" / "strategy" / "examine" / "alphalens")]
+    package.__path__ = [str(LEGACY_ROOT / "strategy" / "examine" / "alphalens")]
     sys.modules[package_name] = package
 
     previous_modules = {
@@ -153,7 +154,7 @@ def _load_legacy_alphalens_performance() -> types.ModuleType:
     try:
         for module_name in ["utils", "performance"]:
             module_path = (
-                ROOT / "tradelearn" / "strategy" / "examine" / "alphalens" / f"{module_name}.py"
+                LEGACY_ROOT / "strategy" / "examine" / "alphalens" / f"{module_name}.py"
             )
             spec = importlib.util.spec_from_file_location(
                 f"{package_name}.{module_name}",
