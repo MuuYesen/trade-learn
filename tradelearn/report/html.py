@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from html import escape
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +38,8 @@ def write_html_report(reporter: Any, path: str | Path) -> Path:
             charts=charts,
             script=script,
             bokeh_resources=INLINE.render(),
+            metadata=_metadata(summary, returns, reporter._get("config", default={}) or {}),
+            drawdowns=reporter.top_drawdowns(limit=10),
             trades=trades,
             returns=returns,
             config=reporter._get("config", default={}) or {},
@@ -160,6 +164,8 @@ def _render_html(
     charts: str,
     script: str,
     bokeh_resources: str,
+    metadata: dict[str, str],
+    drawdowns: pd.DataFrame,
     trades: pd.DataFrame,
     returns: pd.Series,
     config: dict[str, Any],
@@ -181,7 +187,10 @@ def _render_html(
 </head>
 <body>
   <header>
-    <h1>Tradelearn Report</h1>
+    <h1>{escape(metadata["strategy_name"])}</h1>
+    <p>Run ID: {escape(metadata["run_id"])}</p>
+    <p>Period: {escape(metadata["start"])} to {escape(metadata["end"])}</p>
+    <p>Generated: {escape(metadata["generated_at"])}</p>
     <p>Rows: returns={len(returns)}, trades={len(trades)}</p>
   </header>
   <section>
@@ -191,6 +200,8 @@ def _render_html(
   <section>
     <h2>Equity Curve</h2>
     <h2>Drawdown</h2>
+    <h2>Top 10 Drawdowns</h2>
+    {_frame_table(drawdowns)}
     <h2>Monthly Returns Heatmap</h2>
     <h2>Rolling Sharpe</h2>
     <h2>Trade Distribution</h2>
@@ -201,6 +212,9 @@ def _render_html(
     <h2>Configuration</h2>
     {_summary_table(config)}
   </section>
+  <footer>
+    <p>Tradelearn {escape(metadata["version"])} | Generated: {escape(metadata["generated_at"])}</p>
+  </footer>
 </body>
 </html>
 """
@@ -216,6 +230,55 @@ def _summary_table(values: dict[str, Any]) -> str:
         "<table><thead><tr><th>metric</th><th>value</th></tr></thead>"
         f"<tbody>{rows}</tbody></table>"
     )
+
+
+def _frame_table(frame: pd.DataFrame) -> str:
+    """Render a frame as an HTML table."""
+    if frame.empty:
+        return "<table><tbody></tbody></table>"
+    headers = "".join(f"<th>{escape(str(column))}</th>" for column in frame.columns)
+    rows = "".join(
+        "<tr>"
+        + "".join(f"<td>{escape(_format_value(value))}</td>" for value in row)
+        + "</tr>"
+        for row in frame.itertuples(index=False, name=None)
+    )
+    return f"<table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>"
+
+
+def _metadata(
+    summary: dict[str, Any],
+    returns: pd.Series,
+    config: dict[str, Any],
+) -> dict[str, str]:
+    """Return report header and footer metadata."""
+    strategy_name = str(
+        summary.get("strategy_name") or config.get("strategy") or "Tradelearn Report"
+    )
+    run_id = str(config.get("run_id") or summary.get("run_id") or "-")
+    return {
+        "strategy_name": strategy_name,
+        "run_id": run_id,
+        "start": _format_date(returns.index.min()),
+        "end": _format_date(returns.index.max()),
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "version": _package_version(),
+    }
+
+
+def _format_date(value: Any) -> str:
+    """Format report date metadata."""
+    if pd.isna(value):
+        return "-"
+    return str(value)
+
+
+def _package_version() -> str:
+    """Return installed package version for report footer."""
+    try:
+        return version("trade-learn")
+    except PackageNotFoundError:
+        return "unknown"
 
 
 def _format_value(value: Any) -> str:

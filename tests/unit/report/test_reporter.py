@@ -121,6 +121,30 @@ def test_reporter_rolling_sharpe_uses_windowed_metrics() -> None:
     assert rolling.iloc[3] == metrics.sharpe(returns.iloc[1:4], periods=252)
 
 
+def test_reporter_top_drawdowns_returns_largest_episodes() -> None:
+    """Reporter.top_drawdowns returns the largest drawdown episodes first."""
+    returns = pd.Series(
+        [0.10, -0.20, -0.10, 0.50, -0.05, -0.05, 0.12],
+        index=pd.date_range("2024-01-01", periods=7, tz="UTC"),
+        name="returns",
+    )
+    reporter = Reporter({"returns": returns, "trades": pd.DataFrame()})
+
+    drawdowns = reporter.top_drawdowns(limit=2)
+
+    assert list(drawdowns.columns) == [
+        "peak",
+        "valley",
+        "recovery",
+        "max_drawdown",
+        "duration",
+    ]
+    assert len(drawdowns) == 2
+    assert drawdowns.iloc[0]["max_drawdown"] < drawdowns.iloc[1]["max_drawdown"]
+    assert drawdowns.iloc[0]["valley"] == pd.Timestamp("2024-01-03", tz="UTC")
+    assert drawdowns.iloc[0]["recovery"] == pd.Timestamp("2024-01-04", tz="UTC")
+
+
 def _stats() -> SimpleNamespace:
     returns = _returns()
     return SimpleNamespace(

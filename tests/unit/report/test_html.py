@@ -19,11 +19,16 @@ def test_reporter_html_writes_single_file_tear_sheet(tmp_path) -> None:
     html = path.read_text()
     assert "<!doctype html>" in html.lower()
     assert "Summary Stats" in html
+    assert "demo-strategy" in html
+    assert "run-001" in html
+    assert "Generated" in html
     assert "Equity Curve" in html
     assert "Drawdown" in html
+    assert "Top 10 Drawdowns" in html
     assert "Monthly Returns Heatmap" in html
     assert "Rolling Sharpe" in html
     assert "Trade Distribution" in html
+    assert "Tradelearn" in html
     assert "Bokeh" in html
     assert "annual_return" in html
 
@@ -52,9 +57,9 @@ def _stats() -> SimpleNamespace:
         trades=_trades(),
         positions=pd.DataFrame(),
         orders=pd.DataFrame(),
-        summary={"strategy_name": "demo"},
+        summary={"strategy_name": "demo-strategy"},
         analyzers={},
-        config={"strategy": "demo"},
+        config={"strategy": "demo", "run_id": "run-001"},
     )
 
 

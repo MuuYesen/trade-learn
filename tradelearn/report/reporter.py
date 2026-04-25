@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from tradelearn import metrics
-from tradelearn.report.analytics import monthly_returns_matrix, rolling_sharpe
+from tradelearn.report.analytics import monthly_returns_matrix, rolling_sharpe, top_drawdowns
 from tradelearn.report.excel import write_excel_report
 from tradelearn.report.explore import explore_trades
 from tradelearn.report.html import write_html_report
@@ -77,6 +77,10 @@ class Reporter:
     def rolling_sharpe(self, window: int = 126) -> pd.Series:
         """Return rolling Sharpe ratio."""
         return rolling_sharpe(self._get("returns"), window=window, periods=self.periods)
+
+    def top_drawdowns(self, limit: int = 10) -> pd.DataFrame:
+        """Return the largest drawdown episodes."""
+        return top_drawdowns(self._get("returns"), limit=limit)
 
     def excel(self, path: str) -> Any:
         """Write an Excel report."""
