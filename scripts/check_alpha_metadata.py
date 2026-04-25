@@ -39,7 +39,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--family",
-        choices=("alpha101", "alpha191"),
         help="check only one Alpha formula family",
     )
     parser.add_argument(
@@ -66,6 +65,12 @@ def main(argv: list[str] | None = None) -> int:
         for family in sorted(metadata):
             print(family)
         return 0
+
+    if args.family is not None and args.family not in metadata:
+        parser.error(
+            f"Unknown Alpha family: {args.family}. Available: "
+            + ", ".join(sorted(metadata))
+        )
 
     families = [args.family] if args.family else sorted(metadata)
     counts = {}

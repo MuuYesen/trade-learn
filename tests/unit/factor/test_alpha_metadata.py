@@ -216,6 +216,27 @@ def test_check_alpha_metadata_script_lists_families() -> None:
     assert result.stderr == ""
 
 
+def test_check_alpha_metadata_script_rejects_unknown_family() -> None:
+    """The metadata check script validates families from current metadata."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/check_alpha_metadata.py",
+            "--family",
+            "alpha999",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "Unknown Alpha family: alpha999. Available: alpha101, alpha191" in (
+        result.stderr
+    )
+
+
 @pytest.mark.parametrize(
     "detail_flag",
     ["--include-skipped", "--include-supported", "--include-all"],
@@ -403,6 +424,27 @@ def test_render_alpha_known_differences_script_lists_families() -> None:
 
     assert result.stdout.splitlines() == sorted(validated_alpha_formula_metadata())
     assert result.stderr == ""
+
+
+def test_render_alpha_known_differences_script_rejects_unknown_family() -> None:
+    """The known differences script validates families from current metadata."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha999",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "Unknown Alpha family: alpha999. Available: alpha101, alpha191" in (
+        result.stderr
+    )
 
 
 def test_render_alpha_known_differences_script_check_passes_when_content_exists(
