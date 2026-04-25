@@ -103,6 +103,31 @@ def test_reporter_excel_formats_return_values_to_six_decimals(tmp_path) -> None:
     assert num_formats[daily_returns_style] == "0.000000"
 
 
+def test_reporter_excel_flattens_nested_config_parameters(tmp_path) -> None:
+    """Reporter.excel expands nested config and strategy parameters into key/value rows."""
+    path = tmp_path / "config-report.xlsx"
+    stats = _stats()
+    stats.config = {
+        "strategy": {"name": "demo", "params": {"fast": 5, "slow": 20}},
+        "broker": {"cash": 100_000, "commission": 0.001},
+        "run_id": "run-001",
+    }
+
+    Reporter(stats, periods=252).excel(path)
+
+    shared_strings = _shared_strings(path)
+    for key in [
+        "strategy.name",
+        "strategy.params.fast",
+        "strategy.params.slow",
+        "broker.cash",
+        "broker.commission",
+        "run_id",
+    ]:
+        assert key in shared_strings
+    assert "params" not in shared_strings
+
+
 def _sheet_names(path) -> list[str]:
     with ZipFile(path) as workbook:
         xml = workbook.read("xl/workbook.xml").decode()

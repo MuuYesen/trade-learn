@@ -122,7 +122,22 @@ def _drawdowns(reporter: Any) -> pd.DataFrame:
 
 def _config_frame(config: Mapping[str, Any]) -> pd.DataFrame:
     """Return config as key/value rows."""
-    return pd.DataFrame({"key": list(config), "value": [str(value) for value in config.values()]})
+    rows = list(_flatten_config(config))
+    return pd.DataFrame(
+        {"key": [key for key, _ in rows], "value": [str(value) for _, value in rows]}
+    )
+
+
+def _flatten_config(config: Mapping[str, Any], prefix: str = "") -> list[tuple[str, Any]]:
+    """Return dotted config key/value rows for nested mappings."""
+    rows: list[tuple[str, Any]] = []
+    for key, value in config.items():
+        dotted_key = f"{prefix}.{key}" if prefix else str(key)
+        if isinstance(value, Mapping):
+            rows.extend(_flatten_config(value, prefix=dotted_key))
+        else:
+            rows.append((dotted_key, value))
+    return rows
 
 
 def _series(value: Any, name: str) -> pd.Series:
