@@ -59,6 +59,7 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha047",
         "alpha049",
         "alpha050",
+        "alpha051",
     }
 )
 
@@ -456,6 +457,15 @@ class Alpha101Factors:
     def alpha050(self) -> pd.DataFrame:
         """Return Alpha#50."""
         return -1 * _ts_max(_rank(_correlation(_rank(self.volume), _rank(self.vwap), 5)), 5)
+
+    def alpha051(self) -> pd.DataFrame:
+        """Return Alpha#51."""
+        inner = ((_delay(self.close, 20) - _delay(self.close, 10)) / 10) - (
+            (_delay(self.close, 10) - self.close) / 10
+        )
+        values = -1 * _delta(self.close, 1)
+        values[inner < -0.05] = 1
+        return values
 
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
