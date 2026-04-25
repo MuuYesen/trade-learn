@@ -20,6 +20,16 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha008",
         "alpha009",
         "alpha010",
+        "alpha011",
+        "alpha012",
+        "alpha013",
+        "alpha014",
+        "alpha015",
+        "alpha016",
+        "alpha017",
+        "alpha018",
+        "alpha019",
+        "alpha020",
     }
 )
 
@@ -163,6 +173,63 @@ class Alpha191Factors:
         part[cond] = _stddev(self.returns, 20)
         part[~cond] = self.close
         return _rank(_ts_max(part**2, 5))
+
+    def alpha011(self) -> pd.DataFrame:
+        """Return Alpha#11."""
+        return _ts_sum(
+            ((self.close - self.low) - (self.high - self.close))
+            / (self.high - self.low)
+            * self.volume,
+            6,
+        )
+
+    def alpha012(self) -> pd.DataFrame:
+        """Return Alpha#12."""
+        return _rank(self.open - (_ts_sum(self.vwap, 10) / 10)) * (
+            -1 * _rank(np.abs(self.close - self.vwap))
+        )
+
+    def alpha013(self) -> pd.DataFrame:
+        """Return Alpha#13."""
+        return ((self.high * self.low) ** 0.5) - self.vwap
+
+    def alpha014(self) -> pd.DataFrame:
+        """Return Alpha#14."""
+        return self.close - _delay(self.close, 5)
+
+    def alpha015(self) -> pd.DataFrame:
+        """Return Alpha#15."""
+        return self.open / _delay(self.close, 1) - 1
+
+    def alpha016(self) -> pd.DataFrame:
+        """Return Alpha#16."""
+        return -1 * _ts_max(_rank(_correlation(_rank(self.volume), _rank(self.vwap), 5)), 5)
+
+    def alpha017(self) -> pd.DataFrame:
+        """Return Alpha#17."""
+        return _rank(self.vwap - _ts_max(self.vwap, 15)) ** _delta(self.close, 5)
+
+    def alpha018(self) -> pd.DataFrame:
+        """Return Alpha#18."""
+        return self.close / _delay(self.close, 5)
+
+    def alpha019(self) -> pd.DataFrame:
+        """Return Alpha#19."""
+        delayed_close = _delay(self.close, 5)
+        cond1 = self.close < delayed_close
+        cond2 = self.close == delayed_close
+        cond3 = self.close > delayed_close
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond1] = (self.close - delayed_close) / delayed_close
+        part[cond2] = 0
+        part[cond3] = (self.close - delayed_close) / self.close
+        return part
+
+    def alpha020(self) -> pd.DataFrame:
+        """Return Alpha#20."""
+        delayed_close = _delay(self.close, 6)
+        return (self.close - delayed_close) / delayed_close * 100
 
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
