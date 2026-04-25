@@ -1,11 +1,11 @@
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from functools import partial
 from numbers import Number
-from typing import Callable, Dict, List, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
-from tradelearn.query.tec.pandas_ta import AnalysisIndicators
+import pandas_ta_classic as pta
 
 
 def try_(lazy_func, default=None, exception=Exception):
@@ -30,13 +30,13 @@ def _as_str(value) -> str:
     return name
 
 
-def _as_list(value) -> List:
+def _as_list(value) -> list:
     if isinstance(value, Sequence) and not isinstance(value, str):
         return list(value)
     return [value]
 
 
-def _data_period(index) -> Union[pd.Timedelta, Number]:
+def _data_period(index) -> pd.Timedelta | Number:
     """Return data index period as pd.Timedelta"""
     values = pd.Series(index[-100:])
     return values.diff().dropna().median()
@@ -45,7 +45,7 @@ def _data_period(index) -> Union[pd.Timedelta, Number]:
 class _Array(np.ndarray):
     """Array with a corresponding DataFrame/Series attachment."""
 
-    def __new__(cls, array, df: Union[Callable, pd.DataFrame, pd.Series]):
+    def __new__(cls, array, df: Callable | pd.DataFrame | pd.Series):
         if not callable(df) and not isinstance(df, (pd.DataFrame, pd.Series)):
             raise ValueError(f'df must be callable or pd.DataFrame/pd.Series. Got {type(df)}')
         obj = np.asarray(array).view(cls)
@@ -70,7 +70,7 @@ class _Array(np.ndarray):
         return super().__repr__() + f'\nwith df:\n{self.__df}'
 
     @property
-    def df(self) -> Union[pd.DataFrame, pd.Series]:
+    def df(self) -> pd.DataFrame | pd.Series:
         if callable(self.__df):
             self.__df = self.__df()
         return self.__df
@@ -102,9 +102,9 @@ class _Data:
     def __init__(self, df: pd.DataFrame):
         self.__df = df
         self.__i = len(df)
-        self.__pip: Optional[float] = None
-        self.__cache: Dict[str, np.ndarray] = {}
-        self.__arrays: Dict[str, np.ndarray] = {}
+        self.__pip: float | None = None
+        self.__cache: dict[str, np.ndarray] = {}
+        self.__arrays: dict[str, np.ndarray] = {}
         self.__tickers = list(self.__df.columns.levels[0])
         self.__ta = _TA(self.__df)
         self._update()
@@ -155,8 +155,11 @@ class _Data:
     @property
     def pip(self) -> float:
         if self.__pip is None:
-            self.__pip = float(10**-np.median([len(s.partition('.')[-1])
-                                               for s in self.__arrays['close'][0].ravel().astype(str)]))
+            decimal_lengths = [
+                len(s.partition('.')[-1])
+                for s in self.__arrays['close'][0].ravel().astype(str)
+            ]
+            self.__pip = float(10**-np.median(decimal_lengths))
         return self.__pip
 
     def __get_array(self, key) -> _Array:
@@ -164,9 +167,15 @@ class _Data:
         if arr is None:
             array, df = self.__arrays[key]
             if key == '__index':
-                arr = self.__cache[key] = _Indicator(array=array[:self.__i], df=lambda: df[:self.__i])
+                arr = self.__cache[key] = _Indicator(
+                    array=array[:self.__i],
+                    df=lambda: df[:self.__i],
+                )
             else:
-                arr = self.__cache[key] = _Indicator(array=array[:self.__i], df=lambda: df.iloc[:self.__i])
+                arr = self.__cache[key] = _Indicator(
+                    array=array[:self.__i],
+                    df=lambda: df.iloc[:self.__i],
+                )
         return arr
 
     @property
@@ -205,7 +214,7 @@ class _Data:
         return self.index[-1]
 
     @property
-    def tickers(self) -> List[str]:
+    def tickers(self) -> list[str]:
         return self.__tickers
 
     @property
@@ -227,12 +236,41 @@ except AttributeError:
     pass
 
 
-class PicklableAnalysisIndicators(AnalysisIndicators):
+class PicklableAnalysisIndicators:
+    """Picklable pandas-ta-classic dispatcher for backtesting data frames."""
+
+    _SERIES_PARAMS = {"open_", "open", "high", "low", "close", "volume"}
+
+    def __init__(self, df: pd.DataFrame):
+        self._df = df
+
     def __getstate__(self):
         return self.__dict__.copy()
 
     def __setstate__(self, state):
         self.__dict__.update(state)
+
+    def __getattr__(self, method: str):
+        indicator = getattr(pta, method)
+
+        def call(*args, **kwargs):
+            return indicator(*self._series_args(indicator), *args, **kwargs)
+
+        return call
+
+    def _series_args(self, indicator) -> list[pd.Series]:
+        import inspect
+
+        columns = {str(column).lower(): column for column in self._df.columns}
+        args = []
+        for name in inspect.signature(indicator).parameters:
+            if name not in self._SERIES_PARAMS:
+                break
+            column = columns.get("open" if name == "open_" else name)
+            if column is None:
+                break
+            args.append(self._df[column])
+        return args
 
 
 @pd.api.extensions.register_dataframe_accessor("ta")
@@ -249,7 +287,10 @@ class _TA:
         self.__df = df
         if self.__df.columns.nlevels == 2:
             self.__tickers = list(self.__df.columns.levels[0])
-            self.__indicators = {ticker: PicklableAnalysisIndicators(df[ticker]) for ticker in self.__tickers}
+            self.__indicators = {
+                ticker: PicklableAnalysisIndicators(df[ticker])
+                for ticker in self.__tickers
+            }
         elif self.__df.columns.nlevels == 1:
             self.__tickers = []
             self.__indicator = PicklableAnalysisIndicators(df)
