@@ -72,6 +72,7 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha065",
         "alpha066",
         "alpha068",
+        "alpha071",
     }
 )
 
@@ -574,6 +575,20 @@ class Alpha101Factors:
         right = _rank(_delta(right_mix, 2)) * 14
         return (left < right) * -1
 
+    def alpha071(self) -> pd.DataFrame:
+        """Return Alpha#71."""
+        adv180 = _sma(self.volume, 180)
+        left = _ts_rank(
+            _decay_linear(
+                _correlation(_ts_rank(self.close, 3), _ts_rank(adv180, 12), 18),
+                4,
+            ),
+            16,
+        )
+        price_spread_rank = _rank((self.low + self.open) - (self.vwap + self.vwap))
+        right = _ts_rank(_decay_linear(price_spread_rank.pow(2), 16), 4)
+        return _elementwise_max(left, right)
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha101 formula layout."""
@@ -664,3 +679,8 @@ def _ts_min(frame: pd.DataFrame, window: int) -> pd.DataFrame:
 def _ts_max(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling maximum."""
     return frame.rolling(window).max()
+
+
+def _elementwise_max(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
+    """Return element-wise maximum matching the Alpha101 legacy helper."""
+    return pd.DataFrame(np.maximum(left, right), index=left.index, columns=left.columns)
