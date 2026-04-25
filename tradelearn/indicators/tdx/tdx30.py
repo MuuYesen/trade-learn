@@ -76,6 +76,13 @@ def _sma(
     return _series(MyTT.SMA(_array(close), n, m), index=_index(close), name=f"SMA_{n}_{m}")
 
 
+def _wma(close: pd.Series | Sequence[float], n: int = 5, **kwargs: int) -> pd.Series:
+    """Weighted moving average using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    _unexpected(kwargs)
+    return _series(MyTT.WMA(_array(close), n), index=_index(close), name=f"WMA_{n}")
+
+
 def _macd(
     close: pd.Series | Sequence[float],
     short: int = 12,
@@ -212,6 +219,101 @@ def _atr(
     return _series(values, index=_index(close), name=f"ATR_{n}")
 
 
+def _bbi(
+    close: pd.Series | Sequence[float],
+    m1: int = 3,
+    m2: int = 6,
+    m3: int = 12,
+    m4: int = 20,
+    **kwargs: int,
+) -> pd.Series:
+    """BBI using Tongdaxin semantics."""
+    m1 = kwargs.pop("M1", m1)
+    m2 = kwargs.pop("M2", m2)
+    m3 = kwargs.pop("M3", m3)
+    m4 = kwargs.pop("M4", m4)
+    _unexpected(kwargs)
+    values = MyTT.BBI(_array(close), M1=m1, M2=m2, M3=m3, M4=m4)
+    return _series(values, index=_index(close), name="BBI")
+
+
+def _dmi(
+    close: pd.Series | Sequence[float],
+    high: pd.Series | Sequence[float],
+    low: pd.Series | Sequence[float],
+    m1: int = 14,
+    m2: int = 6,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """DMI using Tongdaxin semantics."""
+    m1 = kwargs.pop("M1", m1)
+    m2 = kwargs.pop("M2", m2)
+    _unexpected(kwargs)
+    pdi, mdi, adx, adxr = MyTT.DMI(
+        _array(close),
+        _array(high),
+        _array(low),
+        M1=m1,
+        M2=m2,
+    )
+    return _frame({"PDI": pdi, "MDI": mdi, "ADX": adx, "ADXR": adxr}, index=_index(close))
+
+
+def _trix(
+    close: pd.Series | Sequence[float],
+    m1: int = 12,
+    m2: int = 20,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """TRIX using Tongdaxin semantics."""
+    m1 = kwargs.pop("M1", m1)
+    m2 = kwargs.pop("M2", m2)
+    _unexpected(kwargs)
+    trix_value, trma = MyTT.TRIX(_array(close), M1=m1, M2=m2)
+    return _frame({"TRIX": trix_value, "TRMA": trma}, index=_index(close))
+
+
+def _vr(
+    close: pd.Series | Sequence[float],
+    volume: pd.Series | Sequence[float],
+    m1: int = 26,
+    **kwargs: int,
+) -> pd.Series:
+    """VR using Tongdaxin semantics."""
+    m1 = kwargs.pop("M1", m1)
+    _unexpected(kwargs)
+    values = MyTT.VR(_array(close), _array(volume), M1=m1)
+    return _series(values, index=_index(close), name=f"VR_{m1}")
+
+
+def _mtm(
+    close: pd.Series | Sequence[float],
+    n: int = 12,
+    m: int = 6,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """MTM using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    m = kwargs.pop("M", m)
+    _unexpected(kwargs)
+    mtm_value, mtmma = MyTT.MTM(_array(close), N=n, M=m)
+    return _frame({"MTM": mtm_value, "MTMMA": mtmma}, index=_index(close))
+
+
+def _roc(
+    close: pd.Series | Sequence[float],
+    n: int = 12,
+    m: int = 6,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """ROC using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    m = kwargs.pop("M", m)
+    _unexpected(kwargs)
+    roc_value, maroc = MyTT.ROC(_array(close), N=n, M=m)
+    return _frame({"ROC": roc_value, "MAROC": maroc}, index=_index(close))
+
+
 def _expma(
     close: pd.Series | Sequence[float],
     n1: int = 12,
@@ -235,12 +337,29 @@ def _obv(
     return _series(values, index=_index(close), name="OBV")
 
 
+def _mfi(
+    close: pd.Series | Sequence[float],
+    high: pd.Series | Sequence[float],
+    low: pd.Series | Sequence[float],
+    volume: pd.Series | Sequence[float],
+    n: int = 14,
+    **kwargs: int,
+) -> pd.Series:
+    """MFI using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    _unexpected(kwargs)
+    values = MyTT.MFI(_array(close), _array(high), _array(low), _array(volume), N=n)
+    return _series(values, index=_index(close), name=f"MFI_{n}")
+
+
 ma = FunctionIndicator("tdx.ma", _ma, {"n": 5})
 MA = FunctionIndicator("tdx.MA", _ma, {"N": 5})
 ema = FunctionIndicator("tdx.ema", _ema, {"n": 5})
 EMA = FunctionIndicator("tdx.EMA", _ema, {"N": 5})
 sma = FunctionIndicator("tdx.sma", _sma, {"n": 5, "m": 1})
 SMA = FunctionIndicator("tdx.SMA", _sma, {"N": 5, "M": 1})
+wma = FunctionIndicator("tdx.wma", _wma, {"n": 5})
+WMA = FunctionIndicator("tdx.WMA", _wma, {"N": 5})
 macd = FunctionIndicator("tdx.macd", _macd, {"short": 12, "long": 26, "m": 9})
 MACD = FunctionIndicator("tdx.MACD", _macd, {"SHORT": 12, "LONG": 26, "M": 9})
 kdj = FunctionIndicator("tdx.kdj", _kdj, {"n": 9, "m1": 3, "m2": 3})
@@ -259,38 +378,68 @@ cci = FunctionIndicator("tdx.cci", _cci, {"n": 14})
 CCI = FunctionIndicator("tdx.CCI", _cci, {"N": 14})
 atr = FunctionIndicator("tdx.atr", _atr, {"n": 20})
 ATR = FunctionIndicator("tdx.ATR", _atr, {"N": 20})
+bbi = FunctionIndicator("tdx.bbi", _bbi, {"m1": 3, "m2": 6, "m3": 12, "m4": 20})
+BBI = FunctionIndicator("tdx.BBI", _bbi, {"M1": 3, "M2": 6, "M3": 12, "M4": 20})
+dmi = FunctionIndicator("tdx.dmi", _dmi, {"m1": 14, "m2": 6})
+DMI = FunctionIndicator("tdx.DMI", _dmi, {"M1": 14, "M2": 6})
+trix = FunctionIndicator("tdx.trix", _trix, {"m1": 12, "m2": 20})
+TRIX = FunctionIndicator("tdx.TRIX", _trix, {"M1": 12, "M2": 20})
+vr = FunctionIndicator("tdx.vr", _vr, {"m1": 26})
+VR = FunctionIndicator("tdx.VR", _vr, {"M1": 26})
+mtm = FunctionIndicator("tdx.mtm", _mtm, {"n": 12, "m": 6})
+MTM = FunctionIndicator("tdx.MTM", _mtm, {"N": 12, "M": 6})
+roc = FunctionIndicator("tdx.roc", _roc, {"n": 12, "m": 6})
+ROC = FunctionIndicator("tdx.ROC", _roc, {"N": 12, "M": 6})
 expma = FunctionIndicator("tdx.expma", _expma, {"n1": 12, "n2": 50})
 EXPMA = FunctionIndicator("tdx.EXPMA", _expma, {"N1": 12, "N2": 50})
 obv = FunctionIndicator("tdx.obv", _obv, {})
 OBV = FunctionIndicator("tdx.OBV", _obv, {})
+mfi = FunctionIndicator("tdx.mfi", _mfi, {"n": 14})
+MFI = FunctionIndicator("tdx.MFI", _mfi, {"N": 14})
 
 __all__ = [
     "ATR",
+    "BBI",
     "BIAS",
     "BOLL",
     "CCI",
+    "DMI",
     "EMA",
     "EXPMA",
     "KDJ",
     "MA",
     "MACD",
+    "MFI",
+    "MTM",
     "OBV",
     "PSY",
+    "ROC",
     "RSI",
     "SMA",
+    "TRIX",
+    "VR",
     "WR",
+    "WMA",
     "atr",
+    "bbi",
     "bias",
     "boll",
     "cci",
+    "dmi",
     "ema",
     "expma",
     "kdj",
     "ma",
     "macd",
+    "mfi",
+    "mtm",
     "obv",
     "psy",
+    "roc",
     "rsi",
     "sma",
+    "trix",
+    "vr",
     "wr",
+    "wma",
 ]

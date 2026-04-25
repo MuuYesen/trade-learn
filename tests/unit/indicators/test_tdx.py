@@ -133,6 +133,61 @@ def test_tdx_cci_atr_expma_obv_match_mytt() -> None:
     assert obv.name == "OBV"
 
 
+def test_tdx_wma_bbi_vr_mfi_match_mytt() -> None:
+    """Additional classic tdx indicators match MyTT formulas."""
+    close = _close()
+    high = _high()
+    low = _low()
+    volume = _volume()
+
+    wma = ta.tdx.wma(close, n=4)
+    bbi = ta.tdx.bbi(close, m1=3, m2=4, m3=5, m4=6)
+    vr = ta.tdx.vr(close, volume, m1=5)
+    mfi = ta.tdx.mfi(close, high, low, volume, n=5)
+
+    np.testing.assert_allclose(wma.to_numpy(), MyTT.WMA(close.to_numpy(), 4), equal_nan=True)
+    np.testing.assert_allclose(
+        bbi.to_numpy(),
+        MyTT.BBI(close.to_numpy(), M1=3, M2=4, M3=5, M4=6),
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        vr.to_numpy(),
+        MyTT.VR(close.to_numpy(), volume.to_numpy(), M1=5),
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        mfi.to_numpy(),
+        MyTT.MFI(close.to_numpy(), high.to_numpy(), low.to_numpy(), volume.to_numpy(), N=5),
+        equal_nan=True,
+    )
+    assert wma.name == "WMA_4"
+    assert bbi.name == "BBI"
+    assert vr.name == "VR_5"
+    assert mfi.name == "MFI_5"
+
+
+def test_tdx_dmi_trix_mtm_roc_match_mytt_with_stable_columns() -> None:
+    """Trend and momentum tdx indicators match MyTT tuple outputs."""
+    close = _close()
+    high = _high()
+    low = _low()
+
+    dmi = ta.tdx.dmi(close, high, low, m1=5, m2=3)
+    trix = ta.tdx.trix(close, m1=4, m2=3)
+    mtm = ta.tdx.mtm(close, n=4, m=3)
+    roc = ta.tdx.roc(close, n=4, m=3)
+
+    _assert_frame_matches(
+        dmi,
+        ["PDI", "MDI", "ADX", "ADXR"],
+        MyTT.DMI(close.to_numpy(), high.to_numpy(), low.to_numpy(), M1=5, M2=3),
+    )
+    _assert_frame_matches(trix, ["TRIX", "TRMA"], MyTT.TRIX(close.to_numpy(), M1=4, M2=3))
+    _assert_frame_matches(mtm, ["MTM", "MTMMA"], MyTT.MTM(close.to_numpy(), N=4, M=3))
+    _assert_frame_matches(roc, ["ROC", "MAROC"], MyTT.ROC(close.to_numpy(), N=4, M=3))
+
+
 def _assert_frame_matches(
     result: pd.DataFrame,
     columns: list[str],
