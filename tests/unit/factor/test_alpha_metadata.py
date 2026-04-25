@@ -770,6 +770,54 @@ def test_render_alpha_known_differences_script_check_ignores_nested_fenced_headi
     assert result.stderr == ""
 
 
+def test_render_alpha_known_differences_script_check_ignores_unclosed_fence_content(
+    tmp_path: Path,
+) -> None:
+    """The known differences check does not close fences with trailing content."""
+    rendered = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha101",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    target = tmp_path / "MIGRATION.md"
+    target.write_text(
+        "# MIGRATION\n\n"
+        "```markdown\n"
+        "``` invalid close\n"
+        "### Alpha alpha101 skipped formulas\n"
+        "```\n\n"
+        + rendered,
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha101",
+            "--check",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout == (
+        f"Alpha known differences sections present in {target}: alpha101\n"
+    )
+    assert result.stderr == ""
+
+
 def test_render_alpha_known_differences_script_check_fails_for_missing_file(
     tmp_path: Path,
 ) -> None:

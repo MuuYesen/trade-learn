@@ -63,13 +63,20 @@ def alpha_known_differences_section_starts(
         stripped = line.strip()
         marker = ""
         marker_length = 0
+        marker_rest = ""
         if stripped.startswith(("```", "~~~")):
             marker = stripped[0]
             marker_length = len(stripped) - len(stripped.lstrip(marker))
+            marker_rest = stripped[marker_length:]
         if marker and not fence_marker:
             fence_marker = marker
             fence_length = marker_length
-        elif marker and marker == fence_marker and marker_length >= fence_length:
+        elif (
+            marker
+            and marker == fence_marker
+            and marker_length >= fence_length
+            and not marker_rest.strip()
+        ):
             fence_marker = ""
             fence_length = 0
         elif not fence_marker:
