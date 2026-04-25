@@ -412,6 +412,37 @@ def test_check_design_notes_reports_duplicate_required_section(
     ]
 
 
+def test_check_design_notes_ignores_required_sections_inside_fenced_blocks(
+    tmp_path: Path,
+) -> None:
+    """The checker ignores markdown examples fenced inside design notes."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    write_design_note(docs_internal / "matching-design.md", "Matching Design")
+    write_design_note(docs_internal / "event-loop.md", "Event Loop")
+    write_design_note(docs_internal / "portfolio.md", "Portfolio")
+    with (docs_internal / "portfolio.md").open("a", encoding="utf-8") as handle:
+        handle.write("\n```markdown\n")
+        handle.write("## Source Notes\n")
+        handle.write("Example markdown that should not count as a real section.\n")
+        handle.write("```\n")
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "design-note:matching-design.md=ok",
+        "design-note:event-loop.md=ok",
+        "design-note:portfolio.md=ok",
+    ]
+    assert result.stderr == ""
+
+
 def test_check_design_notes_json_reports_all_note_statuses(tmp_path: Path) -> None:
     """JSON output reports machine-readable status for all design notes."""
     docs_internal = tmp_path / "docs" / "internal"

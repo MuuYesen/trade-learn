@@ -43,6 +43,18 @@ SectionSpans = dict[str, tuple[int, int]]
 SectionCounts = dict[str, int]
 
 
+def fence_marker(line: str) -> tuple[str, int, str] | None:
+    """Return fenced-code marker metadata for a markdown line."""
+    stripped = line.strip()
+    if not stripped or stripped[0] not in ("`", "~"):
+        return None
+    marker = stripped[0]
+    marker_length = len(stripped) - len(stripped.lstrip(marker))
+    if marker_length < 3:
+        return None
+    return marker, marker_length, stripped[marker_length:]
+
+
 def design_note_template(filename: str) -> str:
     """Return the starter content for one clean-room design note."""
     lines = [f"# {NOTE_TITLES[filename]}", ""]
@@ -69,7 +81,24 @@ def section_heading_spans(content: str) -> SectionSpans:
     """Return spans for required markdown section heading lines."""
     spans: SectionSpans = {}
     offset = 0
+    fence: tuple[str, int] | None = None
     for line in content.splitlines(keepends=True):
+        marker = fence_marker(line)
+        if marker is not None:
+            marker_char, marker_length, marker_rest = marker
+            if fence is None:
+                fence = (marker_char, marker_length)
+            elif (
+                marker_char == fence[0]
+                and marker_length >= fence[1]
+                and not marker_rest.strip()
+            ):
+                fence = None
+            offset += len(line)
+            continue
+        if fence is not None:
+            offset += len(line)
+            continue
         heading = line.strip()
         if heading in REQUIRED_SECTIONS and heading not in spans:
             spans[heading] = (offset + line.index(heading), offset + len(line))
@@ -80,7 +109,22 @@ def section_heading_spans(content: str) -> SectionSpans:
 def section_heading_counts(content: str) -> SectionCounts:
     """Return occurrence counts for required markdown section heading lines."""
     counts: SectionCounts = {}
+    fence: tuple[str, int] | None = None
     for line in content.splitlines():
+        marker = fence_marker(line)
+        if marker is not None:
+            marker_char, marker_length, marker_rest = marker
+            if fence is None:
+                fence = (marker_char, marker_length)
+            elif (
+                marker_char == fence[0]
+                and marker_length >= fence[1]
+                and not marker_rest.strip()
+            ):
+                fence = None
+            continue
+        if fence is not None:
+            continue
         heading = line.strip()
         if heading in REQUIRED_SECTIONS:
             counts[heading] = counts.get(heading, 0) + 1
