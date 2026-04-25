@@ -43,6 +43,16 @@ def test_alpha191_exports_migrated_formulas_like_legacy_query() -> None:
         "alpha027",
         "alpha028",
         "alpha029",
+        "alpha031",
+        "alpha032",
+        "alpha033",
+        "alpha034",
+        "alpha035",
+        "alpha036",
+        "alpha037",
+        "alpha038",
+        "alpha039",
+        "alpha040",
     ]
     expected = _legacy_alpha191(stock_data, bench_data, names)
 
@@ -89,6 +99,16 @@ def test_query_alphas191_delegates_supported_formulas_to_v2_facade() -> None:
         "alpha027",
         "alpha028",
         "alpha029",
+        "alpha031",
+        "alpha032",
+        "alpha033",
+        "alpha034",
+        "alpha035",
+        "alpha036",
+        "alpha037",
+        "alpha038",
+        "alpha039",
+        "alpha040",
     ]
 
     result = Query.alphas191(stock_data, bench_data, names)
@@ -104,7 +124,15 @@ def test_alpha191_v2_facade_avoids_future_warning_for_missing_values() -> None:
     """The v2 Alpha191 path should not inherit legacy None-to-float warnings."""
     stock_data = _stock_data()
     bench_data = _bench_data()
-    names = ["alpha003", "alpha004", "alpha010", "alpha019", "alpha023"]
+    names = [
+        "alpha003",
+        "alpha004",
+        "alpha010",
+        "alpha019",
+        "alpha023",
+        "alpha038",
+        "alpha040",
+    ]
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", FutureWarning)
