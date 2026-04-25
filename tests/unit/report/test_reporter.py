@@ -167,6 +167,18 @@ def test_reporter_top_drawdowns_returns_largest_episodes() -> None:
     assert drawdowns.iloc[0]["recovery"] == pd.Timestamp("2024-01-04", tz="UTC")
 
 
+def test_reporter_trade_distribution_bins_trade_pnl() -> None:
+    """Reporter.trade_distribution returns histogram bins and summary stats."""
+    reporter = Reporter({"returns": _returns(), "trades": _trades()})
+
+    distribution = reporter.trade_distribution(bins=2)
+
+    assert list(distribution.columns) == ["left", "right", "count"]
+    assert distribution["count"].sum() == len(_trades())
+    assert distribution.attrs["mean"] == pytest.approx(_trades()["pnl"].mean())
+    assert distribution.attrs["median"] == pytest.approx(_trades()["pnl"].median())
+
+
 def test_reporter_exposure_pivots_multi_asset_positions() -> None:
     """Reporter.exposure returns daily symbol exposure weights."""
     positions = pd.DataFrame(

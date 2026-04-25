@@ -35,7 +35,7 @@ def write_html_report(
         _drawdown_plot(reporter.drawdown()),
         _monthly_heatmap_plot(reporter.monthly_heatmap()),
         _rolling_sharpe_plot(reporter.rolling_sharpe()),
-        _trade_distribution_plot(trades),
+        _trade_distribution_plot(reporter.trade_distribution()),
     ]
     if _has_multi_asset_exposure(exposure):
         plots.append(_correlation_plot(correlation))
@@ -154,22 +154,26 @@ def _rolling_sharpe_plot(rolling: pd.Series):
     return plot
 
 
-def _trade_distribution_plot(trades: pd.DataFrame):
+def _trade_distribution_plot(distribution: pd.DataFrame):
     """Return a trade PnL histogram figure."""
     plot = figure(title="Trade Distribution", height=220, sizing_mode="stretch_width")
-    if "pnl" not in trades or trades.empty:
+    if distribution.empty:
         return plot
-    hist, edges = pd.cut(trades["pnl"], bins=min(20, max(1, len(trades))), retbins=True)
-    counts = hist.value_counts(sort=False).to_numpy()
     plot.quad(
-        top=counts,
+        top=distribution["count"],
         bottom=0,
-        left=edges[:-1],
-        right=edges[1:],
+        left=distribution["left"],
+        right=distribution["right"],
         fill_color="#2ca02c",
         line_color="white",
         alpha=0.65,
     )
+    mean = distribution.attrs.get("mean")
+    median = distribution.attrs.get("median")
+    if pd.notna(mean):
+        plot.line([mean, mean], [0, distribution["count"].max()], color="#1f77b4", line_width=2)
+    if pd.notna(median):
+        plot.line([median, median], [0, distribution["count"].max()], color="#ff7f0e", line_width=2)
     return plot
 
 

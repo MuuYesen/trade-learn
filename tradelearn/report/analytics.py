@@ -92,6 +92,28 @@ def top_drawdowns(returns: pd.Series, limit: int = 10) -> pd.DataFrame:
     return pd.DataFrame(episodes, columns=columns).sort_values("max_drawdown").head(limit)
 
 
+def trade_distribution(trades: pd.DataFrame, bins: int = 20) -> pd.DataFrame:
+    """Return trade PnL histogram bins with summary stats in attrs."""
+    if trades.empty or "pnl" not in trades:
+        result = pd.DataFrame(columns=["left", "right", "count"])
+        result.attrs["mean"] = np.nan
+        result.attrs["median"] = np.nan
+        return result
+    pnl = pd.Series(trades["pnl"], dtype="float64")
+    bucket_count = min(bins, max(1, len(pnl)))
+    histogram, edges = np.histogram(pnl, bins=bucket_count)
+    result = pd.DataFrame(
+        {
+            "left": edges[:-1],
+            "right": edges[1:],
+            "count": histogram,
+        }
+    )
+    result.attrs["mean"] = float(pnl.mean())
+    result.attrs["median"] = float(pnl.median())
+    return result
+
+
 def exposure_weights(positions: pd.DataFrame) -> pd.DataFrame:
     """Return daily symbol exposure weights from position values."""
     if positions.empty or not {"date", "symbol", "value"}.issubset(positions.columns):

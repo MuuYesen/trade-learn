@@ -16,6 +16,7 @@ from tradelearn.report.analytics import (
     rolling_beta,
     rolling_sharpe,
     top_drawdowns,
+    trade_distribution,
 )
 from tradelearn.report.excel import write_excel_report
 from tradelearn.report.explore import explore_trades
@@ -92,6 +93,10 @@ class Reporter:
     def top_drawdowns(self, limit: int = 10) -> pd.DataFrame:
         """Return the largest drawdown episodes."""
         return top_drawdowns(self._get("returns"), limit=limit)
+
+    def trade_distribution(self, bins: int = 20) -> pd.DataFrame:
+        """Return trade PnL histogram bins."""
+        return trade_distribution(self._get("trades", default=pd.DataFrame()), bins=bins)
 
     def exposure(self) -> pd.DataFrame:
         """Return daily symbol exposure weights."""
