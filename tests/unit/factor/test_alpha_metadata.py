@@ -628,6 +628,52 @@ def test_render_alpha_known_differences_script_check_reports_all_section_errors(
     )
 
 
+def test_render_alpha_known_differences_script_check_fails_for_duplicate_section(
+    tmp_path: Path,
+) -> None:
+    """The known differences check rejects duplicate family sections."""
+    rendered = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha101",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    target = tmp_path / "MIGRATION.md"
+    target.write_text(
+        "# MIGRATION\n\n"
+        + rendered
+        + "\n### Alpha alpha101 skipped formulas\n\n"
+        "| Formula | Reason |\n"
+        "|---|---|\n"
+        "| `alpha999` | duplicate stale row |\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha101",
+            "--check",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == "Duplicate Alpha known differences sections: alpha101\n"
+
+
 def test_render_alpha_known_differences_script_check_fails_for_missing_file(
     tmp_path: Path,
 ) -> None:

@@ -65,6 +65,19 @@ def alpha_known_differences_section(content: str, family: str) -> str | None:
     return content[section_start:section_end].strip() + "\n"
 
 
+def alpha_known_differences_section_count(content: str, family: str) -> int:
+    """Return how many Alpha family sections appear in a Markdown document."""
+    heading = f"### Alpha {family} skipped formulas"
+    count = 0
+    position = 0
+    while True:
+        section_start = content.find(heading, position)
+        if section_start == -1:
+            return count
+        count += 1
+        position = section_start + len(heading)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Print Markdown tables for skipped Alpha formulas."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -130,12 +143,21 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         missing = []
         outdated = []
+        duplicate = []
         for family, rendered in rendered_by_family.items():
+            if alpha_known_differences_section_count(content, family) > 1:
+                duplicate.append(family)
+                continue
             section = alpha_known_differences_section(content, family)
             if section is None:
                 missing.append(family)
             elif section != rendered.rstrip() + "\n":
                 outdated.append(family)
+        if duplicate:
+            print(
+                "Duplicate Alpha known differences sections: " + ", ".join(duplicate),
+                file=sys.stderr,
+            )
         if missing:
             print(
                 "Missing Alpha known differences sections: " + ", ".join(missing),
@@ -146,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
                 "Outdated Alpha known differences sections: " + ", ".join(outdated),
                 file=sys.stderr,
             )
-        if missing or outdated:
+        if duplicate or missing or outdated:
             return 1
         print(
             f"Alpha known differences sections present in {args.check}: "
