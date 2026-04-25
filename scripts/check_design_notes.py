@@ -153,7 +153,12 @@ def has_placeholder_token(content: str, token: str) -> bool:
 
 def has_expected_title(content: str, filename: str) -> bool:
     """Return whether a note starts with the expected top-level heading."""
-    return content.lstrip().startswith(f"# {NOTE_TITLES[filename]}\n")
+    expected = f"# {NOTE_TITLES[filename]}"
+    for line in content.splitlines():
+        heading = line.strip().removeprefix("\ufeff")
+        if heading:
+            return heading == expected
+    return False
 
 
 def note_errors(directory: Path, filename: str, *, strict: bool = False) -> list[str]:

@@ -144,6 +144,101 @@ def test_check_design_notes_reports_wrong_top_level_title(tmp_path: Path) -> Non
     ]
 
 
+def test_check_design_notes_accepts_crlf_top_level_title(tmp_path: Path) -> None:
+    """The checker accepts design notes written with CRLF line endings."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    write_design_note(docs_internal / "matching-design.md", "Matching Design")
+    write_design_note(docs_internal / "event-loop.md", "Event Loop")
+    (docs_internal / "portfolio.md").write_text(
+        "\r\n".join(
+            [
+                "# Portfolio",
+                "",
+                "## Scope",
+                "Captures the design boundary.",
+                "",
+                "## Clean-room Boundary",
+                "Records source separation rules.",
+                "",
+                "## Source Notes",
+                "Lists references reviewed before the freeze.",
+                "",
+                "## Implementation Decisions",
+                "Records independent implementation decisions.",
+                "",
+                "## Open Questions",
+                "Tracks unresolved follow-up items.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "design-note:matching-design.md=ok",
+        "design-note:event-loop.md=ok",
+        "design-note:portfolio.md=ok",
+    ]
+    assert result.stderr == ""
+
+
+def test_check_design_notes_accepts_bom_before_top_level_title(tmp_path: Path) -> None:
+    """The checker accepts UTF-8 BOM before the design-note H1."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    write_design_note(docs_internal / "matching-design.md", "Matching Design")
+    write_design_note(docs_internal / "event-loop.md", "Event Loop")
+    (docs_internal / "portfolio.md").write_text(
+        "\ufeff"
+        + "\n".join(
+            [
+                "# Portfolio",
+                "",
+                "## Scope",
+                "Captures the design boundary.",
+                "",
+                "## Clean-room Boundary",
+                "Records source separation rules.",
+                "",
+                "## Source Notes",
+                "Lists references reviewed before the freeze.",
+                "",
+                "## Implementation Decisions",
+                "Records independent implementation decisions.",
+                "",
+                "## Open Questions",
+                "Tracks unresolved follow-up items.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "design-note:matching-design.md=ok",
+        "design-note:event-loop.md=ok",
+        "design-note:portfolio.md=ok",
+    ]
+    assert result.stderr == ""
+
+
 def test_check_design_notes_init_creates_required_templates(tmp_path: Path) -> None:
     """The design-note checker can create the three required note templates."""
     docs_internal = tmp_path / "docs" / "internal"
