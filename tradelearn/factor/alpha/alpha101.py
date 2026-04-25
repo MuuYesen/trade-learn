@@ -61,6 +61,7 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha050",
         "alpha051",
         "alpha052",
+        "alpha053",
     }
 )
 
@@ -476,6 +477,12 @@ class Alpha101Factors:
             * _rank((_ts_sum(self.returns, 240) - _ts_sum(self.returns, 20)) / 220)
             * _ts_rank(self.volume, 5)
         )
+
+    def alpha053(self) -> pd.DataFrame:
+        """Return Alpha#53."""
+        denominator = (self.close - self.low).replace(0, 0.0001)
+        inner = ((self.close - self.low) - (self.high - self.close)) / denominator
+        return -1 * _delta(inner, 9)
 
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
