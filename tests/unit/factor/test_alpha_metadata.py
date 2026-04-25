@@ -58,3 +58,20 @@ def test_alpha_formula_metadata_is_exported_from_factor_package() -> None:
 
     assert factor_package.alpha_formula_metadata() == alpha_package.alpha_formula_metadata()
     assert "alpha_formula_metadata" in factor_package.__all__
+
+
+def test_alpha_formula_constants_are_exported_from_factor_package() -> None:
+    """The top-level factor facade exposes Alpha formula metadata constants."""
+    import tradelearn.factor as factor_package
+    import tradelearn.factor.alpha as alpha_package
+
+    assert factor_package.ALPHA101_SUPPORTED == alpha_package.ALPHA101_SUPPORTED
+    assert factor_package.ALPHA191_SUPPORTED == alpha_package.ALPHA191_SUPPORTED
+    assert factor_package.ALPHA101_SKIPPED == alpha_package.ALPHA101_SKIPPED
+    assert factor_package.ALPHA191_SKIPPED == alpha_package.ALPHA191_SKIPPED
+    assert {
+        "ALPHA101_SKIPPED",
+        "ALPHA101_SUPPORTED",
+        "ALPHA191_SKIPPED",
+        "ALPHA191_SUPPORTED",
+    }.issubset(factor_package.__all__)
