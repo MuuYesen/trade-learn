@@ -35,6 +35,7 @@ def write_excel_report(reporter: Any, path: str | Path) -> Path:
     factor_rank_ic = reporter.factor_rank_ic()
     factor_turnover = reporter.factor_turnover()
     factor_autocorrelation = reporter.factor_autocorrelation()
+    factor_long_short_returns = reporter.factor_long_short_returns()
     factor_quantile_returns = reporter.factor_quantile_returns()
     config = reporter._get("config", default={}) or {}
 
@@ -69,6 +70,11 @@ def write_excel_report(reporter: Any, path: str | Path) -> Path:
             _excel_safe_frame(factor_autocorrelation.to_frame("autocorrelation")).to_excel(
                 writer,
                 sheet_name="factor_autocorr",
+            )
+        if not factor_long_short_returns.empty:
+            _excel_safe_frame(factor_long_short_returns).to_excel(
+                writer,
+                sheet_name="factor_long_short",
             )
         if not factor_quantile_returns.empty:
             _excel_safe_frame(factor_quantile_returns).to_excel(

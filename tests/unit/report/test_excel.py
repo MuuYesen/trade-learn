@@ -62,6 +62,7 @@ def test_reporter_excel_writes_factor_quantile_sheet_when_analyzer_exists(tmp_pa
     assert "factor_rank_ic" in _sheet_names(path)
     assert "factor_turnover" in _sheet_names(path)
     assert "factor_autocorr" in _sheet_names(path)
+    assert "factor_long_short" in _sheet_names(path)
     assert "factor_quantiles" in _sheet_names(path)
 
 
@@ -140,5 +141,16 @@ class _FactorAnalyzerStub:
         """Return factor quantile cumulative returns for Excel tests."""
         return pd.DataFrame(
             {1: [0.01, 0.02], 2: [0.03, 0.04]},
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+        )
+
+    def long_short_cumulative_returns(self) -> pd.DataFrame:
+        """Return factor long-short cumulative returns for Excel tests."""
+        return pd.DataFrame(
+            {
+                "long": [0.03, 0.04],
+                "short": [0.01, 0.02],
+                "spread": [0.02, 0.02],
+            },
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
         )
