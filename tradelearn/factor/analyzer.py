@@ -79,6 +79,10 @@ class FactorAnalyzer:
             raise ValueError("window must be a positive integer")
         return self.quantile_returns().rolling(window, min_periods=1).mean()
 
+    def quantile_cumulative_returns(self) -> pd.DataFrame:
+        """Return compounded returns by factor quantile."""
+        return (1.0 + self.quantile_returns()).cumprod() - 1.0
+
     def quantile_spread(self, reverse: bool = False) -> pd.Series:
         """Return top-minus-bottom factor quantile returns."""
         returns = self.quantile_returns()

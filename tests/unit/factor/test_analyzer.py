@@ -127,6 +127,17 @@ def test_factor_analyzer_quantile_decay_returns_rolling_group_means() -> None:
     pd.testing.assert_frame_equal(decay, quantile_returns.rolling(2, min_periods=1).mean())
 
 
+def test_factor_analyzer_quantile_cumulative_returns_compounds_group_returns() -> None:
+    """quantile_cumulative_returns compounds grouped forward returns."""
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
+
+    cumulative = analyzer.quantile_cumulative_returns()
+    expected = (1.0 + analyzer.quantile_returns()).cumprod() - 1.0
+
+    pd.testing.assert_frame_equal(cumulative, expected)
+
+
 def test_factor_analyzer_quantile_spread_returns_top_minus_bottom() -> None:
     """quantile_spread returns top-minus-bottom quantile returns."""
     factor, forward = _factor_and_forward_returns()
