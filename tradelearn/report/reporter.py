@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from tradelearn import metrics
+from tradelearn.report import charts
 from tradelearn.report.analytics import (
     exposure_correlation,
     exposure_weights,
@@ -148,6 +149,65 @@ class Reporter:
         if factor_analyzer is None or not hasattr(factor_analyzer, "autocorrelation"):
             return pd.Series(dtype="float64", name="autocorrelation")
         return pd.Series(factor_analyzer.autocorrelation()).copy()
+
+    def equity_curve_chart(self, benchmark: pd.Series | None = None):
+        """Return a Bokeh equity curve chart."""
+        return charts.equity_curve(
+            self.equity_curve(),
+            benchmark=benchmark,
+            drawdowns=self.top_drawdowns(limit=5),
+        )
+
+    def drawdown_chart(self):
+        """Return a Bokeh drawdown chart."""
+        return charts.drawdown(self.drawdown())
+
+    def monthly_heatmap_chart(self):
+        """Return a Bokeh monthly heatmap chart."""
+        return charts.monthly_heatmap(self.monthly_heatmap())
+
+    def rolling_sharpe_chart(self, window: int = 126):
+        """Return a Bokeh rolling Sharpe chart."""
+        return charts.rolling_sharpe(self.rolling_sharpe(window=window))
+
+    def rolling_beta_chart(self, benchmark: pd.Series, window: int = 126):
+        """Return a Bokeh rolling beta chart."""
+        return charts.rolling_beta(self.rolling_beta(benchmark, window=window))
+
+    def trade_distribution_chart(self, bins: int = 20):
+        """Return a Bokeh trade distribution chart."""
+        return charts.trade_distribution(self.trade_distribution(bins=bins))
+
+    def exposure_chart(self):
+        """Return a Bokeh exposure chart."""
+        return charts.exposure(self.exposure())
+
+    def correlation_matrix_chart(self):
+        """Return a Bokeh correlation matrix chart."""
+        return charts.correlation_matrix(self.correlation_matrix())
+
+    def factor_quantile_returns_chart(self):
+        """Return a Bokeh factor quantile returns chart."""
+        return charts.quantile_returns(self.factor_quantile_returns())
+
+    def factor_long_short_returns_chart(self):
+        """Return a Bokeh factor long-short returns chart."""
+        return charts.factor_long_short_returns(self.factor_long_short_returns())
+
+    def factor_ic_chart(self):
+        """Return a Bokeh factor IC chart."""
+        return charts.factor_ic(self.factor_ic())
+
+    def factor_rank_ic_chart(self):
+        """Return a Bokeh factor rank IC chart."""
+        return charts.factor_rank_ic(self.factor_rank_ic())
+
+    def factor_turnover_chart(self):
+        """Return a Bokeh factor turnover/autocorrelation chart."""
+        return charts.factor_turnover(
+            self.factor_turnover(),
+            self.factor_autocorrelation(),
+        )
 
     def excel(self, path: str, benchmark: pd.Series | None = None) -> Any:
         """Write an Excel report."""

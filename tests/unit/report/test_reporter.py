@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+from bokeh.plotting import figure
 
 from tradelearn import metrics
 from tradelearn.report import Reporter
@@ -316,6 +317,37 @@ def test_reporter_summary_includes_factor_analyzer_metrics() -> None:
     assert summary["factor_rank_ic_mean"] == 0.23
 
 
+def test_reporter_chart_facade_returns_bokeh_figures() -> None:
+    """Reporter exposes notebook-ready Bokeh chart methods beside series APIs."""
+    reporter = Reporter(
+        {
+            "returns": _returns(),
+            "trades": _trades(),
+            "positions": _positions(),
+            "analyzers": {"factor": _FactorAnalyzerStub()},
+        }
+    )
+    benchmark = _benchmark()
+
+    plots = [
+        reporter.equity_curve_chart(benchmark=benchmark),
+        reporter.drawdown_chart(),
+        reporter.monthly_heatmap_chart(),
+        reporter.rolling_sharpe_chart(window=3),
+        reporter.rolling_beta_chart(benchmark, window=3),
+        reporter.trade_distribution_chart(bins=2),
+        reporter.exposure_chart(),
+        reporter.correlation_matrix_chart(),
+        reporter.factor_quantile_returns_chart(),
+        reporter.factor_long_short_returns_chart(),
+        reporter.factor_ic_chart(),
+        reporter.factor_rank_ic_chart(),
+        reporter.factor_turnover_chart(),
+    ]
+
+    assert all(isinstance(plot, type(figure())) for plot in plots)
+
+
 def _stats() -> SimpleNamespace:
     returns = _returns()
     return SimpleNamespace(
@@ -348,6 +380,26 @@ def _benchmark() -> pd.Series:
 
 def _trades() -> pd.DataFrame:
     return pd.DataFrame({"pnl": [100.0, -50.0, 25.0, -10.0]})
+
+
+def _positions() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                [
+                    "2024-01-01",
+                    "2024-01-01",
+                    "2024-01-02",
+                    "2024-01-02",
+                    "2024-01-03",
+                    "2024-01-03",
+                ],
+                utc=True,
+            ),
+            "symbol": ["AAA", "BBB", "AAA", "BBB", "AAA", "BBB"],
+            "value": [80.0, 20.0, 50.0, 50.0, 20.0, 80.0],
+        }
+    )
 
 
 class _FactorAnalyzerStub:
