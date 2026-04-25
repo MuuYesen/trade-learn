@@ -50,6 +50,13 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha038",
         "alpha039",
         "alpha040",
+        "alpha041",
+        "alpha042",
+        "alpha043",
+        "alpha044",
+        "alpha045",
+        "alpha046",
+        "alpha047",
     }
 )
 
@@ -385,6 +392,55 @@ class Alpha101Factors:
     def alpha040(self) -> pd.DataFrame:
         """Return Alpha#40."""
         return -1 * _rank(_stddev(self.high, 10)) * _correlation(self.high, self.volume, 10)
+
+    def alpha041(self) -> pd.DataFrame:
+        """Return Alpha#41."""
+        return (self.high * self.low).pow(0.5) - self.vwap
+
+    def alpha042(self) -> pd.DataFrame:
+        """Return Alpha#42."""
+        return _rank(self.vwap - self.close) / _rank(self.vwap + self.close)
+
+    def alpha043(self) -> pd.DataFrame:
+        """Return Alpha#43."""
+        adv20 = _sma(self.volume, 20)
+        return _ts_rank(self.volume / adv20, 20) * _ts_rank(-1 * _delta(self.close, 7), 8)
+
+    def alpha044(self) -> pd.DataFrame:
+        """Return Alpha#44."""
+        values = _correlation(self.high, _rank(self.volume), 5)
+        return -1 * values.replace([-np.inf, np.inf], 0).fillna(value=0)
+
+    def alpha045(self) -> pd.DataFrame:
+        """Return Alpha#45."""
+        values = _correlation(self.close, self.volume, 2)
+        values = values.replace([-np.inf, np.inf], 0).fillna(value=0)
+        return -1 * (
+            _rank(_sma(_delay(self.close, 5), 20))
+            * values
+            * _rank(_correlation(_ts_sum(self.close, 5), _ts_sum(self.close, 20), 2))
+        )
+
+    def alpha046(self) -> pd.DataFrame:
+        """Return Alpha#46."""
+        inner = ((_delay(self.close, 20) - _delay(self.close, 10)) / 10) - (
+            (_delay(self.close, 10) - self.close) / 10
+        )
+        values = -1 * _delta(self.close, 1)
+        values[inner < 0] = 1
+        values[inner > 0.25] = -1
+        return values
+
+    def alpha047(self) -> pd.DataFrame:
+        """Return Alpha#47."""
+        adv20 = _sma(self.volume, 20)
+        return (
+            (
+                ((_rank(1 / self.close) * self.volume) / adv20)
+                * ((self.high * _rank(self.high - self.close)) / (_sma(self.high, 5) / 5))
+            )
+            - _rank(self.vwap - _delay(self.vwap, 5))
+        )
 
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:

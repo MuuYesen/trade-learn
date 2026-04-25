@@ -51,6 +51,13 @@ def test_alpha101_exports_migrated_formulas_like_legacy_query() -> None:
         "alpha038",
         "alpha039",
         "alpha040",
+        "alpha041",
+        "alpha042",
+        "alpha043",
+        "alpha044",
+        "alpha045",
+        "alpha046",
+        "alpha047",
     ]
     expected = _legacy_alpha101(data, names)
 
@@ -106,6 +113,13 @@ def test_query_alphas101_delegates_supported_formulas_to_v2_facade() -> None:
         "alpha038",
         "alpha039",
         "alpha040",
+        "alpha041",
+        "alpha042",
+        "alpha043",
+        "alpha044",
+        "alpha045",
+        "alpha046",
+        "alpha047",
     ]
 
     result = Query.alphas101(data, names)
