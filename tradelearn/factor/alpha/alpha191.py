@@ -178,6 +178,14 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha170",
         "alpha171",
         "alpha172",
+        "alpha173",
+        "alpha174",
+        "alpha175",
+        "alpha176",
+        "alpha177",
+        "alpha178",
+        "alpha179",
+        "alpha180",
     }
 )
 
@@ -1721,6 +1729,70 @@ class Alpha191Factors:
         down = _ts_sum(part1, 14) * 100 / _ts_sum(true_range, 14)
         up = _ts_sum(part2, 14) * 100 / _ts_sum(true_range, 14)
         return _mean((down - up).abs() / (down + up) * 100, 6)
+
+    def alpha173(self) -> pd.DataFrame:
+        """Return Alpha#173."""
+        smoothed_close = _sma(self.close, 13, 2)
+        return (
+            3 * smoothed_close
+            - 2 * _sma(smoothed_close, 13, 2)
+            + _sma(_sma(_sma(np.log(self.close), 13, 2), 13, 2), 13, 2)
+        )
+
+    def alpha174(self) -> pd.DataFrame:
+        """Return Alpha#174."""
+        cond = self.close > _delay(self.close, 1)
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond] = _stddev(self.close, 20)
+        part[~cond] = 0
+        return _sma(part, 20, 1)
+
+    def alpha175(self) -> pd.DataFrame:
+        """Return Alpha#175."""
+        delayed_close = _delay(self.close, 1)
+        return _mean(
+            _elementwise_max(
+                _elementwise_max(self.high - self.low, (delayed_close - self.high).abs()),
+                (delayed_close - self.low).abs(),
+            ),
+            6,
+        )
+
+    def alpha176(self) -> pd.DataFrame:
+        """Return Alpha#176."""
+        return _correlation(
+            _rank(
+                (self.close - _ts_min(self.low, 12))
+                / (_ts_max(self.high, 12) - _ts_min(self.low, 12)),
+            ),
+            _rank(self.volume),
+            6,
+        )
+
+    def alpha177(self) -> pd.DataFrame:
+        """Return Alpha#177."""
+        return (20 - _highday(self.high, 20)) / 20 * 100
+
+    def alpha178(self) -> pd.DataFrame:
+        """Return Alpha#178."""
+        return (self.close - _delay(self.close, 1)) / _delay(self.close, 1) * self.volume
+
+    def alpha179(self) -> pd.DataFrame:
+        """Return Alpha#179."""
+        return _rank(_correlation(self.vwap, self.volume, 4)) * _rank(
+            _correlation(_rank(self.low), _rank(_mean(self.volume, 50)), 12),
+        )
+
+    def alpha180(self) -> pd.DataFrame:
+        """Return Alpha#180."""
+        cond = _mean(self.volume, 20) < self.volume
+        close_delta = _delta(self.close, 7)
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond] = -1 * _ts_rank(close_delta.abs(), 60) * np.sign(close_delta)
+        part[~cond] = -1 * self.volume
+        return part
 
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:

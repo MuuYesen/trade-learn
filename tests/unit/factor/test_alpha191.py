@@ -182,6 +182,14 @@ def test_alpha191_exports_migrated_formulas_like_legacy_query() -> None:
         "alpha170",
         "alpha171",
         "alpha172",
+        "alpha173",
+        "alpha174",
+        "alpha175",
+        "alpha176",
+        "alpha177",
+        "alpha178",
+        "alpha179",
+        "alpha180",
     ]
     expected = _legacy_alpha191(stock_data, bench_data, names)
 
@@ -367,6 +375,14 @@ def test_query_alphas191_delegates_supported_formulas_to_v2_facade() -> None:
         "alpha170",
         "alpha171",
         "alpha172",
+        "alpha173",
+        "alpha174",
+        "alpha175",
+        "alpha176",
+        "alpha177",
+        "alpha178",
+        "alpha179",
+        "alpha180",
     ]
 
     result = Query.alphas191(stock_data, bench_data, names)
@@ -414,6 +430,8 @@ def test_alpha191_v2_facade_avoids_future_warning_for_missing_values() -> None:
         "alpha164",
         "alpha167",
         "alpha172",
+        "alpha174",
+        "alpha180",
     ]
 
     with warnings.catch_warnings(record=True) as caught:
