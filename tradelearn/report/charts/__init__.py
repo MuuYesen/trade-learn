@@ -11,6 +11,7 @@ from tradelearn.report.charts.core import (
     factor_turnover,
     monthly_heatmap,
     quantile_returns,
+    rolling_beta,
     rolling_sharpe,
     trade_distribution,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "factor_turnover",
     "monthly_heatmap",
     "quantile_returns",
+    "rolling_beta",
     "rolling_sharpe",
     "trade_distribution",
 ]

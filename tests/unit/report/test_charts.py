@@ -14,6 +14,7 @@ from tradelearn.report.charts import (
     factor_turnover,
     monthly_heatmap,
     quantile_returns,
+    rolling_beta,
     rolling_sharpe,
     trade_distribution,
 )
@@ -30,6 +31,7 @@ def test_report_charts_return_bokeh_figures() -> None:
         exposure(_exposure()),
         correlation_matrix(_correlation()),
         quantile_returns(_quantile_returns()),
+        rolling_beta(_series("rolling_beta")),
         factor_ic(_series("ic")),
         factor_rank_ic(_series("rank_ic")),
         factor_turnover(_series("turnover"), _series("autocorrelation")),

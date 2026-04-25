@@ -103,7 +103,7 @@ def test_reporter_html_adds_exposure_chart_for_multi_asset_positions(tmp_path) -
 
 
 def test_reporter_html_accepts_benchmark_series(tmp_path) -> None:
-    """Reporter.html adds benchmark metrics and equity overlay when provided."""
+    """Reporter.html adds benchmark metrics, overlay, and rolling beta when provided."""
     path = tmp_path / "benchmark-report.html"
     benchmark = pd.Series(
         [0.01, -0.005, 0.01, -0.02, 0.03],
@@ -126,6 +126,8 @@ def test_reporter_html_accepts_benchmark_series(tmp_path) -> None:
     assert "alpha" in html
     assert "beta" in html
     assert "information_ratio" in html
+    assert "Rolling Beta" in html
+    assert (tmp_path / "rolling_beta.parquet").exists()
 
 
 def test_reporter_html_adds_factor_quantile_chart_when_analyzer_exists(tmp_path) -> None:

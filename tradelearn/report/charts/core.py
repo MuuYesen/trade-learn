@@ -95,6 +95,20 @@ def rolling_sharpe(rolling: pd.Series):
     return plot
 
 
+def rolling_beta(rolling: pd.Series):
+    """Return a rolling beta figure."""
+    frame = _plot_frame(rolling, "rolling_beta").dropna()
+    plot = figure(
+        title="Rolling Beta",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not frame.empty:
+        plot.line(frame["date"], frame["rolling_beta"], line_width=2, color="#17becf")
+    return plot
+
+
 def trade_distribution(distribution: pd.DataFrame):
     """Return a trade PnL histogram figure."""
     plot = figure(title="Trade Distribution", height=220, sizing_mode="stretch_width")

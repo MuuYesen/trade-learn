@@ -32,6 +32,11 @@ def write_html_report(
     returns = pd.Series(reporter._get("returns")).copy()
     benchmark_returns = None if benchmark is None else pd.Series(benchmark).copy()
     trades = pd.DataFrame(reporter._get("trades", default=pd.DataFrame())).copy()
+    rolling_beta = (
+        pd.Series(dtype="float64", name="rolling_beta")
+        if benchmark_returns is None
+        else reporter.rolling_beta(benchmark_returns)
+    )
     exposure = reporter.exposure()
     correlation = reporter.correlation_matrix()
     factor_ic = reporter.factor_ic()
@@ -50,6 +55,8 @@ def write_html_report(
         charts.rolling_sharpe(reporter.rolling_sharpe()),
         charts.trade_distribution(reporter.trade_distribution()),
     ]
+    if not rolling_beta.empty:
+        plots.append(charts.rolling_beta(rolling_beta))
     if _has_multi_asset_exposure(exposure):
         plots.append(charts.correlation_matrix(correlation))
         plots.append(charts.exposure(exposure))
@@ -101,6 +108,7 @@ def write_html_report(
         factor_autocorrelation=factor_autocorrelation,
         factor_long_short_returns=factor_long_short_returns,
         factor_quantile_returns=factor_quantile_returns,
+        rolling_beta=rolling_beta,
     )
     return output
 
@@ -119,6 +127,7 @@ def _write_artifacts(
     factor_autocorrelation: pd.Series,
     factor_long_short_returns: pd.DataFrame,
     factor_quantile_returns: pd.DataFrame,
+    rolling_beta: pd.Series,
 ) -> None:
     """Write colocated machine-readable report artifacts."""
     equity.to_frame("equity").to_parquet(directory / "equity.parquet")
@@ -137,6 +146,8 @@ def _write_artifacts(
         factor_long_short_returns.to_parquet(directory / "factor_long_short_returns.parquet")
     if not factor_quantile_returns.empty:
         factor_quantile_returns.to_parquet(directory / "factor_quantile_returns.parquet")
+    if not rolling_beta.empty:
+        rolling_beta.to_frame("rolling_beta").to_parquet(directory / "rolling_beta.parquet")
     (directory / "stats.json").write_text(
         json.dumps(
             {
