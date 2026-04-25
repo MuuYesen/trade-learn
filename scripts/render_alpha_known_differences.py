@@ -10,6 +10,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from alpha_metadata_cli import (  # noqa: E402
+    alpha_metadata_families,
+    selected_alpha_metadata_families,
+)
+
 from tradelearn.factor.alpha import validated_alpha_formula_metadata  # noqa: E402
 
 MIGRATION_KNOWN_DIFFERENCES_HEADING = "### 3.2 登记示例(待填充)"
@@ -86,17 +91,11 @@ def main(argv: list[str] | None = None) -> int:
 
     metadata = validated_alpha_formula_metadata()
     if args.list_families:
-        for family in sorted(metadata):
+        for family in alpha_metadata_families(metadata):
             print(family)
         return 0
 
-    if args.family is not None and args.family not in metadata:
-        parser.error(
-            f"Unknown Alpha family: {args.family}. Available: "
-            + ", ".join(sorted(metadata))
-        )
-
-    families = [args.family] if args.family else sorted(metadata)
+    families = selected_alpha_metadata_families(parser, metadata, args.family)
 
     rendered_by_family = {
         family: render_family(family, metadata[family]["skipped"]) for family in families
