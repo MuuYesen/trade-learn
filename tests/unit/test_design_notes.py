@@ -144,6 +144,31 @@ def test_check_design_notes_reports_wrong_top_level_title(tmp_path: Path) -> Non
     ]
 
 
+def test_check_design_notes_reports_duplicate_top_level_title(tmp_path: Path) -> None:
+    """The checker fails when a design note has more than one H1 title."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    write_design_note(docs_internal / "matching-design.md", "Matching Design")
+    write_design_note(docs_internal / "event-loop.md", "Event Loop")
+    write_design_note(docs_internal / "portfolio.md", "Portfolio")
+    with (docs_internal / "portfolio.md").open("a", encoding="utf-8") as handle:
+        handle.write("\n# Event Loop\n")
+        handle.write("A second H1 makes the clean-room note identity ambiguous.\n")
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr.splitlines() == [
+        "duplicate top-level title in portfolio.md: # Event Loop"
+    ]
+
+
 def test_check_design_notes_accepts_crlf_top_level_title(tmp_path: Path) -> None:
     """The checker accepts design notes written with CRLF line endings."""
     docs_internal = tmp_path / "docs" / "internal"

@@ -43,6 +43,11 @@ SectionSpans = dict[str, tuple[int, int]]
 SectionCounts = dict[str, int]
 
 
+def normalized_heading(line: str) -> str:
+    """Return a stripped markdown heading line without a leading UTF-8 BOM."""
+    return line.strip().removeprefix("\ufeff")
+
+
 def fence_marker(line: str) -> tuple[str, int, str] | None:
     """Return fenced-code marker metadata for a markdown line."""
     stripped = line.strip()
@@ -131,6 +136,31 @@ def section_heading_counts(content: str) -> SectionCounts:
     return counts
 
 
+def top_level_headings(content: str) -> list[str]:
+    """Return H1 markdown heading lines outside fenced code blocks."""
+    headings: list[str] = []
+    fence: tuple[str, int] | None = None
+    for line in content.splitlines():
+        marker = fence_marker(line)
+        if marker is not None:
+            marker_char, marker_length, marker_rest = marker
+            if fence is None:
+                fence = (marker_char, marker_length)
+            elif (
+                marker_char == fence[0]
+                and marker_length >= fence[1]
+                and not marker_rest.strip()
+            ):
+                fence = None
+            continue
+        if fence is not None:
+            continue
+        heading = normalized_heading(line)
+        if heading.startswith("# ") and not heading.startswith("## "):
+            headings.append(heading)
+    return headings
+
+
 def section_body(content: str, section: str, heading_spans: SectionSpans) -> str:
     """Return the body text under a required markdown section."""
     current_span = heading_spans.get(section)
@@ -155,7 +185,7 @@ def has_expected_title(content: str, filename: str) -> bool:
     """Return whether a note starts with the expected top-level heading."""
     expected = f"# {NOTE_TITLES[filename]}"
     for line in content.splitlines():
-        heading = line.strip().removeprefix("\ufeff")
+        heading = normalized_heading(line)
         if heading:
             return heading == expected
     return False
@@ -177,6 +207,10 @@ def note_errors(directory: Path, filename: str, *, strict: bool = False) -> list
     ]
     if not has_expected_title(content, filename):
         errors.append(f"wrong title in {filename}: expected # {NOTE_TITLES[filename]}")
+    errors.extend(
+        f"duplicate top-level title in {filename}: {heading}"
+        for heading in top_level_headings(content)[1:]
+    )
     errors.extend(
         f"duplicate section in {filename}: {section}"
         for section in REQUIRED_SECTIONS
