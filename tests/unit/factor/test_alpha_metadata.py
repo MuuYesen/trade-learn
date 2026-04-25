@@ -18,11 +18,15 @@ def test_alpha_formula_metadata_lists_supported_and_skipped_formulas() -> None:
     assert metadata == {
         "alpha101": {
             "supported": tuple(sorted(ALPHA101_SUPPORTED)),
+            "supported_count": len(ALPHA101_SUPPORTED),
             "skipped": ALPHA101_SKIPPED,
+            "skipped_count": len(ALPHA101_SKIPPED),
         },
         "alpha191": {
             "supported": tuple(sorted(ALPHA191_SUPPORTED)),
+            "supported_count": len(ALPHA191_SUPPORTED),
             "skipped": ALPHA191_SKIPPED,
+            "skipped_count": len(ALPHA191_SKIPPED),
         },
     }
 
@@ -42,6 +46,18 @@ def test_alpha_formula_metadata_returns_skipped_copies() -> None:
     assert "alpha999" not in ALPHA191_SKIPPED
     assert "alpha999" not in fresh["alpha101"]["skipped"]
     assert "alpha999" not in fresh["alpha191"]["skipped"]
+
+
+def test_alpha_formula_metadata_includes_formula_counts() -> None:
+    """Metadata exposes deterministic counts for progress and docs checks."""
+    from tradelearn.factor import alpha as alpha_package
+
+    metadata = alpha_package.alpha_formula_metadata()
+
+    assert metadata["alpha101"]["supported_count"] == len(ALPHA101_SUPPORTED)
+    assert metadata["alpha101"]["skipped_count"] == len(ALPHA101_SKIPPED)
+    assert metadata["alpha191"]["supported_count"] == len(ALPHA191_SUPPORTED)
+    assert metadata["alpha191"]["skipped_count"] == len(ALPHA191_SKIPPED)
 
 
 def test_alpha_formula_metadata_is_exported_from_package_all() -> None:
