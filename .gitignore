@@ -182,7 +182,7 @@ tradelearn/trader/extension/
 worktrees/
 .ruff_cache/
 .interrogate
-data/
+/data/
 .tradelearn/
 tests/golden/datasets/**/*.parquet
 tests/golden/expected/**/*.json
