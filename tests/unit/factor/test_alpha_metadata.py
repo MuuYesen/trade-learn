@@ -1,0 +1,51 @@
+"""Tests for Alpha formula metadata helpers."""
+
+from tradelearn.factor.alpha import (
+    ALPHA101_SKIPPED,
+    ALPHA101_SUPPORTED,
+    ALPHA191_SKIPPED,
+    ALPHA191_SUPPORTED,
+)
+
+
+def test_alpha_formula_metadata_lists_supported_and_skipped_formulas() -> None:
+    """Callers can discover supported and intentionally skipped Alpha formulas."""
+    from tradelearn.factor import alpha as alpha_package
+
+    alpha_formula_metadata = alpha_package.alpha_formula_metadata
+    metadata = alpha_formula_metadata()
+
+    assert metadata == {
+        "alpha101": {
+            "supported": tuple(sorted(ALPHA101_SUPPORTED)),
+            "skipped": ALPHA101_SKIPPED,
+        },
+        "alpha191": {
+            "supported": tuple(sorted(ALPHA191_SUPPORTED)),
+            "skipped": ALPHA191_SKIPPED,
+        },
+    }
+
+
+def test_alpha_formula_metadata_returns_skipped_copies() -> None:
+    """Mutating metadata from one call must not change the package constants."""
+    from tradelearn.factor import alpha as alpha_package
+
+    alpha_formula_metadata = alpha_package.alpha_formula_metadata
+    metadata = alpha_formula_metadata()
+
+    metadata["alpha101"]["skipped"]["alpha999"] = "local mutation"
+    metadata["alpha191"]["skipped"]["alpha999"] = "local mutation"
+
+    fresh = alpha_formula_metadata()
+    assert "alpha999" not in ALPHA101_SKIPPED
+    assert "alpha999" not in ALPHA191_SKIPPED
+    assert "alpha999" not in fresh["alpha101"]["skipped"]
+    assert "alpha999" not in fresh["alpha191"]["skipped"]
+
+
+def test_alpha_formula_metadata_is_exported_from_package_all() -> None:
+    """The helper is part of the public alpha facade."""
+    import tradelearn.factor.alpha as alpha_package
+
+    assert "alpha_formula_metadata" in alpha_package.__all__
