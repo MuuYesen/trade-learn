@@ -237,6 +237,37 @@ def test_check_alpha_metadata_script_reports_all_json_formula_metadata() -> None
     assert result.stderr == ""
 
 
+def test_render_alpha_known_differences_script_reports_skipped_formulas() -> None:
+    """The known differences script renders skipped Alpha formulas as markdown."""
+    from tradelearn.factor.alpha import validated_alpha_formula_metadata
+
+    result = subprocess.run(
+        [sys.executable, "scripts/render_alpha_known_differences.py"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    metadata = validated_alpha_formula_metadata()
+
+    assert result.stdout.splitlines() == [
+        line
+        for family, family_metadata in sorted(metadata.items())
+        for line in (
+            f"### Alpha {family} skipped formulas",
+            "",
+            "| Formula | Reason |",
+            "|---|---|",
+            *(
+                f"| `{formula}` | {reason} |"
+                for formula, reason in sorted(family_metadata["skipped"].items())
+            ),
+            "",
+        )
+    ]
+    assert result.stderr == ""
+
+
 def test_validate_alpha_formula_metadata_rejects_inconsistent_counts() -> None:
     """The validator catches stale counts before docs consume metadata."""
     import tradelearn.factor.alpha as alpha_package
