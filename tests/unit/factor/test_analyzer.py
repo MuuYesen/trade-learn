@@ -141,6 +141,24 @@ def test_factor_analyzer_quantile_spread_returns_top_minus_bottom() -> None:
     assert spread.name == "quantile_spread"
 
 
+def test_factor_analyzer_long_short_returns_exposes_sides_and_spread() -> None:
+    """long_short_returns returns long, short, and spread factor returns."""
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
+
+    returns = analyzer.long_short_returns()
+    quantile_returns = analyzer.quantile_returns()
+
+    assert list(returns.columns) == ["long", "short", "spread"]
+    pd.testing.assert_series_equal(returns["long"], quantile_returns[2], check_names=False)
+    pd.testing.assert_series_equal(returns["short"], quantile_returns[1], check_names=False)
+    pd.testing.assert_series_equal(
+        returns["spread"],
+        analyzer.quantile_spread(),
+        check_names=False,
+    )
+
+
 def test_factor_analyzer_requires_returns_or_prices_for_return_metrics() -> None:
     """Return-based methods fail clearly when no returns source is configured."""
     factor, _ = _factor_and_forward_returns()

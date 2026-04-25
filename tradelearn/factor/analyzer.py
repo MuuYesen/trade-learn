@@ -88,6 +88,19 @@ class FactorAnalyzer:
         spread.name = "quantile_spread"
         return spread
 
+    def long_short_returns(self) -> pd.DataFrame:
+        """Return long, short, and spread factor returns."""
+        returns = self.quantile_returns()
+        bottom = returns.columns.min()
+        top = returns.columns.max()
+        return pd.DataFrame(
+            {
+                "long": returns[top],
+                "short": returns[bottom],
+                "spread": self.quantile_spread(),
+            }
+        )
+
     def factor_returns(self) -> pd.DataFrame:
         """Return quantile returns derived from configured prices."""
         if self.prices is None:
