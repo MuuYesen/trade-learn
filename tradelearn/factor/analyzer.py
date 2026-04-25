@@ -59,6 +59,15 @@ class FactorAnalyzer:
             raise ValueError("window must be a positive integer")
         return self.quantile_returns().rolling(window, min_periods=1).mean()
 
+    def quantile_spread(self, reverse: bool = False) -> pd.Series:
+        """Return top-minus-bottom factor quantile returns."""
+        returns = self.quantile_returns()
+        bottom = returns.columns.min()
+        top = returns.columns.max()
+        spread = returns[bottom] - returns[top] if reverse else returns[top] - returns[bottom]
+        spread.name = "quantile_spread"
+        return spread
+
     def factor_returns(self) -> pd.DataFrame:
         """Return quantile returns derived from configured prices."""
         if self.prices is None:

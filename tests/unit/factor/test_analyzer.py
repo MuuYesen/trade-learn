@@ -105,6 +105,20 @@ def test_factor_analyzer_quantile_decay_returns_rolling_group_means() -> None:
     pd.testing.assert_frame_equal(decay, quantile_returns.rolling(2, min_periods=1).mean())
 
 
+def test_factor_analyzer_quantile_spread_returns_top_minus_bottom() -> None:
+    """quantile_spread returns top-minus-bottom quantile returns."""
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
+
+    spread = analyzer.quantile_spread()
+    quantile_returns = analyzer.quantile_returns()
+    expected = quantile_returns[2] - quantile_returns[1]
+    expected.name = "quantile_spread"
+
+    pd.testing.assert_series_equal(spread, expected)
+    assert spread.name == "quantile_spread"
+
+
 def test_factor_analyzer_requires_returns_or_prices_for_return_metrics() -> None:
     """Return-based methods fail clearly when no returns source is configured."""
     factor, _ = _factor_and_forward_returns()
