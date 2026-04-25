@@ -114,6 +114,13 @@ class Reporter:
             return pd.DataFrame()
         return pd.DataFrame(factor_analyzer.quantile_cumulative_returns()).copy()
 
+    def factor_long_short_returns(self) -> pd.DataFrame:
+        """Return factor long-short cumulative returns from analyzers."""
+        factor_analyzer = self._factor_analyzer()
+        if factor_analyzer is None or not hasattr(factor_analyzer, "long_short_cumulative_returns"):
+            return pd.DataFrame()
+        return pd.DataFrame(factor_analyzer.long_short_cumulative_returns()).copy()
+
     def factor_ic(self) -> pd.Series:
         """Return factor information coefficient series from analyzers."""
         factor_analyzer = self._factor_analyzer()

@@ -244,6 +244,19 @@ def test_reporter_factor_quantile_returns_uses_factor_analyzer() -> None:
     pd.testing.assert_frame_equal(quantiles, analyzer.quantile_cumulative_returns())
 
 
+def test_reporter_factor_long_short_returns_uses_factor_analyzer() -> None:
+    """Reporter.factor_long_short_returns returns analyzer long-short cumulative returns."""
+    analyzer = _FactorAnalyzerStub()
+    reporter = Reporter(
+        {"returns": _returns(), "trades": pd.DataFrame(), "analyzers": {"factor": analyzer}}
+    )
+
+    pd.testing.assert_frame_equal(
+        reporter.factor_long_short_returns(),
+        analyzer.long_short_cumulative_returns(),
+    )
+
+
 def test_reporter_factor_ic_uses_factor_analyzer() -> None:
     """Reporter.factor_ic returns analyzer IC series."""
     analyzer = _FactorAnalyzerStub()
@@ -374,6 +387,17 @@ class _FactorAnalyzerStub:
         """Return factor quantile cumulative returns for reporter tests."""
         return pd.DataFrame(
             {1: [0.01, 0.02], 2: [0.03, 0.04]},
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+        )
+
+    def long_short_cumulative_returns(self) -> pd.DataFrame:
+        """Return factor long-short cumulative returns for reporter tests."""
+        return pd.DataFrame(
+            {
+                "long": [0.03, 0.04],
+                "short": [0.01, 0.02],
+                "spread": [0.02, 0.02],
+            },
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
         )
 
