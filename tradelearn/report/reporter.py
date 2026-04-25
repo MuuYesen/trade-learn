@@ -68,6 +68,7 @@ class Reporter:
                 "turnover": self._turnover(),
             }
         )
+        computed.update(self._factor_summary())
         return computed | summary
 
     def equity_curve(self) -> pd.Series:
@@ -144,6 +145,16 @@ class Reporter:
         if isinstance(analyzers, Mapping) and "factor" in analyzers:
             return analyzers["factor"]
         return self._get("factor", default=None)
+
+    def _factor_summary(self) -> dict[str, float]:
+        """Return prefixed factor analyzer summary metrics."""
+        factor_analyzer = self._factor_analyzer()
+        if factor_analyzer is None or not hasattr(factor_analyzer, "summary"):
+            return {}
+        return {
+            f"factor_{key}": float(value)
+            for key, value in factor_analyzer.summary().items()
+        }
 
     @staticmethod
     def _max_drawdown_duration(returns: pd.Series) -> int:

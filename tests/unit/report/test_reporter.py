@@ -244,6 +244,22 @@ def test_reporter_factor_quantile_returns_uses_factor_analyzer() -> None:
     pd.testing.assert_frame_equal(quantiles, analyzer.quantile_cumulative_returns())
 
 
+def test_reporter_summary_includes_factor_analyzer_metrics() -> None:
+    """Reporter.summary prefixes factor analyzer summary metrics when available."""
+    reporter = Reporter(
+        {
+            "returns": _returns(),
+            "trades": _trades(),
+            "analyzers": {"factor": _FactorAnalyzerStub()},
+        }
+    )
+
+    summary = reporter.summary()
+
+    assert summary["factor_ic_mean"] == 0.12
+    assert summary["factor_rank_ic_mean"] == 0.23
+
+
 def _stats() -> SimpleNamespace:
     returns = _returns()
     return SimpleNamespace(
@@ -285,3 +301,7 @@ class _FactorAnalyzerStub:
             {1: [0.01, 0.02], 2: [0.03, 0.04]},
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
         )
+
+    def summary(self) -> dict[str, float]:
+        """Return scalar factor diagnostics for reporter tests."""
+        return {"ic_mean": 0.12, "rank_ic_mean": 0.23}
