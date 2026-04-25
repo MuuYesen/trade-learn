@@ -71,6 +71,7 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha064",
         "alpha065",
         "alpha066",
+        "alpha068",
     }
 )
 
@@ -564,6 +565,14 @@ class Alpha101Factors:
             _rank(_decay_linear(_delta(self.vwap, 4), 7))
             + _ts_rank(_decay_linear(term, 11), 7)
         ) * -1
+
+    def alpha068(self) -> pd.DataFrame:
+        """Return Alpha#68."""
+        adv15 = _sma(self.volume, 15)
+        left = _ts_rank(_correlation(_rank(self.high), _rank(adv15), 9), 14)
+        right_mix = (self.close * 0.518371) + (self.low * (1 - 0.518371))
+        right = _rank(_delta(right_mix, 2)) * 14
+        return (left < right) * -1
 
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
