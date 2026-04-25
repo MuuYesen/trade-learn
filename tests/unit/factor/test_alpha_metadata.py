@@ -1,5 +1,8 @@
 """Tests for Alpha formula metadata helpers."""
 
+import subprocess
+import sys
+from pathlib import Path
 from typing import get_type_hints
 
 import pytest
@@ -10,6 +13,8 @@ from tradelearn.factor.alpha import (
     ALPHA191_SKIPPED,
     ALPHA191_SUPPORTED,
 )
+
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_alpha_formula_metadata_lists_supported_and_skipped_formulas() -> None:
@@ -97,6 +102,27 @@ def test_validated_alpha_formula_metadata_returns_current_metadata() -> None:
     metadata = alpha_package.validated_alpha_formula_metadata()
 
     assert metadata == alpha_package.alpha_formula_metadata()
+
+
+def test_check_alpha_metadata_script_reports_validated_counts() -> None:
+    """The metadata check script reports counts from validated metadata."""
+    from tradelearn.factor.alpha import validated_alpha_formula_metadata
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_alpha_metadata.py"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    metadata = validated_alpha_formula_metadata()
+
+    assert result.stdout.splitlines() == [
+        f"{family}: supported={family_metadata['supported_count']} "
+        f"skipped={family_metadata['skipped_count']}"
+        for family, family_metadata in sorted(metadata.items())
+    ]
+    assert result.stderr == ""
 
 
 def test_validate_alpha_formula_metadata_rejects_inconsistent_counts() -> None:
