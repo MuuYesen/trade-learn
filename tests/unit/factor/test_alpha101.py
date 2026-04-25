@@ -10,7 +10,17 @@ from tradelearn.query.alpha.alphas101 import Alphas101 as LegacyAlphas101
 def test_alpha101_exports_first_three_formulas_like_legacy_query() -> None:
     """The v2 Alpha101 facade returns legacy-compatible long-form columns."""
     data = _stock_data()
-    names = ["alpha001", "alpha002", "alpha003", "alpha004", "alpha005", "alpha006"]
+    names = [
+        "alpha001",
+        "alpha002",
+        "alpha003",
+        "alpha004",
+        "alpha005",
+        "alpha006",
+        "alpha007",
+        "alpha008",
+        "alpha009",
+    ]
     expected = _legacy_alpha101(data, names)
 
     result = alpha101(data, names=names)
@@ -24,7 +34,17 @@ def test_alpha101_exports_first_three_formulas_like_legacy_query() -> None:
 def test_query_alphas101_delegates_supported_formulas_to_v2_facade() -> None:
     """Query.alphas101 keeps its output contract while using the v2 facade."""
     data = _stock_data()
-    names = ["alpha001", "alpha002", "alpha003", "alpha004", "alpha005", "alpha006"]
+    names = [
+        "alpha001",
+        "alpha002",
+        "alpha003",
+        "alpha004",
+        "alpha005",
+        "alpha006",
+        "alpha007",
+        "alpha008",
+        "alpha009",
+    ]
 
     result = Query.alphas101(data, names)
     expected = alpha101(data, names=names)
@@ -53,7 +73,7 @@ def _legacy_alpha101(data: pd.DataFrame, names: list[str]) -> pd.DataFrame:
 
 
 def _stock_data() -> pd.DataFrame:
-    dates = pd.date_range("2024-01-01", periods=25)
+    dates = pd.date_range("2024-01-01", periods=75)
     rows = []
     for symbol_index, code in enumerate(["AAA", "BBB", "CCC"], start=1):
         for day_index, date in enumerate(dates, start=1):

@@ -9,7 +9,17 @@ import pandas as pd
 from scipy.stats import rankdata
 
 ALPHA101_SUPPORTED = frozenset(
-    {"alpha001", "alpha002", "alpha003", "alpha004", "alpha005", "alpha006"}
+    {
+        "alpha001",
+        "alpha002",
+        "alpha003",
+        "alpha004",
+        "alpha005",
+        "alpha006",
+        "alpha007",
+        "alpha008",
+        "alpha009",
+    }
 )
 
 
@@ -82,6 +92,28 @@ class Alpha101Factors:
         values = -1 * _correlation(self.open, self.volume, 10)
         return values.replace([-np.inf, np.inf], 0).fillna(value=0)
 
+    def alpha007(self) -> pd.DataFrame:
+        """Return Alpha#7."""
+        adv20 = _sma(self.volume, 20)
+        delta_close = _delta(self.close, 7)
+        values = -1 * _ts_rank(np.abs(delta_close), 60) * np.sign(delta_close)
+        values[adv20 >= self.volume] = -1
+        return values
+
+    def alpha008(self) -> pd.DataFrame:
+        """Return Alpha#8."""
+        product = _ts_sum(self.open, 5) * _ts_sum(self.returns, 5)
+        return -1 * _rank(product - _delay(product, 10))
+
+    def alpha009(self) -> pd.DataFrame:
+        """Return Alpha#9."""
+        delta_close = _delta(self.close, 1)
+        cond_1 = _ts_min(delta_close, 5) > 0
+        cond_2 = _ts_max(delta_close, 5) < 0
+        values = -1 * delta_close
+        values[cond_1 | cond_2] = delta_close
+        return values
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha101 formula layout."""
@@ -107,6 +139,11 @@ def _ts_sum(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     return frame.rolling(window).sum()
 
 
+def _sma(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return rolling mean."""
+    return frame.rolling(window).mean()
+
+
 def _correlation(left: pd.DataFrame, right: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling correlation with Alpha101 legacy missing-value handling."""
     return left.rolling(window).corr(right).fillna(0).replace([np.inf, -np.inf], 0)
@@ -115,6 +152,11 @@ def _correlation(left: pd.DataFrame, right: pd.DataFrame, window: int) -> pd.Dat
 def _delta(frame: pd.DataFrame, period: int) -> pd.DataFrame:
     """Return period difference."""
     return frame.diff(period)
+
+
+def _delay(frame: pd.DataFrame, period: int) -> pd.DataFrame:
+    """Return lagged values."""
+    return frame.shift(period)
 
 
 def _rank(frame: pd.DataFrame) -> pd.DataFrame:
@@ -135,3 +177,13 @@ def _ts_argmax(frame: pd.DataFrame, window: int) -> pd.DataFrame:
 def _ts_rank(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling rank of the latest value."""
     return frame.rolling(window).apply(_rolling_rank)
+
+
+def _ts_min(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return rolling minimum."""
+    return frame.rolling(window).min()
+
+
+def _ts_max(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return rolling maximum."""
+    return frame.rolling(window).max()
