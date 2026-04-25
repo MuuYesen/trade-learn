@@ -1,5 +1,6 @@
 """Consistency checks for metrics against the 1.x vendored empyrical code."""
 
+import importlib.util
 import sys
 import types
 from pathlib import Path
@@ -14,6 +15,7 @@ from tradelearn.metrics import (
     cvar,
     max_drawdown,
     omega,
+    rank_ic,
     sharpe,
     simple_returns,
     tail_ratio,
@@ -71,3 +73,67 @@ def test_risk_metrics_match_vendored_empyrical() -> None:
         empyrical.conditional_value_at_risk(returns),
         rtol=1e-10,
     )
+
+
+def test_factor_rank_ic_matches_vendored_alphalens() -> None:
+    """rank_ic matches the 1.x alphalens Spearman IC implementation."""
+    dates = pd.to_datetime(["2024-01-01", "2024-01-02"])
+    index = pd.MultiIndex.from_product([dates, ["AAA", "BBB", "CCC"]], names=["date", "asset"])
+    factor_data = pd.DataFrame(
+        {
+            "factor": [1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
+            "1D": [0.01, 0.02, 0.03, 0.03, 0.02, 0.01],
+        },
+        index=index,
+    )
+
+    alphalens = _load_legacy_alphalens_performance()
+    expected = alphalens.factor_information_coefficient(factor_data)["1D"]
+    expected.name = "rank_ic"
+
+    result = rank_ic(factor_data["factor"], factor_data["1D"])
+
+    pd.testing.assert_series_equal(result, expected, check_freq=False)
+
+
+def _load_legacy_alphalens_performance() -> types.ModuleType:
+    """Load vendored alphalens performance without importing old package initializers."""
+    package_name = "legacy_alphalens"
+    package = types.ModuleType(package_name)
+    package.__path__ = [str(ROOT / "tradelearn" / "strategy" / "examine" / "alphalens")]
+    sys.modules[package_name] = package
+
+    previous_modules = {
+        name: sys.modules.get(name)
+        for name in [
+            "tradelearn.strategy",
+            "tradelearn.strategy.evaluate",
+            "tradelearn.strategy.evaluate.empyrical",
+        ]
+    }
+    sys.modules["tradelearn.strategy"] = types.ModuleType("tradelearn.strategy")
+    sys.modules["tradelearn.strategy.evaluate"] = types.ModuleType("tradelearn.strategy.evaluate")
+    sys.modules["tradelearn.strategy.evaluate.empyrical"] = types.ModuleType(
+        "tradelearn.strategy.evaluate.empyrical"
+    )
+    try:
+        for module_name in ["utils", "performance"]:
+            module_path = (
+                ROOT / "tradelearn" / "strategy" / "examine" / "alphalens" / f"{module_name}.py"
+            )
+            spec = importlib.util.spec_from_file_location(
+                f"{package_name}.{module_name}",
+                module_path,
+            )
+            if spec is None or spec.loader is None:
+                raise RuntimeError(f"Cannot load legacy alphalens module: {module_path}")
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[f"{package_name}.{module_name}"] = module
+            spec.loader.exec_module(module)
+        return sys.modules[f"{package_name}.performance"]
+    finally:
+        for name, previous in previous_modules.items():
+            if previous is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = previous
