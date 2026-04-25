@@ -49,6 +49,17 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha038",
         "alpha039",
         "alpha040",
+        "alpha041",
+        "alpha042",
+        "alpha043",
+        "alpha044",
+        "alpha045",
+        "alpha046",
+        "alpha047",
+        "alpha048",
+        "alpha049",
+        "alpha050",
+        "alpha051",
     }
 )
 
@@ -411,6 +422,103 @@ class Alpha191Factors:
         part2[cond] = 0
         return _ts_sum(part1, 26) / _ts_sum(part2, 26) * 100
 
+    def alpha041(self) -> pd.DataFrame:
+        """Return Alpha#41."""
+        return _rank(_ts_max(_delta(self.vwap, 3), 5)) * -1
+
+    def alpha042(self) -> pd.DataFrame:
+        """Return Alpha#42."""
+        return -1 * _rank(_stddev(self.high, 10)) * _correlation(
+            self.high,
+            self.volume,
+            10,
+        )
+
+    def alpha043(self) -> pd.DataFrame:
+        """Return Alpha#43."""
+        cond1 = self.close > _delay(self.close, 1)
+        cond2 = self.close < _delay(self.close, 1)
+        cond3 = self.close == _delay(self.close, 1)
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond1] = self.volume
+        part[cond2] = -self.volume
+        part[cond3] = 0
+        return _ts_sum(part, 6)
+
+    def alpha044(self) -> pd.DataFrame:
+        """Return Alpha#44."""
+        return _ts_rank(
+            _decay_linear(_correlation(self.low, _mean(self.volume, 10), 7), 6),
+            4,
+        ) + _ts_rank(_decay_linear(_delta(self.vwap, 3), 10), 15)
+
+    def alpha045(self) -> pd.DataFrame:
+        """Return Alpha#45."""
+        return _rank(_delta((self.close * 0.6) + (self.open * 0.4), 1)) * _rank(
+            _correlation(self.vwap, _mean(self.volume, 150), 15)
+        )
+
+    def alpha046(self) -> pd.DataFrame:
+        """Return Alpha#46."""
+        return (
+            _mean(self.close, 3)
+            + _mean(self.close, 6)
+            + _mean(self.close, 12)
+            + _mean(self.close, 24)
+        ) / (4 * self.close)
+
+    def alpha047(self) -> pd.DataFrame:
+        """Return Alpha#47."""
+        return _sma(
+            (_ts_max(self.high, 6) - self.close)
+            / (_ts_max(self.high, 6) - _ts_min(self.low, 6))
+            * 100,
+            9,
+            1,
+        )
+
+    def alpha048(self) -> pd.DataFrame:
+        """Return Alpha#48."""
+        signs = (
+            np.sign(self.close - _delay(self.close, 1))
+            + np.sign(_delay(self.close, 1) - _delay(self.close, 2))
+            + np.sign(_delay(self.close, 2) - _delay(self.close, 3))
+        )
+        return -1 * _rank(signs) * _ts_sum(self.volume, 5) / _ts_sum(self.volume, 20)
+
+    def alpha049(self) -> pd.DataFrame:
+        """Return Alpha#49."""
+        part1, part2 = _directional_range_parts(
+            self.close,
+            self.high,
+            self.low,
+            (self.high + self.low) > (_delay(self.high, 1) + _delay(self.low, 1)),
+        )
+        return _ts_sum(part1, 12) / (_ts_sum(part1, 12) + _ts_sum(part2, 12))
+
+    def alpha050(self) -> pd.DataFrame:
+        """Return Alpha#50."""
+        part1, part2 = _directional_range_parts(
+            self.close,
+            self.high,
+            self.low,
+            (self.high + self.low) <= (_delay(self.high, 1) + _delay(self.low, 1)),
+        )
+        return (_ts_sum(part1, 12) - _ts_sum(part2, 12)) / (
+            _ts_sum(part1, 12) + _ts_sum(part2, 12)
+        )
+
+    def alpha051(self) -> pd.DataFrame:
+        """Return Alpha#51."""
+        part1, part2 = _directional_range_parts(
+            self.close,
+            self.high,
+            self.low,
+            (self.high + self.low) <= (_delay(self.high, 1) + _delay(self.low, 1)),
+        )
+        return _ts_sum(part1, 12) / (_ts_sum(part1, 12) + _ts_sum(part2, 12))
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha191 formula layout."""
@@ -526,3 +634,25 @@ def _elementwise_max(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
 def _elementwise_min(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
     """Return element-wise minimum."""
     return np.minimum(left, right)
+
+
+def _directional_range_parts(
+    template: pd.DataFrame,
+    high: pd.DataFrame,
+    low: pd.DataFrame,
+    cond: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return the paired range components used by Alpha#49-51."""
+    movement = _elementwise_max(
+        (high - _delay(high, 1)).abs(),
+        (low - _delay(low, 1)).abs(),
+    )
+    part1 = template.copy(deep=True)
+    part1.loc[:, :] = np.nan
+    part1[cond] = 0
+    part1[~cond] = movement
+    part2 = template.copy(deep=True)
+    part2.loc[:, :] = np.nan
+    part2[~cond] = 0
+    part2[cond] = movement
+    return part1, part2
