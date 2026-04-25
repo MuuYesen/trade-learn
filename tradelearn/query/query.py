@@ -1,8 +1,13 @@
+import os
 import time
-import numpy as np
-import pandas as pd
+import traceback
 from multiprocessing import Pool
 
+import numpy as np
+import pandas as pd
+
+from tradelearn.factor.alpha import ALPHA101_SUPPORTED
+from tradelearn.factor.alpha import alpha101 as v2_alpha101
 from tradelearn.query.alpha.alphas101 import Alphas101
 from tradelearn.query.alpha.alphas191 import Alphas191
 
@@ -214,6 +219,8 @@ class Query:
         Returns:
             pd.DataFrame: A DataFrame containing the calculated Alpha 101 factors.
         """
+        if alpha_name and set(alpha_name).issubset(ALPHA101_SUPPORTED):
+            return v2_alpha101(stock_data, names=alpha_name)
 
         stock_data = stock_data.pivot(index='date', columns='code')
 
