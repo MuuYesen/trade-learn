@@ -1,5 +1,7 @@
 """Tests for v2 Alpha191 factor entry points."""
 
+import warnings
+
 import pandas as pd
 
 from tradelearn.factor.alpha import alpha191
@@ -30,6 +32,7 @@ def test_alpha191_exports_migrated_formulas_like_legacy_query() -> None:
     pd.testing.assert_frame_equal(
         result.sort_values(["date", "code"]).reset_index(drop=True),
         expected.sort_values(["date", "code"]).reset_index(drop=True),
+        check_dtype=False,
     )
 
 
@@ -59,6 +62,25 @@ def test_query_alphas191_delegates_supported_formulas_to_v2_facade() -> None:
     )
 
 
+def test_alpha191_v2_facade_avoids_future_warning_for_missing_values() -> None:
+    """The v2 Alpha191 path should not inherit legacy None-to-float warnings."""
+    stock_data = _stock_data()
+    bench_data = _bench_data()
+    names = ["alpha003", "alpha004", "alpha010"]
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", FutureWarning)
+        alpha191(stock_data, bench_data, names=names)
+        Query.alphas191(stock_data, bench_data, names)
+
+    assert not [
+        warning
+        for warning in caught
+        if issubclass(warning.category, FutureWarning)
+        and "incompatible dtype" in str(warning.message)
+    ]
+
+
 def _legacy_alpha191(
     stock_data: pd.DataFrame, bench_data: pd.DataFrame, names: list[str]
 ) -> pd.DataFrame:
@@ -66,7 +88,9 @@ def _legacy_alpha191(
     legacy = LegacyAlphas191(pivoted, bench_data)
     result = pd.DataFrame({"date": [], "code": []})
     for name in names:
-        frame = getattr(legacy, name)().copy()
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=FutureWarning)
+            frame = getattr(legacy, name)().copy()
         frame["date"] = frame.index
         frame = frame.melt(
             id_vars="date",
@@ -75,6 +99,8 @@ def _legacy_alpha191(
         )
         frame.rename(columns={name: f"{name}_191"}, inplace=True)
         result = pd.merge(result, frame, how="outer", on=["date", "code"])
+    for column in result.columns.difference(["date", "code"]):
+        result[column] = pd.to_numeric(result[column], errors="coerce")
     return result
 
 

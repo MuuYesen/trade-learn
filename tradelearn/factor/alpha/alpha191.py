@@ -89,7 +89,7 @@ class Alpha191Factors:
         cond2 = self.close > _delay(self.close, 1)
         cond3 = self.close < _delay(self.close, 1)
         part = self.close.copy(deep=True)
-        part.loc[:, :] = None
+        part.loc[:, :] = np.nan
         part[cond1] = 0
         part[cond2] = self.close - _elementwise_min(self.low, _delay(self.close, 1))
         part[cond3] = self.close - _elementwise_max(self.high, _delay(self.close, 1))
@@ -108,7 +108,7 @@ class Alpha191Factors:
         )
         cond4 = self.volume / _sma(self.volume, 20) >= 1
         part = self.close.copy(deep=True)
-        part.loc[:, :] = None
+        part.loc[:, :] = np.nan
         part[cond1] = -1
         part[cond2] = 1
         part[cond3] = -1
@@ -159,7 +159,7 @@ class Alpha191Factors:
         """Return Alpha#10."""
         cond = self.returns < 0
         part = self.returns.copy(deep=True)
-        part.loc[:, :] = None
+        part.loc[:, :] = np.nan
         part[cond] = _stddev(self.returns, 20)
         part[~cond] = self.close
         return _rank(_ts_max(part**2, 5))
