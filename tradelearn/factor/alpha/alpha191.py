@@ -69,6 +69,16 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha058",
         "alpha059",
         "alpha060",
+        "alpha061",
+        "alpha062",
+        "alpha063",
+        "alpha064",
+        "alpha065",
+        "alpha066",
+        "alpha067",
+        "alpha068",
+        "alpha069",
+        "alpha070",
     }
 )
 
@@ -627,6 +637,114 @@ class Alpha191Factors:
             * self.volume,
             20,
         )
+
+    def alpha061(self) -> pd.DataFrame:
+        """Return Alpha#61."""
+        left = _rank(_decay_linear(_delta(self.vwap, 1), 12))
+        right = _rank(
+            _decay_linear(_rank(_correlation(self.low, _mean(self.volume, 80), 8)), 17)
+        )
+        return _elementwise_max(left, right) * -1
+
+    def alpha062(self) -> pd.DataFrame:
+        """Return Alpha#62."""
+        return -1 * _correlation(self.high, _rank(self.volume), 5)
+
+    def alpha063(self) -> pd.DataFrame:
+        """Return Alpha#63."""
+        close_delta = self.close - _delay(self.close, 1)
+        return (
+            _sma(_elementwise_max(close_delta, 0), 6, 1)
+            / _sma(close_delta.abs(), 6, 1)
+            * 100
+        )
+
+    def alpha064(self) -> pd.DataFrame:
+        """Return Alpha#64."""
+        left = _rank(
+            _decay_linear(
+                _correlation(_rank(self.vwap), _rank(self.volume), 4),
+                4,
+            )
+        )
+        right = _rank(
+            _decay_linear(
+                _ts_max(
+                    _correlation(_rank(self.close), _rank(_mean(self.volume, 60)), 4),
+                    13,
+                ),
+                14,
+            )
+        )
+        return _elementwise_max(left, right) * -1
+
+    def alpha065(self) -> pd.DataFrame:
+        """Return Alpha#65."""
+        return _mean(self.close, 6) / self.close
+
+    def alpha066(self) -> pd.DataFrame:
+        """Return Alpha#66."""
+        close_mean = _mean(self.close, 6)
+        return (self.close - close_mean) / close_mean * 100
+
+    def alpha067(self) -> pd.DataFrame:
+        """Return Alpha#67."""
+        close_delta = self.close - _delay(self.close, 1)
+        return (
+            _sma(_elementwise_max(close_delta, 0), 24, 1)
+            / _sma(close_delta.abs(), 24, 1)
+            * 100
+        )
+
+    def alpha068(self) -> pd.DataFrame:
+        """Return Alpha#68."""
+        return _sma(
+            (
+                (self.high + self.low) / 2
+                - (_delay(self.high, 1) + _delay(self.low, 1)) / 2
+            )
+            * (self.high - self.low)
+            / self.volume,
+            15,
+            2,
+        )
+
+    def alpha069(self) -> pd.DataFrame:
+        """Return Alpha#69."""
+        cond1 = self.open <= _delay(self.open, 1)
+        cond2 = self.open >= _delay(self.open, 1)
+
+        dtm = self.close.copy(deep=True)
+        dtm.loc[:, :] = np.nan
+        dtm[cond1] = 0
+        dtm[~cond1] = _elementwise_max(
+            self.high - self.open,
+            self.open - _delay(self.open, 1),
+        )
+
+        dbm = self.close.copy(deep=True)
+        dbm.loc[:, :] = np.nan
+        dbm[cond2] = 0
+        dbm[~cond2] = _elementwise_max(
+            self.open - self.low,
+            self.open - _delay(self.open, 1),
+        )
+
+        dtm_sum = _ts_sum(dtm, 20)
+        dbm_sum = _ts_sum(dbm, 20)
+        cond3 = dtm_sum > dbm_sum
+        cond4 = dtm_sum == dbm_sum
+        cond5 = dtm_sum < dbm_sum
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond3] = (dtm_sum - dbm_sum) / dtm_sum
+        part[cond4] = 0
+        part[cond5] = (dtm_sum - dbm_sum) / dbm_sum
+        return part
+
+    def alpha070(self) -> pd.DataFrame:
+        """Return Alpha#70."""
+        return _stddev(self.amount, 6)
 
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
