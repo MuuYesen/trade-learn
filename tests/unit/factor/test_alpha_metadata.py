@@ -120,7 +120,7 @@ def test_validate_alpha_formula_metadata_rejects_supported_skipped_overlap() -> 
 
     with pytest.raises(
         ValueError,
-        match="alpha101 formulas cannot be both supported and skipped",
+        match="alpha101 formulas cannot be both supported and skipped: alpha001",
     ):
         alpha_package.validate_alpha_formula_metadata(metadata)
 
