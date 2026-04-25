@@ -229,6 +229,35 @@ def test_check_design_notes_strict_accepts_filled_design_notes(tmp_path: Path) -
     assert result.stderr == ""
 
 
+def test_check_design_notes_strict_rejects_placeholder_tokens(
+    tmp_path: Path,
+) -> None:
+    """Strict mode fails when freeze-blocking placeholder tokens remain."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    for filename, title in [
+        ("matching-design.md", "Matching Design"),
+        ("event-loop.md", "Event Loop"),
+        ("portfolio.md", "Portfolio"),
+    ]:
+        write_design_note(docs_internal / filename, title)
+    with (docs_internal / "event-loop.md").open("a", encoding="utf-8") as handle:
+        handle.write("\nTODO: resolve event ordering before freeze.\n")
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--strict", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr.splitlines() == [
+        "placeholder token in event-loop.md: TODO"
+    ]
+
+
 def test_check_design_notes_json_reports_all_note_statuses(tmp_path: Path) -> None:
     """JSON output reports machine-readable status for all design notes."""
     docs_internal = tmp_path / "docs" / "internal"

@@ -36,6 +36,8 @@ SECTION_PROMPTS = {
     "## Open Questions": "Track unresolved items that must be closed before the freeze.",
 }
 
+STRICT_PLACEHOLDER_TOKENS = ("TODO", "TBD", "FIXME")
+
 
 def design_note_template(filename: str) -> str:
     """Return the starter content for one clean-room design note."""
@@ -76,6 +78,11 @@ def note_errors(directory: Path, filename: str, *, strict: bool = False) -> list
             f"untouched template prompt in {filename}: {section}"
             for section, prompt in SECTION_PROMPTS.items()
             if prompt in content
+        )
+        errors.extend(
+            f"placeholder token in {filename}: {token}"
+            for token in STRICT_PLACEHOLDER_TOKENS
+            if token in content
         )
     return errors
 
