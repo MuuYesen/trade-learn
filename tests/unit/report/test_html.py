@@ -146,7 +146,9 @@ def test_reporter_html_adds_factor_quantile_chart_when_analyzer_exists(tmp_path)
     html = path.read_text()
     assert "Factor Quantile Returns" in html
     assert "Factor IC" in html
+    assert "Factor Rank IC" in html
     assert (tmp_path / "factor_ic.parquet").exists()
+    assert (tmp_path / "factor_rank_ic.parquet").exists()
     assert (tmp_path / "factor_quantile_returns.parquet").exists()
 
 
@@ -157,6 +159,14 @@ class _FactorAnalyzerStub:
             [0.10, 0.20],
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
             name="ic",
+        )
+
+    def rank_ic(self) -> pd.Series:
+        """Return factor rank IC series for report tests."""
+        return pd.Series(
+            [0.15, 0.25],
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+            name="rank_ic",
         )
 
     def quantile_cumulative_returns(self) -> pd.DataFrame:

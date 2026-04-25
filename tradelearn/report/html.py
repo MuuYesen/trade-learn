@@ -35,6 +35,7 @@ def write_html_report(
     exposure = reporter.exposure()
     correlation = reporter.correlation_matrix()
     factor_ic = reporter.factor_ic()
+    factor_rank_ic = reporter.factor_rank_ic()
     factor_quantile_returns = reporter.factor_quantile_returns()
     summary = reporter.summary(benchmark=benchmark_returns)
     config = reporter._get("config", default={}) or {}
@@ -51,6 +52,8 @@ def write_html_report(
         plots.append(charts.exposure(exposure))
     if not factor_ic.empty:
         plots.append(charts.factor_ic(factor_ic))
+    if not factor_rank_ic.empty:
+        plots.append(charts.factor_rank_ic(factor_rank_ic))
     if not factor_quantile_returns.empty:
         plots.append(charts.quantile_returns(factor_quantile_returns))
     script, chart_components = components(
@@ -68,6 +71,7 @@ def write_html_report(
             correlation=correlation,
             exposure=exposure,
             factor_ic=factor_ic,
+            factor_rank_ic=factor_rank_ic,
             factor_quantile_returns=factor_quantile_returns,
             trades=trades,
             returns=returns,
@@ -82,6 +86,7 @@ def write_html_report(
         summary=summary,
         trades=trades,
         factor_ic=factor_ic,
+        factor_rank_ic=factor_rank_ic,
         factor_quantile_returns=factor_quantile_returns,
     )
     return output
@@ -96,6 +101,7 @@ def _write_artifacts(
     summary: dict[str, Any],
     trades: pd.DataFrame,
     factor_ic: pd.Series,
+    factor_rank_ic: pd.Series,
     factor_quantile_returns: pd.DataFrame,
 ) -> None:
     """Write colocated machine-readable report artifacts."""
@@ -103,6 +109,8 @@ def _write_artifacts(
     trades.to_parquet(directory / "trades.parquet", index=False)
     if not factor_ic.empty:
         factor_ic.to_frame("ic").to_parquet(directory / "factor_ic.parquet")
+    if not factor_rank_ic.empty:
+        factor_rank_ic.to_frame("rank_ic").to_parquet(directory / "factor_rank_ic.parquet")
     if not factor_quantile_returns.empty:
         factor_quantile_returns.to_parquet(directory / "factor_quantile_returns.parquet")
     (directory / "stats.json").write_text(
@@ -130,6 +138,7 @@ def _render_html(
     correlation: pd.DataFrame,
     exposure: pd.DataFrame,
     factor_ic: pd.Series,
+    factor_rank_ic: pd.Series,
     factor_quantile_returns: pd.DataFrame,
     trades: pd.DataFrame,
     returns: pd.Series,
@@ -146,6 +155,7 @@ def _render_html(
         drawdowns_table=_frame_table(drawdowns),
         exposure_section=_exposure_section(exposure),
         factor_ic_section=_factor_ic_section(factor_ic),
+        factor_rank_ic_section=_factor_rank_ic_section(factor_rank_ic),
         factor_section=_factor_section(factor_quantile_returns),
         metadata={key: escape(value) for key, value in metadata.items()},
         returns_count=len(returns),
@@ -246,6 +256,13 @@ def _factor_ic_section(factor_ic: pd.Series) -> str:
     if factor_ic.empty:
         return ""
     return f"<h2>Factor IC</h2><p>Observations: {len(factor_ic)}</p>"
+
+
+def _factor_rank_ic_section(factor_rank_ic: pd.Series) -> str:
+    """Return the optional factor rank IC section heading."""
+    if factor_rank_ic.empty:
+        return ""
+    return f"<h2>Factor Rank IC</h2><p>Observations: {len(factor_rank_ic)}</p>"
 
 
 def _has_multi_asset_exposure(exposure: pd.DataFrame) -> bool:

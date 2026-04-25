@@ -222,6 +222,27 @@ def factor_ic(ic: pd.Series):
     return plot
 
 
+def factor_rank_ic(rank_ic: pd.Series):
+    """Return a factor rank IC figure."""
+    frame = _plot_frame(rank_ic, "rank_ic").dropna()
+    plot = figure(
+        title="Factor Rank IC",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not frame.empty:
+        plot.line(frame["date"], frame["rank_ic"], line_width=2, color="#1f77b4")
+        plot.line(
+            frame["date"],
+            frame["rank_ic"].expanding(min_periods=1).mean(),
+            line_width=2,
+            color="#ff7f0e",
+            legend_label="Expanding Mean",
+        )
+    return plot
+
+
 def _plot_frame(series: pd.Series, name: str) -> pd.DataFrame:
     """Return a timezone-naive plotting frame."""
     frame = series.to_frame(name).reset_index()
