@@ -184,7 +184,7 @@ def drawdown_series(
     """
     clean = apply_nan_policy(returns, nan_policy)
     equity = (1.0 + clean).cumprod()
-    running_max = equity.cummax()
+    running_max = equity.cummax().clip(lower=1.0)
     return equity / running_max - 1.0
 
 

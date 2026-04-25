@@ -18,7 +18,6 @@ def test_golden_manifest_available_for_consistency_suite() -> None:
 @pytest.mark.parametrize(
     "future_check",
     [
-        "test_metrics.py",
         "test_indicators_core.py",
         "test_indicators_tdx.py",
         "test_indicators_tv.py",
