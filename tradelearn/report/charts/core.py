@@ -243,6 +243,35 @@ def factor_rank_ic(rank_ic: pd.Series):
     return plot
 
 
+def factor_turnover(turnover: pd.Series, autocorrelation: pd.Series):
+    """Return a factor turnover and autocorrelation figure."""
+    turnover_frame = _plot_frame(turnover, "turnover").dropna()
+    autocorrelation_frame = _plot_frame(autocorrelation, "autocorrelation").dropna()
+    plot = figure(
+        title="Factor Turnover",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not turnover_frame.empty:
+        plot.line(
+            turnover_frame["date"],
+            turnover_frame["turnover"],
+            line_width=2,
+            color="#1f77b4",
+            legend_label="Turnover",
+        )
+    if not autocorrelation_frame.empty:
+        plot.line(
+            autocorrelation_frame["date"],
+            autocorrelation_frame["autocorrelation"],
+            line_width=2,
+            color="#ff7f0e",
+            legend_label="Autocorrelation",
+        )
+    return plot
+
+
 def _plot_frame(series: pd.Series, name: str) -> pd.DataFrame:
     """Return a timezone-naive plotting frame."""
     frame = series.to_frame(name).reset_index()

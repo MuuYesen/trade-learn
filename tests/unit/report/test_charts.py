@@ -10,6 +10,7 @@ from tradelearn.report.charts import (
     exposure,
     factor_ic,
     factor_rank_ic,
+    factor_turnover,
     monthly_heatmap,
     quantile_returns,
     rolling_sharpe,
@@ -30,6 +31,7 @@ def test_report_charts_return_bokeh_figures() -> None:
         quantile_returns(_quantile_returns()),
         factor_ic(_series("ic")),
         factor_rank_ic(_series("rank_ic")),
+        factor_turnover(_series("turnover"), _series("autocorrelation")),
     ]
 
     assert all(isinstance(plot, type(figure())) for plot in plots)

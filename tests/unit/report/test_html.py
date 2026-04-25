@@ -147,8 +147,11 @@ def test_reporter_html_adds_factor_quantile_chart_when_analyzer_exists(tmp_path)
     assert "Factor Quantile Returns" in html
     assert "Factor IC" in html
     assert "Factor Rank IC" in html
+    assert "Factor Turnover" in html
     assert (tmp_path / "factor_ic.parquet").exists()
     assert (tmp_path / "factor_rank_ic.parquet").exists()
+    assert (tmp_path / "factor_turnover.parquet").exists()
+    assert (tmp_path / "factor_autocorrelation.parquet").exists()
     assert (tmp_path / "factor_quantile_returns.parquet").exists()
 
 
@@ -167,6 +170,22 @@ class _FactorAnalyzerStub:
             [0.15, 0.25],
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
             name="rank_ic",
+        )
+
+    def turnover(self) -> pd.Series:
+        """Return factor turnover series for report tests."""
+        return pd.Series(
+            [0.30, 0.40],
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+            name="turnover",
+        )
+
+    def autocorrelation(self) -> pd.Series:
+        """Return factor autocorrelation series for report tests."""
+        return pd.Series(
+            [0.60, 0.70],
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+            name="autocorrelation",
         )
 
     def quantile_cumulative_returns(self) -> pd.DataFrame:
