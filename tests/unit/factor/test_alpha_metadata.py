@@ -559,6 +559,29 @@ def test_render_alpha_known_differences_script_output_rejects_check(
     assert not output.exists()
 
 
+def test_render_alpha_known_differences_script_output_reports_write_error(
+    tmp_path: Path,
+) -> None:
+    """The known differences script reports output write failures cleanly."""
+    target = tmp_path / "missing-parent" / "alpha-known-differences.md"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--output",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == f"Cannot write Alpha known differences target: {target}\n"
+
+
 def test_validate_alpha_formula_metadata_rejects_inconsistent_counts() -> None:
     """The validator catches stale counts before docs consume metadata."""
     import tradelearn.factor.alpha as alpha_package

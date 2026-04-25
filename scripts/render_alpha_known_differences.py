@@ -83,7 +83,14 @@ def main(argv: list[str] | None = None) -> int:
 
     rendered_output = "".join(rendered_by_family[family] for family in families)
     if args.output is not None:
-        args.output.write_text(rendered_output, encoding="utf-8")
+        try:
+            args.output.write_text(rendered_output, encoding="utf-8")
+        except OSError:
+            print(
+                f"Cannot write Alpha known differences target: {args.output}",
+                file=sys.stderr,
+            )
+            return 1
         print(
             f"Alpha known differences sections written to {args.output}: "
             + ", ".join(families)
