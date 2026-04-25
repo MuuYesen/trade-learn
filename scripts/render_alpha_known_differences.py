@@ -99,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     rendered_output = "".join(rendered_by_family[family] for family in families)
     if args.output is not None:
         try:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(rendered_output, encoding="utf-8")
         except OSError:
             print(

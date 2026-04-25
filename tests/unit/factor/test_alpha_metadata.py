@@ -609,6 +609,37 @@ def test_render_alpha_known_differences_script_writes_output_file(
     assert result.stderr == ""
 
 
+def test_render_alpha_known_differences_script_creates_output_parent_dirs(
+    tmp_path: Path,
+) -> None:
+    """The known differences script creates missing output parent directories."""
+    target = tmp_path / "nested" / "reports" / "alpha-known-differences.md"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha191",
+            "--output",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert target.exists()
+    assert target.read_text(encoding="utf-8").startswith(
+        "### Alpha alpha191 skipped formulas\n"
+    )
+    assert result.stdout == (
+        f"Alpha known differences sections written to {target}: alpha191\n"
+    )
+    assert result.stderr == ""
+
+
 def test_render_alpha_known_differences_script_output_rejects_check(
     tmp_path: Path,
 ) -> None:
@@ -641,7 +672,8 @@ def test_render_alpha_known_differences_script_output_reports_write_error(
     tmp_path: Path,
 ) -> None:
     """The known differences script reports output write failures cleanly."""
-    target = tmp_path / "missing-parent" / "alpha-known-differences.md"
+    target = tmp_path / "output-directory"
+    target.mkdir()
 
     result = subprocess.run(
         [
