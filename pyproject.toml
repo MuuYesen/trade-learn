@@ -79,6 +79,7 @@ exclude = ["reference*", "tests*"]
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/golden", "tests/consistency"]
 addopts = "-ra"
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100

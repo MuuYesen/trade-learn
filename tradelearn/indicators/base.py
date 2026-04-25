@@ -1,0 +1,52 @@
+"""Indicator protocol and function wrapper."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any, Protocol
+
+import pandas as pd
+
+
+class Indicator(Protocol):
+    """Protocol implemented by function-style indicators."""
+
+    name: str
+    params: dict[str, Any]
+
+    def compute(self, *args: Any, **kwargs: Any) -> pd.Series | pd.DataFrame:
+        """Compute an indicator over a batch of data."""
+        ...
+
+    def on_bar(self, bar: Any) -> float | tuple[Any, ...]:
+        """Update an indicator from a single streaming bar."""
+        ...
+
+
+class FunctionIndicator:
+    """Callable indicator wrapper with batch and streaming entry points."""
+
+    def __init__(
+        self,
+        name: str,
+        func: Callable[..., pd.Series | pd.DataFrame],
+        params: dict[str, Any] | None = None,
+    ) -> None:
+        """Create a function-backed indicator."""
+        self.name = name
+        self.params = params or {}
+        self._func = func
+        self.__name__ = name
+        self.__doc__ = func.__doc__
+
+    def __call__(self, *args: Any, **kwargs: Any) -> pd.Series | pd.DataFrame:
+        """Compute the indicator over a batch of data."""
+        return self.compute(*args, **kwargs)
+
+    def compute(self, *args: Any, **kwargs: Any) -> pd.Series | pd.DataFrame:
+        """Compute the indicator over a batch of data."""
+        return self._func(*args, **kwargs)
+
+    def on_bar(self, bar: Any) -> float | tuple[Any, ...]:
+        """Raise until streaming mode is implemented."""
+        raise NotImplementedError(f"{self.name} streaming on_bar is not implemented")
