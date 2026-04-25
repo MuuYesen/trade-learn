@@ -10,6 +10,7 @@ import pandas as pd
 
 from tradelearn import metrics
 from tradelearn.report.excel import write_excel_report
+from tradelearn.report.explore import explore_trades
 
 
 class Reporter:
@@ -70,6 +71,10 @@ class Reporter:
     def excel(self, path: str) -> Any:
         """Write an Excel report."""
         return write_excel_report(self, path)
+
+    def explore(self) -> Any:
+        """Open an interactive pygwalker explorer for trades."""
+        return explore_trades(self._get("trades", default=pd.DataFrame()))
 
     def _get(self, name: str, default: Any = None) -> Any:
         """Read a field from mapping or object stats."""
