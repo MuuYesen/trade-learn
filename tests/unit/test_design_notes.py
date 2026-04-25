@@ -317,6 +317,26 @@ def test_check_design_notes_init_does_not_overwrite_existing_note(tmp_path: Path
     assert existing.read_text(encoding="utf-8") == "# Custom Portfolio\n\nlocal draft\n"
 
 
+def test_check_design_notes_list_prints_required_note_paths(tmp_path: Path) -> None:
+    """The list command prints the required Stage 2 design note paths."""
+    docs_internal = tmp_path / "docs" / "internal"
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--list", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        str(docs_internal / "matching-design.md"),
+        str(docs_internal / "event-loop.md"),
+        str(docs_internal / "portfolio.md"),
+    ]
+    assert result.stderr == ""
+
+
 def test_check_design_notes_strict_rejects_untouched_template_prompts(
     tmp_path: Path,
 ) -> None:

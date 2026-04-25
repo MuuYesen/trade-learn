@@ -82,6 +82,11 @@ def init_design_notes(directory: Path) -> list[str]:
     return statuses
 
 
+def design_note_paths(directory: Path) -> list[str]:
+    """Return the required Stage 2 design note paths."""
+    return [str(directory / filename) for filename in REQUIRED_DESIGN_NOTES]
+
+
 def section_heading_spans(content: str) -> SectionSpans:
     """Return spans for required markdown section heading lines."""
     spans: SectionSpans = {}
@@ -277,6 +282,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Create missing design note templates before checking readiness.",
     )
     parser.add_argument(
+        "--list",
+        action="store_true",
+        help="Print required Stage 2 design note paths without checking files.",
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
         help="Also fail if generated template prompts have not been replaced.",
@@ -287,6 +297,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Print a machine-readable readiness report.",
     )
     args = parser.parse_args(argv)
+
+    if args.list:
+        print("\n".join(design_note_paths(args.directory)))
+        return 0
 
     if args.init:
         print("\n".join(init_design_notes(args.directory)))
