@@ -7,7 +7,7 @@ from tradelearn.query import Query
 from tradelearn.query.alpha.alphas101 import Alphas101 as LegacyAlphas101
 
 
-def test_alpha101_exports_first_three_formulas_like_legacy_query() -> None:
+def test_alpha101_exports_migrated_formulas_like_legacy_query() -> None:
     """The v2 Alpha101 facade returns legacy-compatible long-form columns."""
     data = _stock_data()
     names = [
@@ -26,6 +26,12 @@ def test_alpha101_exports_first_three_formulas_like_legacy_query() -> None:
         "alpha013",
         "alpha014",
         "alpha015",
+        "alpha016",
+        "alpha017",
+        "alpha018",
+        "alpha019",
+        "alpha020",
+        "alpha021",
     ]
     expected = _legacy_alpha101(data, names)
 
@@ -56,6 +62,12 @@ def test_query_alphas101_delegates_supported_formulas_to_v2_facade() -> None:
         "alpha013",
         "alpha014",
         "alpha015",
+        "alpha016",
+        "alpha017",
+        "alpha018",
+        "alpha019",
+        "alpha020",
+        "alpha021",
     ]
 
     result = Query.alphas101(data, names)

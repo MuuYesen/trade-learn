@@ -25,6 +25,12 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha013",
         "alpha014",
         "alpha015",
+        "alpha016",
+        "alpha017",
+        "alpha018",
+        "alpha019",
+        "alpha020",
+        "alpha021",
     }
 )
 
@@ -157,10 +163,54 @@ class Alpha101Factors:
         values = values.replace([-np.inf, np.inf], 0).fillna(value=0)
         return -1 * _ts_sum(_rank(values), 3)
 
+    def alpha016(self) -> pd.DataFrame:
+        """Return Alpha#16."""
+        return -1 * _rank(_covariance(_rank(self.high), _rank(self.volume), 5))
+
+    def alpha017(self) -> pd.DataFrame:
+        """Return Alpha#17."""
+        adv20 = _sma(self.volume, 20)
+        return -1 * (
+            _rank(_ts_rank(self.close, 10))
+            * _rank(_delta(_delta(self.close, 1), 1))
+            * _rank(_ts_rank(self.volume / adv20, 5))
+        )
+
+    def alpha018(self) -> pd.DataFrame:
+        """Return Alpha#18."""
+        values = _correlation(self.close, self.open, 10)
+        values = values.replace([-np.inf, np.inf], 0).fillna(value=0)
+        return -1 * _rank(
+            _stddev(np.abs(self.close - self.open), 5) + (self.close - self.open) + values
+        )
+
+    def alpha019(self) -> pd.DataFrame:
+        """Return Alpha#19."""
+        return (
+            -1
+            * np.sign((self.close - _delay(self.close, 7)) + _delta(self.close, 7))
+            * (1 + _rank(1 + _ts_sum(self.returns, 250)))
+        )
+
+    def alpha020(self) -> pd.DataFrame:
+        """Return Alpha#20."""
+        return -1 * (
+            _rank(self.open - _delay(self.high, 1))
+            * _rank(self.open - _delay(self.close, 1))
+            * _rank(self.open - _delay(self.low, 1))
+        )
+
+    def alpha021(self) -> pd.DataFrame:
+        """Return Alpha#21."""
+        cond_1 = _sma(self.close, 8) + _stddev(self.close, 8) < _sma(self.close, 2)
+        cond_2 = _sma(self.close, 2) < _sma(self.close, 8) - _stddev(self.close, 8)
+        cond_3 = _sma(self.volume, 20) / self.volume < 1
+        return (cond_1 | ((~cond_1) & (~cond_2) & (~cond_3))).astype("int") * (-2) + 1
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha101 formula layout."""
-    required = {"date", "code", "open", "low", "close", "volume", "vwap"}
+    required = {"date", "code", "open", "high", "low", "close", "volume", "vwap"}
     missing = required.difference(stock_data.columns)
     if missing:
         raise ValueError(f"stock_data is missing required columns: {sorted(missing)}")
