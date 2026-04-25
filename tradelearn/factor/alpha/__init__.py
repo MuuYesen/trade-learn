@@ -17,6 +17,14 @@ class AlphaFormulaFamilyMetadata(TypedDict):
     total_count: int
 
 
+class AlphaFormulaBlocker(TypedDict):
+    """A skipped Alpha formula and its blocking reason."""
+
+    family: str
+    formula: str
+    reason: str
+
+
 def alpha_formula_metadata() -> dict[str, AlphaFormulaFamilyMetadata]:
     """Return supported and intentionally skipped Alpha formula metadata."""
     return {
@@ -35,6 +43,22 @@ def alpha_formula_metadata() -> dict[str, AlphaFormulaFamilyMetadata]:
             "total_count": len(ALPHA191_SUPPORTED) + len(ALPHA191_SKIPPED),
         },
     }
+
+
+def alpha_formula_blockers(
+    metadata: Mapping[str, AlphaFormulaFamilyMetadata] | None = None,
+) -> tuple[AlphaFormulaBlocker, ...]:
+    """Return intentionally skipped Alpha formulas as a flat blocker list."""
+    families = validated_alpha_formula_metadata() if metadata is None else metadata
+    return tuple(
+        {
+            "family": family_name,
+            "formula": formula,
+            "reason": reason,
+        }
+        for family_name, family_metadata in sorted(families.items())
+        for formula, reason in sorted(family_metadata["skipped"].items())
+    )
 
 
 def validate_alpha_formula_metadata(
@@ -72,6 +96,7 @@ def validated_alpha_formula_metadata() -> dict[str, AlphaFormulaFamilyMetadata]:
 
 
 __all__ = [
+    "AlphaFormulaBlocker",
     "AlphaFormulaFamilyMetadata",
     "ALPHA101_SKIPPED",
     "ALPHA101_SUPPORTED",
@@ -79,6 +104,7 @@ __all__ = [
     "ALPHA191_SUPPORTED",
     "alpha101",
     "alpha191",
+    "alpha_formula_blockers",
     "alpha_formula_metadata",
     "validated_alpha_formula_metadata",
     "validate_alpha_formula_metadata",

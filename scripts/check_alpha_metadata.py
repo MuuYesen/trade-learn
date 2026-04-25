@@ -16,7 +16,10 @@ from alpha_metadata_cli import (  # noqa: E402
     selected_alpha_metadata_families,
 )
 
-from tradelearn.factor.alpha import validated_alpha_formula_metadata  # noqa: E402
+from tradelearn.factor.alpha import (  # noqa: E402
+    alpha_formula_blockers,
+    validated_alpha_formula_metadata,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -43,6 +46,11 @@ def main(argv: list[str] | None = None) -> int:
         help="include supported and skipped formula details in JSON output",
     )
     parser.add_argument(
+        "--blockers",
+        action="store_true",
+        help="emit skipped formulas as a flat JSON blocker list",
+    )
+    parser.add_argument(
         "--family",
         help="check only one Alpha formula family",
     )
@@ -59,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
             (args.include_skipped, "--include-skipped"),
             (args.include_supported, "--include-supported"),
             (args.include_all, "--include-all"),
+            (args.blockers, "--blockers"),
         )
         if enabled
     ]
@@ -76,6 +85,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     families = selected_alpha_metadata_families(parser, metadata, args.family)
+    if args.blockers:
+        selected_metadata = {family: metadata[family] for family in families}
+        print(
+            json.dumps(list(alpha_formula_blockers(selected_metadata)), sort_keys=True)
+        )
+        return 0
+
     counts = {}
     for family in families:
         family_metadata = metadata[family]

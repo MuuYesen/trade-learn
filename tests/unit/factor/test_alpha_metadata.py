@@ -60,6 +60,27 @@ def test_alpha_formula_metadata_returns_skipped_copies() -> None:
     assert "alpha999" not in fresh["alpha191"]["skipped"]
 
 
+def test_alpha_formula_blockers_flattens_skipped_formulas() -> None:
+    """Callers can consume skipped formulas as a deterministic blocker list."""
+    from tradelearn.factor import alpha as alpha_package
+
+    blockers = alpha_package.alpha_formula_blockers()
+
+    assert blockers == tuple(
+        {
+            "family": family,
+            "formula": formula,
+            "reason": reason,
+        }
+        for family, skipped in (
+            ("alpha101", ALPHA101_SKIPPED),
+            ("alpha191", ALPHA191_SKIPPED),
+        )
+        for formula, reason in sorted(skipped.items())
+    )
+    assert "alpha_formula_blockers" in alpha_package.__all__
+
+
 def test_alpha_formula_metadata_includes_formula_counts() -> None:
     """Metadata exposes deterministic counts for progress and docs checks."""
     from tradelearn.factor import alpha as alpha_package
@@ -384,6 +405,67 @@ def test_check_alpha_metadata_script_reports_all_json_formula_metadata() -> None
         for family, family_metadata in sorted(metadata.items())
     }
     assert result.stderr == ""
+
+
+def test_check_alpha_metadata_script_reports_json_blockers() -> None:
+    """The metadata check script can emit a flat skipped-formula blocker list."""
+    from tradelearn.factor.alpha import alpha_formula_blockers
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/check_alpha_metadata.py",
+            "--json",
+            "--blockers",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert json.loads(result.stdout) == list(alpha_formula_blockers())
+    assert result.stderr == ""
+
+
+def test_check_alpha_metadata_script_filters_json_blockers_by_family() -> None:
+    """The blocker list can be scoped to one Alpha family."""
+    from tradelearn.factor.alpha import alpha_formula_blockers, alpha_formula_metadata
+
+    metadata = alpha_formula_metadata()
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/check_alpha_metadata.py",
+            "--json",
+            "--blockers",
+            "--family",
+            "alpha191",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert json.loads(result.stdout) == list(
+        alpha_formula_blockers({"alpha191": metadata["alpha191"]})
+    )
+    assert result.stderr == ""
+
+
+def test_check_alpha_metadata_blockers_requires_json() -> None:
+    """Blocker output is intentionally a machine-readable JSON mode."""
+    result = subprocess.run(
+        [sys.executable, "scripts/check_alpha_metadata.py", "--blockers"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "--blockers requires --json" in result.stderr
 
 
 def test_render_alpha_known_differences_script_reports_skipped_formulas() -> None:
