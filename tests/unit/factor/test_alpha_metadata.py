@@ -95,6 +95,31 @@ def test_alpha_formula_blockers_validates_custom_metadata() -> None:
         alpha_package.alpha_formula_blockers(metadata)
 
 
+def test_alpha_formula_blockers_default_path_validates_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default blocker path should not repeat metadata validation work."""
+    from tradelearn.factor import alpha as alpha_package
+
+    calls = 0
+    validate_alpha_formula_metadata = alpha_package.validate_alpha_formula_metadata
+
+    def counting_validate(metadata: object = None) -> None:
+        nonlocal calls
+        calls += 1
+        validate_alpha_formula_metadata(metadata)
+
+    monkeypatch.setattr(
+        alpha_package,
+        "validate_alpha_formula_metadata",
+        counting_validate,
+    )
+
+    alpha_package.alpha_formula_blockers()
+
+    assert calls == 1
+
+
 def test_alpha_formula_metadata_includes_formula_counts() -> None:
     """Metadata exposes deterministic counts for progress and docs checks."""
     from tradelearn.factor import alpha as alpha_package
