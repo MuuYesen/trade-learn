@@ -75,3 +75,13 @@ def test_alpha_formula_constants_are_exported_from_factor_package() -> None:
         "ALPHA191_SKIPPED",
         "ALPHA191_SUPPORTED",
     }.issubset(factor_package.__all__)
+
+
+def test_alpha_formula_facades_are_exported_from_factor_package() -> None:
+    """The top-level factor facade exposes both Alpha formula callable facades."""
+    import tradelearn.factor as factor_package
+    import tradelearn.factor.alpha as alpha_package
+
+    assert factor_package.alpha101 is alpha_package.alpha101
+    assert factor_package.alpha191 is alpha_package.alpha191
+    assert {"alpha101", "alpha191"}.issubset(factor_package.__all__)
