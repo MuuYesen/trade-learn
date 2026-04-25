@@ -121,6 +121,13 @@ class Reporter:
             return pd.Series(dtype="float64", name="ic")
         return pd.Series(factor_analyzer.ic()).copy()
 
+    def factor_rank_ic(self) -> pd.Series:
+        """Return factor rank information coefficient series from analyzers."""
+        factor_analyzer = self._factor_analyzer()
+        if factor_analyzer is None or not hasattr(factor_analyzer, "rank_ic"):
+            return pd.Series(dtype="float64", name="rank_ic")
+        return pd.Series(factor_analyzer.rank_ic()).copy()
+
     def excel(self, path: str) -> Any:
         """Write an Excel report."""
         return write_excel_report(self, path)
