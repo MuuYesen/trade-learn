@@ -84,6 +84,12 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha085",
         "alpha086",
         "alpha088",
+        "alpha092",
+        "alpha094",
+        "alpha095",
+        "alpha096",
+        "alpha098",
+        "alpha099",
     }
 )
 
@@ -705,6 +711,88 @@ class Alpha101Factors:
         )
         return _elementwise_min(left, right)
 
+    def alpha092(self) -> pd.DataFrame:
+        """Return Alpha#92."""
+        adv30 = _sma(self.volume, 30)
+        left_condition = (((self.high + self.low) / 2) + self.close) < (
+            self.low + self.open
+        )
+        left = _ts_rank(_decay_linear(left_condition, 15), 19)
+        right = _ts_rank(
+            _decay_linear(_correlation(_rank(self.low), _rank(adv30), 8), 7),
+            7,
+        )
+        return _elementwise_min(left, right)
+
+    def alpha094(self) -> pd.DataFrame:
+        """Return Alpha#94."""
+        adv60 = _sma(self.volume, 60)
+        base = _rank(self.vwap - _ts_min(self.vwap, 12))
+        exponent = _ts_rank(
+            _correlation(_ts_rank(self.vwap, 20), _ts_rank(adv60, 4), 18),
+            3,
+        )
+        return base.pow(exponent) * -1
+
+    def alpha095(self) -> pd.DataFrame:
+        """Return Alpha#95."""
+        adv40 = _sma(self.volume, 40)
+        left = _rank(self.open - _ts_min(self.open, 12)) * 12
+        mid_price = (self.high + self.low) / 2
+        right = _ts_rank(
+            _rank(_correlation(_sma(mid_price, 19), _sma(adv40, 19), 13)).pow(5),
+            12,
+        )
+        return (left < right).astype("int")
+
+    def alpha096(self) -> pd.DataFrame:
+        """Return Alpha#96."""
+        adv60 = _sma(self.volume, 60)
+        left = _ts_rank(
+            _decay_linear(_correlation(_rank(self.vwap), _rank(self.volume), 4), 4),
+            8,
+        )
+        right = _ts_rank(
+            _decay_linear(
+                _ts_argmax(
+                    _correlation(_ts_rank(self.close, 7), _ts_rank(adv60, 4), 4),
+                    13,
+                ),
+                14,
+            ),
+            13,
+        )
+        return -1 * _elementwise_max(left, right)
+
+    def alpha098(self) -> pd.DataFrame:
+        """Return Alpha#98."""
+        adv5 = _sma(self.volume, 5)
+        adv15 = _sma(self.volume, 15)
+        left = _rank(_decay_linear(_correlation(self.vwap, _sma(adv5, 26), 5), 7))
+        right = _rank(
+            _decay_linear(
+                _ts_rank(
+                    _ts_argmin(_correlation(_rank(self.open), _rank(adv15), 21), 9),
+                    7,
+                ),
+                8,
+            )
+        )
+        return left - right
+
+    def alpha099(self) -> pd.DataFrame:
+        """Return Alpha#99."""
+        adv60 = _sma(self.volume, 60)
+        left = _rank(
+            _correlation(
+                _ts_sum((self.high + self.low) / 2, 20),
+                _ts_sum(adv60, 20),
+                9,
+            )
+        )
+        right = _rank(_correlation(self.low, self.volume, 6))
+        return (left < right) * -1
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha101 formula layout."""
@@ -790,6 +878,11 @@ def _rolling_rank(values: np.ndarray) -> float:
 def _ts_argmax(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return the one-based position of the rolling maximum."""
     return frame.rolling(window).apply(np.argmax) + 1
+
+
+def _ts_argmin(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return the one-based position of the rolling minimum."""
+    return frame.rolling(window).apply(np.argmin) + 1
 
 
 def _ts_rank(frame: pd.DataFrame, window: int) -> pd.DataFrame:
