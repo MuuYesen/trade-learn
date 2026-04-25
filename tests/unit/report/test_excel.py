@@ -79,6 +79,18 @@ def test_reporter_excel_accepts_benchmark_series(tmp_path) -> None:
     assert "information_ratio" in workbook_text
 
 
+def test_reporter_excel_drawdowns_sheet_uses_top_drawdown_table(tmp_path) -> None:
+    """Reporter.excel writes the spec's top drawdowns table, not raw drawdown series."""
+    path = tmp_path / "drawdowns-report.xlsx"
+
+    Reporter(_stats(), periods=252).excel(path)
+
+    workbook_text = _workbook_text(path)
+    for header in ["peak", "valley", "recovery", "max_drawdown", "duration"]:
+        assert header in workbook_text
+    assert "drawdown" not in _shared_strings(path)
+
+
 def _sheet_names(path) -> list[str]:
     with ZipFile(path) as workbook:
         xml = workbook.read("xl/workbook.xml").decode()
@@ -98,6 +110,15 @@ def _workbook_text(path) -> str:
             for name in workbook.namelist()
             if name.endswith(".xml")
         )
+
+
+def _shared_strings(path) -> set[str]:
+    with ZipFile(path) as workbook:
+        xml = workbook.read("xl/sharedStrings.xml").decode(errors="ignore")
+    values = set()
+    for chunk in xml.split("<t>")[1:]:
+        values.add(chunk.split("</t>", 1)[0])
+    return values
 
 
 def _stats() -> SimpleNamespace:

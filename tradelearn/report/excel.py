@@ -8,7 +8,6 @@ from typing import Any
 
 import pandas as pd
 
-from tradelearn import metrics
 from tradelearn.report.analytics import monthly_returns_matrix
 
 REPORT_SHEETS = [
@@ -68,7 +67,7 @@ def write_excel_report(
                 sheet_name="rolling_beta",
             )
         monthly_returns_matrix(returns).to_excel(writer, sheet_name="monthly_returns")
-        _excel_safe_frame(_drawdowns(returns)).to_excel(
+        _excel_safe_frame(_drawdowns(reporter)).to_excel(
             writer,
             sheet_name="drawdowns",
             index=False,
@@ -116,10 +115,9 @@ def _summary_frame(summary: Mapping[str, Any]) -> pd.DataFrame:
     return pd.DataFrame({"metric": list(summary), "value": list(summary.values())})
 
 
-def _drawdowns(returns: pd.Series) -> pd.DataFrame:
-    """Return drawdown series for the drawdowns sheet."""
-    drawdown = metrics.drawdown_series(returns)
-    return pd.DataFrame({"date": drawdown.index, "drawdown": drawdown.to_numpy()})
+def _drawdowns(reporter: Any) -> pd.DataFrame:
+    """Return top drawdown episodes for the drawdowns sheet."""
+    return reporter.top_drawdowns(limit=10)
 
 
 def _config_frame(config: Mapping[str, Any]) -> pd.DataFrame:
