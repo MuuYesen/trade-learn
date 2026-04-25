@@ -224,6 +224,9 @@ def main(argv: list[str] | None = None) -> int:
         try:
             content = args.update.read_text(encoding="utf-8")
             updated = update_migration_known_differences(content, rendered_output)
+            for family in families:
+                if alpha_known_differences_section_count(updated, family) > 1:
+                    raise ValueError("duplicate known differences section")
             args.update.write_text(updated, encoding="utf-8")
         except (OSError, ValueError):
             print(

@@ -930,6 +930,43 @@ def test_render_alpha_known_differences_script_update_reports_missing_anchor(
     assert result.stderr == f"Cannot update Alpha known differences target: {target}\n"
 
 
+def test_render_alpha_known_differences_script_update_rejects_remaining_duplicates(
+    tmp_path: Path,
+) -> None:
+    """The known differences update refuses files that would still contain duplicates."""
+    target = tmp_path / "MIGRATION.md"
+    original = (
+        "# MIGRATION\n\n"
+        "### 3.2 登记示例(待填充)\n\n"
+        "_此部分在阶段 1 起按进度追加。当前为空。_\n\n"
+        "---\n\n"
+        "### Alpha alpha101 skipped formulas\n\n"
+        "| Formula | Reason |\n"
+        "|---|---|\n"
+        "| `alpha999` | duplicate stale row |\n"
+    )
+    target.write_text(original, encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha101",
+            "--update",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert target.read_text(encoding="utf-8") == original
+    assert result.stdout == ""
+    assert result.stderr == f"Cannot update Alpha known differences target: {target}\n"
+
+
 def test_render_alpha_known_differences_script_creates_output_parent_dirs(
     tmp_path: Path,
 ) -> None:
