@@ -57,12 +57,22 @@ def alpha_known_differences_section_starts(
 
     starts = []
     offset = 0
-    in_fence = False
+    fence_marker = ""
+    fence_length = 0
     for line in content.splitlines(keepends=True):
         stripped = line.strip()
+        marker = ""
+        marker_length = 0
         if stripped.startswith(("```", "~~~")):
-            in_fence = not in_fence
-        elif not in_fence:
+            marker = stripped[0]
+            marker_length = len(stripped) - len(stripped.lstrip(marker))
+        if marker and not fence_marker:
+            fence_marker = marker
+            fence_length = marker_length
+        elif marker and marker == fence_marker and marker_length >= fence_length:
+            fence_marker = ""
+            fence_length = 0
+        elif not fence_marker:
             heading = line.rstrip("\r\n")
             if expected_heading is not None:
                 if heading == expected_heading:
