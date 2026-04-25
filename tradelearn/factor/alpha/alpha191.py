@@ -79,6 +79,15 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha068",
         "alpha069",
         "alpha070",
+        "alpha071",
+        "alpha072",
+        "alpha073",
+        "alpha074",
+        "alpha076",
+        "alpha077",
+        "alpha078",
+        "alpha079",
+        "alpha080",
     }
 )
 
@@ -745,6 +754,89 @@ class Alpha191Factors:
     def alpha070(self) -> pd.DataFrame:
         """Return Alpha#70."""
         return _stddev(self.amount, 6)
+
+    def alpha071(self) -> pd.DataFrame:
+        """Return Alpha#71."""
+        close_mean = _mean(self.close, 24)
+        return (self.close - close_mean) / close_mean * 100
+
+    def alpha072(self) -> pd.DataFrame:
+        """Return Alpha#72."""
+        return _sma(
+            (_ts_max(self.high, 6) - self.close)
+            / (_ts_max(self.high, 6) - _ts_min(self.low, 6))
+            * 100,
+            15,
+            1,
+        )
+
+    def alpha073(self) -> pd.DataFrame:
+        """Return Alpha#73."""
+        left = _ts_rank(
+            _decay_linear(
+                _decay_linear(_correlation(self.close, self.volume, 10), 16),
+                4,
+            ),
+            5,
+        )
+        right = _rank(
+            _decay_linear(_correlation(self.vwap, _mean(self.volume, 30), 4), 3)
+        )
+        return (left - right) * -1
+
+    def alpha074(self) -> pd.DataFrame:
+        """Return Alpha#74."""
+        left = _rank(
+            _correlation(
+                _ts_sum((self.low * 0.35) + (self.vwap * 0.65), 20),
+                _ts_sum(_mean(self.volume, 40), 20),
+                7,
+            )
+        )
+        right = _rank(_correlation(_rank(self.vwap), _rank(self.volume), 6))
+        return left + right
+
+    def alpha076(self) -> pd.DataFrame:
+        """Return Alpha#76."""
+        values = ((self.close / _delay(self.close, 1) - 1).abs()) / self.volume
+        return _stddev(values, 20) / _mean(values, 20)
+
+    def alpha077(self) -> pd.DataFrame:
+        """Return Alpha#77."""
+        left = _rank(
+            _decay_linear(
+                (((self.high + self.low) / 2) + self.high) - (self.vwap + self.high),
+                20,
+            )
+        )
+        right = _rank(
+            _decay_linear(
+                _correlation((self.high + self.low) / 2, _mean(self.volume, 40), 3),
+                6,
+            )
+        )
+        return _elementwise_min(left, right)
+
+    def alpha078(self) -> pd.DataFrame:
+        """Return Alpha#78."""
+        typical_price = (self.high + self.low + self.close) / 3
+        return (typical_price - _mean(typical_price, 12)) / (
+            0.015 * _mean((self.close - _mean(typical_price, 12)).abs(), 12)
+        )
+
+    def alpha079(self) -> pd.DataFrame:
+        """Return Alpha#79."""
+        close_delta = self.close - _delay(self.close, 1)
+        return (
+            _sma(_elementwise_max(close_delta, 0), 12, 1)
+            / _sma(close_delta.abs(), 12, 1)
+            * 100
+        )
+
+    def alpha080(self) -> pd.DataFrame:
+        """Return Alpha#80."""
+        delayed_volume = _delay(self.volume, 5)
+        return (self.volume - delayed_volume) / delayed_volume * 100
 
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:

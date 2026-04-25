@@ -83,6 +83,15 @@ def test_alpha191_exports_migrated_formulas_like_legacy_query() -> None:
         "alpha068",
         "alpha069",
         "alpha070",
+        "alpha071",
+        "alpha072",
+        "alpha073",
+        "alpha074",
+        "alpha076",
+        "alpha077",
+        "alpha078",
+        "alpha079",
+        "alpha080",
     ]
     expected = _legacy_alpha191(stock_data, bench_data, names)
 
@@ -169,6 +178,15 @@ def test_query_alphas191_delegates_supported_formulas_to_v2_facade() -> None:
         "alpha068",
         "alpha069",
         "alpha070",
+        "alpha071",
+        "alpha072",
+        "alpha073",
+        "alpha074",
+        "alpha076",
+        "alpha077",
+        "alpha078",
+        "alpha079",
+        "alpha080",
     ]
 
     result = Query.alphas191(stock_data, bench_data, names)
