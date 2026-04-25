@@ -145,6 +145,29 @@ def test_reporter_top_drawdowns_returns_largest_episodes() -> None:
     assert drawdowns.iloc[0]["recovery"] == pd.Timestamp("2024-01-04", tz="UTC")
 
 
+def test_reporter_exposure_pivots_multi_asset_positions() -> None:
+    """Reporter.exposure returns daily symbol exposure weights."""
+    positions = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
+                utc=True,
+            ),
+            "symbol": ["AAA", "BBB", "AAA", "BBB"],
+            "value": [60.0, 40.0, 25.0, 75.0],
+        }
+    )
+    reporter = Reporter({"returns": _returns(), "trades": pd.DataFrame(), "positions": positions})
+
+    exposure = reporter.exposure()
+
+    assert list(exposure.columns) == ["AAA", "BBB"]
+    assert exposure.loc[pd.Timestamp("2024-01-01", tz="UTC"), "AAA"] == pytest.approx(0.6)
+    assert exposure.loc[pd.Timestamp("2024-01-01", tz="UTC"), "BBB"] == pytest.approx(0.4)
+    assert exposure.loc[pd.Timestamp("2024-01-02", tz="UTC"), "AAA"] == pytest.approx(0.25)
+    assert exposure.loc[pd.Timestamp("2024-01-02", tz="UTC"), "BBB"] == pytest.approx(0.75)
+
+
 def _stats() -> SimpleNamespace:
     returns = _returns()
     return SimpleNamespace(

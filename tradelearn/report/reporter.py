@@ -9,7 +9,12 @@ import numpy as np
 import pandas as pd
 
 from tradelearn import metrics
-from tradelearn.report.analytics import monthly_returns_matrix, rolling_sharpe, top_drawdowns
+from tradelearn.report.analytics import (
+    exposure_weights,
+    monthly_returns_matrix,
+    rolling_sharpe,
+    top_drawdowns,
+)
 from tradelearn.report.excel import write_excel_report
 from tradelearn.report.explore import explore_trades
 from tradelearn.report.html import write_html_report
@@ -81,6 +86,10 @@ class Reporter:
     def top_drawdowns(self, limit: int = 10) -> pd.DataFrame:
         """Return the largest drawdown episodes."""
         return top_drawdowns(self._get("returns"), limit=limit)
+
+    def exposure(self) -> pd.DataFrame:
+        """Return daily symbol exposure weights."""
+        return exposure_weights(self._get("positions", default=pd.DataFrame()))
 
     def excel(self, path: str) -> Any:
         """Write an Excel report."""

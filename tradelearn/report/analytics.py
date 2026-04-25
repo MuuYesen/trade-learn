@@ -76,6 +76,20 @@ def top_drawdowns(returns: pd.Series, limit: int = 10) -> pd.DataFrame:
     return pd.DataFrame(episodes, columns=columns).sort_values("max_drawdown").head(limit)
 
 
+def exposure_weights(positions: pd.DataFrame) -> pd.DataFrame:
+    """Return daily symbol exposure weights from position values."""
+    if positions.empty or not {"date", "symbol", "value"}.issubset(positions.columns):
+        return pd.DataFrame()
+    exposure = positions.pivot_table(
+        index="date",
+        columns="symbol",
+        values="value",
+        aggfunc="sum",
+    ).sort_index()
+    totals = exposure.abs().sum(axis=1)
+    return exposure.div(totals.replace(0, np.nan), axis=0).fillna(0.0)
+
+
 def _drawdown_episode(
     *,
     peak: object,

@@ -49,6 +49,35 @@ def test_reporter_html_accepts_mapping_stats(tmp_path) -> None:
     assert path.exists()
 
 
+def test_reporter_html_adds_exposure_chart_for_multi_asset_positions(tmp_path) -> None:
+    """Reporter.html adds the multi-asset exposure section when positions contain symbols."""
+    path = tmp_path / "multi-asset-report.html"
+
+    Reporter(
+        {
+            "returns": _returns(),
+            "trades": _trades(),
+            "positions": pd.DataFrame(
+                {
+                    "date": pd.to_datetime(
+                        ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
+                        utc=True,
+                    ),
+                    "symbol": ["AAA", "BBB", "AAA", "BBB"],
+                    "value": [60.0, 40.0, 25.0, 75.0],
+                }
+            ),
+            "summary": {"strategy_name": "multi"},
+            "config": {"strategy": "multi"},
+        }
+    ).html(path)
+
+    html = path.read_text()
+    assert "Exposure Chart" in html
+    assert "AAA" in html
+    assert "BBB" in html
+
+
 def _stats() -> SimpleNamespace:
     returns = _returns()
     return SimpleNamespace(

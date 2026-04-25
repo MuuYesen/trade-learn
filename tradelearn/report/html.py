@@ -22,15 +22,19 @@ def write_html_report(reporter: Any, path: str | Path) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
     returns = pd.Series(reporter._get("returns")).copy()
     trades = pd.DataFrame(reporter._get("trades", default=pd.DataFrame())).copy()
+    exposure = reporter.exposure()
     summary = reporter.summary()
+    plots = [
+        _equity_plot(reporter.equity_curve()),
+        _drawdown_plot(reporter.drawdown()),
+        _monthly_heatmap_plot(reporter.monthly_heatmap()),
+        _rolling_sharpe_plot(reporter.rolling_sharpe()),
+        _trade_distribution_plot(trades),
+    ]
+    if _has_multi_asset_exposure(exposure):
+        plots.append(_exposure_plot(exposure))
     script, charts = components(
-        column(
-            _equity_plot(reporter.equity_curve()),
-            _drawdown_plot(reporter.drawdown()),
-            _monthly_heatmap_plot(reporter.monthly_heatmap()),
-            _rolling_sharpe_plot(reporter.rolling_sharpe()),
-            _trade_distribution_plot(trades),
-        )
+        column(*plots)
     )
     output.write_text(
         _render_html(
@@ -40,6 +44,7 @@ def write_html_report(reporter: Any, path: str | Path) -> Path:
             bokeh_resources=INLINE.render(),
             metadata=_metadata(summary, returns, reporter._get("config", default={}) or {}),
             drawdowns=reporter.top_drawdowns(limit=10),
+            exposure=exposure,
             trades=trades,
             returns=returns,
             config=reporter._get("config", default={}) or {},
@@ -149,6 +154,29 @@ def _trade_distribution_plot(trades: pd.DataFrame):
     return plot
 
 
+def _exposure_plot(exposure: pd.DataFrame):
+    """Return a multi-asset exposure figure."""
+    frame = exposure.reset_index().rename(columns={exposure.index.name or "index": "date"})
+    if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
+        frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
+    plot = figure(
+        title="Exposure Chart",
+        x_axis_type="datetime",
+        height=240,
+        sizing_mode="stretch_width",
+    )
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#8c564b", "#e377c2"]
+    for index, symbol in enumerate(exposure.columns):
+        plot.line(
+            frame["date"],
+            frame[symbol],
+            line_width=2,
+            color=colors[index % len(colors)],
+            legend_label=str(symbol),
+        )
+    return plot
+
+
 def _plot_frame(series: pd.Series, name: str) -> pd.DataFrame:
     """Return a timezone-naive plotting frame."""
     frame = series.to_frame(name).reset_index()
@@ -166,6 +194,7 @@ def _render_html(
     bokeh_resources: str,
     metadata: dict[str, str],
     drawdowns: pd.DataFrame,
+    exposure: pd.DataFrame,
     trades: pd.DataFrame,
     returns: pd.Series,
     config: dict[str, Any],
@@ -205,6 +234,7 @@ def _render_html(
     <h2>Monthly Returns Heatmap</h2>
     <h2>Rolling Sharpe</h2>
     <h2>Trade Distribution</h2>
+    {_exposure_section(exposure)}
     {charts}
     {script}
   </section>
@@ -264,6 +294,19 @@ def _metadata(
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "version": _package_version(),
     }
+
+
+def _exposure_section(exposure: pd.DataFrame) -> str:
+    """Return the optional exposure section heading."""
+    if not _has_multi_asset_exposure(exposure):
+        return ""
+    symbols = ", ".join(escape(str(symbol)) for symbol in exposure.columns)
+    return f"<h2>Exposure Chart</h2><p>Symbols: {symbols}</p>"
+
+
+def _has_multi_asset_exposure(exposure: pd.DataFrame) -> bool:
+    """Return whether exposure should be rendered as a multi-asset section."""
+    return not exposure.empty and len(exposure.columns) > 1
 
 
 def _format_date(value: Any) -> str:
