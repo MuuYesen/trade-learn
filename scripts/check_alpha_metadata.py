@@ -82,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         family_counts = {
             "supported_count": family_metadata["supported_count"],
             "skipped_count": family_metadata["skipped_count"],
+            "total_count": family_metadata["total_count"],
         }
         if args.include_supported or args.include_all:
             family_counts["supported"] = list(family_metadata["supported"])

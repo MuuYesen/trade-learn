@@ -31,12 +31,14 @@ def test_alpha_formula_metadata_lists_supported_and_skipped_formulas() -> None:
             "supported_count": len(ALPHA101_SUPPORTED),
             "skipped": ALPHA101_SKIPPED,
             "skipped_count": len(ALPHA101_SKIPPED),
+            "total_count": len(ALPHA101_SUPPORTED) + len(ALPHA101_SKIPPED),
         },
         "alpha191": {
             "supported": tuple(sorted(ALPHA191_SUPPORTED)),
             "supported_count": len(ALPHA191_SUPPORTED),
             "skipped": ALPHA191_SKIPPED,
             "skipped_count": len(ALPHA191_SKIPPED),
+            "total_count": len(ALPHA191_SUPPORTED) + len(ALPHA191_SKIPPED),
         },
     }
 
@@ -66,8 +68,14 @@ def test_alpha_formula_metadata_includes_formula_counts() -> None:
 
     assert metadata["alpha101"]["supported_count"] == len(ALPHA101_SUPPORTED)
     assert metadata["alpha101"]["skipped_count"] == len(ALPHA101_SKIPPED)
+    assert metadata["alpha101"]["total_count"] == (
+        len(ALPHA101_SUPPORTED) + len(ALPHA101_SKIPPED)
+    )
     assert metadata["alpha191"]["supported_count"] == len(ALPHA191_SUPPORTED)
     assert metadata["alpha191"]["skipped_count"] == len(ALPHA191_SKIPPED)
+    assert metadata["alpha191"]["total_count"] == (
+        len(ALPHA191_SUPPORTED) + len(ALPHA191_SKIPPED)
+    )
 
 
 def test_alpha_formula_metadata_uses_public_typed_dict() -> None:
@@ -103,6 +111,20 @@ def test_validated_alpha_formula_metadata_returns_current_metadata() -> None:
     metadata = alpha_package.validated_alpha_formula_metadata()
 
     assert metadata == alpha_package.alpha_formula_metadata()
+
+
+def test_validate_alpha_formula_metadata_rejects_wrong_total_count() -> None:
+    """The validator rejects inconsistent supported plus skipped totals."""
+    import tradelearn.factor.alpha as alpha_package
+
+    metadata = alpha_package.alpha_formula_metadata()
+    metadata["alpha101"]["total_count"] += 1
+
+    with pytest.raises(
+        ValueError,
+        match="alpha101 total_count does not match supported plus skipped formulas",
+    ):
+        alpha_package.validate_alpha_formula_metadata(metadata)
 
 
 def test_check_alpha_metadata_script_reports_validated_counts() -> None:
@@ -143,6 +165,7 @@ def test_check_alpha_metadata_script_reports_json_counts() -> None:
         family: {
             "supported_count": family_metadata["supported_count"],
             "skipped_count": family_metadata["skipped_count"],
+            "total_count": family_metadata["total_count"],
         }
         for family, family_metadata in sorted(metadata.items())
     }
@@ -193,6 +216,7 @@ def test_check_alpha_metadata_script_filters_json_by_family() -> None:
         "alpha101": {
             "supported_count": family_metadata["supported_count"],
             "skipped_count": family_metadata["skipped_count"],
+            "total_count": family_metadata["total_count"],
             "supported": list(family_metadata["supported"]),
             "skipped": family_metadata["skipped"],
         }
@@ -293,6 +317,7 @@ def test_check_alpha_metadata_script_reports_json_skipped_reasons() -> None:
         family: {
             "supported_count": family_metadata["supported_count"],
             "skipped_count": family_metadata["skipped_count"],
+            "total_count": family_metadata["total_count"],
             "skipped": family_metadata["skipped"],
         }
         for family, family_metadata in sorted(metadata.items())
@@ -322,6 +347,7 @@ def test_check_alpha_metadata_script_reports_json_supported_formulas() -> None:
         family: {
             "supported_count": family_metadata["supported_count"],
             "skipped_count": family_metadata["skipped_count"],
+            "total_count": family_metadata["total_count"],
             "supported": list(family_metadata["supported"]),
         }
         for family, family_metadata in sorted(metadata.items())
@@ -351,6 +377,7 @@ def test_check_alpha_metadata_script_reports_all_json_formula_metadata() -> None
         family: {
             "supported_count": family_metadata["supported_count"],
             "skipped_count": family_metadata["skipped_count"],
+            "total_count": family_metadata["total_count"],
             "supported": list(family_metadata["supported"]),
             "skipped": family_metadata["skipped"],
         }

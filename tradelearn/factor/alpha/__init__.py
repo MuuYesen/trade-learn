@@ -14,6 +14,7 @@ class AlphaFormulaFamilyMetadata(TypedDict):
     supported_count: int
     skipped: dict[str, str]
     skipped_count: int
+    total_count: int
 
 
 def alpha_formula_metadata() -> dict[str, AlphaFormulaFamilyMetadata]:
@@ -24,12 +25,14 @@ def alpha_formula_metadata() -> dict[str, AlphaFormulaFamilyMetadata]:
             "supported_count": len(ALPHA101_SUPPORTED),
             "skipped": dict(ALPHA101_SKIPPED),
             "skipped_count": len(ALPHA101_SKIPPED),
+            "total_count": len(ALPHA101_SUPPORTED) + len(ALPHA101_SKIPPED),
         },
         "alpha191": {
             "supported": tuple(sorted(ALPHA191_SUPPORTED)),
             "supported_count": len(ALPHA191_SUPPORTED),
             "skipped": dict(ALPHA191_SKIPPED),
             "skipped_count": len(ALPHA191_SKIPPED),
+            "total_count": len(ALPHA191_SUPPORTED) + len(ALPHA191_SKIPPED),
         },
     }
 
@@ -54,6 +57,10 @@ def validate_alpha_formula_metadata(
             names = ", ".join(sorted(overlap))
             raise ValueError(
                 f"{family_name} formulas cannot be both supported and skipped: {names}"
+            )
+        if len(supported) + len(skipped) != family_metadata["total_count"]:
+            raise ValueError(
+                f"{family_name} total_count does not match supported plus skipped formulas"
             )
 
 
