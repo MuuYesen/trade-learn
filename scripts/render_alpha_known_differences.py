@@ -141,12 +141,12 @@ def main(argv: list[str] | None = None) -> int:
                 "Missing Alpha known differences sections: " + ", ".join(missing),
                 file=sys.stderr,
             )
-            return 1
         if outdated:
             print(
                 "Outdated Alpha known differences sections: " + ", ".join(outdated),
                 file=sys.stderr,
             )
+        if missing or outdated:
             return 1
         print(
             f"Alpha known differences sections present in {args.check}: "

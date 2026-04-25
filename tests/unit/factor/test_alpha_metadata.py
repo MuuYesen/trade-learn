@@ -582,6 +582,53 @@ def test_render_alpha_known_differences_script_check_fails_for_stale_section(
     assert result.stderr == "Outdated Alpha known differences sections: alpha101\n"
 
 
+def test_render_alpha_known_differences_script_check_reports_all_section_errors(
+    tmp_path: Path,
+) -> None:
+    """The known differences check reports missing and stale sections together."""
+    rendered = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha101",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    target = tmp_path / "MIGRATION.md"
+    target.write_text(
+        "# MIGRATION\n\n"
+        + rendered.replace(
+            "\n",
+            "\n| `alpha999` | stale local row |\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--check",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == (
+        "Missing Alpha known differences sections: alpha191\n"
+        "Outdated Alpha known differences sections: alpha101\n"
+    )
+
+
 def test_render_alpha_known_differences_script_check_fails_for_missing_file(
     tmp_path: Path,
 ) -> None:
