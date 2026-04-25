@@ -491,6 +491,74 @@ def test_render_alpha_known_differences_script_check_reports_all_families(
     assert result.stderr == ""
 
 
+def test_render_alpha_known_differences_script_writes_output_file(
+    tmp_path: Path,
+) -> None:
+    """The known differences script can write rendered Markdown to a file."""
+    expected = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha101",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    target = tmp_path / "alpha-known-differences.md"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha101",
+            "--output",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert target.read_text(encoding="utf-8") == expected
+    assert result.stdout == (
+        f"Alpha known differences sections written to {target}: alpha101\n"
+    )
+    assert result.stderr == ""
+
+
+def test_render_alpha_known_differences_script_output_rejects_check(
+    tmp_path: Path,
+) -> None:
+    """The known differences script keeps output and check modes separate."""
+    target = tmp_path / "MIGRATION.md"
+    output = tmp_path / "alpha-known-differences.md"
+    target.write_text("# MIGRATION\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--check",
+            str(target),
+            "--output",
+            str(output),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "--output cannot be used with --check" in result.stderr
+    assert not output.exists()
+
+
 def test_validate_alpha_formula_metadata_rejects_inconsistent_counts() -> None:
     """The validator catches stale counts before docs consume metadata."""
     import tradelearn.factor.alpha as alpha_package

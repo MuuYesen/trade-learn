@@ -39,7 +39,14 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="verify the rendered Markdown is present in a file",
     )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="write the rendered Markdown to a file",
+    )
     args = parser.parse_args(argv)
+    if args.check is not None and args.output is not None:
+        parser.error("--output cannot be used with --check")
 
     metadata = validated_alpha_formula_metadata()
     families = [args.family] if args.family else sorted(metadata)
@@ -70,6 +77,15 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(
             f"Alpha known differences sections present in {args.check}: "
+            + ", ".join(families)
+        )
+        return 0
+
+    rendered_output = "".join(rendered_by_family[family] for family in families)
+    if args.output is not None:
+        args.output.write_text(rendered_output, encoding="utf-8")
+        print(
+            f"Alpha known differences sections written to {args.output}: "
             + ", ".join(families)
         )
         return 0
