@@ -172,3 +172,57 @@ def test_check_design_notes_init_does_not_overwrite_existing_note(tmp_path: Path
 
     assert "exists design note: portfolio.md" in result.stdout.splitlines()
     assert existing.read_text(encoding="utf-8") == "# Custom Portfolio\n\nlocal draft\n"
+
+
+def test_check_design_notes_strict_rejects_untouched_template_prompts(
+    tmp_path: Path,
+) -> None:
+    """Strict mode fails while template prompts are still untouched."""
+    docs_internal = tmp_path / "docs" / "internal"
+    subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--init", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--strict", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert "untouched template prompt in matching-design.md: ## Scope" in (
+        result.stderr.splitlines()
+    )
+
+
+def test_check_design_notes_strict_accepts_filled_design_notes(tmp_path: Path) -> None:
+    """Strict mode passes once all template prompts have been replaced."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    for filename, title in [
+        ("matching-design.md", "Matching Design"),
+        ("event-loop.md", "Event Loop"),
+        ("portfolio.md", "Portfolio"),
+    ]:
+        write_design_note(docs_internal / filename, title)
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--strict", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "design-note:matching-design.md=ok",
+        "design-note:event-loop.md=ok",
+        "design-note:portfolio.md=ok",
+    ]
+    assert result.stderr == ""

@@ -58,26 +58,32 @@ def init_design_notes(directory: Path) -> list[str]:
     return statuses
 
 
-def note_errors(directory: Path, filename: str) -> list[str]:
+def note_errors(directory: Path, filename: str, *, strict: bool = False) -> list[str]:
     """Return readiness errors for one required design note."""
     path = directory / filename
     if not path.is_file():
         return [f"missing design note: {filename}"]
 
     content = path.read_text(encoding="utf-8")
-    missing_sections = [
+    errors = [
         f"missing section in {filename}: {section}"
         for section in REQUIRED_SECTIONS
         if section not in content
     ]
-    return missing_sections
+    if strict:
+        errors.extend(
+            f"untouched template prompt in {filename}: {section}"
+            for section, prompt in SECTION_PROMPTS.items()
+            if prompt in content
+        )
+    return errors
 
 
-def check_design_notes(directory: Path) -> list[str]:
+def check_design_notes(directory: Path, *, strict: bool = False) -> list[str]:
     """Return all design note readiness errors."""
     errors: list[str] = []
     for filename in REQUIRED_DESIGN_NOTES:
-        errors.extend(note_errors(directory, filename))
+        errors.extend(note_errors(directory, filename, strict=strict))
     return errors
 
 
@@ -96,13 +102,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Create missing design note templates before checking readiness.",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Also fail if generated template prompts have not been replaced.",
+    )
     args = parser.parse_args(argv)
 
     if args.init:
         print("\n".join(init_design_notes(args.directory)))
         return 0
 
-    errors = check_design_notes(args.directory)
+    errors = check_design_notes(args.directory, strict=args.strict)
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
