@@ -268,6 +268,38 @@ def test_render_alpha_known_differences_script_reports_skipped_formulas() -> Non
     assert result.stderr == ""
 
 
+def test_render_alpha_known_differences_script_filters_family() -> None:
+    """The known differences script can render one Alpha family."""
+    from tradelearn.factor.alpha import validated_alpha_formula_metadata
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha101",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    family_metadata = validated_alpha_formula_metadata()["alpha101"]
+
+    assert result.stdout.splitlines() == [
+        "### Alpha alpha101 skipped formulas",
+        "",
+        "| Formula | Reason |",
+        "|---|---|",
+        *(
+            f"| `{formula}` | {reason} |"
+            for formula, reason in sorted(family_metadata["skipped"].items())
+        ),
+        "",
+    ]
+    assert result.stderr == ""
+
+
 def test_validate_alpha_formula_metadata_rejects_inconsistent_counts() -> None:
     """The validator catches stale counts before docs consume metadata."""
     import tradelearn.factor.alpha as alpha_package
