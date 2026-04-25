@@ -336,6 +336,55 @@ def test_check_design_notes_strict_rejects_empty_section_body(
     ]
 
 
+def test_check_design_notes_strict_allows_section_names_in_body_text(
+    tmp_path: Path,
+) -> None:
+    """Strict mode treats only exact required heading lines as section boundaries."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    write_design_note(docs_internal / "matching-design.md", "Matching Design")
+    write_design_note(docs_internal / "event-loop.md", "Event Loop")
+    (docs_internal / "portfolio.md").write_text(
+        "\n".join(
+            [
+                "# Portfolio",
+                "",
+                "## Scope",
+                "Captures the design boundary.",
+                "",
+                "## Clean-room Boundary",
+                "Records source separation rules.",
+                "",
+                "## Source Notes",
+                "## Implementation Decisions are referenced as source-note prose.",
+                "",
+                "## Implementation Decisions",
+                "Records independent implementation decisions.",
+                "",
+                "## Open Questions",
+                "Tracks unresolved follow-up items.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--strict", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "design-note:matching-design.md=ok",
+        "design-note:event-loop.md=ok",
+        "design-note:portfolio.md=ok",
+    ]
+    assert result.stderr == ""
+
+
 def test_check_design_notes_json_reports_all_note_statuses(tmp_path: Path) -> None:
     """JSON output reports machine-readable status for all design notes."""
     docs_internal = tmp_path / "docs" / "internal"

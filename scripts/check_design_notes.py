@@ -39,6 +39,8 @@ SECTION_PROMPTS = {
 
 STRICT_PLACEHOLDER_TOKENS = ("TODO", "TBD", "FIXME")
 
+SectionSpans = dict[str, tuple[int, int]]
+
 
 def design_note_template(filename: str) -> str:
     """Return the starter content for one clean-room design note."""
@@ -62,18 +64,28 @@ def init_design_notes(directory: Path) -> list[str]:
     return statuses
 
 
-def section_body(content: str, section: str) -> str:
+def section_heading_spans(content: str) -> SectionSpans:
+    """Return spans for required markdown section heading lines."""
+    spans: SectionSpans = {}
+    offset = 0
+    for line in content.splitlines(keepends=True):
+        heading = line.strip()
+        if heading in REQUIRED_SECTIONS and heading not in spans:
+            spans[heading] = (offset + line.index(heading), offset + len(line))
+        offset += len(line)
+    return spans
+
+
+def section_body(content: str, section: str, heading_spans: SectionSpans) -> str:
     """Return the body text under a required markdown section."""
-    start = content.find(section)
-    if start == -1:
+    current_span = heading_spans.get(section)
+    if current_span is None:
         return ""
-    body_start = start + len(section)
+    body_start = current_span[1]
     next_section_starts = [
-        position
-        for other_section in REQUIRED_SECTIONS
-        if other_section != section
-        for position in [content.find(other_section, body_start)]
-        if position != -1
+        start
+        for other_section, (start, _) in heading_spans.items()
+        if other_section != section and start > body_start
     ]
     body_end = min(next_section_starts) if next_section_starts else len(content)
     return content[body_start:body_end].strip()
@@ -91,10 +103,11 @@ def note_errors(directory: Path, filename: str, *, strict: bool = False) -> list
         return [f"missing design note: {filename}"]
 
     content = path.read_text(encoding="utf-8")
+    heading_spans = section_heading_spans(content)
     errors = [
         f"missing section in {filename}: {section}"
         for section in REQUIRED_SECTIONS
-        if section not in content
+        if section not in heading_spans
     ]
     if strict:
         errors.extend(
@@ -105,7 +118,8 @@ def note_errors(directory: Path, filename: str, *, strict: bool = False) -> list
         errors.extend(
             f"empty section body in {filename}: {section}"
             for section in REQUIRED_SECTIONS
-            if section in content and not section_body(content, section)
+            if section in heading_spans
+            and not section_body(content, section, heading_spans)
         )
         errors.extend(
             f"placeholder token in {filename}: {token}"
