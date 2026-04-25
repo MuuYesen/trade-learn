@@ -1,5 +1,14 @@
 """Portfolio and factor metrics."""
 
+from tradelearn.metrics.factor import (
+    autocorrelation,
+    factor_returns,
+    ic,
+    ic_ir,
+    quantile_returns,
+    rank_ic,
+    turnover,
+)
 from tradelearn.metrics.returns import (
     annual_return,
     cum_returns,
@@ -36,6 +45,7 @@ from tradelearn.metrics.trade import (
 __all__ = [
     "alpha",
     "annual_return",
+    "autocorrelation",
     "avg_loss",
     "avg_win",
     "beta",
@@ -46,6 +56,9 @@ __all__ = [
     "drawdown_series",
     "excess_returns",
     "expectancy",
+    "factor_returns",
+    "ic",
+    "ic_ir",
     "information_ratio",
     "log_to_simple",
     "max_consecutive_losses",
@@ -53,10 +66,13 @@ __all__ = [
     "max_drawdown",
     "omega",
     "profit_factor",
+    "quantile_returns",
+    "rank_ic",
     "sharpe",
     "simple_returns",
     "sortino",
     "tail_ratio",
+    "turnover",
     "var",
     "volatility",
     "win_rate",
