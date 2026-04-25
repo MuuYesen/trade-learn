@@ -1,5 +1,6 @@
 """Tests for HTML report export."""
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -56,6 +57,19 @@ def test_reporter_html_accepts_mapping_stats(tmp_path) -> None:
     ).html(path)
 
     assert path.exists()
+
+
+def test_reporter_html_writes_report_artifacts(tmp_path) -> None:
+    """Reporter.html writes colocated report artifacts from the spec."""
+    path = tmp_path / "report.html"
+
+    Reporter(_stats(), periods=252).html(path)
+
+    assert (tmp_path / "equity.parquet").exists()
+    assert (tmp_path / "trades.parquet").exists()
+    stats = json.loads((tmp_path / "stats.json").read_text())
+    assert stats["summary"]["strategy_name"] == "demo-strategy"
+    assert stats["config"]["strategy"] == "demo"
 
 
 def test_reporter_html_adds_exposure_chart_for_multi_asset_positions(tmp_path) -> None:

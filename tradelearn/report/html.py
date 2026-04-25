@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from html import escape
 from importlib.metadata import PackageNotFoundError, version
@@ -34,6 +35,8 @@ def write_html_report(
     exposure = reporter.exposure()
     correlation = reporter.correlation_matrix()
     summary = reporter.summary(benchmark=benchmark_returns)
+    config = reporter._get("config", default={}) or {}
+    metadata = _metadata(summary, returns, config)
     plots = [
         charts.equity_curve(reporter.equity_curve(), benchmark_returns),
         charts.drawdown(reporter.drawdown()),
@@ -53,17 +56,50 @@ def write_html_report(
             charts=chart_components,
             script=script,
             bokeh_resources=INLINE.render(),
-            metadata=_metadata(summary, returns, reporter._get("config", default={}) or {}),
+            metadata=metadata,
             drawdowns=reporter.top_drawdowns(limit=10),
             benchmark=benchmark_returns,
             correlation=correlation,
             exposure=exposure,
             trades=trades,
             returns=returns,
-            config=reporter._get("config", default={}) or {},
+            config=config,
         )
     )
+    _write_artifacts(
+        directory=output.parent,
+        config=config,
+        equity=reporter.equity_curve(),
+        metadata=metadata,
+        summary=summary,
+        trades=trades,
+    )
     return output
+
+
+def _write_artifacts(
+    *,
+    directory: Path,
+    config: dict[str, Any],
+    equity: pd.Series,
+    metadata: dict[str, str],
+    summary: dict[str, Any],
+    trades: pd.DataFrame,
+) -> None:
+    """Write colocated machine-readable report artifacts."""
+    equity.to_frame("equity").to_parquet(directory / "equity.parquet")
+    trades.to_parquet(directory / "trades.parquet", index=False)
+    (directory / "stats.json").write_text(
+        json.dumps(
+            {
+                "config": _json_safe(config),
+                "metadata": metadata,
+                "summary": _json_safe(summary),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
 
 
 def _render_html(
@@ -187,6 +223,19 @@ def _format_date(value: Any) -> str:
     if pd.isna(value):
         return "-"
     return str(value)
+
+
+def _json_safe(value: Any) -> Any:
+    """Return a JSON-serializable value."""
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if pd.isna(value):
+        return None
+    if hasattr(value, "item"):
+        return value.item()
+    return value
 
 
 def _package_version() -> str:
