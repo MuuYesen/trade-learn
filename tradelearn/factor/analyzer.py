@@ -53,6 +53,26 @@ class FactorAnalyzer:
         result.index.name = "quantile"
         return result
 
+    def quantile_counts(self) -> pd.DataFrame:
+        """Return per-date asset counts by factor quantile."""
+        if self.quantiles <= 0:
+            raise ValueError("quantiles must be a positive integer")
+
+        def _assign_quantiles(frame: pd.Series) -> pd.Series:
+            labels = pd.qcut(
+                frame.rank(method="first"),
+                q=min(self.quantiles, len(frame)),
+                labels=False,
+            )
+            return labels.astype(int) + 1
+
+        quantiles = self.factor.groupby(level=0, group_keys=False).apply(_assign_quantiles)
+        counts = quantiles.groupby([quantiles.index.get_level_values(0), quantiles]).size()
+        result = counts.unstack(fill_value=0).sort_index(axis=1)
+        result.index.name = self.factor.index.names[0]
+        result.columns.name = None
+        return result
+
     def quantile_decay(self, window: int = 5) -> pd.DataFrame:
         """Return rolling mean returns by factor quantile."""
         if window <= 0:
