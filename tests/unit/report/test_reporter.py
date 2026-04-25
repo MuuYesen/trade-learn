@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 from tradelearn import metrics
 from tradelearn.report import Reporter
@@ -74,6 +75,50 @@ def test_reporter_equity_curve_and_drawdown_delegate_metrics() -> None:
 
     pd.testing.assert_series_equal(reporter.equity_curve(), metrics.cum_returns(stats.returns, 1.0))
     pd.testing.assert_series_equal(reporter.drawdown(), metrics.drawdown_series(stats.returns))
+
+
+def test_reporter_monthly_heatmap_pivots_monthly_returns() -> None:
+    """Reporter.monthly_heatmap returns year/month return matrix."""
+    returns = pd.Series(
+        [0.10, -0.05, 0.02, 0.03],
+        index=pd.to_datetime(
+            [
+                "2024-01-02",
+                "2024-01-31",
+                "2024-02-01",
+                "2024-02-29",
+            ],
+            utc=True,
+        ),
+        name="returns",
+    )
+    reporter = Reporter({"returns": returns, "trades": pd.DataFrame()})
+
+    heatmap = reporter.monthly_heatmap()
+
+    assert heatmap.loc[2024, 1] == pytest.approx((1.10 * 0.95) - 1.0)
+    assert heatmap.loc[2024, 2] == pytest.approx((1.02 * 1.03) - 1.0)
+    assert heatmap.loc[2024, "year_total"] == pytest.approx(
+        (1.10 * 0.95 * 1.02 * 1.03) - 1.0
+    )
+    assert "month_avg" in heatmap.index
+
+
+def test_reporter_rolling_sharpe_uses_windowed_metrics() -> None:
+    """Reporter.rolling_sharpe returns a rolling metrics.sharpe series."""
+    returns = pd.Series(
+        [0.01, 0.02, -0.01, 0.03],
+        index=pd.date_range("2024-01-01", periods=4, tz="UTC"),
+        name="returns",
+    )
+    reporter = Reporter({"returns": returns, "trades": pd.DataFrame()}, periods=252)
+
+    rolling = reporter.rolling_sharpe(window=3)
+
+    assert pd.isna(rolling.iloc[0])
+    assert pd.isna(rolling.iloc[1])
+    assert rolling.iloc[2] == metrics.sharpe(returns.iloc[:3], periods=252)
+    assert rolling.iloc[3] == metrics.sharpe(returns.iloc[1:4], periods=252)
 
 
 def _stats() -> SimpleNamespace:

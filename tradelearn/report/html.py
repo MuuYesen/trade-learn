@@ -11,6 +11,7 @@ from bokeh.embed import components
 from bokeh.layouts import column
 from bokeh.plotting import figure
 from bokeh.resources import INLINE
+from bokeh.transform import linear_cmap
 
 
 def write_html_report(reporter: Any, path: str | Path) -> Path:
@@ -24,6 +25,8 @@ def write_html_report(reporter: Any, path: str | Path) -> Path:
         column(
             _equity_plot(reporter.equity_curve()),
             _drawdown_plot(reporter.drawdown()),
+            _monthly_heatmap_plot(reporter.monthly_heatmap()),
+            _rolling_sharpe_plot(reporter.rolling_sharpe()),
             _trade_distribution_plot(trades),
         )
     )
@@ -65,6 +68,61 @@ def _drawdown_plot(drawdown: pd.Series):
     )
     plot.varea(frame["date"], y1=0, y2=frame["drawdown"], color="#d62728", alpha=0.35)
     plot.line(frame["date"], frame["drawdown"], line_width=2, color="#d62728")
+    return plot
+
+
+def _monthly_heatmap_plot(monthly: pd.DataFrame):
+    """Return a monthly returns heatmap figure."""
+    values = monthly.drop(index="month_avg", errors="ignore")
+    months = [column for column in range(1, 13) if column in values.columns]
+    years = [str(year) for year in values.index]
+    data = {
+        "month": [],
+        "year": [],
+        "return": [],
+    }
+    for year in values.index:
+        for month in months:
+            data["month"].append(str(month))
+            data["year"].append(str(year))
+            data["return"].append(values.loc[year, month])
+    plot = figure(
+        title="Monthly Returns Heatmap",
+        x_range=[str(month) for month in months],
+        y_range=years,
+        height=240,
+        sizing_mode="stretch_width",
+        toolbar_location=None,
+    )
+    mapper = linear_cmap(
+        "return",
+        palette=["#d62728", "#f7f7f7", "#2ca02c"],
+        low=-0.05,
+        high=0.05,
+    )
+    plot.rect(
+        "month",
+        "year",
+        width=0.95,
+        height=0.95,
+        source=data,
+        fill_color=mapper,
+        line_color="white",
+    )
+    return plot
+
+
+def _rolling_sharpe_plot(rolling: pd.Series):
+    """Return a rolling Sharpe figure."""
+    frame = _plot_frame(rolling, "rolling_sharpe").dropna()
+    plot = figure(
+        title="Rolling Sharpe",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not frame.empty:
+        plot.line(frame["date"], frame["rolling_sharpe"], line_width=2, color="#9467bd")
     return plot
 
 
@@ -133,6 +191,8 @@ def _render_html(
   <section>
     <h2>Equity Curve</h2>
     <h2>Drawdown</h2>
+    <h2>Monthly Returns Heatmap</h2>
+    <h2>Rolling Sharpe</h2>
     <h2>Trade Distribution</h2>
     {charts}
     {script}

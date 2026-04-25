@@ -21,6 +21,8 @@ def test_reporter_html_writes_single_file_tear_sheet(tmp_path) -> None:
     assert "Summary Stats" in html
     assert "Equity Curve" in html
     assert "Drawdown" in html
+    assert "Monthly Returns Heatmap" in html
+    assert "Rolling Sharpe" in html
     assert "Trade Distribution" in html
     assert "Bokeh" in html
     assert "annual_return" in html

@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from tradelearn import metrics
+from tradelearn.report.analytics import monthly_returns_matrix, rolling_sharpe
 from tradelearn.report.excel import write_excel_report
 from tradelearn.report.explore import explore_trades
 from tradelearn.report.html import write_html_report
@@ -68,6 +69,14 @@ class Reporter:
     def drawdown(self) -> pd.Series:
         """Return drawdown series."""
         return metrics.drawdown_series(self._get("returns"))
+
+    def monthly_heatmap(self) -> pd.DataFrame:
+        """Return monthly returns matrix with yearly and monthly totals."""
+        return monthly_returns_matrix(self._get("returns"))
+
+    def rolling_sharpe(self, window: int = 126) -> pd.Series:
+        """Return rolling Sharpe ratio."""
+        return rolling_sharpe(self._get("returns"), window=window, periods=self.periods)
 
     def excel(self, path: str) -> Any:
         """Write an Excel report."""

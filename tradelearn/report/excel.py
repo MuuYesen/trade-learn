@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 
 from tradelearn import metrics
+from tradelearn.report.analytics import monthly_returns_matrix
 
 REPORT_SHEETS = [
     "summary",
@@ -36,7 +37,7 @@ def write_excel_report(reporter: Any, path: str | Path) -> Path:
         _summary_frame(reporter.summary()).to_excel(writer, sheet_name="summary", index=False)
         _excel_safe_frame(trades).to_excel(writer, sheet_name="trades", index=False)
         _excel_safe_frame(returns.to_frame()).to_excel(writer, sheet_name="daily_returns")
-        _monthly_returns(returns).to_excel(writer, sheet_name="monthly_returns")
+        monthly_returns_matrix(returns).to_excel(writer, sheet_name="monthly_returns")
         _excel_safe_frame(_drawdowns(returns)).to_excel(
             writer,
             sheet_name="drawdowns",
@@ -53,18 +54,6 @@ def write_excel_report(reporter: Any, path: str | Path) -> Path:
 def _summary_frame(summary: Mapping[str, Any]) -> pd.DataFrame:
     """Return summary as metric/value rows."""
     return pd.DataFrame({"metric": list(summary), "value": list(summary.values())})
-
-
-def _monthly_returns(returns: pd.Series) -> pd.DataFrame:
-    """Return monthly returns pivoted by year and month."""
-    monthly = (1.0 + returns).resample("ME").prod() - 1.0
-    frame = monthly.to_frame("return")
-    frame["year"] = frame.index.year
-    frame["month"] = frame.index.month
-    result = frame.pivot(index="year", columns="month", values="return")
-    result["year_total"] = (1.0 + result).prod(axis=1) - 1.0
-    result.loc["month_avg"] = result.mean(axis=0)
-    return result
 
 
 def _drawdowns(returns: pd.Series) -> pd.DataFrame:
