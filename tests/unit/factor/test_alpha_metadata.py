@@ -149,6 +149,57 @@ def test_check_alpha_metadata_script_reports_json_counts() -> None:
     assert result.stderr == ""
 
 
+def test_check_alpha_metadata_script_filters_text_by_family() -> None:
+    """The metadata check script can report one Alpha family in text mode."""
+    from tradelearn.factor.alpha import validated_alpha_formula_metadata
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_alpha_metadata.py", "--family", "alpha191"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    family_metadata = validated_alpha_formula_metadata()["alpha191"]
+
+    assert result.stdout.splitlines() == [
+        "alpha191: supported="
+        f"{family_metadata['supported_count']} skipped={family_metadata['skipped_count']}"
+    ]
+    assert result.stderr == ""
+
+
+def test_check_alpha_metadata_script_filters_json_by_family() -> None:
+    """The metadata check script can report one Alpha family in JSON mode."""
+    from tradelearn.factor.alpha import validated_alpha_formula_metadata
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/check_alpha_metadata.py",
+            "--json",
+            "--include-all",
+            "--family",
+            "alpha101",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    family_metadata = validated_alpha_formula_metadata()["alpha101"]
+
+    assert json.loads(result.stdout) == {
+        "alpha101": {
+            "supported_count": family_metadata["supported_count"],
+            "skipped_count": family_metadata["skipped_count"],
+            "supported": list(family_metadata["supported"]),
+            "skipped": family_metadata["skipped"],
+        }
+    }
+    assert result.stderr == ""
+
+
 def test_check_alpha_metadata_script_reports_json_skipped_reasons() -> None:
     """The metadata check script can include skipped reasons in JSON output."""
     from tradelearn.factor.alpha import validated_alpha_formula_metadata

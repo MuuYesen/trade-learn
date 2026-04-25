@@ -37,11 +37,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="include supported and skipped formula details in JSON output",
     )
+    parser.add_argument(
+        "--family",
+        choices=("alpha101", "alpha191"),
+        help="check only one Alpha formula family",
+    )
     args = parser.parse_args(argv)
 
     metadata = validated_alpha_formula_metadata()
+    families = [args.family] if args.family else sorted(metadata)
     counts = {}
-    for family, family_metadata in sorted(metadata.items()):
+    for family in families:
+        family_metadata = metadata[family]
         family_counts = {
             "supported_count": family_metadata["supported_count"],
             "skipped_count": family_metadata["skipped_count"],
@@ -55,7 +62,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(counts, sort_keys=True))
         return 0
 
-    for family, family_metadata in sorted(metadata.items()):
+    for family in families:
+        family_metadata = metadata[family]
         print(
             f"{family}: supported={family_metadata['supported_count']} "
             f"skipped={family_metadata['skipped_count']}"
