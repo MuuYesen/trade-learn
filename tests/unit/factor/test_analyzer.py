@@ -94,6 +94,17 @@ def test_factor_analyzer_quantile_stats_summarizes_groups() -> None:
     assert stats.loc[2, "cumulative_return"] == (1.0 + quantile_returns[2]).prod() - 1.0
 
 
+def test_factor_analyzer_quantile_decay_returns_rolling_group_means() -> None:
+    """quantile_decay returns rolling mean returns by quantile."""
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
+
+    decay = analyzer.quantile_decay(window=2)
+    quantile_returns = analyzer.quantile_returns()
+
+    pd.testing.assert_frame_equal(decay, quantile_returns.rolling(2, min_periods=1).mean())
+
+
 def test_factor_analyzer_requires_returns_or_prices_for_return_metrics() -> None:
     """Return-based methods fail clearly when no returns source is configured."""
     factor, _ = _factor_and_forward_returns()

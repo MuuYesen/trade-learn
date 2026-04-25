@@ -53,6 +53,12 @@ class FactorAnalyzer:
         result.index.name = "quantile"
         return result
 
+    def quantile_decay(self, window: int = 5) -> pd.DataFrame:
+        """Return rolling mean returns by factor quantile."""
+        if window <= 0:
+            raise ValueError("window must be a positive integer")
+        return self.quantile_returns().rolling(window, min_periods=1).mean()
+
     def factor_returns(self) -> pd.DataFrame:
         """Return quantile returns derived from configured prices."""
         if self.prices is None:
