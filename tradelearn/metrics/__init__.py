@@ -23,10 +23,21 @@ from tradelearn.metrics.risk import (
     var,
     volatility,
 )
+from tradelearn.metrics.trade import (
+    avg_loss,
+    avg_win,
+    expectancy,
+    max_consecutive_losses,
+    max_consecutive_wins,
+    profit_factor,
+    win_rate,
+)
 
 __all__ = [
     "alpha",
     "annual_return",
+    "avg_loss",
+    "avg_win",
     "beta",
     "calmar",
     "cum_returns",
@@ -34,14 +45,19 @@ __all__ = [
     "downside_risk",
     "drawdown_series",
     "excess_returns",
+    "expectancy",
     "information_ratio",
     "log_to_simple",
+    "max_consecutive_losses",
+    "max_consecutive_wins",
     "max_drawdown",
     "omega",
+    "profit_factor",
     "sharpe",
     "simple_returns",
     "sortino",
     "tail_ratio",
     "var",
     "volatility",
+    "win_rate",
 ]
