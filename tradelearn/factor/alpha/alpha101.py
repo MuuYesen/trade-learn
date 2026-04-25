@@ -22,6 +22,9 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha010",
         "alpha011",
         "alpha012",
+        "alpha013",
+        "alpha014",
+        "alpha015",
     }
 )
 
@@ -54,6 +57,7 @@ class Alpha101Factors:
     def __init__(self, data: pd.DataFrame) -> None:
         """Create a factor calculator from ``data.pivot(index='date', columns='code')``."""
         self.open = data["open"]
+        self.high = data["high"]
         self.low = data["low"]
         self.close = data["close"]
         self.volume = data["volume"]
@@ -137,6 +141,22 @@ class Alpha101Factors:
         """Return Alpha#12."""
         return np.sign(_delta(self.volume, 1)) * (-1 * _delta(self.close, 1))
 
+    def alpha013(self) -> pd.DataFrame:
+        """Return Alpha#13."""
+        return -1 * _rank(_covariance(_rank(self.close), _rank(self.volume), 5))
+
+    def alpha014(self) -> pd.DataFrame:
+        """Return Alpha#14."""
+        values = _correlation(self.open, self.volume, 10)
+        values = values.replace([-np.inf, np.inf], 0).fillna(value=0)
+        return -1 * _rank(_delta(self.returns, 3)) * values
+
+    def alpha015(self) -> pd.DataFrame:
+        """Return Alpha#15."""
+        values = _correlation(_rank(self.high), _rank(self.volume), 3)
+        values = values.replace([-np.inf, np.inf], 0).fillna(value=0)
+        return -1 * _ts_sum(_rank(values), 3)
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha101 formula layout."""
@@ -170,6 +190,11 @@ def _sma(frame: pd.DataFrame, window: int) -> pd.DataFrame:
 def _correlation(left: pd.DataFrame, right: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling correlation with Alpha101 legacy missing-value handling."""
     return left.rolling(window).corr(right).fillna(0).replace([np.inf, -np.inf], 0)
+
+
+def _covariance(left: pd.DataFrame, right: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return rolling covariance."""
+    return left.rolling(window).cov(right)
 
 
 def _delta(frame: pd.DataFrame, period: int) -> pd.DataFrame:
