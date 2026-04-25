@@ -258,6 +258,38 @@ def test_check_design_notes_strict_rejects_placeholder_tokens(
     ]
 
 
+def test_check_design_notes_strict_allows_placeholder_substrings(
+    tmp_path: Path,
+) -> None:
+    """Strict mode only treats standalone placeholder tokens as blockers."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    for filename, title in [
+        ("matching-design.md", "Matching Design"),
+        ("event-loop.md", "Event Loop"),
+        ("portfolio.md", "Portfolio"),
+    ]:
+        write_design_note(docs_internal / filename, title)
+    with (docs_internal / "event-loop.md").open("a", encoding="utf-8") as handle:
+        handle.write("\nTODOS are tracked outside this note.\n")
+        handle.write("TODO_LIST is an example variable name, not a placeholder.\n")
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--strict", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "design-note:matching-design.md=ok",
+        "design-note:event-loop.md=ok",
+        "design-note:portfolio.md=ok",
+    ]
+    assert result.stderr == ""
+
+
 def test_check_design_notes_strict_rejects_empty_section_body(
     tmp_path: Path,
 ) -> None:

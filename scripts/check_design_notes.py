@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -78,6 +79,11 @@ def section_body(content: str, section: str) -> str:
     return content[body_start:body_end].strip()
 
 
+def has_placeholder_token(content: str, token: str) -> bool:
+    """Return whether content contains a standalone freeze-blocking token."""
+    return re.search(rf"(?<![A-Za-z0-9_]){re.escape(token)}(?![A-Za-z0-9_])", content) is not None
+
+
 def note_errors(directory: Path, filename: str, *, strict: bool = False) -> list[str]:
     """Return readiness errors for one required design note."""
     path = directory / filename
@@ -104,7 +110,7 @@ def note_errors(directory: Path, filename: str, *, strict: bool = False) -> list
         errors.extend(
             f"placeholder token in {filename}: {token}"
             for token in STRICT_PLACEHOLDER_TOKENS
-            if token in content
+            if has_placeholder_token(content, token)
         )
     return errors
 
