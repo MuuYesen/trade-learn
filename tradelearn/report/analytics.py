@@ -90,6 +90,14 @@ def exposure_weights(positions: pd.DataFrame) -> pd.DataFrame:
     return exposure.div(totals.replace(0, np.nan), axis=0).fillna(0.0)
 
 
+def exposure_correlation(positions: pd.DataFrame) -> pd.DataFrame:
+    """Return a symbol correlation matrix from daily exposure weights."""
+    exposure = exposure_weights(positions)
+    if exposure.empty:
+        return pd.DataFrame()
+    return exposure.corr()
+
+
 def _drawdown_episode(
     *,
     peak: object,

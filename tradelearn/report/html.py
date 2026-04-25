@@ -23,6 +23,7 @@ def write_html_report(reporter: Any, path: str | Path) -> Path:
     returns = pd.Series(reporter._get("returns")).copy()
     trades = pd.DataFrame(reporter._get("trades", default=pd.DataFrame())).copy()
     exposure = reporter.exposure()
+    correlation = reporter.correlation_matrix()
     summary = reporter.summary()
     plots = [
         _equity_plot(reporter.equity_curve()),
@@ -32,6 +33,7 @@ def write_html_report(reporter: Any, path: str | Path) -> Path:
         _trade_distribution_plot(trades),
     ]
     if _has_multi_asset_exposure(exposure):
+        plots.append(_correlation_plot(correlation))
         plots.append(_exposure_plot(exposure))
     script, charts = components(
         column(*plots)
@@ -44,6 +46,7 @@ def write_html_report(reporter: Any, path: str | Path) -> Path:
             bokeh_resources=INLINE.render(),
             metadata=_metadata(summary, returns, reporter._get("config", default={}) or {}),
             drawdowns=reporter.top_drawdowns(limit=10),
+            correlation=correlation,
             exposure=exposure,
             trades=trades,
             returns=returns,
@@ -177,6 +180,41 @@ def _exposure_plot(exposure: pd.DataFrame):
     return plot
 
 
+def _correlation_plot(correlation: pd.DataFrame):
+    """Return a multi-asset correlation heatmap figure."""
+    symbols = [str(symbol) for symbol in correlation.columns]
+    data = {"x": [], "y": [], "correlation": []}
+    for row in correlation.index:
+        for symbol in correlation.columns:
+            data["x"].append(str(symbol))
+            data["y"].append(str(row))
+            data["correlation"].append(correlation.loc[row, symbol])
+    plot = figure(
+        title="Correlation Matrix",
+        x_range=symbols,
+        y_range=symbols,
+        height=260,
+        sizing_mode="stretch_width",
+        toolbar_location=None,
+    )
+    mapper = linear_cmap(
+        "correlation",
+        palette=["#d62728", "#f7f7f7", "#1f77b4"],
+        low=-1.0,
+        high=1.0,
+    )
+    plot.rect(
+        "x",
+        "y",
+        width=0.95,
+        height=0.95,
+        source=data,
+        fill_color=mapper,
+        line_color="white",
+    )
+    return plot
+
+
 def _plot_frame(series: pd.Series, name: str) -> pd.DataFrame:
     """Return a timezone-naive plotting frame."""
     frame = series.to_frame(name).reset_index()
@@ -194,6 +232,7 @@ def _render_html(
     bokeh_resources: str,
     metadata: dict[str, str],
     drawdowns: pd.DataFrame,
+    correlation: pd.DataFrame,
     exposure: pd.DataFrame,
     trades: pd.DataFrame,
     returns: pd.Series,
@@ -234,6 +273,7 @@ def _render_html(
     <h2>Monthly Returns Heatmap</h2>
     <h2>Rolling Sharpe</h2>
     <h2>Trade Distribution</h2>
+    {_correlation_section(correlation)}
     {_exposure_section(exposure)}
     {charts}
     {script}
@@ -302,6 +342,14 @@ def _exposure_section(exposure: pd.DataFrame) -> str:
         return ""
     symbols = ", ".join(escape(str(symbol)) for symbol in exposure.columns)
     return f"<h2>Exposure Chart</h2><p>Symbols: {symbols}</p>"
+
+
+def _correlation_section(correlation: pd.DataFrame) -> str:
+    """Return the optional correlation matrix section heading."""
+    if correlation.empty or len(correlation.columns) <= 1:
+        return ""
+    symbols = ", ".join(escape(str(symbol)) for symbol in correlation.columns)
+    return f"<h2>Correlation Matrix</h2><p>Symbols: {symbols}</p>"
 
 
 def _has_multi_asset_exposure(exposure: pd.DataFrame) -> bool:

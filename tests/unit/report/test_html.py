@@ -73,6 +73,7 @@ def test_reporter_html_adds_exposure_chart_for_multi_asset_positions(tmp_path) -
     ).html(path)
 
     html = path.read_text()
+    assert "Correlation Matrix" in html
     assert "Exposure Chart" in html
     assert "AAA" in html
     assert "BBB" in html

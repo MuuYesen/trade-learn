@@ -10,6 +10,7 @@ import pandas as pd
 
 from tradelearn import metrics
 from tradelearn.report.analytics import (
+    exposure_correlation,
     exposure_weights,
     monthly_returns_matrix,
     rolling_sharpe,
@@ -90,6 +91,10 @@ class Reporter:
     def exposure(self) -> pd.DataFrame:
         """Return daily symbol exposure weights."""
         return exposure_weights(self._get("positions", default=pd.DataFrame()))
+
+    def correlation_matrix(self) -> pd.DataFrame:
+        """Return multi-asset exposure correlation matrix."""
+        return exposure_correlation(self._get("positions", default=pd.DataFrame()))
 
     def excel(self, path: str) -> Any:
         """Write an Excel report."""

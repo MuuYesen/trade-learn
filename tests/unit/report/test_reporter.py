@@ -168,6 +168,36 @@ def test_reporter_exposure_pivots_multi_asset_positions() -> None:
     assert exposure.loc[pd.Timestamp("2024-01-02", tz="UTC"), "BBB"] == pytest.approx(0.75)
 
 
+def test_reporter_correlation_matrix_uses_multi_asset_exposure() -> None:
+    """Reporter.correlation_matrix returns symbol correlations from exposure."""
+    positions = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                [
+                    "2024-01-01",
+                    "2024-01-01",
+                    "2024-01-02",
+                    "2024-01-02",
+                    "2024-01-03",
+                    "2024-01-03",
+                ],
+                utc=True,
+            ),
+            "symbol": ["AAA", "BBB", "AAA", "BBB", "AAA", "BBB"],
+            "value": [80.0, 20.0, 50.0, 50.0, 20.0, 80.0],
+        }
+    )
+    reporter = Reporter({"returns": _returns(), "trades": pd.DataFrame(), "positions": positions})
+
+    correlation = reporter.correlation_matrix()
+
+    assert list(correlation.index) == ["AAA", "BBB"]
+    assert list(correlation.columns) == ["AAA", "BBB"]
+    assert correlation.loc["AAA", "AAA"] == pytest.approx(1.0)
+    assert correlation.loc["BBB", "BBB"] == pytest.approx(1.0)
+    assert correlation.loc["AAA", "BBB"] == pytest.approx(-1.0)
+
+
 def _stats() -> SimpleNamespace:
     returns = _returns()
     return SimpleNamespace(
