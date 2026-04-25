@@ -49,3 +49,12 @@ def test_alpha_formula_metadata_is_exported_from_package_all() -> None:
     import tradelearn.factor.alpha as alpha_package
 
     assert "alpha_formula_metadata" in alpha_package.__all__
+
+
+def test_alpha_formula_metadata_is_exported_from_factor_package() -> None:
+    """The top-level factor facade exposes Alpha formula metadata."""
+    import tradelearn.factor as factor_package
+    import tradelearn.factor.alpha as alpha_package
+
+    assert factor_package.alpha_formula_metadata() == alpha_package.alpha_formula_metadata()
+    assert "alpha_formula_metadata" in factor_package.__all__
