@@ -108,6 +108,16 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha098",
         "alpha099",
         "alpha100",
+        "alpha101",
+        "alpha102",
+        "alpha103",
+        "alpha104",
+        "alpha105",
+        "alpha106",
+        "alpha107",
+        "alpha108",
+        "alpha109",
+        "alpha110",
     }
 )
 
@@ -1019,6 +1029,77 @@ class Alpha191Factors:
         """Return Alpha#100."""
         return _stddev(self.volume, 20)
 
+    def alpha101(self) -> pd.DataFrame:
+        """Return Alpha#101."""
+        rank1 = _rank(_correlation(self.close, _ts_sum(_mean(self.volume, 30), 37), 15))
+        rank2 = _rank(
+            _correlation(
+                _rank((self.high * 0.1) + (self.vwap * 0.9)),
+                _rank(self.volume),
+                11,
+            )
+        )
+        cond = rank1 < rank2
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond] = 1
+        part[~cond] = 0
+        return part
+
+    def alpha102(self) -> pd.DataFrame:
+        """Return Alpha#102."""
+        volume_delta = self.volume - _delay(self.volume, 1)
+        return (
+            _sma(_elementwise_max(volume_delta, 0), 6, 1)
+            / _sma(volume_delta.abs(), 6, 1)
+            * 100
+        )
+
+    def alpha103(self) -> pd.DataFrame:
+        """Return Alpha#103."""
+        return ((20 - _lowday(self.low, 20)) / 20) * 100
+
+    def alpha104(self) -> pd.DataFrame:
+        """Return Alpha#104."""
+        return -1 * (
+            _delta(_correlation(self.high, self.volume, 5), 5)
+            * _rank(_stddev(self.close, 20))
+        )
+
+    def alpha105(self) -> pd.DataFrame:
+        """Return Alpha#105."""
+        return -1 * _correlation(_rank(self.open), _rank(self.volume), 10)
+
+    def alpha106(self) -> pd.DataFrame:
+        """Return Alpha#106."""
+        return self.close - _delay(self.close, 20)
+
+    def alpha107(self) -> pd.DataFrame:
+        """Return Alpha#107."""
+        return (
+            (-1 * _rank(self.open - _delay(self.high, 1)))
+            * _rank(self.open - _delay(self.close, 1))
+            * _rank(self.open - _delay(self.low, 1))
+        )
+
+    def alpha108(self) -> pd.DataFrame:
+        """Return Alpha#108."""
+        return (
+            _rank(self.high - _ts_min(self.high, 2))
+            ** _rank(_correlation(self.vwap, _mean(self.volume, 120), 6))
+        ) * -1
+
+    def alpha109(self) -> pd.DataFrame:
+        """Return Alpha#109."""
+        high_low = self.high - self.low
+        return _sma(high_low, 10, 2) / _sma(_sma(high_low, 10, 2), 10, 2)
+
+    def alpha110(self) -> pd.DataFrame:
+        """Return Alpha#110."""
+        up = _ts_sum(_elementwise_max(self.high - _delay(self.close, 1), 0), 20)
+        down = _ts_sum(_elementwise_max(_delay(self.close, 1) - self.low, 0), 20)
+        return up / down * 100
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha191 formula layout."""
@@ -1134,6 +1215,11 @@ def _ts_max(frame: pd.DataFrame, window: int) -> pd.DataFrame:
 def _ts_min(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling minimum."""
     return frame.rolling(window).min()
+
+
+def _lowday(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Return days since the rolling minimum, matching legacy Lowday."""
+    return frame.rolling(window).apply(lambda values: len(values) - values.argmin())
 
 
 def _elementwise_max(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
