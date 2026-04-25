@@ -41,6 +41,21 @@ def test_report_charts_return_bokeh_figures() -> None:
     assert all(isinstance(plot, type(figure())) for plot in plots)
 
 
+def test_equity_curve_marks_top_drawdown_peak_and_valley() -> None:
+    """Equity curve marks top drawdown peak and valley dates."""
+    drawdowns = pd.DataFrame(
+        {
+            "peak": [pd.Timestamp("2024-01-01", tz="UTC")],
+            "valley": [pd.Timestamp("2024-01-03", tz="UTC")],
+        }
+    )
+
+    plot = equity_curve(_series("equity"), drawdowns=drawdowns)
+
+    assert any(renderer.name == "drawdown_peak" for renderer in plot.renderers)
+    assert any(renderer.name == "drawdown_valley" for renderer in plot.renderers)
+
+
 def _series(name: str) -> pd.Series:
     return pd.Series(
         [1.0, 1.1, 1.05],

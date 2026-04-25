@@ -7,7 +7,11 @@ from bokeh.plotting import figure
 from bokeh.transform import linear_cmap
 
 
-def equity_curve(equity: pd.Series, benchmark: pd.Series | None = None):
+def equity_curve(
+    equity: pd.Series,
+    benchmark: pd.Series | None = None,
+    drawdowns: pd.DataFrame | None = None,
+):
     """Return an equity curve figure."""
     frame = _plot_frame(equity, "equity")
     plot = figure(
@@ -27,6 +31,8 @@ def equity_curve(equity: pd.Series, benchmark: pd.Series | None = None):
             color="#ff7f0e",
             legend_label="Benchmark",
         )
+    if drawdowns is not None and not drawdowns.empty:
+        _add_drawdown_markers(plot, equity, drawdowns)
     return plot
 
 
@@ -311,6 +317,30 @@ def factor_turnover(turnover: pd.Series, autocorrelation: pd.Series):
             legend_label="Autocorrelation",
         )
     return plot
+
+
+def _add_drawdown_markers(plot, equity: pd.Series, drawdowns: pd.DataFrame) -> None:
+    """Add peak and valley markers for drawdown episodes."""
+    for column, name, color, marker in [
+        ("peak", "drawdown_peak", "#2ca02c", "triangle"),
+        ("valley", "drawdown_valley", "#d62728", "inverted_triangle"),
+    ]:
+        if column not in drawdowns:
+            continue
+        dates = pd.to_datetime(drawdowns[column]).dropna()
+        values = equity.reindex(dates).dropna()
+        if values.empty:
+            continue
+        marker_frame = _plot_frame(values, "equity")
+        plot.scatter(
+            marker_frame["date"],
+            marker_frame["equity"],
+            marker=marker,
+            size=9,
+            color=color,
+            legend_label=name.replace("_", " ").title(),
+            name=name,
+        )
 
 
 def _plot_frame(series: pd.Series, name: str) -> pd.DataFrame:

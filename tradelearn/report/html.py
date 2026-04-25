@@ -48,8 +48,13 @@ def write_html_report(
     summary = reporter.summary(benchmark=benchmark_returns)
     config = reporter._get("config", default={}) or {}
     metadata = _metadata(summary, returns, config)
+    top_drawdowns = reporter.top_drawdowns(limit=10)
     plots = [
-        charts.equity_curve(reporter.equity_curve(), benchmark_returns),
+        charts.equity_curve(
+            reporter.equity_curve(),
+            benchmark_returns,
+            drawdowns=top_drawdowns.head(5),
+        ),
         charts.drawdown(reporter.drawdown()),
         charts.monthly_heatmap(reporter.monthly_heatmap()),
         charts.rolling_sharpe(reporter.rolling_sharpe()),
@@ -80,7 +85,7 @@ def write_html_report(
             script=script,
             bokeh_resources=INLINE.render(),
             metadata=metadata,
-            drawdowns=reporter.top_drawdowns(limit=10),
+            drawdowns=top_drawdowns,
             benchmark=benchmark_returns,
             correlation=correlation,
             exposure=exposure,
