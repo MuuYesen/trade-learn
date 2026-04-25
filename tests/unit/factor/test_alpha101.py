@@ -1,6 +1,9 @@
 """Tests for v2 Alpha101 factor entry points."""
 
+import importlib
+
 import pandas as pd
+import pytest
 
 from tradelearn.factor.alpha import alpha101
 from tradelearn.query import Query
@@ -197,6 +200,43 @@ def test_query_alphas101_delegates_supported_formulas_to_v2_facade() -> None:
         result.sort_values(["date", "code"]).reset_index(drop=True),
         expected.sort_values(["date", "code"]).reset_index(drop=True),
     )
+
+
+def test_alpha101_documents_skipped_legacy_formulas() -> None:
+    """Intentionally skipped formulas are visible and fail with reasons."""
+    alpha101_module = importlib.import_module("tradelearn.factor.alpha.alpha101")
+    expected_skipped = {
+        "alpha048": "requires industry neutralization input",
+        "alpha056": "requires cap input",
+        "alpha058": "requires industry neutralization input",
+        "alpha059": "requires industry neutralization input",
+        "alpha063": "requires industry neutralization input",
+        "alpha067": "requires industry neutralization input",
+        "alpha069": "requires industry neutralization input",
+        "alpha070": "requires industry neutralization input",
+        "alpha076": "requires industry neutralization input",
+        "alpha079": "requires industry neutralization input",
+        "alpha080": "requires industry neutralization input",
+        "alpha082": "requires industry neutralization input",
+        "alpha087": "requires industry neutralization input",
+        "alpha089": "requires industry neutralization input",
+        "alpha090": "requires industry neutralization input",
+        "alpha091": "requires industry neutralization input",
+        "alpha093": "requires industry neutralization input",
+        "alpha097": "requires industry neutralization input",
+        "alpha100": "requires subindustry neutralization input",
+    }
+
+    assert alpha101_module.ALPHA101_SKIPPED == expected_skipped
+    assert set(expected_skipped).isdisjoint(alpha101_module.ALPHA101_SUPPORTED)
+
+    with pytest.raises(ValueError) as exc_info:
+        alpha101(_stock_data(), names=sorted(expected_skipped))
+
+    message = str(exc_info.value)
+    for name, reason in expected_skipped.items():
+        assert name in message
+        assert reason in message
 
 
 def _legacy_alpha101(data: pd.DataFrame, names: list[str]) -> pd.DataFrame:

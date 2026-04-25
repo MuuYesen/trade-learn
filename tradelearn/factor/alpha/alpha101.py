@@ -94,12 +94,41 @@ ALPHA101_SUPPORTED = frozenset(
     }
 )
 
+ALPHA101_SKIPPED = {
+    "alpha048": "requires industry neutralization input",
+    "alpha056": "requires cap input",
+    "alpha058": "requires industry neutralization input",
+    "alpha059": "requires industry neutralization input",
+    "alpha063": "requires industry neutralization input",
+    "alpha067": "requires industry neutralization input",
+    "alpha069": "requires industry neutralization input",
+    "alpha070": "requires industry neutralization input",
+    "alpha076": "requires industry neutralization input",
+    "alpha079": "requires industry neutralization input",
+    "alpha080": "requires industry neutralization input",
+    "alpha082": "requires industry neutralization input",
+    "alpha087": "requires industry neutralization input",
+    "alpha089": "requires industry neutralization input",
+    "alpha090": "requires industry neutralization input",
+    "alpha091": "requires industry neutralization input",
+    "alpha093": "requires industry neutralization input",
+    "alpha097": "requires industry neutralization input",
+    "alpha100": "requires subindustry neutralization input",
+}
+
 
 def alpha101(stock_data: pd.DataFrame, names: Iterable[str] | None = None) -> pd.DataFrame:
     """Return selected Alpha101 factors in legacy Query-compatible long form."""
     selected = list(names or sorted(ALPHA101_SUPPORTED))
     unsupported = sorted(set(selected).difference(ALPHA101_SUPPORTED))
     if unsupported:
+        skipped = [name for name in unsupported if name in ALPHA101_SKIPPED]
+        unknown = [name for name in unsupported if name not in ALPHA101_SKIPPED]
+        if skipped and not unknown:
+            details = "; ".join(
+                f"{name}: {ALPHA101_SKIPPED[name]}" for name in skipped
+            )
+            raise ValueError(f"skipped Alpha101 formulas are not supported: {details}")
         raise ValueError(f"unsupported Alpha101 formulas: {unsupported}")
 
     factors = Alpha101Factors(_pivot_stock_data(stock_data))
