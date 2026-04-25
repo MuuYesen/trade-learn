@@ -629,6 +629,8 @@ def test_check_design_notes_json_reports_all_note_statuses(tmp_path: Path) -> No
         "directory": str(docs_internal),
         "strict": False,
         "ok": True,
+        "error_count": 0,
+        "missing_count": 0,
         "notes": [
             {
                 "file": "matching-design.md",
@@ -672,6 +674,8 @@ def test_check_design_notes_json_reports_failures_on_stdout(
     payload = json.loads(result.stdout)
     assert result.returncode == 1
     assert payload["ok"] is False
+    assert payload["error_count"] == 1
+    assert payload["missing_count"] == 1
     assert payload["notes"][-1] == {
         "file": "portfolio.md",
         "path": str(docs_internal / "portfolio.md"),

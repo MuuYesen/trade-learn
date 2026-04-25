@@ -264,6 +264,8 @@ def design_note_report(directory: Path, *, strict: bool = False) -> dict[str, ob
         "directory": str(directory),
         "strict": strict,
         "ok": all(not note["errors"] for note in notes),
+        "error_count": sum(len(note["errors"]) for note in notes),
+        "missing_count": sum(not note["exists"] for note in notes),
         "notes": notes,
     }
 
