@@ -47,35 +47,62 @@ def update_migration_known_differences(content: str, rendered: str) -> str:
     return content[:heading_end] + replacement + content[block_end:]
 
 
+def alpha_known_differences_section_starts(
+    content: str, family: str | None = None
+) -> list[int]:
+    """Return Alpha known-difference heading offsets outside fenced code blocks."""
+    expected_heading = None
+    if family is not None:
+        expected_heading = f"### Alpha {family} skipped formulas"
+
+    starts = []
+    offset = 0
+    in_fence = False
+    for line in content.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped.startswith(("```", "~~~")):
+            in_fence = not in_fence
+        elif not in_fence:
+            heading = line.rstrip("\r\n")
+            if expected_heading is not None:
+                if heading == expected_heading:
+                    starts.append(offset)
+            elif heading.startswith("### Alpha ") and heading.endswith(
+                " skipped formulas"
+            ):
+                starts.append(offset)
+        offset += len(line)
+    return starts
+
+
 def alpha_known_differences_section(content: str, family: str) -> str | None:
     """Return one rendered Alpha family section from a larger Markdown document."""
-    heading = f"### Alpha {family} skipped formulas"
-    section_start = content.find(heading)
-    if section_start == -1:
+    section_starts = alpha_known_differences_section_starts(content, family)
+    if not section_starts:
         return None
-    next_family_start = content.find("\n### Alpha ", section_start + len(heading))
+    section_start = section_starts[0]
+    next_family_start = next(
+        (
+            start
+            for start in alpha_known_differences_section_starts(content)
+            if start > section_start
+        ),
+        -1,
+    )
     block_end = content.find(MIGRATION_KNOWN_DIFFERENCES_END, section_start)
     if block_end == -1:
         block_end = len(content)
     section_end = (
         block_end
         if next_family_start == -1
-        else min(next_family_start + 1, block_end)
+        else min(next_family_start, block_end)
     )
     return content[section_start:section_end].strip() + "\n"
 
 
 def alpha_known_differences_section_count(content: str, family: str) -> int:
     """Return how many Alpha family sections appear in a Markdown document."""
-    heading = f"### Alpha {family} skipped formulas"
-    count = 0
-    position = 0
-    while True:
-        section_start = content.find(heading, position)
-        if section_start == -1:
-            return count
-        count += 1
-        position = section_start + len(heading)
+    return len(alpha_known_differences_section_starts(content, family))
 
 
 def main(argv: list[str] | None = None) -> int:
