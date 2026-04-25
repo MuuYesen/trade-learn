@@ -118,6 +118,16 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha108",
         "alpha109",
         "alpha110",
+        "alpha111",
+        "alpha112",
+        "alpha113",
+        "alpha114",
+        "alpha115",
+        "alpha116",
+        "alpha117",
+        "alpha118",
+        "alpha119",
+        "alpha120",
     }
 )
 
@@ -1099,6 +1109,101 @@ class Alpha191Factors:
         up = _ts_sum(_elementwise_max(self.high - _delay(self.close, 1), 0), 20)
         down = _ts_sum(_elementwise_max(_delay(self.close, 1) - self.low, 0), 20)
         return up / down * 100
+
+    def alpha111(self) -> pd.DataFrame:
+        """Return Alpha#111."""
+        values = self.volume * (
+            ((self.close - self.low) - (self.high - self.close))
+            / (self.high - self.low)
+        )
+        return _sma(values, 11, 2) - _sma(values, 4, 2)
+
+    def alpha112(self) -> pd.DataFrame:
+        """Return Alpha#112."""
+        close_delta = self.close - _delay(self.close, 1)
+        cond = close_delta > 0
+        part1 = self.close.copy(deep=True)
+        part1.loc[:, :] = np.nan
+        part1[cond] = close_delta
+        part1[~cond] = 0
+        part2 = self.close.copy(deep=True)
+        part2.loc[:, :] = np.nan
+        part2[~cond] = close_delta.abs()
+        part2[cond] = 0
+        part1_sum = _ts_sum(part1, 12)
+        part2_sum = _ts_sum(part2, 12)
+        return (part1_sum - part2_sum) / (part1_sum + part2_sum) * 100
+
+    def alpha113(self) -> pd.DataFrame:
+        """Return Alpha#113."""
+        return -1 * (
+            _rank(_ts_sum(_delay(self.close, 5), 20) / 20)
+            * _correlation(self.close, self.volume, 2)
+            * _rank(_correlation(_ts_sum(self.close, 5), _ts_sum(self.close, 20), 2))
+        )
+
+    def alpha114(self) -> pd.DataFrame:
+        """Return Alpha#114."""
+        spread_ratio = (self.high - self.low) / (_ts_sum(self.close, 5) / 5)
+        return (
+            _rank(_delay(spread_ratio, 2)) * _rank(_rank(self.volume))
+        ) / (spread_ratio / (self.vwap - self.close))
+
+    def alpha115(self) -> pd.DataFrame:
+        """Return Alpha#115."""
+        left = _rank(
+            _correlation((self.high * 0.9) + (self.close * 0.1), _mean(self.volume, 30), 10)
+        )
+        right = _rank(
+            _correlation(
+                _ts_rank((self.high + self.low) / 2, 4),
+                _ts_rank(self.volume, 10),
+                7,
+            )
+        )
+        return left**right
+
+    def alpha116(self) -> pd.DataFrame:
+        """Return Alpha#116."""
+        return _regbeta(self.close, _sequence(20))
+
+    def alpha117(self) -> pd.DataFrame:
+        """Return Alpha#117."""
+        return (
+            _ts_rank(self.volume, 32)
+            * (1 - _ts_rank((self.close + self.high) - self.low, 16))
+            * (1 - _ts_rank(self.returns, 32))
+        )
+
+    def alpha118(self) -> pd.DataFrame:
+        """Return Alpha#118."""
+        return _ts_sum(self.high - self.open, 20) / _ts_sum(self.open - self.low, 20) * 100
+
+    def alpha119(self) -> pd.DataFrame:
+        """Return Alpha#119."""
+        left = _rank(
+            _decay_linear(
+                _correlation(self.vwap, _ts_sum(_mean(self.volume, 5), 26), 5),
+                7,
+            )
+        )
+        right = _rank(
+            _decay_linear(
+                _ts_rank(
+                    _ts_min(
+                        _correlation(_rank(self.open), _rank(_mean(self.volume, 15)), 21),
+                        9,
+                    ),
+                    7,
+                ),
+                8,
+            )
+        )
+        return left - right
+
+    def alpha120(self) -> pd.DataFrame:
+        """Return Alpha#120."""
+        return _rank(self.vwap - self.close) / _rank(self.vwap + self.close)
 
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
