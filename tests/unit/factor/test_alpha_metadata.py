@@ -366,6 +366,29 @@ def test_render_alpha_known_differences_script_check_fails_for_missing_content(
     assert result.stderr == "Missing Alpha known differences sections: alpha191\n"
 
 
+def test_render_alpha_known_differences_script_check_fails_for_missing_file(
+    tmp_path: Path,
+) -> None:
+    """The known differences script reports an unreadable target file."""
+    target = tmp_path / "missing.md"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--check",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == f"Cannot read Alpha known differences target: {target}\n"
+
+
 def test_render_alpha_known_differences_script_check_reports_all_families(
     tmp_path: Path,
 ) -> None:

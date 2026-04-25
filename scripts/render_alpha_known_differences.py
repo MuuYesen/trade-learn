@@ -49,7 +49,14 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     if args.check is not None:
-        content = args.check.read_text(encoding="utf-8")
+        try:
+            content = args.check.read_text(encoding="utf-8")
+        except OSError:
+            print(
+                f"Cannot read Alpha known differences target: {args.check}",
+                file=sys.stderr,
+            )
+            return 1
         missing = [
             family
             for family, rendered in rendered_by_family.items()
