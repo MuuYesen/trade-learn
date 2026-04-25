@@ -31,6 +31,7 @@ def write_excel_report(reporter: Any, path: str | Path) -> Path:
     trades = _frame(reporter._get("trades", default=pd.DataFrame()))
     positions = _frame(reporter._get("positions", default=pd.DataFrame()))
     orders = _frame(reporter._get("orders", default=pd.DataFrame()))
+    factor_quantile_returns = reporter.factor_quantile_returns()
     config = reporter._get("config", default={}) or {}
 
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
@@ -45,6 +46,11 @@ def write_excel_report(reporter: Any, path: str | Path) -> Path:
         )
         _excel_safe_frame(positions).to_excel(writer, sheet_name="positions", index=False)
         _excel_safe_frame(orders).to_excel(writer, sheet_name="orders", index=False)
+        if not factor_quantile_returns.empty:
+            _excel_safe_frame(factor_quantile_returns).to_excel(
+                writer,
+                sheet_name="factor_quantiles",
+            )
         _config_frame(config).to_excel(writer, sheet_name="config", index=False)
         _format_summary(writer)
         _format_monthly_heatmap(writer)

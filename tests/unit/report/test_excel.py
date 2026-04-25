@@ -47,6 +47,20 @@ def test_reporter_excel_accepts_mapping_stats(tmp_path) -> None:
     assert path.exists()
 
 
+def test_reporter_excel_writes_factor_quantile_sheet_when_analyzer_exists(tmp_path) -> None:
+    """Reporter.excel writes factor quantile returns when a factor analyzer exists."""
+    path = tmp_path / "factor-report.xlsx"
+    stats = {
+        "returns": _returns(),
+        "trades": _trades(),
+        "analyzers": {"factor": _FactorAnalyzerStub()},
+    }
+
+    Reporter(stats).excel(path)
+
+    assert "factor_quantiles" in _sheet_names(path)
+
+
 def _sheet_names(path) -> list[str]:
     with ZipFile(path) as workbook:
         xml = workbook.read("xl/workbook.xml").decode()
@@ -83,3 +97,12 @@ def _returns() -> pd.Series:
 
 def _trades() -> pd.DataFrame:
     return pd.DataFrame({"pnl": [100.0, -50.0, 25.0, -10.0]})
+
+
+class _FactorAnalyzerStub:
+    def quantile_cumulative_returns(self) -> pd.DataFrame:
+        """Return factor quantile cumulative returns for Excel tests."""
+        return pd.DataFrame(
+            {1: [0.01, 0.02], 2: [0.03, 0.04]},
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+        )
