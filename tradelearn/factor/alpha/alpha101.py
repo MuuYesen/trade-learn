@@ -19,6 +19,9 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha007",
         "alpha008",
         "alpha009",
+        "alpha010",
+        "alpha011",
+        "alpha012",
     }
 )
 
@@ -113,6 +116,26 @@ class Alpha101Factors:
         values = -1 * delta_close
         values[cond_1 | cond_2] = delta_close
         return values
+
+    def alpha010(self) -> pd.DataFrame:
+        """Return Alpha#10."""
+        delta_close = _delta(self.close, 1)
+        cond_1 = _ts_min(delta_close, 4) > 0
+        cond_2 = _ts_max(delta_close, 4) < 0
+        values = -1 * delta_close
+        values[cond_1 | cond_2] = delta_close
+        return _rank(values)
+
+    def alpha011(self) -> pd.DataFrame:
+        """Return Alpha#11."""
+        vwap_close_spread = self.vwap - self.close
+        return (
+            _rank(_ts_max(vwap_close_spread, 3)) + _rank(_ts_min(vwap_close_spread, 3))
+        ) * _rank(_delta(self.volume, 3))
+
+    def alpha012(self) -> pd.DataFrame:
+        """Return Alpha#12."""
+        return np.sign(_delta(self.volume, 1)) * (-1 * _delta(self.close, 1))
 
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
