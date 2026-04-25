@@ -239,6 +239,15 @@ def test_alpha101_documents_skipped_legacy_formulas() -> None:
         assert reason in message
 
 
+def test_alpha101_skipped_formulas_are_exported_from_package() -> None:
+    """The package facade exposes skipped formulas for callers and docs."""
+    alpha_package = importlib.import_module("tradelearn.factor.alpha")
+    alpha101_module = importlib.import_module("tradelearn.factor.alpha.alpha101")
+
+    assert alpha101_module.ALPHA101_SKIPPED == alpha_package.ALPHA101_SKIPPED
+    assert "ALPHA101_SKIPPED" in alpha_package.__all__
+
+
 def _legacy_alpha101(data: pd.DataFrame, names: list[str]) -> pd.DataFrame:
     pivoted = data.pivot(index="date", columns="code")
     legacy = LegacyAlphas101(pivoted)
