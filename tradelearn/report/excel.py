@@ -105,7 +105,7 @@ def write_excel_report(
                 sheet_name="factor_quantiles",
             )
         _config_frame(config).to_excel(writer, sheet_name="config", index=False)
-        _format_summary(writer)
+        _format_numeric_sheets(writer)
         _format_monthly_heatmap(writer)
     return output
 
@@ -149,13 +149,30 @@ def _excel_safe_frame(frame: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def _format_summary(writer: pd.ExcelWriter) -> None:
-    """Apply basic summary number formatting."""
+def _format_numeric_sheets(writer: pd.ExcelWriter) -> None:
+    """Apply the report's six-decimal number format to numeric report sheets."""
     workbook = writer.book
-    worksheet = writer.sheets["summary"]
     numeric = workbook.add_format({"num_format": "0.000000"})
-    worksheet.set_column("A:A", 24)
-    worksheet.set_column("B:B", 16, numeric)
+    writer.sheets["summary"].set_column("A:A", 24)
+    writer.sheets["summary"].set_column("B:B", 16, numeric)
+    for sheet_name in [
+        "trades",
+        "daily_returns",
+        "benchmark_returns",
+        "rolling_beta",
+        "monthly_returns",
+        "drawdowns",
+        "positions",
+        "orders",
+        "factor_ic",
+        "factor_rank_ic",
+        "factor_turnover",
+        "factor_autocorr",
+        "factor_long_short",
+        "factor_quantiles",
+    ]:
+        if sheet_name in writer.sheets:
+            writer.sheets[sheet_name].set_column("A:Z", None, numeric)
 
 
 def _format_monthly_heatmap(writer: pd.ExcelWriter) -> None:

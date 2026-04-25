@@ -1,5 +1,6 @@
 """Tests for Excel report export."""
 
+import xml.etree.ElementTree as ET
 from types import SimpleNamespace
 from zipfile import ZipFile
 
@@ -91,6 +92,17 @@ def test_reporter_excel_drawdowns_sheet_uses_top_drawdown_table(tmp_path) -> Non
     assert "drawdown" not in _shared_strings(path)
 
 
+def test_reporter_excel_formats_return_values_to_six_decimals(tmp_path) -> None:
+    """Reporter.excel applies the spec's six-decimal number format to return sheets."""
+    path = tmp_path / "formatted-report.xlsx"
+
+    Reporter(_stats(), periods=252).excel(path)
+
+    daily_returns_style = _cell_style(path, sheet="sheet3", cell="B2")
+    num_formats = _number_formats_by_style(path)
+    assert num_formats[daily_returns_style] == "0.000000"
+
+
 def _sheet_names(path) -> list[str]:
     with ZipFile(path) as workbook:
         xml = workbook.read("xl/workbook.xml").decode()
@@ -119,6 +131,31 @@ def _shared_strings(path) -> set[str]:
     for chunk in xml.split("<t>")[1:]:
         values.add(chunk.split("</t>", 1)[0])
     return values
+
+
+def _cell_style(path, sheet: str, cell: str) -> int:
+    with ZipFile(path) as workbook:
+        xml = workbook.read(f"xl/worksheets/{sheet}.xml")
+    root = ET.fromstring(xml)
+    namespace = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    element = root.find(f".//x:c[@r='{cell}']", namespace)
+    assert element is not None
+    return int(element.attrib["s"])
+
+
+def _number_formats_by_style(path) -> dict[int, str]:
+    with ZipFile(path) as workbook:
+        xml = workbook.read("xl/styles.xml")
+    root = ET.fromstring(xml)
+    namespace = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    custom_formats = {
+        element.attrib["numFmtId"]: element.attrib["formatCode"]
+        for element in root.findall(".//x:numFmt", namespace)
+    }
+    styles = {}
+    for index, element in enumerate(root.findall(".//x:cellXfs/x:xf", namespace)):
+        styles[index] = custom_formats.get(element.attrib.get("numFmtId", ""), "")
+    return styles
 
 
 def _stats() -> SimpleNamespace:
