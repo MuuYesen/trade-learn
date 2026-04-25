@@ -128,6 +128,22 @@ def test_reporter_excel_flattens_nested_config_parameters(tmp_path) -> None:
     assert "params" not in shared_strings
 
 
+def test_reporter_excel_preserves_numeric_config_values(tmp_path) -> None:
+    """Reporter.excel keeps numeric config values numeric after flattening."""
+    path = tmp_path / "numeric-config-report.xlsx"
+    stats = _stats()
+    stats.config = {
+        "strategy": {"params": {"fast": 5}},
+        "broker": {"cash": 100_000, "commission": 0.001},
+    }
+
+    Reporter(stats, periods=252).excel(path)
+
+    assert _cell_type(path, sheet="config", cell="B2") != "s"
+    assert _cell_type(path, sheet="config", cell="B3") != "s"
+    assert _cell_type(path, sheet="config", cell="B4") != "s"
+
+
 def _sheet_names(path) -> list[str]:
     with ZipFile(path) as workbook:
         xml = workbook.read("xl/workbook.xml").decode()
@@ -160,12 +176,29 @@ def _shared_strings(path) -> set[str]:
 
 def _cell_style(path, sheet: str, cell: str) -> int:
     with ZipFile(path) as workbook:
-        xml = workbook.read(f"xl/worksheets/{sheet}.xml")
+        xml = workbook.read(_worksheet_path(path, sheet))
     root = ET.fromstring(xml)
     namespace = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
     element = root.find(f".//x:c[@r='{cell}']", namespace)
     assert element is not None
     return int(element.attrib["s"])
+
+
+def _cell_type(path, sheet: str, cell: str) -> str:
+    with ZipFile(path) as workbook:
+        xml = workbook.read(_worksheet_path(path, sheet))
+    root = ET.fromstring(xml)
+    namespace = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    element = root.find(f".//x:c[@r='{cell}']", namespace)
+    assert element is not None
+    return element.attrib.get("t", "")
+
+
+def _worksheet_path(path, sheet: str) -> str:
+    if sheet.startswith("sheet"):
+        return f"xl/worksheets/{sheet}.xml"
+    names = _sheet_names(path)
+    return f"xl/worksheets/sheet{names.index(sheet) + 1}.xml"
 
 
 def _number_formats_by_style(path) -> dict[int, str]:

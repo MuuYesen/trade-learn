@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pandas.api.types as pd_types
 
 from tradelearn.report.analytics import monthly_returns_matrix
 
@@ -124,7 +125,10 @@ def _config_frame(config: Mapping[str, Any]) -> pd.DataFrame:
     """Return config as key/value rows."""
     rows = list(_flatten_config(config))
     return pd.DataFrame(
-        {"key": [key for key, _ in rows], "value": [str(value) for _, value in rows]}
+        {
+            "key": [key for key, _ in rows],
+            "value": [_excel_config_value(value) for _, value in rows],
+        }
     )
 
 
@@ -138,6 +142,13 @@ def _flatten_config(config: Mapping[str, Any], prefix: str = "") -> list[tuple[s
         else:
             rows.append((dotted_key, value))
     return rows
+
+
+def _excel_config_value(value: Any) -> Any:
+    """Return a scalar config value that keeps Excel-native numeric types."""
+    if pd_types.is_scalar(value):
+        return value
+    return str(value)
 
 
 def _series(value: Any, name: str) -> pd.Series:
