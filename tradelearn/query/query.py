@@ -6,8 +6,16 @@ from multiprocessing import Pool
 import numpy as np
 import pandas as pd
 
-from tradelearn.factor.alpha import ALPHA101_SUPPORTED
-from tradelearn.factor.alpha import alpha101 as v2_alpha101
+from tradelearn.factor.alpha import (
+    ALPHA101_SUPPORTED,
+    ALPHA191_SUPPORTED,
+)
+from tradelearn.factor.alpha import (
+    alpha101 as v2_alpha101,
+)
+from tradelearn.factor.alpha import (
+    alpha191 as v2_alpha191,
+)
 from tradelearn.query.alpha.alphas101 import Alphas101
 from tradelearn.query.alpha.alphas191 import Alphas191
 
@@ -20,7 +28,12 @@ class Query:
         pass
 
     @staticmethod
-    def read_csv_from_tongdaxin(data_path_list: list, begin: str = None, end: str = None, data_symbol_list: list = []):
+    def read_csv_from_tongdaxin(
+        data_path_list: list,
+        begin: str = None,
+        end: str = None,
+        data_symbol_list: list | None = None,
+    ):
         """Reads a CSV file and filters the data by date range.
 
         Args:
@@ -31,21 +44,35 @@ class Query:
         Returns:
             pd.DataFrame: The filtered data as a DataFrame.
         """
-        path_list, symbol_list = data_path_list, data_symbol_list
+        path_list, symbol_list = data_path_list, data_symbol_list or []
 
         if isinstance(path_list, str):
             path_list = [path_list]
         if isinstance(symbol_list, str):
             symbol_list = [symbol_list]
-  
-        rename_dict = {'日期':'date', '开盘':'open', '最高':'high', '最低':'low', '收盘':'close',
-                       '成交量':'volume', '持仓量':'open_interest', '结算价':'settlement_price'}		
+        rename_dict = {
+            '日期': 'date',
+            '开盘': 'open',
+            '最高': 'high',
+            '最低': 'low',
+            '收盘': 'close',
+            '成交量': 'volume',
+            '持仓量': 'open_interest',
+            '结算价': 'settlement_price',
+        }
         date_key, symbol_key = 'date', 'code'
 
         data_list = []
         for i, data_path in enumerate(path_list):
 
-            data = pd.read_csv(data_path, low_memory=True, encoding='gbk', skiprows=2, skipfooter=1, names=rename_dict.keys())
+            data = pd.read_csv(
+                data_path,
+                low_memory=True,
+                encoding='gbk',
+                skiprows=2,
+                skipfooter=1,
+                names=rename_dict.keys(),
+            )
             data.rename(columns=rename_dict, inplace=True)
             data[date_key] = pd.to_datetime(data[date_key])
 
@@ -65,7 +92,7 @@ class Query:
         if not isinstance(data_path_list, list):
             fina_res = data_list[0]
         return fina_res
-    
+
     @staticmethod
     def read_csv_from_tradingview(data_path_list: list, begin: str = None, end: str = None):
         """Reads a CSV file and filters the data by date range.
@@ -83,7 +110,7 @@ class Query:
         if isinstance(path_list, str):
             path_list = [path_list]
 
-        rename_dict = {'datetime':'date', 'symbol':'code'}
+        rename_dict = {'datetime': 'date', 'symbol': 'code'}
         date_key, symbol_key = 'date', 'code'
 
         data_list = []
@@ -109,12 +136,18 @@ class Query:
 
     @staticmethod
     def read_csv(data_path: str, begin: str = None, end: str = None):
-        data = pd.read_csv(data_path, parse_dates=['date'], dtype={'code': str}, low_memory=True, encoding='utf_8_sig')
+        data = pd.read_csv(
+            data_path,
+            parse_dates=['date'],
+            dtype={'code': str},
+            low_memory=True,
+            encoding='utf_8_sig',
+        )
         if begin is None and end is None:
             return data
         data = data.query(f"date >= '{begin}' and date <= '{end}'")
         return data
-    
+
     @staticmethod
     def to_csv(data: pd.DataFrame, file_path: str):
         """Saves a DataFrame to a CSV file after renaming columns.
@@ -132,8 +165,16 @@ class Query:
         data.to_csv(file_path, encoding='utf_8_sig', index=False)
 
     @staticmethod
-    def history_ohlc(symbol: str = None, start: str = None, end: str = None, adjust: str = 'qfq',
-                     engine: str = 'tdx', username: str = None, password: str = None, exchange: str = None):
+    def history_ohlc(
+        symbol: str = None,
+        start: str = None,
+        end: str = None,
+        adjust: str = 'qfq',
+        engine: str = 'tdx',
+        username: str = None,
+        password: str = None,
+        exchange: str = None,
+    ):
         """Fetches historical OHLC data for a given stock symbol.
 
         Args:
@@ -155,27 +196,34 @@ class Query:
                 import yfinance as yf
 
                 tickler = yf.Ticker(symbol)
-                if adjust == 'qfq':
-                    auto_adjust = True
+                auto_adjust = adjust == 'qfq'
                 data = tickler.history(start=start, end=end, interval="1d", auto_adjust=auto_adjust)
                 data = data.reset_index()
                 data.columns = [fname.lower() for fname in data.columns]
                 data['code'] = symbol
                 data['date'] = data['date'].dt.tz_localize(None)
-            except:
+            except Exception:
                 data = None
 
         if engine == 'tdx':
             try:
                 from mootdx.quotes import Quotes
 
-                client = Quotes.factory(market='std', multithread=True, heartbeat=True, timeout=15, auto_retry=True)
+                client = Quotes.factory(
+                    market='std',
+                    multithread=True,
+                    heartbeat=True,
+                    timeout=15,
+                    auto_retry=True,
+                )
                 data = client.ohlc(symbol=symbol, begin=start, end=end, adjust=adjust)
                 data = data.drop(['date'], axis=1).reset_index()
-                data[['open', 'close', 'high', 'low']] = data[['open', 'close', 'high', 'low']].apply(lambda x: x / data['factor'], axis=0)
-                if not data is None:
+                data[['open', 'close', 'high', 'low']] = data[
+                    ['open', 'close', 'high', 'low']
+                ].apply(lambda x: x / data['factor'], axis=0)
+                if data is not None:
                     data['vwap'] = data.amount / data.volume / 100
-            except:
+            except Exception:
                 data = None
 
         if engine == 'tv':
@@ -183,15 +231,20 @@ class Query:
                 from tradelearn.query.tvDatafeed.main import Interval, TvDatafeed
 
                 tv = TvDatafeed(username, password)
-                data = tv.get_hist(symbol=symbol, exchange=exchange, interval=Interval.in_daily, n_bars=10000)
+                data = tv.get_hist(
+                    symbol=symbol,
+                    exchange=exchange,
+                    interval=Interval.in_daily,
+                    n_bars=10000,
+                )
                 data.index = data.index.map(lambda x: np.datetime64(x.date()))
-            except:
+            except Exception:
                 data = None
 
         return data
 
     @staticmethod
-    def _calc_func(func, m, kwargs={}):
+    def _calc_func(func, m, kwargs=None):
         """Calculates a function and measures its execution time.
 
         Args:
@@ -202,6 +255,7 @@ class Query:
         Returns:
             The result of the function call.
         """
+        kwargs = kwargs or {}
         t1 = time.time()
         alpha = func(**kwargs)
         t2 = time.time()
@@ -229,8 +283,9 @@ class Query:
         if alpha_name:
             methods = alpha_name
         else:
-            methods = (list(filter(lambda m: m.startswith("alpha") and callable(getattr(af, m)),
-                            dir(af))))
+            methods = list(
+                filter(lambda m: m.startswith("alpha") and callable(getattr(af, m)), dir(af))
+            )
 
         res_list = []
         pool = Pool(processes=os.cpu_count())
@@ -239,9 +294,10 @@ class Query:
             try:
                 def print_error(value):
                     print("error: ", value)
+
                 res = pool.apply_async(Query._calc_func, (fac_func, m), error_callback=print_error)
                 res_list.append([m, res])
-            except:
+            except Exception:
                 traceback.print_exc()
 
         res = pd.DataFrame({'date':[], 'code':[]})
@@ -269,6 +325,9 @@ class Query:
         Returns:
             pd.DataFrame: A DataFrame containing the calculated Alpha 191 factors.
         """
+        if alpha_name and set(alpha_name).issubset(ALPHA191_SUPPORTED):
+            return v2_alpha191(stock_data, bench_data, names=alpha_name)
+
         stock_data = stock_data.pivot(index='date', columns='code')
 
         af = Alphas191(stock_data, bench_data)
@@ -276,8 +335,9 @@ class Query:
         if alpha_name:
             methods = alpha_name
         else:
-            methods = (list(filter(lambda m: m.startswith("alpha") and callable(getattr(af, m)),
-                            dir(af))))
+            methods = list(
+                filter(lambda m: m.startswith("alpha") and callable(getattr(af, m)), dir(af))
+            )
 
         res_list = []
         pool = Pool(processes=os.cpu_count())
@@ -287,9 +347,10 @@ class Query:
             try:
                 def print_error(value):
                     print("error: ", value)
+
                 res = pool.apply_async(Query._calc_func, (fac_func, m), error_callback=print_error)
                 res_list.append([m, res])
-            except:
+            except Exception:
                 traceback.print_exc()
 
         res = pd.DataFrame({'date':[], 'code':[]})
