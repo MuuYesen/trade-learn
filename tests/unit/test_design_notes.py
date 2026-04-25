@@ -630,9 +630,21 @@ def test_check_design_notes_json_reports_all_note_statuses(tmp_path: Path) -> No
         "strict": False,
         "ok": True,
         "notes": [
-            {"file": "matching-design.md", "errors": []},
-            {"file": "event-loop.md", "errors": []},
-            {"file": "portfolio.md", "errors": []},
+            {
+                "file": "matching-design.md",
+                "path": str(docs_internal / "matching-design.md"),
+                "errors": [],
+            },
+            {
+                "file": "event-loop.md",
+                "path": str(docs_internal / "event-loop.md"),
+                "errors": [],
+            },
+            {
+                "file": "portfolio.md",
+                "path": str(docs_internal / "portfolio.md"),
+                "errors": [],
+            },
         ],
     }
     assert result.stderr == ""
@@ -659,6 +671,7 @@ def test_check_design_notes_json_reports_failures_on_stdout(
     assert payload["ok"] is False
     assert payload["notes"][-1] == {
         "file": "portfolio.md",
+        "path": str(docs_internal / "portfolio.md"),
         "errors": ["missing design note: portfolio.md"],
     }
     assert result.stderr == ""
