@@ -98,6 +98,16 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha088",
         "alpha089",
         "alpha090",
+        "alpha091",
+        "alpha092",
+        "alpha093",
+        "alpha094",
+        "alpha095",
+        "alpha096",
+        "alpha097",
+        "alpha098",
+        "alpha099",
+        "alpha100",
     }
 )
 
@@ -926,6 +936,88 @@ class Alpha191Factors:
     def alpha090(self) -> pd.DataFrame:
         """Return Alpha#90."""
         return _rank(_correlation(_rank(self.vwap), _rank(self.volume), 5)) * -1
+
+    def alpha091(self) -> pd.DataFrame:
+        """Return Alpha#91."""
+        return (
+            _rank(self.close - _ts_max(self.close, 5))
+            * _rank(_correlation(_mean(self.volume, 40), self.low, 5))
+        ) * -1
+
+    def alpha092(self) -> pd.DataFrame:
+        """Return Alpha#92."""
+        left = _rank(
+            _decay_linear(
+                _delta((self.close * 0.35) + (self.vwap * 0.65), 2),
+                3,
+            )
+        )
+        right = _ts_rank(
+            _decay_linear(
+                _correlation(_mean(self.volume, 180), self.close, 13).abs(),
+                5,
+            ),
+            15,
+        )
+        return _elementwise_max(left, right) * -1
+
+    def alpha093(self) -> pd.DataFrame:
+        """Return Alpha#93."""
+        cond = self.open >= _delay(self.open, 1)
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond] = 0
+        part[~cond] = _elementwise_max(
+            self.open - self.low,
+            self.open - _delay(self.open, 1),
+        )
+        return _ts_sum(part, 20)
+
+    def alpha094(self) -> pd.DataFrame:
+        """Return Alpha#94."""
+        cond1 = self.close > _delay(self.close, 1)
+        cond2 = self.close < _delay(self.close, 1)
+        cond3 = self.close == _delay(self.close, 1)
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond1] = self.volume
+        part[cond2] = -1 * self.volume
+        part[cond3] = 0
+        return _ts_sum(part, 30)
+
+    def alpha095(self) -> pd.DataFrame:
+        """Return Alpha#95."""
+        return _stddev(self.amount, 20)
+
+    def alpha096(self) -> pd.DataFrame:
+        """Return Alpha#96."""
+        numerator = self.close - _ts_min(self.low, 9)
+        denominator = _ts_max(self.high, 9) - _ts_min(self.low, 9)
+        return _sma(_sma(numerator / denominator * 100, 3, 1), 3, 1)
+
+    def alpha097(self) -> pd.DataFrame:
+        """Return Alpha#97."""
+        return _stddev(self.volume, 10)
+
+    def alpha098(self) -> pd.DataFrame:
+        """Return Alpha#98."""
+        cond = _delta(_ts_sum(self.close, 100) / 100, 100) / _delay(
+            self.close,
+            100,
+        ) <= 0.05
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond] = -1 * (self.close - _ts_min(self.close, 100))
+        part[~cond] = -1 * _delta(self.close, 3)
+        return part
+
+    def alpha099(self) -> pd.DataFrame:
+        """Return Alpha#99."""
+        return -1 * _rank(_covariance(_rank(self.close), _rank(self.volume), 5))
+
+    def alpha100(self) -> pd.DataFrame:
+        """Return Alpha#100."""
+        return _stddev(self.volume, 20)
 
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
