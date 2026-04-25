@@ -1,0 +1,296 @@
+"""Tongdaxin 30 classic indicator wrappers backed by MyTT."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+import pandas as pd
+
+from tradelearn.indicators.base import FunctionIndicator
+from tradelearn.query.tec import MyTT
+
+
+def _index(values: pd.Series | Sequence[float]) -> pd.Index | None:
+    """Return the index for pandas inputs."""
+    if isinstance(values, pd.Series):
+        return values.index
+    return None
+
+
+def _array(values: pd.Series | Sequence[float]) -> Sequence[float]:
+    """Return raw values for MyTT functions."""
+    if isinstance(values, pd.Series):
+        return values.to_numpy()
+    return values
+
+
+def _series(
+    values: Sequence[float],
+    *,
+    index: pd.Index | None,
+    name: str,
+) -> pd.Series:
+    """Create a named series with an optional source index."""
+    return pd.Series(values, index=index, name=name)
+
+
+def _frame(
+    columns: dict[str, Sequence[float]],
+    *,
+    index: pd.Index | None,
+) -> pd.DataFrame:
+    """Create a frame from named MyTT output arrays."""
+    return pd.DataFrame(columns, index=index)
+
+
+def _unexpected(kwargs: dict[str, int | float]) -> None:
+    """Raise for unsupported keyword arguments."""
+    if kwargs:
+        raise TypeError(f"Unexpected keyword argument: {next(iter(kwargs))}")
+
+
+def _ma(close: pd.Series | Sequence[float], n: int = 5, **kwargs: int) -> pd.Series:
+    """Simple moving average using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    _unexpected(kwargs)
+    return _series(MyTT.MA(_array(close), n), index=_index(close), name=f"MA_{n}")
+
+
+def _ema(close: pd.Series | Sequence[float], n: int = 5, **kwargs: int) -> pd.Series:
+    """Exponential moving average using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    _unexpected(kwargs)
+    return _series(MyTT.EMA(_array(close), n), index=_index(close), name=f"EMA_{n}")
+
+
+def _sma(
+    close: pd.Series | Sequence[float],
+    n: int = 5,
+    m: int = 1,
+    **kwargs: int,
+) -> pd.Series:
+    """Chinese-style SMA using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    m = kwargs.pop("M", m)
+    _unexpected(kwargs)
+    return _series(MyTT.SMA(_array(close), n, m), index=_index(close), name=f"SMA_{n}_{m}")
+
+
+def _macd(
+    close: pd.Series | Sequence[float],
+    short: int = 12,
+    long: int = 26,
+    m: int = 9,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """MACD using Tongdaxin semantics."""
+    short = kwargs.pop("SHORT", short)
+    long = kwargs.pop("LONG", long)
+    m = kwargs.pop("M", m)
+    _unexpected(kwargs)
+    dif, dea, macd_value = MyTT.MACD(_array(close), SHORT=short, LONG=long, M=m)
+    return _frame({"DIF": dif, "DEA": dea, "MACD": macd_value}, index=_index(close))
+
+
+def _kdj(
+    close: pd.Series | Sequence[float],
+    high: pd.Series | Sequence[float],
+    low: pd.Series | Sequence[float],
+    n: int = 9,
+    m1: int = 3,
+    m2: int = 3,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """KDJ using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    m1 = kwargs.pop("M1", m1)
+    m2 = kwargs.pop("M2", m2)
+    _unexpected(kwargs)
+    k, d, j = MyTT.KDJ(
+        _array(close),
+        _array(high),
+        _array(low),
+        N=n,
+        M1=m1,
+        M2=m2,
+    )
+    return _frame({"K": k, "D": d, "J": j}, index=_index(close))
+
+
+def _rsi(close: pd.Series | Sequence[float], n: int = 24, **kwargs: int) -> pd.Series:
+    """RSI using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    _unexpected(kwargs)
+    return _series(MyTT.RSI(_array(close), N=n), index=_index(close), name=f"RSI_{n}")
+
+
+def _wr(
+    close: pd.Series | Sequence[float],
+    high: pd.Series | Sequence[float],
+    low: pd.Series | Sequence[float],
+    n: int = 10,
+    n1: int = 6,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """Williams %R using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    n1 = kwargs.pop("N1", n1)
+    _unexpected(kwargs)
+    wr_value, wr1 = MyTT.WR(_array(close), _array(high), _array(low), N=n, N1=n1)
+    return _frame({"WR": wr_value, "WR1": wr1}, index=_index(close))
+
+
+def _bias(
+    close: pd.Series | Sequence[float],
+    l1: int = 6,
+    l2: int = 12,
+    l3: int = 24,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """BIAS using Tongdaxin semantics."""
+    l1 = kwargs.pop("L1", l1)
+    l2 = kwargs.pop("L2", l2)
+    l3 = kwargs.pop("L3", l3)
+    _unexpected(kwargs)
+    bias1, bias2, bias3 = MyTT.BIAS(_array(close), L1=l1, L2=l2, L3=l3)
+    return _frame({"BIAS1": bias1, "BIAS2": bias2, "BIAS3": bias3}, index=_index(close))
+
+
+def _boll(
+    close: pd.Series | Sequence[float],
+    n: int = 20,
+    p: float = 2,
+    **kwargs: int | float,
+) -> pd.DataFrame:
+    """Bollinger bands using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    p = kwargs.pop("P", p)
+    _unexpected(kwargs)
+    upper, mid, lower = MyTT.BOLL(_array(close), N=n, P=p)
+    return _frame({"UPPER": upper, "MID": mid, "LOWER": lower}, index=_index(close))
+
+
+def _psy(
+    close: pd.Series | Sequence[float],
+    n: int = 12,
+    m: int = 6,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """Psychological line using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    m = kwargs.pop("M", m)
+    _unexpected(kwargs)
+    psy_value, psyma = MyTT.PSY(_array(close), N=n, M=m)
+    return _frame({"PSY": psy_value, "PSYMA": psyma}, index=_index(close))
+
+
+def _cci(
+    close: pd.Series | Sequence[float],
+    high: pd.Series | Sequence[float],
+    low: pd.Series | Sequence[float],
+    n: int = 14,
+    **kwargs: int,
+) -> pd.Series:
+    """CCI using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    _unexpected(kwargs)
+    values = MyTT.CCI(_array(close), _array(high), _array(low), N=n)
+    return _series(values, index=_index(close), name=f"CCI_{n}")
+
+
+def _atr(
+    close: pd.Series | Sequence[float],
+    high: pd.Series | Sequence[float],
+    low: pd.Series | Sequence[float],
+    n: int = 20,
+    **kwargs: int,
+) -> pd.Series:
+    """ATR using Tongdaxin semantics."""
+    n = kwargs.pop("N", n)
+    _unexpected(kwargs)
+    values = MyTT.ATR(_array(close), _array(high), _array(low), N=n)
+    return _series(values, index=_index(close), name=f"ATR_{n}")
+
+
+def _expma(
+    close: pd.Series | Sequence[float],
+    n1: int = 12,
+    n2: int = 50,
+    **kwargs: int,
+) -> pd.DataFrame:
+    """EXPMA using Tongdaxin semantics."""
+    n1 = kwargs.pop("N1", n1)
+    n2 = kwargs.pop("N2", n2)
+    _unexpected(kwargs)
+    expma1, expma2 = MyTT.EXPMA(_array(close), N1=n1, N2=n2)
+    return _frame({"EXPMA1": expma1, "EXPMA2": expma2}, index=_index(close))
+
+
+def _obv(
+    close: pd.Series | Sequence[float],
+    volume: pd.Series | Sequence[float],
+) -> pd.Series:
+    """OBV using Tongdaxin semantics."""
+    values = MyTT.OBV(_array(close), _array(volume))
+    return _series(values, index=_index(close), name="OBV")
+
+
+ma = FunctionIndicator("tdx.ma", _ma, {"n": 5})
+MA = FunctionIndicator("tdx.MA", _ma, {"N": 5})
+ema = FunctionIndicator("tdx.ema", _ema, {"n": 5})
+EMA = FunctionIndicator("tdx.EMA", _ema, {"N": 5})
+sma = FunctionIndicator("tdx.sma", _sma, {"n": 5, "m": 1})
+SMA = FunctionIndicator("tdx.SMA", _sma, {"N": 5, "M": 1})
+macd = FunctionIndicator("tdx.macd", _macd, {"short": 12, "long": 26, "m": 9})
+MACD = FunctionIndicator("tdx.MACD", _macd, {"SHORT": 12, "LONG": 26, "M": 9})
+kdj = FunctionIndicator("tdx.kdj", _kdj, {"n": 9, "m1": 3, "m2": 3})
+KDJ = FunctionIndicator("tdx.KDJ", _kdj, {"N": 9, "M1": 3, "M2": 3})
+rsi = FunctionIndicator("tdx.rsi", _rsi, {"n": 24})
+RSI = FunctionIndicator("tdx.RSI", _rsi, {"N": 24})
+wr = FunctionIndicator("tdx.wr", _wr, {"n": 10, "n1": 6})
+WR = FunctionIndicator("tdx.WR", _wr, {"N": 10, "N1": 6})
+bias = FunctionIndicator("tdx.bias", _bias, {"l1": 6, "l2": 12, "l3": 24})
+BIAS = FunctionIndicator("tdx.BIAS", _bias, {"L1": 6, "L2": 12, "L3": 24})
+boll = FunctionIndicator("tdx.boll", _boll, {"n": 20, "p": 2})
+BOLL = FunctionIndicator("tdx.BOLL", _boll, {"N": 20, "P": 2})
+psy = FunctionIndicator("tdx.psy", _psy, {"n": 12, "m": 6})
+PSY = FunctionIndicator("tdx.PSY", _psy, {"N": 12, "M": 6})
+cci = FunctionIndicator("tdx.cci", _cci, {"n": 14})
+CCI = FunctionIndicator("tdx.CCI", _cci, {"N": 14})
+atr = FunctionIndicator("tdx.atr", _atr, {"n": 20})
+ATR = FunctionIndicator("tdx.ATR", _atr, {"N": 20})
+expma = FunctionIndicator("tdx.expma", _expma, {"n1": 12, "n2": 50})
+EXPMA = FunctionIndicator("tdx.EXPMA", _expma, {"N1": 12, "N2": 50})
+obv = FunctionIndicator("tdx.obv", _obv, {})
+OBV = FunctionIndicator("tdx.OBV", _obv, {})
+
+__all__ = [
+    "ATR",
+    "BIAS",
+    "BOLL",
+    "CCI",
+    "EMA",
+    "EXPMA",
+    "KDJ",
+    "MA",
+    "MACD",
+    "OBV",
+    "PSY",
+    "RSI",
+    "SMA",
+    "WR",
+    "atr",
+    "bias",
+    "boll",
+    "cci",
+    "ema",
+    "expma",
+    "kdj",
+    "ma",
+    "macd",
+    "obv",
+    "psy",
+    "rsi",
+    "sma",
+    "wr",
+]
