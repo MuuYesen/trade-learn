@@ -68,6 +68,7 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha060",
         "alpha061",
         "alpha062",
+        "alpha064",
     }
 )
 
@@ -530,6 +531,18 @@ class Alpha101Factors:
             (_rank(self.open) + _rank(self.open))
             < (_rank((self.high + self.low) / 2) + _rank(self.high))
         )
+        return (left < right) * -1
+
+    def alpha064(self) -> pd.DataFrame:
+        """Return Alpha#64."""
+        adv120 = _sma(self.volume, 120)
+        price_mix = (self.open * 0.178404) + (self.low * (1 - 0.178404))
+        volume_avg = _sma(adv120, 13)
+        left = _rank(_correlation(_sma(price_mix, 13), volume_avg, 17))
+        right_mix = (((self.high + self.low) / 2) * 0.178404) + (
+            self.vwap * (1 - 0.178404)
+        )
+        right = _rank(_delta(right_mix, 4))
         return (left < right) * -1
 
 
