@@ -90,6 +90,7 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha096",
         "alpha098",
         "alpha099",
+        "alpha101",
     }
 )
 
@@ -792,6 +793,10 @@ class Alpha101Factors:
         )
         right = _rank(_correlation(self.low, self.volume, 6))
         return (left < right) * -1
+
+    def alpha101(self) -> pd.DataFrame:
+        """Return Alpha#101."""
+        return (self.close - self.open) / ((self.high - self.low) + 0.001)
 
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
