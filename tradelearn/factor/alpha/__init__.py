@@ -1,5 +1,6 @@
 """Alpha factor formula facades."""
 
+from collections.abc import Mapping
 from typing import TypedDict
 
 from tradelearn.factor.alpha.alpha101 import ALPHA101_SKIPPED, ALPHA101_SUPPORTED, alpha101
@@ -33,6 +34,29 @@ def alpha_formula_metadata() -> dict[str, AlphaFormulaFamilyMetadata]:
     }
 
 
+def validate_alpha_formula_metadata(
+    metadata: Mapping[str, AlphaFormulaFamilyMetadata] | None = None,
+) -> None:
+    """Validate Alpha formula metadata consistency."""
+    families = alpha_formula_metadata() if metadata is None else metadata
+
+    for family_name, family_metadata in families.items():
+        supported = set(family_metadata["supported"])
+        skipped = set(family_metadata["skipped"])
+
+        if len(supported) != family_metadata["supported_count"]:
+            raise ValueError(f"{family_name} supported_count does not match supported formulas")
+        if len(skipped) != family_metadata["skipped_count"]:
+            raise ValueError(f"{family_name} skipped_count does not match skipped formulas")
+
+        overlap = supported & skipped
+        if overlap:
+            names = ", ".join(sorted(overlap))
+            raise ValueError(
+                f"{family_name} formulas cannot be both supported and skipped: {names}"
+            )
+
+
 __all__ = [
     "AlphaFormulaFamilyMetadata",
     "ALPHA101_SKIPPED",
@@ -42,4 +66,5 @@ __all__ = [
     "alpha101",
     "alpha191",
     "alpha_formula_metadata",
+    "validate_alpha_formula_metadata",
 ]

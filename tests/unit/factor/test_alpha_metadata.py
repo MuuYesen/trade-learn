@@ -2,6 +2,8 @@
 
 from typing import get_type_hints
 
+import pytest
+
 from tradelearn.factor.alpha import (
     ALPHA101_SKIPPED,
     ALPHA101_SUPPORTED,
@@ -81,11 +83,57 @@ def test_alpha_formula_metadata_type_is_exported_from_factor_package() -> None:
     assert "AlphaFormulaFamilyMetadata" in factor_package.__all__
 
 
+def test_validate_alpha_formula_metadata_accepts_current_metadata() -> None:
+    """The public validator accepts the packaged Alpha metadata."""
+    import tradelearn.factor.alpha as alpha_package
+
+    assert alpha_package.validate_alpha_formula_metadata() is None
+
+
+def test_validate_alpha_formula_metadata_rejects_inconsistent_counts() -> None:
+    """The validator catches stale counts before docs consume metadata."""
+    import tradelearn.factor.alpha as alpha_package
+
+    metadata = alpha_package.alpha_formula_metadata()
+    metadata["alpha101"]["supported_count"] += 1
+
+    with pytest.raises(ValueError, match="alpha101 supported_count"):
+        alpha_package.validate_alpha_formula_metadata(metadata)
+
+
+def test_validate_alpha_formula_metadata_rejects_supported_skipped_overlap() -> None:
+    """The validator catches formulas marked both supported and skipped."""
+    import tradelearn.factor.alpha as alpha_package
+
+    metadata = alpha_package.alpha_formula_metadata()
+    metadata["alpha101"]["skipped"]["alpha001"] = "local overlap"
+    metadata["alpha101"]["skipped_count"] += 1
+
+    with pytest.raises(
+        ValueError,
+        match="alpha101 formulas cannot be both supported and skipped",
+    ):
+        alpha_package.validate_alpha_formula_metadata(metadata)
+
+
+def test_validate_alpha_formula_metadata_is_exported_from_factor_package() -> None:
+    """The top-level factor facade exposes the metadata validator."""
+    import tradelearn.factor as factor_package
+    import tradelearn.factor.alpha as alpha_package
+
+    assert (
+        factor_package.validate_alpha_formula_metadata
+        is alpha_package.validate_alpha_formula_metadata
+    )
+    assert "validate_alpha_formula_metadata" in factor_package.__all__
+
+
 def test_alpha_formula_metadata_is_exported_from_package_all() -> None:
     """The helper is part of the public alpha facade."""
     import tradelearn.factor.alpha as alpha_package
 
     assert "alpha_formula_metadata" in alpha_package.__all__
+    assert "validate_alpha_formula_metadata" in alpha_package.__all__
 
 
 def test_alpha_formula_metadata_is_exported_from_factor_package() -> None:
