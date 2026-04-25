@@ -529,6 +529,59 @@ def test_render_alpha_known_differences_script_check_fails_for_missing_content(
     assert result.stderr == "Missing Alpha known differences sections: alpha191\n"
 
 
+def test_render_alpha_known_differences_script_check_fails_for_stale_section(
+    tmp_path: Path,
+) -> None:
+    """The known differences check detects extra stale content in a family section."""
+    target = tmp_path / "MIGRATION.md"
+    target.write_text(
+        "# MIGRATION\n\n"
+        "### 3.2 登记示例(待填充)\n\n"
+        "_此部分在阶段 1 起按进度追加。当前为空。_\n\n"
+        "---\n\n"
+        "#### 模板条目(示例,尚未实际发生)\n",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--update",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    target.write_text(
+        target.read_text(encoding="utf-8").replace(
+            "\n### Alpha alpha191 skipped formulas\n",
+            "\n| `alpha999` | stale local row |\n\n"
+            "### Alpha alpha191 skipped formulas\n",
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--family",
+            "alpha101",
+            "--check",
+            str(target),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == "Missing Alpha known differences sections: alpha101\n"
+
+
 def test_render_alpha_known_differences_script_check_fails_for_missing_file(
     tmp_path: Path,
 ) -> None:

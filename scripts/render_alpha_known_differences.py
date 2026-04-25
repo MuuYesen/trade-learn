@@ -47,6 +47,24 @@ def update_migration_known_differences(content: str, rendered: str) -> str:
     return content[:heading_end] + replacement + content[block_end:]
 
 
+def alpha_known_differences_section(content: str, family: str) -> str | None:
+    """Return one rendered Alpha family section from a larger Markdown document."""
+    heading = f"### Alpha {family} skipped formulas"
+    section_start = content.find(heading)
+    if section_start == -1:
+        return None
+    next_family_start = content.find("\n### Alpha ", section_start + len(heading))
+    block_end = content.find(MIGRATION_KNOWN_DIFFERENCES_END, section_start)
+    if block_end == -1:
+        block_end = len(content)
+    section_end = (
+        block_end
+        if next_family_start == -1
+        else min(next_family_start + 1, block_end)
+    )
+    return content[section_start:section_end].strip() + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     """Print Markdown tables for skipped Alpha formulas."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -113,7 +131,8 @@ def main(argv: list[str] | None = None) -> int:
         missing = [
             family
             for family, rendered in rendered_by_family.items()
-            if rendered not in content
+            if alpha_known_differences_section(content, family)
+            != rendered.rstrip() + "\n"
         ]
         if missing:
             print(
