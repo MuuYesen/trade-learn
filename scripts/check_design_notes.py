@@ -255,6 +255,7 @@ def design_note_report(directory: Path, *, strict: bool = False) -> dict[str, ob
         {
             "file": filename,
             "path": str(directory / filename),
+            "exists": (directory / filename).is_file(),
             "errors": note_errors(directory, filename, strict=strict),
         }
         for filename in REQUIRED_DESIGN_NOTES

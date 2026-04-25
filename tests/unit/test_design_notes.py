@@ -633,16 +633,19 @@ def test_check_design_notes_json_reports_all_note_statuses(tmp_path: Path) -> No
             {
                 "file": "matching-design.md",
                 "path": str(docs_internal / "matching-design.md"),
+                "exists": True,
                 "errors": [],
             },
             {
                 "file": "event-loop.md",
                 "path": str(docs_internal / "event-loop.md"),
+                "exists": True,
                 "errors": [],
             },
             {
                 "file": "portfolio.md",
                 "path": str(docs_internal / "portfolio.md"),
+                "exists": True,
                 "errors": [],
             },
         ],
@@ -672,6 +675,7 @@ def test_check_design_notes_json_reports_failures_on_stdout(
     assert payload["notes"][-1] == {
         "file": "portfolio.md",
         "path": str(docs_internal / "portfolio.md"),
+        "exists": False,
         "errors": ["missing design note: portfolio.md"],
     }
     assert result.stderr == ""
