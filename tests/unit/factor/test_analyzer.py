@@ -170,6 +170,17 @@ def test_factor_analyzer_long_short_returns_exposes_sides_and_spread() -> None:
     )
 
 
+def test_factor_analyzer_long_short_cumulative_returns_compounds_portfolios() -> None:
+    """long_short_cumulative_returns compounds long, short, and spread returns."""
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
+
+    cumulative = analyzer.long_short_cumulative_returns()
+    expected = (1.0 + analyzer.long_short_returns()).cumprod() - 1.0
+
+    pd.testing.assert_frame_equal(cumulative, expected)
+
+
 def test_factor_analyzer_requires_returns_or_prices_for_return_metrics() -> None:
     """Return-based methods fail clearly when no returns source is configured."""
     factor, _ = _factor_and_forward_returns()

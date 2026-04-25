@@ -105,6 +105,10 @@ class FactorAnalyzer:
             }
         )
 
+    def long_short_cumulative_returns(self) -> pd.DataFrame:
+        """Return compounded long, short, and spread factor returns."""
+        return (1.0 + self.long_short_returns()).cumprod() - 1.0
+
     def factor_returns(self) -> pd.DataFrame:
         """Return quantile returns derived from configured prices."""
         if self.prices is None:
