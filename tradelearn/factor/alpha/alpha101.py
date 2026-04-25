@@ -31,6 +31,15 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha019",
         "alpha020",
         "alpha021",
+        "alpha022",
+        "alpha023",
+        "alpha024",
+        "alpha025",
+        "alpha026",
+        "alpha027",
+        "alpha028",
+        "alpha029",
+        "alpha030",
     }
 )
 
@@ -207,6 +216,76 @@ class Alpha101Factors:
         cond_3 = _sma(self.volume, 20) / self.volume < 1
         return (cond_1 | ((~cond_1) & (~cond_2) & (~cond_3))).astype("int") * (-2) + 1
 
+    def alpha022(self) -> pd.DataFrame:
+        """Return Alpha#22."""
+        values = _correlation(self.high, self.volume, 5)
+        values = values.replace([-np.inf, np.inf], 0).fillna(value=0)
+        return -1 * _delta(values, 5) * _rank(_stddev(self.close, 20))
+
+    def alpha023(self) -> pd.DataFrame:
+        """Return Alpha#23."""
+        cond = _sma(self.high, 20) < self.high
+        values = self.close.copy(deep=True)
+        values[cond] = -1 * _delta(self.high, 2).fillna(value=0)
+        values[~cond] = 0
+        return values
+
+    def alpha024(self) -> pd.DataFrame:
+        """Return Alpha#24."""
+        cond = _delta(_sma(self.close, 100), 100) / _delay(self.close, 100) <= 0.05
+        values = -1 * _delta(self.close, 3)
+        values[cond] = -1 * (self.close - _ts_min(self.close, 100))
+        return values
+
+    def alpha025(self) -> pd.DataFrame:
+        """Return Alpha#25."""
+        adv20 = _sma(self.volume, 20)
+        return _rank(((-1 * self.returns) * adv20) * self.vwap * (self.high - self.close))
+
+    def alpha026(self) -> pd.DataFrame:
+        """Return Alpha#26."""
+        values = _correlation(_ts_rank(self.volume, 5), _ts_rank(self.high, 5), 5)
+        values = values.replace([-np.inf, np.inf], 0).fillna(value=0)
+        return -1 * _ts_max(values, 3)
+
+    def alpha027(self) -> pd.DataFrame:
+        """Return Alpha#27."""
+        values = _rank(_sma(_correlation(_rank(self.volume), _rank(self.vwap), 6), 2) / 2.0)
+        return np.sign((values - 0.5) * (-2))
+
+    def alpha028(self) -> pd.DataFrame:
+        """Return Alpha#28."""
+        adv20 = _sma(self.volume, 20)
+        values = _correlation(adv20, self.low, 5)
+        values = values.replace([-np.inf, np.inf], 0).fillna(value=0)
+        return _scale((values + ((self.high + self.low) / 2)) - self.close)
+
+    def alpha029(self) -> pd.DataFrame:
+        """Return Alpha#29."""
+        return _ts_min(
+            _rank(
+                _rank(
+                    _scale(
+                        np.log(
+                            _ts_sum(
+                                _rank(_rank(-1 * _rank(_delta((self.close - 1), 5)))),
+                                2,
+                            )
+                        )
+                    )
+                )
+            ),
+            5,
+        ) + _ts_rank(_delay((-1 * self.returns), 6), 5)
+
+    def alpha030(self) -> pd.DataFrame:
+        """Return Alpha#30."""
+        delta_close = _delta(self.close, 1)
+        inner = np.sign(delta_close) + np.sign(_delay(delta_close, 1)) + np.sign(
+            _delay(delta_close, 2)
+        )
+        return ((1.0 - _rank(inner)) * _ts_sum(self.volume, 5)) / _ts_sum(self.volume, 20)
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha101 formula layout."""
@@ -260,6 +339,11 @@ def _delay(frame: pd.DataFrame, period: int) -> pd.DataFrame:
 def _rank(frame: pd.DataFrame) -> pd.DataFrame:
     """Return cross-sectional percentile ranks."""
     return frame.rank(axis=1, method="min", pct=True)
+
+
+def _scale(frame: pd.DataFrame, k: float = 1) -> pd.DataFrame:
+    """Return frame scaled so the sum of absolute values equals ``k``."""
+    return frame.mul(k).div(np.abs(frame).sum())
 
 
 def _rolling_rank(values: np.ndarray) -> float:
