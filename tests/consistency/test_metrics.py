@@ -9,15 +9,19 @@ import numpy as np
 import pandas as pd
 
 from tradelearn.metrics import (
+    alpha,
     annual_return,
+    beta,
     calmar,
     cum_returns,
     cvar,
+    downside_risk,
     max_drawdown,
     omega,
     rank_ic,
     sharpe,
     simple_returns,
+    sortino,
     tail_ratio,
     var,
     volatility,
@@ -58,6 +62,14 @@ def test_risk_metrics_match_vendored_empyrical() -> None:
         returns,
         annualization=252,
     ), rtol=1e-10)
+    assert np.isclose(sortino(returns, periods=252), empyrical.sortino_ratio(
+        returns,
+        annualization=252,
+    ), rtol=1e-10)
+    assert np.isclose(downside_risk(returns, periods=252), empyrical.downside_risk(
+        returns,
+        annualization=252,
+    ), rtol=1e-10)
     assert np.isclose(calmar(returns, periods=252), empyrical.calmar_ratio(
         returns,
         annualization=252,
@@ -71,6 +83,20 @@ def test_risk_metrics_match_vendored_empyrical() -> None:
     assert np.isclose(
         cvar(returns),
         empyrical.conditional_value_at_risk(returns),
+        rtol=1e-10,
+    )
+
+
+def test_alpha_beta_metrics_match_vendored_empyrical() -> None:
+    """Alpha and beta match the 1.x oracle on aligned benchmark returns."""
+    index = pd.date_range("2024-01-01", periods=6)
+    returns = pd.Series([0.01, 0.03, -0.02, 0.04, 0.00, 0.02], index=index)
+    benchmark = pd.Series([0.005, 0.02, -0.01, 0.03, 0.01, 0.015], index=index)
+
+    assert np.isclose(beta(returns, benchmark), empyrical.beta(returns, benchmark), rtol=1e-10)
+    assert np.isclose(
+        alpha(returns, benchmark, periods=252),
+        empyrical.alpha(returns, benchmark, annualization=252),
         rtol=1e-10,
     )
 

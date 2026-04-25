@@ -379,7 +379,7 @@ def alpha(
     --------
     >>> import pandas as pd
     >>> round(alpha(pd.Series([0.01, 0.02, 0.03]), pd.Series([0.02, 0.03, 0.04]), 252), 4)
-    -2.52
+    -0.9206
     """
     validate_periods(periods)
     aligned = _align_pair(returns, benchmark, nan_policy)
@@ -387,7 +387,8 @@ def alpha(
     b = aligned.iloc[:, 1]
     period_rf = rf / periods
     slope = beta(r, b, nan_policy="propagate")
-    return float(((r - period_rf).mean() - slope * (b - period_rf).mean()) * periods)
+    alpha_series = (r - period_rf) - slope * (b - period_rf)
+    return float((1.0 + alpha_series.mean()) ** periods - 1.0)
 
 
 def information_ratio(

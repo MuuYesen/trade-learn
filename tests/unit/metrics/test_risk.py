@@ -92,7 +92,8 @@ def test_beta_alpha_and_information_ratio_align_on_inner_index() -> None:
 
     aligned_returns, aligned_benchmark = returns.align(benchmark, join="inner")
     expected_beta = aligned_returns.cov(aligned_benchmark) / aligned_benchmark.var()
-    expected_alpha = (aligned_returns.mean() - expected_beta * aligned_benchmark.mean()) * 252
+    alpha_series = aligned_returns - expected_beta * aligned_benchmark
+    expected_alpha = (1.0 + alpha_series.mean()) ** 252 - 1.0
     active = aligned_returns - aligned_benchmark
     expected_ir = active.mean() / active.std(ddof=1) * math.sqrt(252)
     assert math.isclose(result_beta, expected_beta, rel_tol=1e-12)
