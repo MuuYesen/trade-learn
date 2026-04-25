@@ -31,6 +31,22 @@ def rolling_sharpe(returns: pd.Series, window: int, periods: int) -> pd.Series:
     return pd.Series(values, index=returns.index, name="rolling_sharpe")
 
 
+def rolling_beta(returns: pd.Series, benchmark: pd.Series, window: int) -> pd.Series:
+    """Return rolling beta using tradelearn.metrics.beta."""
+    aligned = pd.concat([returns, benchmark], axis=1, join="inner")
+    aligned.columns = ["returns", "benchmark"]
+    values = [
+        np.nan
+        if index + 1 < window
+        else metrics.beta(
+            aligned["returns"].iloc[index + 1 - window : index + 1],
+            aligned["benchmark"].iloc[index + 1 - window : index + 1],
+        )
+        for index in range(len(aligned))
+    ]
+    return pd.Series(values, index=aligned.index, name="rolling_beta")
+
+
 def top_drawdowns(returns: pd.Series, limit: int = 10) -> pd.DataFrame:
     """Return the largest drawdown episodes."""
     drawdown = metrics.drawdown_series(returns)

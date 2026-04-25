@@ -13,6 +13,7 @@ from tradelearn.report.analytics import (
     exposure_correlation,
     exposure_weights,
     monthly_returns_matrix,
+    rolling_beta,
     rolling_sharpe,
     top_drawdowns,
 )
@@ -83,6 +84,10 @@ class Reporter:
     def rolling_sharpe(self, window: int = 126) -> pd.Series:
         """Return rolling Sharpe ratio."""
         return rolling_sharpe(self._get("returns"), window=window, periods=self.periods)
+
+    def rolling_beta(self, benchmark: pd.Series, window: int = 126) -> pd.Series:
+        """Return rolling beta to a benchmark."""
+        return rolling_beta(self._get("returns"), benchmark=benchmark, window=window)
 
     def top_drawdowns(self, limit: int = 10) -> pd.DataFrame:
         """Return the largest drawdown episodes."""

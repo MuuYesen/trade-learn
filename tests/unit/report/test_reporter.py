@@ -121,6 +121,28 @@ def test_reporter_rolling_sharpe_uses_windowed_metrics() -> None:
     assert rolling.iloc[3] == metrics.sharpe(returns.iloc[1:4], periods=252)
 
 
+def test_reporter_rolling_beta_uses_windowed_metrics() -> None:
+    """Reporter.rolling_beta returns a rolling metrics.beta series."""
+    returns = pd.Series(
+        [0.01, 0.02, -0.01, 0.03],
+        index=pd.date_range("2024-01-01", periods=4, tz="UTC"),
+        name="returns",
+    )
+    benchmark = pd.Series(
+        [0.02, 0.01, -0.02, 0.04],
+        index=pd.date_range("2024-01-01", periods=4, tz="UTC"),
+        name="benchmark",
+    )
+    reporter = Reporter({"returns": returns, "trades": pd.DataFrame()})
+
+    rolling = reporter.rolling_beta(benchmark, window=3)
+
+    assert pd.isna(rolling.iloc[0])
+    assert pd.isna(rolling.iloc[1])
+    assert rolling.iloc[2] == metrics.beta(returns.iloc[:3], benchmark.iloc[:3])
+    assert rolling.iloc[3] == metrics.beta(returns.iloc[1:4], benchmark.iloc[1:4])
+
+
 def test_reporter_top_drawdowns_returns_largest_episodes() -> None:
     """Reporter.top_drawdowns returns the largest drawdown episodes first."""
     returns = pd.Series(
