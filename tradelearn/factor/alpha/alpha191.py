@@ -148,6 +148,16 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha138",
         "alpha139",
         "alpha140",
+        "alpha141",
+        "alpha142",
+        "alpha144",
+        "alpha145",
+        "alpha146",
+        "alpha147",
+        "alpha148",
+        "alpha150",
+        "alpha151",
+        "alpha152",
     }
 )
 
@@ -1423,6 +1433,69 @@ class Alpha191Factors:
         )
         return _elementwise_min(left, right)
 
+    def alpha141(self) -> pd.DataFrame:
+        """Return Alpha#141."""
+        return _rank(_correlation(_rank(self.high), _rank(_mean(self.volume, 15)), 9)) * -1
+
+    def alpha142(self) -> pd.DataFrame:
+        """Return Alpha#142."""
+        return (
+            -1
+            * _rank(_ts_rank(self.close, 10))
+            * _rank(_delta(_delta(self.close, 1), 1))
+            * _rank(_ts_rank(self.volume / _mean(self.volume, 20), 5))
+        )
+
+    def alpha144(self) -> pd.DataFrame:
+        """Return Alpha#144."""
+        cond = self.close < _delay(self.close, 1)
+        values = (self.close / _delay(self.close, 1) - 1).abs() / self.amount
+        return _sumif(values, 20, cond) / _count(cond, 20)
+
+    def alpha145(self) -> pd.DataFrame:
+        """Return Alpha#145."""
+        return (_mean(self.volume, 9) - _mean(self.volume, 26)) / _mean(
+            self.volume,
+            12,
+        ) * 100
+
+    def alpha146(self) -> pd.DataFrame:
+        """Return Alpha#146."""
+        returns = (self.close - _delay(self.close, 1)) / _delay(self.close, 1)
+        smoothed = _sma(returns, 61, 2)
+        residual = returns - smoothed
+        return _mean(residual, 20) * residual / _sma((returns - residual) ** 2, 61, 2)
+
+    def alpha147(self) -> pd.DataFrame:
+        """Return Alpha#147."""
+        return _regbeta(_mean(self.close, 12), _sequence(12))
+
+    def alpha148(self) -> pd.DataFrame:
+        """Return Alpha#148."""
+        cond = _rank(
+            _correlation(self.open, _ts_sum(_mean(self.volume, 60), 9), 6)
+        ) < _rank(self.open - _ts_min(self.open, 14))
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond] = -1
+        part[~cond] = 0
+        return part
+
+    def alpha150(self) -> pd.DataFrame:
+        """Return Alpha#150."""
+        return (self.close + self.high + self.low) / 3 * self.volume
+
+    def alpha151(self) -> pd.DataFrame:
+        """Return Alpha#151."""
+        return _sma(self.close - _delay(self.close, 20), 20, 1)
+
+    def alpha152(self) -> pd.DataFrame:
+        """Return Alpha#152."""
+        delayed_ratio = _delay(self.close / _delay(self.close, 9), 1)
+        smoothed = _sma(delayed_ratio, 9, 1)
+        delayed_smoothed = _delay(smoothed, 1)
+        return _sma(_mean(delayed_smoothed, 12) - _mean(delayed_smoothed, 26), 9, 1)
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha191 formula layout."""
@@ -1483,6 +1556,13 @@ def _ts_sum(frame: pd.DataFrame, window: int) -> pd.DataFrame:
 def _count(cond: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling count of true values."""
     return cond.rolling(window).apply(lambda values: values.sum())
+
+
+def _sumif(frame: pd.DataFrame, window: int, cond: pd.DataFrame) -> pd.DataFrame:
+    """Return rolling sum over values selected by ``cond``."""
+    values = frame.copy(deep=True)
+    values[~cond] = 0
+    return values.rolling(window).sum()
 
 
 def _stddev(frame: pd.DataFrame, window: int) -> pd.DataFrame:
