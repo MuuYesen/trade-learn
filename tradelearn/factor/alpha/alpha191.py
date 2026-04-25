@@ -168,6 +168,16 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha160",
         "alpha161",
         "alpha162",
+        "alpha163",
+        "alpha164",
+        "alpha165",
+        "alpha166",
+        "alpha167",
+        "alpha168",
+        "alpha169",
+        "alpha170",
+        "alpha171",
+        "alpha172",
     }
 )
 
@@ -1610,6 +1620,108 @@ class Alpha191Factors:
         )
         return (ratio - _ts_min(ratio, 12)) / (_sma(ratio, 12, 1) - _ts_min(ratio, 12))
 
+    def alpha163(self) -> pd.DataFrame:
+        """Return Alpha#163."""
+        return _rank(
+            -1
+            * self.returns
+            * _mean(self.volume, 20)
+            * self.vwap
+            * (self.high - self.close),
+        )
+
+    def alpha164(self) -> pd.DataFrame:
+        """Return Alpha#164."""
+        close_delta = self.close - _delay(self.close, 1)
+        cond = self.close > _delay(self.close, 1)
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond] = 1 / close_delta
+        part[~cond] = 1
+        high_low = self.high - self.low
+        high_low = high_low.replace({0: np.nan})
+        return _sma((part - _ts_min(part, 12)) / high_low * 100, 13, 2)
+
+    def alpha165(self) -> pd.DataFrame:
+        """Return Alpha#165."""
+        centered_sum = _ts_sum(self.close - _mean(self.close, 48), 48)
+        row_max = _row_max(centered_sum)
+        row_min = _row_min(centered_sum)
+        stddev = _stddev(self.close, 48)
+        return -1 * (1 / stddev.div(row_min, axis=0)).sub(row_max, axis=0)
+
+    def alpha166(self) -> pd.DataFrame:
+        """Return Alpha#166."""
+        ratio = self.close / _delay(self.close, 1)
+        centered = ratio - 1 - _mean(ratio - 1, 20)
+        numerator = -20 * (20 - 1) ** 1.5 * _ts_sum(centered, 20)
+        denominator = (20 - 1) * (20 - 2) * _ts_sum(_mean(ratio, 20) ** 2, 20) ** 1.5
+        return numerator / denominator
+
+    def alpha167(self) -> pd.DataFrame:
+        """Return Alpha#167."""
+        close_delta = self.close - _delay(self.close, 1)
+        cond = self.close > _delay(self.close, 1)
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond] = close_delta
+        part[~cond] = 0
+        return _ts_sum(part, 12)
+
+    def alpha168(self) -> pd.DataFrame:
+        """Return Alpha#168."""
+        return -1 * self.volume / _mean(self.volume, 20)
+
+    def alpha169(self) -> pd.DataFrame:
+        """Return Alpha#169."""
+        smoothed_delta = _sma(self.close - _delay(self.close, 1), 9, 1)
+        delayed = _delay(smoothed_delta, 1)
+        return _sma(_mean(delayed, 12) - _mean(delayed, 26), 10, 1)
+
+    def alpha170(self) -> pd.DataFrame:
+        """Return Alpha#170."""
+        left = (
+            (_rank(1 / self.close) * self.volume)
+            / _mean(self.volume, 20)
+            * (
+                self.high
+                * _rank(self.high - self.close)
+                / (_ts_sum(self.high, 5) / 5)
+            )
+        )
+        return left - _rank(self.vwap - _delay(self.vwap, 5))
+
+    def alpha171(self) -> pd.DataFrame:
+        """Return Alpha#171."""
+        return (
+            -1
+            * ((self.low - self.close) * self.open**5)
+            / ((self.close - self.high) * self.close**5)
+        )
+
+    def alpha172(self) -> pd.DataFrame:
+        """Return Alpha#172."""
+        delayed_close = _delay(self.close, 1)
+        true_range = _elementwise_max(
+            _elementwise_max(self.high - self.low, (self.high - delayed_close).abs()),
+            (self.low - delayed_close).abs(),
+        )
+        high_delta = self.high - _delay(self.high, 1)
+        low_delta = _delay(self.low, 1) - self.low
+        cond1 = (low_delta > 0) & (low_delta > high_delta)
+        cond2 = (high_delta > 0) & (high_delta > low_delta)
+        part1 = self.close.copy(deep=True)
+        part1.loc[:, :] = np.nan
+        part1[cond1] = low_delta
+        part1[~cond1] = 0
+        part2 = self.close.copy(deep=True)
+        part2.loc[:, :] = np.nan
+        part2[cond2] = high_delta
+        part2[~cond2] = 0
+        down = _ts_sum(part1, 14) * 100 / _ts_sum(true_range, 14)
+        up = _ts_sum(part2, 14) * 100 / _ts_sum(true_range, 14)
+        return _mean((down - up).abs() / (down + up) * 100, 6)
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha191 formula layout."""
@@ -1737,6 +1849,16 @@ def _ts_max(frame: pd.DataFrame, window: int) -> pd.DataFrame:
 def _ts_min(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling minimum."""
     return frame.rolling(window).min()
+
+
+def _row_max(frame: pd.DataFrame) -> pd.Series:
+    """Return row-wise maximum."""
+    return frame.max(axis=1)
+
+
+def _row_min(frame: pd.DataFrame) -> pd.Series:
+    """Return row-wise minimum."""
+    return frame.min(axis=1)
 
 
 def _lowday(frame: pd.DataFrame, window: int) -> pd.DataFrame:
