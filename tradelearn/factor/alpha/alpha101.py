@@ -40,6 +40,16 @@ ALPHA101_SUPPORTED = frozenset(
         "alpha028",
         "alpha029",
         "alpha030",
+        "alpha031",
+        "alpha032",
+        "alpha033",
+        "alpha034",
+        "alpha035",
+        "alpha036",
+        "alpha037",
+        "alpha038",
+        "alpha039",
+        "alpha040",
     }
 )
 
@@ -286,6 +296,96 @@ class Alpha101Factors:
         )
         return ((1.0 - _rank(inner)) * _ts_sum(self.volume, 5)) / _ts_sum(self.volume, 20)
 
+    def alpha031(self) -> pd.DataFrame:
+        """Return Alpha#31."""
+        adv20 = _sma(self.volume, 20)
+        values = _correlation(adv20, self.low, 12).replace([-np.inf, np.inf], 0).fillna(
+            value=0
+        )
+        return (
+            _rank(_rank(_rank(_decay_linear(-1 * _rank(_rank(_delta(self.close, 10))), 10))))
+            + _rank(-1 * _delta(self.close, 3))
+            + np.sign(_scale(values))
+        )
+
+    def alpha032(self) -> pd.DataFrame:
+        """Return Alpha#32."""
+        return _scale((_sma(self.close, 7) / 7) - self.close) + (
+            20 * _scale(_correlation(self.vwap, _delay(self.close, 5), 230))
+        )
+
+    def alpha033(self) -> pd.DataFrame:
+        """Return Alpha#33."""
+        return _rank(-1 + (self.open / self.close))
+
+    def alpha034(self) -> pd.DataFrame:
+        """Return Alpha#34."""
+        inner = (_stddev(self.returns, 2) / _stddev(self.returns, 5)).replace(
+            [-np.inf, np.inf], 1
+        ).fillna(value=1)
+        return _rank(2 - _rank(inner) - _rank(_delta(self.close, 1)))
+
+    def alpha035(self) -> pd.DataFrame:
+        """Return Alpha#35."""
+        return (
+            _ts_rank(self.volume, 32)
+            * (1 - _ts_rank(self.close + self.high - self.low, 16))
+            * (1 - _ts_rank(self.returns, 32))
+        )
+
+    def alpha036(self) -> pd.DataFrame:
+        """Return Alpha#36."""
+        adv20 = _sma(self.volume, 20)
+        return (
+            (
+                (
+                    (
+                        (
+                            2.21
+                            * _rank(
+                                _correlation(
+                                    self.close - self.open,
+                                    _delay(self.volume, 1),
+                                    15,
+                                )
+                            )
+                        )
+                        + (0.7 * _rank(self.open - self.close))
+                    )
+                    + (0.73 * _rank(_ts_rank(_delay(-1 * self.returns, 6), 5)))
+                )
+                + _rank(np.abs(_correlation(self.vwap, adv20, 6)))
+            )
+            + (
+                0.6
+                * _rank(((_sma(self.close, 200) / 200) - self.open) * (self.close - self.open))
+            )
+        )
+
+    def alpha037(self) -> pd.DataFrame:
+        """Return Alpha#37."""
+        return _rank(_correlation(_delay(self.open - self.close, 1), self.close, 200)) + _rank(
+            self.open - self.close
+        )
+
+    def alpha038(self) -> pd.DataFrame:
+        """Return Alpha#38."""
+        inner = (self.close / self.open).replace([-np.inf, np.inf], 1).fillna(value=1)
+        return -1 * _rank(_ts_rank(self.open, 10)) * _rank(inner)
+
+    def alpha039(self) -> pd.DataFrame:
+        """Return Alpha#39."""
+        adv20 = _sma(self.volume, 20)
+        return (
+            -1
+            * _rank(_delta(self.close, 7) * (1 - _rank(_decay_linear(self.volume / adv20, 9))))
+            * (1 + _rank(_sma(self.returns, 250)))
+        )
+
+    def alpha040(self) -> pd.DataFrame:
+        """Return Alpha#40."""
+        return -1 * _rank(_stddev(self.high, 10)) * _correlation(self.high, self.volume, 10)
+
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha101 formula layout."""
@@ -344,6 +444,13 @@ def _rank(frame: pd.DataFrame) -> pd.DataFrame:
 def _scale(frame: pd.DataFrame, k: float = 1) -> pd.DataFrame:
     """Return frame scaled so the sum of absolute values equals ``k``."""
     return frame.mul(k).div(np.abs(frame).sum())
+
+
+def _decay_linear(frame: pd.DataFrame, period: int) -> pd.DataFrame:
+    """Return rolling linearly weighted moving averages."""
+    weights = np.arange(1, period + 1)
+    sum_weights = np.sum(weights)
+    return frame.rolling(period).apply(lambda values: np.sum(weights * values) / sum_weights)
 
 
 def _rolling_rank(values: np.ndarray) -> float:

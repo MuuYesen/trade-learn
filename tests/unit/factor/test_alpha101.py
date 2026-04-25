@@ -41,6 +41,16 @@ def test_alpha101_exports_migrated_formulas_like_legacy_query() -> None:
         "alpha028",
         "alpha029",
         "alpha030",
+        "alpha031",
+        "alpha032",
+        "alpha033",
+        "alpha034",
+        "alpha035",
+        "alpha036",
+        "alpha037",
+        "alpha038",
+        "alpha039",
+        "alpha040",
     ]
     expected = _legacy_alpha101(data, names)
 
@@ -86,6 +96,16 @@ def test_query_alphas101_delegates_supported_formulas_to_v2_facade() -> None:
         "alpha028",
         "alpha029",
         "alpha030",
+        "alpha031",
+        "alpha032",
+        "alpha033",
+        "alpha034",
+        "alpha035",
+        "alpha036",
+        "alpha037",
+        "alpha038",
+        "alpha039",
+        "alpha040",
     ]
 
     result = Query.alphas101(data, names)
@@ -115,7 +135,7 @@ def _legacy_alpha101(data: pd.DataFrame, names: list[str]) -> pd.DataFrame:
 
 
 def _stock_data() -> pd.DataFrame:
-    dates = pd.date_range("2024-01-01", periods=75)
+    dates = pd.date_range("2024-01-01", periods=280)
     rows = []
     for symbol_index, code in enumerate(["AAA", "BBB", "CCC"], start=1):
         for day_index, date in enumerate(dates, start=1):
