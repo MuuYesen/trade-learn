@@ -197,6 +197,16 @@ ALPHA191_SUPPORTED = frozenset(
     }
 )
 
+ALPHA191_SKIPPED = {
+    "alpha030": "requires external MKT/SMB/HML regression inputs",
+    "alpha075": "legacy formula is commented and requires benchmark condition counts",
+    "alpha143": "legacy formula is commented placeholder",
+    "alpha149": "requires benchmark filter input",
+    "alpha181": "legacy formula is commented and requires benchmark close input",
+    "alpha182": "legacy formula is commented and requires benchmark open/close input",
+    "alpha190": "legacy formula is commented placeholder",
+}
+
 
 def alpha191(
     stock_data: pd.DataFrame,
@@ -207,6 +217,13 @@ def alpha191(
     selected = list(names or sorted(ALPHA191_SUPPORTED))
     unsupported = sorted(set(selected).difference(ALPHA191_SUPPORTED))
     if unsupported:
+        skipped = [name for name in unsupported if name in ALPHA191_SKIPPED]
+        unknown = [name for name in unsupported if name not in ALPHA191_SKIPPED]
+        if skipped and not unknown:
+            details = "; ".join(
+                f"{name}: {ALPHA191_SKIPPED[name]}" for name in skipped
+            )
+            raise ValueError(f"skipped Alpha191 formulas are not supported: {details}")
         raise ValueError(f"unsupported Alpha191 formulas: {unsupported}")
 
     factors = Alpha191Factors(_pivot_stock_data(stock_data), bench_data)
