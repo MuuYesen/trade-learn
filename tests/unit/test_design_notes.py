@@ -385,6 +385,33 @@ def test_check_design_notes_strict_allows_section_names_in_body_text(
     assert result.stderr == ""
 
 
+def test_check_design_notes_reports_duplicate_required_section(
+    tmp_path: Path,
+) -> None:
+    """The checker fails when a required design-note section appears twice."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    write_design_note(docs_internal / "matching-design.md", "Matching Design")
+    write_design_note(docs_internal / "event-loop.md", "Event Loop")
+    write_design_note(docs_internal / "portfolio.md", "Portfolio")
+    with (docs_internal / "portfolio.md").open("a", encoding="utf-8") as handle:
+        handle.write("\n## Source Notes\n")
+        handle.write("Duplicate notes would make the freeze boundary ambiguous.\n")
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr.splitlines() == [
+        "duplicate section in portfolio.md: ## Source Notes"
+    ]
+
+
 def test_check_design_notes_json_reports_all_note_statuses(tmp_path: Path) -> None:
     """JSON output reports machine-readable status for all design notes."""
     docs_internal = tmp_path / "docs" / "internal"

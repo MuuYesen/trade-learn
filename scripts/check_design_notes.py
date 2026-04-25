@@ -40,6 +40,7 @@ SECTION_PROMPTS = {
 STRICT_PLACEHOLDER_TOKENS = ("TODO", "TBD", "FIXME")
 
 SectionSpans = dict[str, tuple[int, int]]
+SectionCounts = dict[str, int]
 
 
 def design_note_template(filename: str) -> str:
@@ -76,6 +77,16 @@ def section_heading_spans(content: str) -> SectionSpans:
     return spans
 
 
+def section_heading_counts(content: str) -> SectionCounts:
+    """Return occurrence counts for required markdown section heading lines."""
+    counts: SectionCounts = {}
+    for line in content.splitlines():
+        heading = line.strip()
+        if heading in REQUIRED_SECTIONS:
+            counts[heading] = counts.get(heading, 0) + 1
+    return counts
+
+
 def section_body(content: str, section: str, heading_spans: SectionSpans) -> str:
     """Return the body text under a required markdown section."""
     current_span = heading_spans.get(section)
@@ -104,11 +115,17 @@ def note_errors(directory: Path, filename: str, *, strict: bool = False) -> list
 
     content = path.read_text(encoding="utf-8")
     heading_spans = section_heading_spans(content)
+    heading_counts = section_heading_counts(content)
     errors = [
         f"missing section in {filename}: {section}"
         for section in REQUIRED_SECTIONS
         if section not in heading_spans
     ]
+    errors.extend(
+        f"duplicate section in {filename}: {section}"
+        for section in REQUIRED_SECTIONS
+        if heading_counts.get(section, 0) > 1
+    )
     if strict:
         errors.extend(
             f"untouched template prompt in {filename}: {section}"
