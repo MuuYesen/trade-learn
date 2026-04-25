@@ -186,6 +186,14 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha178",
         "alpha179",
         "alpha180",
+        "alpha183",
+        "alpha184",
+        "alpha185",
+        "alpha186",
+        "alpha187",
+        "alpha188",
+        "alpha189",
+        "alpha191",
     }
 )
 
@@ -1793,6 +1801,76 @@ class Alpha191Factors:
         part[cond] = -1 * _ts_rank(close_delta.abs(), 60) * np.sign(close_delta)
         part[~cond] = -1 * self.volume
         return part
+
+    def alpha183(self) -> pd.DataFrame:
+        """Return Alpha#183."""
+        centered_sum = _ts_sum(self.close - _mean(self.close, 24), 24)
+        row_max = _row_max(centered_sum)
+        row_min = _row_min(centered_sum)
+        stddev = _stddev(self.close, 24)
+        return -1 * (1 / stddev.div(row_min, axis=0)).sub(row_max, axis=0)
+
+    def alpha184(self) -> pd.DataFrame:
+        """Return Alpha#184."""
+        return _rank(_correlation(_delay(self.open - self.close, 1), self.close, 200)) + _rank(
+            self.open - self.close,
+        )
+
+    def alpha185(self) -> pd.DataFrame:
+        """Return Alpha#185."""
+        return _rank(-1 * (1 - self.open / self.close) ** 2)
+
+    def alpha186(self) -> pd.DataFrame:
+        """Return Alpha#186."""
+        indicator = self._directional_indicator(14, 6)
+        return (indicator + _delay(indicator, 6)) / 2
+
+    def alpha187(self) -> pd.DataFrame:
+        """Return Alpha#187."""
+        cond = self.open <= _delay(self.open, 1)
+        part = self.close.copy(deep=True)
+        part.loc[:, :] = np.nan
+        part[cond] = 0
+        part[~cond] = _elementwise_max(self.high - self.open, self.open - _delay(self.open, 1))
+        return _ts_sum(part, 20)
+
+    def alpha188(self) -> pd.DataFrame:
+        """Return Alpha#188."""
+        high_low = self.high - self.low
+        return (high_low - _sma(high_low, 11, 2)) / _sma(high_low, 11, 2) * 100
+
+    def alpha189(self) -> pd.DataFrame:
+        """Return Alpha#189."""
+        return _mean((self.close - _mean(self.close, 6)).abs(), 6)
+
+    def alpha191(self) -> pd.DataFrame:
+        """Return Alpha#191."""
+        return _correlation(_mean(self.volume, 20), self.low, 5) + (
+            self.high + self.low
+        ) / 2 - self.close
+
+    def _directional_indicator(self, sum_window: int, mean_window: int) -> pd.DataFrame:
+        """Return the directional movement indicator used by Alpha#172 and Alpha#186."""
+        delayed_close = _delay(self.close, 1)
+        true_range = _elementwise_max(
+            _elementwise_max(self.high - self.low, (self.high - delayed_close).abs()),
+            (self.low - delayed_close).abs(),
+        )
+        high_delta = self.high - _delay(self.high, 1)
+        low_delta = _delay(self.low, 1) - self.low
+        cond1 = (low_delta > 0) & (low_delta > high_delta)
+        cond2 = (high_delta > 0) & (high_delta > low_delta)
+        part1 = self.close.copy(deep=True)
+        part1.loc[:, :] = np.nan
+        part1[cond1] = low_delta
+        part1[~cond1] = 0
+        part2 = self.close.copy(deep=True)
+        part2.loc[:, :] = np.nan
+        part2[cond2] = high_delta
+        part2[~cond2] = 0
+        down = _ts_sum(part1, sum_window) * 100 / _ts_sum(true_range, sum_window)
+        up = _ts_sum(part2, sum_window) * 100 / _ts_sum(true_range, sum_window)
+        return _mean((down - up).abs() / (down + up) * 100, mean_window)
 
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
