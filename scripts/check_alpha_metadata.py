@@ -62,7 +62,11 @@ def main(argv: list[str] | None = None) -> int:
 
     metadata = validated_alpha_formula_metadata()
     if args.list_families:
-        for family in sorted(metadata):
+        families = sorted(metadata)
+        if args.json:
+            print(json.dumps(families))
+            return 0
+        for family in families:
             print(family)
         return 0
 

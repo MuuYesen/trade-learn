@@ -216,6 +216,22 @@ def test_check_alpha_metadata_script_lists_families() -> None:
     assert result.stderr == ""
 
 
+def test_check_alpha_metadata_script_lists_families_as_json() -> None:
+    """The metadata check script can list families as machine-readable JSON."""
+    from tradelearn.factor.alpha import validated_alpha_formula_metadata
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_alpha_metadata.py", "--json", "--list-families"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert json.loads(result.stdout) == sorted(validated_alpha_formula_metadata())
+    assert result.stderr == ""
+
+
 def test_check_alpha_metadata_script_rejects_unknown_family() -> None:
     """The metadata check script validates families from current metadata."""
     result = subprocess.run(
