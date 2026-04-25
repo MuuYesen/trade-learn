@@ -71,11 +71,18 @@ def test_factor_analyzer_summary_contains_stable_keys() -> None:
         "ic_std",
         "ic_ir",
         "rank_ic_mean",
+        "quantile_spread_mean",
+        "quantile_spread_cumulative_return",
         "turnover_mean",
         "autocorrelation_mean",
     }
     assert math.isclose(summary["ic_mean"], analyzer.ic().mean(), rel_tol=1e-12)
     assert math.isclose(summary["rank_ic_mean"], analyzer.rank_ic().mean(), rel_tol=1e-12)
+    assert math.isclose(
+        summary["quantile_spread_mean"],
+        analyzer.quantile_spread().mean(),
+        rel_tol=1e-12,
+    )
 
 
 def test_factor_analyzer_quantile_stats_summarizes_groups() -> None:

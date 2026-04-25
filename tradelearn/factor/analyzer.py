@@ -92,11 +92,16 @@ class FactorAnalyzer:
         rank_ic_values = self.rank_ic()
         turnover_values = self.turnover()
         autocorrelation_values = self.autocorrelation()
+        quantile_spread_values = self.quantile_spread()
         return {
             "ic_mean": float(ic_values.mean()),
             "ic_std": float(ic_values.std(ddof=1)),
             "ic_ir": self.ic_ir(),
             "rank_ic_mean": float(rank_ic_values.mean()),
+            "quantile_spread_mean": float(quantile_spread_values.mean()),
+            "quantile_spread_cumulative_return": float(
+                (1.0 + quantile_spread_values).prod() - 1.0
+            ),
             "turnover_mean": float(turnover_values.mean()),
             "autocorrelation_mean": float(autocorrelation_values.mean()),
         }
