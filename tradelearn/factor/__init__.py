@@ -10,6 +10,7 @@ from tradelearn.factor.alpha import (
     alpha191,
     alpha_formula_metadata,
     validate_alpha_formula_metadata,
+    validated_alpha_formula_metadata,
 )
 from tradelearn.factor.analyzer import FactorAnalyzer
 
@@ -23,5 +24,6 @@ __all__ = [
     "alpha101",
     "alpha191",
     "alpha_formula_metadata",
+    "validated_alpha_formula_metadata",
     "validate_alpha_formula_metadata",
 ]

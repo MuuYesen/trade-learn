@@ -90,6 +90,15 @@ def test_validate_alpha_formula_metadata_accepts_current_metadata() -> None:
     assert alpha_package.validate_alpha_formula_metadata() is None
 
 
+def test_validated_alpha_formula_metadata_returns_current_metadata() -> None:
+    """Consumers can fetch metadata that has already passed validation."""
+    import tradelearn.factor.alpha as alpha_package
+
+    metadata = alpha_package.validated_alpha_formula_metadata()
+
+    assert metadata == alpha_package.alpha_formula_metadata()
+
+
 def test_validate_alpha_formula_metadata_rejects_inconsistent_counts() -> None:
     """The validator catches stale counts before docs consume metadata."""
     import tradelearn.factor.alpha as alpha_package
@@ -128,11 +137,24 @@ def test_validate_alpha_formula_metadata_is_exported_from_factor_package() -> No
     assert "validate_alpha_formula_metadata" in factor_package.__all__
 
 
+def test_validated_alpha_formula_metadata_is_exported_from_factor_package() -> None:
+    """The top-level factor facade exposes the validated metadata helper."""
+    import tradelearn.factor as factor_package
+    import tradelearn.factor.alpha as alpha_package
+
+    assert (
+        factor_package.validated_alpha_formula_metadata
+        is alpha_package.validated_alpha_formula_metadata
+    )
+    assert "validated_alpha_formula_metadata" in factor_package.__all__
+
+
 def test_alpha_formula_metadata_is_exported_from_package_all() -> None:
     """The helper is part of the public alpha facade."""
     import tradelearn.factor.alpha as alpha_package
 
     assert "alpha_formula_metadata" in alpha_package.__all__
+    assert "validated_alpha_formula_metadata" in alpha_package.__all__
     assert "validate_alpha_formula_metadata" in alpha_package.__all__
 
 

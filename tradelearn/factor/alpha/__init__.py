@@ -57,6 +57,13 @@ def validate_alpha_formula_metadata(
             )
 
 
+def validated_alpha_formula_metadata() -> dict[str, AlphaFormulaFamilyMetadata]:
+    """Return Alpha formula metadata after validating its consistency."""
+    metadata = alpha_formula_metadata()
+    validate_alpha_formula_metadata(metadata)
+    return metadata
+
+
 __all__ = [
     "AlphaFormulaFamilyMetadata",
     "ALPHA101_SKIPPED",
@@ -66,5 +73,6 @@ __all__ = [
     "alpha101",
     "alpha191",
     "alpha_formula_metadata",
+    "validated_alpha_formula_metadata",
     "validate_alpha_formula_metadata",
 ]
