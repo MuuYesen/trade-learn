@@ -200,6 +200,24 @@ def test_check_alpha_metadata_script_filters_json_by_family() -> None:
     assert result.stderr == ""
 
 
+@pytest.mark.parametrize(
+    "detail_flag",
+    ["--include-skipped", "--include-supported", "--include-all"],
+)
+def test_check_alpha_metadata_detail_flags_require_json(detail_flag: str) -> None:
+    """Detail flags are explicit JSON-only options."""
+    result = subprocess.run(
+        [sys.executable, "scripts/check_alpha_metadata.py", detail_flag],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert f"{detail_flag} requires --json" in result.stderr
+
+
 def test_check_alpha_metadata_script_reports_json_skipped_reasons() -> None:
     """The metadata check script can include skipped reasons in JSON output."""
     from tradelearn.factor.alpha import validated_alpha_formula_metadata

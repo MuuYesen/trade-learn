@@ -44,6 +44,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    detail_flags = [
+        flag
+        for enabled, flag in (
+            (args.include_skipped, "--include-skipped"),
+            (args.include_supported, "--include-supported"),
+            (args.include_all, "--include-all"),
+        )
+        if enabled
+    ]
+    if detail_flags and not args.json:
+        parser.error(", ".join(detail_flags) + " requires --json")
+
     metadata = validated_alpha_formula_metadata()
     families = [args.family] if args.family else sorted(metadata)
     counts = {}
