@@ -602,9 +602,8 @@ def test_render_alpha_known_differences_script_check_reports_all_section_errors(
     target.write_text(
         "# MIGRATION\n\n"
         + rendered.replace(
-            "\n",
-            "\n| `alpha999` | stale local row |\n",
-            1,
+            "\n\n| Formula | Reason |",
+            "\n\n| `alpha999` | stale local row |\n\n| Formula | Reason |",
         ),
         encoding="utf-8",
     )
