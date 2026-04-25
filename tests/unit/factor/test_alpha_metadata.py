@@ -200,6 +200,22 @@ def test_check_alpha_metadata_script_filters_json_by_family() -> None:
     assert result.stderr == ""
 
 
+def test_check_alpha_metadata_script_lists_families() -> None:
+    """The metadata check script can list available Alpha families."""
+    from tradelearn.factor.alpha import validated_alpha_formula_metadata
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_alpha_metadata.py", "--list-families"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.splitlines() == sorted(validated_alpha_formula_metadata())
+    assert result.stderr == ""
+
+
 @pytest.mark.parametrize(
     "detail_flag",
     ["--include-skipped", "--include-supported", "--include-all"],
@@ -366,6 +382,26 @@ def test_render_alpha_known_differences_script_filters_family() -> None:
         ),
         "",
     ]
+    assert result.stderr == ""
+
+
+def test_render_alpha_known_differences_script_lists_families() -> None:
+    """The known differences script can list available Alpha families."""
+    from tradelearn.factor.alpha import validated_alpha_formula_metadata
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/render_alpha_known_differences.py",
+            "--list-families",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.splitlines() == sorted(validated_alpha_formula_metadata())
     assert result.stderr == ""
 
 

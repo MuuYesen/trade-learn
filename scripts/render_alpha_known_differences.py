@@ -44,11 +44,21 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="write the rendered Markdown to a file",
     )
+    parser.add_argument(
+        "--list-families",
+        action="store_true",
+        help="list available Alpha formula families",
+    )
     args = parser.parse_args(argv)
     if args.check is not None and args.output is not None:
         parser.error("--output cannot be used with --check")
 
     metadata = validated_alpha_formula_metadata()
+    if args.list_families:
+        for family in sorted(metadata):
+            print(family)
+        return 0
+
     families = [args.family] if args.family else sorted(metadata)
 
     rendered_by_family = {

@@ -42,6 +42,11 @@ def main(argv: list[str] | None = None) -> int:
         choices=("alpha101", "alpha191"),
         help="check only one Alpha formula family",
     )
+    parser.add_argument(
+        "--list-families",
+        action="store_true",
+        help="list available Alpha formula families",
+    )
     args = parser.parse_args(argv)
 
     detail_flags = [
@@ -57,6 +62,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(", ".join(detail_flags) + " requires --json")
 
     metadata = validated_alpha_formula_metadata()
+    if args.list_families:
+        for family in sorted(metadata):
+            print(family)
+        return 0
+
     families = [args.family] if args.family else sorted(metadata)
     counts = {}
     for family in families:
