@@ -1,5 +1,7 @@
 """Tests for Alpha formula metadata helpers."""
 
+from typing import get_type_hints
+
 from tradelearn.factor.alpha import (
     ALPHA101_SKIPPED,
     ALPHA101_SUPPORTED,
@@ -58,6 +60,16 @@ def test_alpha_formula_metadata_includes_formula_counts() -> None:
     assert metadata["alpha101"]["skipped_count"] == len(ALPHA101_SKIPPED)
     assert metadata["alpha191"]["supported_count"] == len(ALPHA191_SUPPORTED)
     assert metadata["alpha191"]["skipped_count"] == len(ALPHA191_SKIPPED)
+
+
+def test_alpha_formula_metadata_uses_public_typed_dict() -> None:
+    """The metadata helper exposes a stable type contract for consumers."""
+    import tradelearn.factor.alpha as alpha_package
+
+    hints = get_type_hints(alpha_package.alpha_formula_metadata)
+
+    assert hints["return"] == dict[str, alpha_package.AlphaFormulaFamilyMetadata]
+    assert "AlphaFormulaFamilyMetadata" in alpha_package.__all__
 
 
 def test_alpha_formula_metadata_is_exported_from_package_all() -> None:

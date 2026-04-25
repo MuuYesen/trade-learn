@@ -1,10 +1,21 @@
 """Alpha factor formula facades."""
 
+from typing import TypedDict
+
 from tradelearn.factor.alpha.alpha101 import ALPHA101_SKIPPED, ALPHA101_SUPPORTED, alpha101
 from tradelearn.factor.alpha.alpha191 import ALPHA191_SKIPPED, ALPHA191_SUPPORTED, alpha191
 
 
-def alpha_formula_metadata() -> dict[str, dict[str, tuple[str, ...] | dict[str, str] | int]]:
+class AlphaFormulaFamilyMetadata(TypedDict):
+    """Metadata for a single Alpha formula family."""
+
+    supported: tuple[str, ...]
+    supported_count: int
+    skipped: dict[str, str]
+    skipped_count: int
+
+
+def alpha_formula_metadata() -> dict[str, AlphaFormulaFamilyMetadata]:
     """Return supported and intentionally skipped Alpha formula metadata."""
     return {
         "alpha101": {
@@ -23,6 +34,7 @@ def alpha_formula_metadata() -> dict[str, dict[str, tuple[str, ...] | dict[str, 
 
 
 __all__ = [
+    "AlphaFormulaFamilyMetadata",
     "ALPHA101_SKIPPED",
     "ALPHA101_SUPPORTED",
     "ALPHA191_SKIPPED",
