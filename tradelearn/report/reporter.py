@@ -114,6 +114,13 @@ class Reporter:
             return pd.DataFrame()
         return pd.DataFrame(factor_analyzer.quantile_cumulative_returns()).copy()
 
+    def factor_ic(self) -> pd.Series:
+        """Return factor information coefficient series from analyzers."""
+        factor_analyzer = self._factor_analyzer()
+        if factor_analyzer is None or not hasattr(factor_analyzer, "ic"):
+            return pd.Series(dtype="float64", name="ic")
+        return pd.Series(factor_analyzer.ic()).copy()
+
     def excel(self, path: str) -> Any:
         """Write an Excel report."""
         return write_excel_report(self, path)

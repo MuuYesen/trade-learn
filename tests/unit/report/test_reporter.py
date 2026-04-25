@@ -244,6 +244,16 @@ def test_reporter_factor_quantile_returns_uses_factor_analyzer() -> None:
     pd.testing.assert_frame_equal(quantiles, analyzer.quantile_cumulative_returns())
 
 
+def test_reporter_factor_ic_uses_factor_analyzer() -> None:
+    """Reporter.factor_ic returns analyzer IC series."""
+    analyzer = _FactorAnalyzerStub()
+    reporter = Reporter(
+        {"returns": _returns(), "trades": pd.DataFrame(), "analyzers": {"factor": analyzer}}
+    )
+
+    pd.testing.assert_series_equal(reporter.factor_ic(), analyzer.ic())
+
+
 def test_reporter_summary_includes_factor_analyzer_metrics() -> None:
     """Reporter.summary prefixes factor analyzer summary metrics when available."""
     reporter = Reporter(
@@ -295,6 +305,14 @@ def _trades() -> pd.DataFrame:
 
 
 class _FactorAnalyzerStub:
+    def ic(self) -> pd.Series:
+        """Return factor IC series for reporter tests."""
+        return pd.Series(
+            [0.10, 0.20],
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+            name="ic",
+        )
+
     def quantile_cumulative_returns(self) -> pd.DataFrame:
         """Return factor quantile cumulative returns for reporter tests."""
         return pd.DataFrame(
