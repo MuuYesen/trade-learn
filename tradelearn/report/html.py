@@ -12,8 +12,12 @@ import pandas as pd
 from bokeh.embed import components
 from bokeh.layouts import column
 from bokeh.resources import INLINE
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from tradelearn.report import charts
+
+TEMPLATE_DIR = Path(__file__).with_name("templates")
+TEMPLATE_NAME = "tear_sheet.html"
 
 
 def write_html_report(
@@ -78,56 +82,29 @@ def _render_html(
     config: dict[str, Any],
 ) -> str:
     """Render the report HTML string."""
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Tradelearn Report</title>
-  {bokeh_resources}
-  <style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 32px; }}
-    table {{ border-collapse: collapse; width: 100%; margin: 12px 0 24px; }}
-    th, td {{ border: 1px solid #ddd; padding: 6px 8px; text-align: left; }}
-    th {{ background: #f6f8fa; }}
-    section {{ margin-bottom: 28px; }}
-  </style>
-</head>
-<body>
-  <header>
-    <h1>{escape(metadata["strategy_name"])}</h1>
-    <p>Run ID: {escape(metadata["run_id"])}</p>
-    <p>Period: {escape(metadata["start"])} to {escape(metadata["end"])}</p>
-    <p>Generated: {escape(metadata["generated_at"])}</p>
-    <p>Rows: returns={len(returns)}, trades={len(trades)}</p>
-  </header>
-  <section>
-    <h2>Summary Stats</h2>
-    {_summary_table(summary)}
-  </section>
-  {_benchmark_section(benchmark)}
-  <section>
-    <h2>Equity Curve</h2>
-    <h2>Drawdown</h2>
-    <h2>Top 10 Drawdowns</h2>
-    {_frame_table(drawdowns)}
-    <h2>Monthly Returns Heatmap</h2>
-    <h2>Rolling Sharpe</h2>
-    <h2>Trade Distribution</h2>
-    {_correlation_section(correlation)}
-    {_exposure_section(exposure)}
-    {charts}
-    {script}
-  </section>
-  <section>
-    <h2>Configuration</h2>
-    {_summary_table(config)}
-  </section>
-  <footer>
-    <p>Tradelearn {escape(metadata["version"])} | Generated: {escape(metadata["generated_at"])}</p>
-  </footer>
-</body>
-</html>
-"""
+    template = _template_environment().get_template(TEMPLATE_NAME)
+    return template.render(
+        benchmark_section=_benchmark_section(benchmark),
+        bokeh_resources=bokeh_resources,
+        charts=charts,
+        config_table=_summary_table(config),
+        correlation_section=_correlation_section(correlation),
+        drawdowns_table=_frame_table(drawdowns),
+        exposure_section=_exposure_section(exposure),
+        metadata={key: escape(value) for key, value in metadata.items()},
+        returns_count=len(returns),
+        script=script,
+        summary_table=_summary_table(summary),
+        trades_count=len(trades),
+    )
+
+
+def _template_environment() -> Environment:
+    """Return the Jinja2 environment for report templates."""
+    return Environment(
+        autoescape=select_autoescape(["html", "xml"]),
+        loader=FileSystemLoader(TEMPLATE_DIR),
+    )
 
 
 def _summary_table(values: dict[str, Any]) -> str:

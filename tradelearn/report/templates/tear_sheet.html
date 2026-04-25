@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tradelearn Report</title>
+  {{ bokeh_resources | safe }}
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 32px; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0 24px; }
+    th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+    th { background: #f6f8fa; }
+    section { margin-bottom: 28px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{{ metadata.strategy_name }}</h1>
+    <p>Run ID: {{ metadata.run_id }}</p>
+    <p>Period: {{ metadata.start }} to {{ metadata.end }}</p>
+    <p>Generated: {{ metadata.generated_at }}</p>
+    <p>Rows: returns={{ returns_count }}, trades={{ trades_count }}</p>
+  </header>
+  <section>
+    <h2>Summary Stats</h2>
+    {{ summary_table | safe }}
+  </section>
+  {{ benchmark_section | safe }}
+  <section>
+    <h2>Equity Curve</h2>
+    <h2>Drawdown</h2>
+    <h2>Top 10 Drawdowns</h2>
+    {{ drawdowns_table | safe }}
+    <h2>Monthly Returns Heatmap</h2>
+    <h2>Rolling Sharpe</h2>
+    <h2>Trade Distribution</h2>
+    {{ correlation_section | safe }}
+    {{ exposure_section | safe }}
+    {{ charts | safe }}
+    {{ script | safe }}
+  </section>
+  <section>
+    <h2>Configuration</h2>
+    {{ config_table | safe }}
+  </section>
+  <footer>
+    <p>Tradelearn {{ metadata.version }} | Generated: {{ metadata.generated_at }}</p>
+  </footer>
+</body>
+</html>

@@ -1,11 +1,20 @@
 """Tests for HTML report export."""
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
 
 from tradelearn import metrics
 from tradelearn.report import Reporter
+
+
+def test_html_template_exists() -> None:
+    """HTML report uses the spec's tear sheet template file."""
+    template = Path("tradelearn/report/templates/tear_sheet.html")
+
+    assert template.exists()
+    assert "Summary Stats" in template.read_text()
 
 
 def test_reporter_html_writes_single_file_tear_sheet(tmp_path) -> None:
