@@ -119,3 +119,56 @@ def test_check_design_notes_reports_missing_required_section(tmp_path: Path) -> 
     assert result.stderr.splitlines() == [
         "missing section in portfolio.md: ## Implementation Decisions"
     ]
+
+
+def test_check_design_notes_init_creates_required_templates(tmp_path: Path) -> None:
+    """The design-note checker can create the three required note templates."""
+    docs_internal = tmp_path / "docs" / "internal"
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--init", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "created design note: matching-design.md",
+        "created design note: event-loop.md",
+        "created design note: portfolio.md",
+    ]
+    assert result.stderr == ""
+
+    check = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert check.stdout.splitlines() == [
+        "design-note:matching-design.md=ok",
+        "design-note:event-loop.md=ok",
+        "design-note:portfolio.md=ok",
+    ]
+
+
+def test_check_design_notes_init_does_not_overwrite_existing_note(tmp_path: Path) -> None:
+    """The init command must not overwrite existing local design drafts."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    existing = docs_internal / "portfolio.md"
+    existing.write_text("# Custom Portfolio\n\nlocal draft\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--init", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "exists design note: portfolio.md" in result.stdout.splitlines()
+    assert existing.read_text(encoding="utf-8") == "# Custom Portfolio\n\nlocal draft\n"
