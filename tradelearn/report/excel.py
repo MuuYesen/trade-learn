@@ -33,6 +33,8 @@ def write_excel_report(reporter: Any, path: str | Path) -> Path:
     orders = _frame(reporter._get("orders", default=pd.DataFrame()))
     factor_ic = reporter.factor_ic()
     factor_rank_ic = reporter.factor_rank_ic()
+    factor_turnover = reporter.factor_turnover()
+    factor_autocorrelation = reporter.factor_autocorrelation()
     factor_quantile_returns = reporter.factor_quantile_returns()
     config = reporter._get("config", default={}) or {}
 
@@ -57,6 +59,16 @@ def write_excel_report(reporter: Any, path: str | Path) -> Path:
             _excel_safe_frame(factor_rank_ic.to_frame("rank_ic")).to_excel(
                 writer,
                 sheet_name="factor_rank_ic",
+            )
+        if not factor_turnover.empty:
+            _excel_safe_frame(factor_turnover.to_frame("turnover")).to_excel(
+                writer,
+                sheet_name="factor_turnover",
+            )
+        if not factor_autocorrelation.empty:
+            _excel_safe_frame(factor_autocorrelation.to_frame("autocorrelation")).to_excel(
+                writer,
+                sheet_name="factor_autocorr",
             )
         if not factor_quantile_returns.empty:
             _excel_safe_frame(factor_quantile_returns).to_excel(

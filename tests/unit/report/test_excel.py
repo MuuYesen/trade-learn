@@ -60,6 +60,8 @@ def test_reporter_excel_writes_factor_quantile_sheet_when_analyzer_exists(tmp_pa
 
     assert "factor_ic" in _sheet_names(path)
     assert "factor_rank_ic" in _sheet_names(path)
+    assert "factor_turnover" in _sheet_names(path)
+    assert "factor_autocorr" in _sheet_names(path)
     assert "factor_quantiles" in _sheet_names(path)
 
 
@@ -116,6 +118,22 @@ class _FactorAnalyzerStub:
             [0.15, 0.25],
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
             name="rank_ic",
+        )
+
+    def turnover(self) -> pd.Series:
+        """Return factor turnover series for Excel tests."""
+        return pd.Series(
+            [0.30, 0.40],
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+            name="turnover",
+        )
+
+    def autocorrelation(self) -> pd.Series:
+        """Return factor autocorrelation series for Excel tests."""
+        return pd.Series(
+            [0.60, 0.70],
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+            name="autocorrelation",
         )
 
     def quantile_cumulative_returns(self) -> pd.DataFrame:
