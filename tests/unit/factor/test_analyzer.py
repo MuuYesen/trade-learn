@@ -78,6 +78,22 @@ def test_factor_analyzer_summary_contains_stable_keys() -> None:
     assert math.isclose(summary["rank_ic_mean"], analyzer.rank_ic().mean(), rel_tol=1e-12)
 
 
+def test_factor_analyzer_quantile_stats_summarizes_groups() -> None:
+    """quantile_stats summarizes grouped forward returns for reports."""
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
+
+    stats = analyzer.quantile_stats()
+    quantile_returns = analyzer.quantile_returns()
+
+    assert list(stats.columns) == ["mean", "std", "count", "cumulative_return"]
+    assert list(stats.index) == [1, 2]
+    assert stats.loc[1, "mean"] == quantile_returns[1].mean()
+    assert stats.loc[2, "mean"] == quantile_returns[2].mean()
+    assert stats.loc[1, "count"] == quantile_returns[1].count()
+    assert stats.loc[2, "cumulative_return"] == (1.0 + quantile_returns[2]).prod() - 1.0
+
+
 def test_factor_analyzer_requires_returns_or_prices_for_return_metrics() -> None:
     """Return-based methods fail clearly when no returns source is configured."""
     factor, _ = _factor_and_forward_returns()

@@ -39,6 +39,20 @@ class FactorAnalyzer:
             quantiles=self.quantiles,
         )
 
+    def quantile_stats(self) -> pd.DataFrame:
+        """Return summary statistics by factor quantile."""
+        returns = self.quantile_returns()
+        result = pd.DataFrame(
+            {
+                "mean": returns.mean(),
+                "std": returns.std(ddof=1),
+                "count": returns.count(),
+                "cumulative_return": (1.0 + returns).prod() - 1.0,
+            }
+        )
+        result.index.name = "quantile"
+        return result
+
     def factor_returns(self) -> pd.DataFrame:
         """Return quantile returns derived from configured prices."""
         if self.prices is None:
