@@ -37,6 +37,24 @@ SECTION_PROMPTS = {
     "## Open Questions": "Track unresolved items that must be closed before the freeze.",
 }
 
+SOURCE_CHECKLISTS = {
+    "matching-design.md": (
+        "docs/specs/BACKTEST_SPEC.md: order matching rules",
+        "docs/specs/STRATEGY_SPEC.md: user-facing order API",
+        "docs/specs/CONSISTENCY.md: decision-layer tolerance",
+    ),
+    "event-loop.md": (
+        "docs/specs/BACKTEST_SPEC.md: event loop ordering",
+        "docs/specs/ARCHITECTURE.md: Python/Rust boundary",
+        "docs/specs/STRATEGY_SPEC.md: callback lifecycle",
+    ),
+    "portfolio.md": (
+        "docs/specs/BACKTEST_SPEC.md: portfolio accounting",
+        "docs/specs/CONTRACTS.md: Broker contract",
+        "docs/specs/REPORT_SPEC.md: downstream report artifacts",
+    ),
+}
+
 STRICT_PLACEHOLDER_TOKENS = ("TODO", "TBD", "FIXME")
 
 SectionSpans = dict[str, tuple[int, int]]
@@ -65,6 +83,10 @@ def design_note_template(filename: str) -> str:
     lines = [f"# {NOTE_TITLES[filename]}", ""]
     for section in REQUIRED_SECTIONS:
         lines.extend([section, SECTION_PROMPTS[section], ""])
+        if section == "## Source Notes":
+            lines.extend(["Source checklist:"])
+            lines.extend(f"- [ ] {item}" for item in SOURCE_CHECKLISTS[filename])
+            lines.append("")
     return "\n".join(lines)
 
 

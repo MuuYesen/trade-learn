@@ -298,6 +298,31 @@ def test_check_design_notes_init_creates_required_templates(tmp_path: Path) -> N
     ]
 
 
+def test_check_design_notes_init_templates_include_source_checklists(
+    tmp_path: Path,
+) -> None:
+    """The generated templates include note-specific source checklists."""
+    docs_internal = tmp_path / "docs" / "internal"
+
+    subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--init", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "- [ ] docs/specs/BACKTEST_SPEC.md: order matching rules" in (
+        docs_internal / "matching-design.md"
+    ).read_text(encoding="utf-8")
+    assert "- [ ] docs/specs/BACKTEST_SPEC.md: event loop ordering" in (
+        docs_internal / "event-loop.md"
+    ).read_text(encoding="utf-8")
+    assert "- [ ] docs/specs/BACKTEST_SPEC.md: portfolio accounting" in (
+        docs_internal / "portfolio.md"
+    ).read_text(encoding="utf-8")
+
+
 def test_check_design_notes_init_does_not_overwrite_existing_note(tmp_path: Path) -> None:
     """The init command must not overwrite existing local design drafts."""
     docs_internal = tmp_path / "docs" / "internal"
