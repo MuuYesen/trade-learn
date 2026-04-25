@@ -122,6 +122,28 @@ def test_check_design_notes_reports_missing_required_section(tmp_path: Path) -> 
     ]
 
 
+def test_check_design_notes_reports_wrong_top_level_title(tmp_path: Path) -> None:
+    """The checker fails when a design note has the wrong H1 title."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    write_design_note(docs_internal / "matching-design.md", "Matching Design")
+    write_design_note(docs_internal / "event-loop.md", "Event Loop")
+    write_design_note(docs_internal / "portfolio.md", "Event Loop")
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr.splitlines() == [
+        "wrong title in portfolio.md: expected # Portfolio"
+    ]
+
+
 def test_check_design_notes_init_creates_required_templates(tmp_path: Path) -> None:
     """The design-note checker can create the three required note templates."""
     docs_internal = tmp_path / "docs" / "internal"

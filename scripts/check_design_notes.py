@@ -151,6 +151,11 @@ def has_placeholder_token(content: str, token: str) -> bool:
     return re.search(rf"(?<![A-Za-z0-9_]){re.escape(token)}(?![A-Za-z0-9_])", content) is not None
 
 
+def has_expected_title(content: str, filename: str) -> bool:
+    """Return whether a note starts with the expected top-level heading."""
+    return content.lstrip().startswith(f"# {NOTE_TITLES[filename]}\n")
+
+
 def note_errors(directory: Path, filename: str, *, strict: bool = False) -> list[str]:
     """Return readiness errors for one required design note."""
     path = directory / filename
@@ -165,6 +170,8 @@ def note_errors(directory: Path, filename: str, *, strict: bool = False) -> list
         for section in REQUIRED_SECTIONS
         if section not in heading_spans
     ]
+    if not has_expected_title(content, filename):
+        errors.append(f"wrong title in {filename}: expected # {NOTE_TITLES[filename]}")
     errors.extend(
         f"duplicate section in {filename}: {section}"
         for section in REQUIRED_SECTIONS
