@@ -34,7 +34,7 @@ def write_html_report(
     trades = pd.DataFrame(reporter._get("trades", default=pd.DataFrame())).copy()
     exposure = reporter.exposure()
     correlation = reporter.correlation_matrix()
-    factor_quantile_returns = _factor_quantile_returns(reporter)
+    factor_quantile_returns = reporter.factor_quantile_returns()
     summary = reporter.summary(benchmark=benchmark_returns)
     config = reporter._get("config", default={}) or {}
     metadata = _metadata(summary, returns, config)
@@ -229,17 +229,6 @@ def _factor_section(factor_quantile_returns: pd.DataFrame) -> str:
         return ""
     quantiles = ", ".join(escape(str(column)) for column in factor_quantile_returns.columns)
     return f"<h2>Factor Quantile Returns</h2><p>Quantiles: {quantiles}</p>"
-
-
-def _factor_quantile_returns(reporter: Any) -> pd.DataFrame:
-    """Return factor quantile cumulative returns from configured analyzers."""
-    analyzers = reporter._get("analyzers", default={}) or {}
-    factor_analyzer = analyzers.get("factor") if isinstance(analyzers, dict) else None
-    if factor_analyzer is None:
-        factor_analyzer = reporter._get("factor", default=None)
-    if factor_analyzer is None or not hasattr(factor_analyzer, "quantile_cumulative_returns"):
-        return pd.DataFrame()
-    return pd.DataFrame(factor_analyzer.quantile_cumulative_returns()).copy()
 
 
 def _has_multi_asset_exposure(exposure: pd.DataFrame) -> bool:

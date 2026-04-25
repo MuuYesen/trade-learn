@@ -232,6 +232,18 @@ def test_reporter_correlation_matrix_uses_multi_asset_exposure() -> None:
     assert correlation.loc["AAA", "BBB"] == pytest.approx(-1.0)
 
 
+def test_reporter_factor_quantile_returns_uses_factor_analyzer() -> None:
+    """Reporter.factor_quantile_returns returns analyzer quantile cumulative returns."""
+    analyzer = _FactorAnalyzerStub()
+    reporter = Reporter(
+        {"returns": _returns(), "trades": pd.DataFrame(), "analyzers": {"factor": analyzer}}
+    )
+
+    quantiles = reporter.factor_quantile_returns()
+
+    pd.testing.assert_frame_equal(quantiles, analyzer.quantile_cumulative_returns())
+
+
 def _stats() -> SimpleNamespace:
     returns = _returns()
     return SimpleNamespace(
@@ -264,3 +276,12 @@ def _benchmark() -> pd.Series:
 
 def _trades() -> pd.DataFrame:
     return pd.DataFrame({"pnl": [100.0, -50.0, 25.0, -10.0]})
+
+
+class _FactorAnalyzerStub:
+    def quantile_cumulative_returns(self) -> pd.DataFrame:
+        """Return factor quantile cumulative returns for reporter tests."""
+        return pd.DataFrame(
+            {1: [0.01, 0.02], 2: [0.03, 0.04]},
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+        )

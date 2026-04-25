@@ -106,6 +106,13 @@ class Reporter:
         """Return multi-asset exposure correlation matrix."""
         return exposure_correlation(self._get("positions", default=pd.DataFrame()))
 
+    def factor_quantile_returns(self) -> pd.DataFrame:
+        """Return factor quantile cumulative returns from analyzers."""
+        factor_analyzer = self._factor_analyzer()
+        if factor_analyzer is None or not hasattr(factor_analyzer, "quantile_cumulative_returns"):
+            return pd.DataFrame()
+        return pd.DataFrame(factor_analyzer.quantile_cumulative_returns()).copy()
+
     def excel(self, path: str) -> Any:
         """Write an Excel report."""
         return write_excel_report(self, path)
@@ -130,6 +137,13 @@ class Reporter:
         if "turnover" in summary:
             return float(summary["turnover"])
         return np.nan
+
+    def _factor_analyzer(self) -> Any:
+        """Return a configured factor analyzer if present."""
+        analyzers = self._get("analyzers", default={}) or {}
+        if isinstance(analyzers, Mapping) and "factor" in analyzers:
+            return analyzers["factor"]
+        return self._get("factor", default=None)
 
     @staticmethod
     def _max_drawdown_duration(returns: pd.Series) -> int:
