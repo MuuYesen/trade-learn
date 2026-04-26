@@ -60,19 +60,16 @@ class SmokeAnalyzer(Analyzer):
         return {"trades": self.trades, "equity": self.equity}
 
 
-def find_dataset(engine: str, datasets_root: Path) -> tuple[dict[str, str], Path]:
+def manifest_datasets(engine: str) -> list[dict[str, str]]:
+    """Return manifest datasets for an engine in documented order."""
+
     manifest = load_manifest()
-    for dataset in manifest["datasets"]:
-        if dataset["engine"] != engine:
-            continue
-        path = datasets_root / engine / dataset_path(dataset).name
-        if path.exists():
-            return dataset, path
-    raise FileNotFoundError(f"no available {engine} parquet dataset under {datasets_root}")
+    return [dataset for dataset in manifest["datasets"] if dataset["engine"] == engine]
 
 
-def run_smoke(engine: str, datasets_root: Path) -> dict[str, object]:
-    dataset, path = find_dataset(engine, datasets_root)
+def run_dataset_smoke(dataset: dict[str, str], path: Path) -> dict[str, object]:
+    """Run the synthetic strategy over one parquet dataset."""
+
     frame = pd.read_parquet(path)
     cerebro = Cerebro()
     cerebro.broker.setcash(100.0)
@@ -82,13 +79,54 @@ def run_smoke(engine: str, datasets_root: Path) -> dict[str, object]:
 
     [strategy] = cerebro.run()
     analysis = strategy.analyzers["smoke"].get_analysis()
+    final_cash = strategy.broker.getcash()
     return {
-        "engine": engine,
         "dataset": dataset["symbol"],
         "path": str(path),
         "trades": analysis["trades"],
         "equity": analysis["equity"],
-        "final_cash": strategy.broker.getcash(),
+        "final_cash": final_cash,
+        "pnl": final_cash - 100.0,
+    }
+
+
+def run_smoke(
+    engine: str,
+    datasets_root: Path,
+    *,
+    allow_missing: bool = False,
+) -> dict[str, object]:
+    """Run small golden smoke over every manifest dataset for an engine."""
+
+    datasets = manifest_datasets(engine)
+    results: list[dict[str, object]] = []
+    missing: list[dict[str, str]] = []
+    failed: list[dict[str, str]] = []
+
+    for dataset in datasets:
+        path = dataset_path(dataset, datasets_root)
+        item = {"dataset": dataset["symbol"], "path": str(path)}
+        if not path.exists():
+            missing.append({**item, "reason": "missing parquet"})
+            continue
+        try:
+            results.append(run_dataset_smoke(dataset, path))
+        except Exception as exc:
+            failed.append({**item, "reason": f"{type(exc).__name__}: {exc}"})
+
+    ok = bool(results) and not failed and (allow_missing or not missing)
+    return {
+        "ok": ok,
+        "engine": engine,
+        "summary": {
+            "requested": len(datasets),
+            "ran": len(results),
+            "missing": len(missing),
+            "failed": len(failed),
+        },
+        "results": results,
+        "missing": missing,
+        "failed": failed,
     }
 
 
@@ -96,28 +134,35 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--engine", choices=["tv", "tdx"], default="tv")
     parser.add_argument("--datasets-root", type=Path, default=DATASETS_DIR)
+    parser.add_argument(
+        "--allow-missing",
+        action="store_true",
+        help="run available datasets without requiring every manifest dataset",
+    )
     parser.add_argument("--json", action="store_true")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    try:
-        result = run_smoke(args.engine, args.datasets_root)
-    except Exception as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
+    result = run_smoke(
+        args.engine,
+        args.datasets_root,
+        allow_missing=args.allow_missing,
+    )
     if args.json:
         print(json.dumps(result, sort_keys=True))
     else:
         print(
             "small-golden-smoke:"
             f"engine={result['engine']}"
-            f" dataset={result['dataset']}"
-            f" trades={len(result['trades'])}"
-            f" final_cash={result['final_cash']}"
+            f" ok={result['ok']}"
+            f" requested={result['summary']['requested']}"
+            f" ran={result['summary']['ran']}"
+            f" missing={result['summary']['missing']}"
+            f" failed={result['summary']['failed']}"
         )
-    return 0
+    return 0 if result["ok"] else 2
 
 
 if __name__ == "__main__":
