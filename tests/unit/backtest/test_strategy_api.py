@@ -213,6 +213,46 @@ def test_simbroker_getvalue_marks_open_position_to_current_close() -> None:
     assert strategy.broker.getvalue() == 104.0
 
 
+def test_trade_on_close_executes_new_market_orders_on_current_close() -> None:
+    data = pd.DataFrame(
+        {
+            "open": [9.0, 20.0, 21.0],
+            "high": [11.0, 22.0, 23.0],
+            "low": [8.0, 19.0, 20.0],
+            "close": [10.0, 21.0, 22.0],
+            "volume": [1000.0, 1100.0, 1200.0],
+        },
+        index=pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"], utc=True),
+    )
+
+    class BuyOnClose(Strategy):
+        def __init__(self) -> None:
+            self.values: list[tuple[float, float]] = []
+            self.order_prices: list[float] = []
+
+        def next(self) -> None:
+            self.values.append((self.position.size, self.broker.getcash()))
+            if not self.position:
+                self.buy(size=2)
+
+        def notify_order(self, order) -> None:
+            if order.status == Order.Completed:
+                self.order_prices.append(order.executed.price)
+
+    cerebro = Cerebro(trade_on_close=True)
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(data)
+    cerebro.addstrategy(BuyOnClose)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.order_prices == [10.0]
+    assert strategy.values == [(0.0, 100.0), (2.0, 80.0), (2.0, 80.0)]
+    assert strategy.position.size == 2.0
+    assert strategy.broker.getcash() == 80.0
+    assert strategy.broker.getvalue() == 124.0
+
+
 def test_simbroker_limit_order_waits_until_bar_crosses_limit() -> None:
     class BuyLimitBelowMarket(Strategy):
         def __init__(self) -> None:

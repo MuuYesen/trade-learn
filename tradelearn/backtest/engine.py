@@ -198,6 +198,7 @@ class SimBroker:
     def __init__(self) -> None:
         self._cash = 10000.0
         self.commission = 0.0
+        self.trade_on_close = False
         self._next_order_ref = 1
         self._next_trade_ref = 1
         self._pending: list[Order] = []
@@ -272,6 +273,17 @@ class SimBroker:
             if not executed:
                 self._handle_unfilled_order(strategy, order)
 
+    def process_close(self, strategy: Strategy, analyzers: AnalyzerCollection) -> None:
+        self._last_strategy = strategy
+        pending, self._pending = self._pending, []
+        for order in pending:
+            if order.exectype != Order.Market:
+                self._pending.append(order)
+                continue
+            executed = self._execute_order(strategy, order, analyzers, trade_on_close=True)
+            if not executed:
+                self._handle_unfilled_order(strategy, order)
+
     def _submit(
         self,
         strategy: Strategy,
@@ -314,12 +326,14 @@ class SimBroker:
         strategy: Strategy,
         order: Order,
         analyzers: AnalyzerCollection,
+        *,
+        trade_on_close: bool = False,
     ) -> bool:
         if order.size > float(order.data.volume[0]):
             order.status = Order.Rejected
             strategy.notify_order(order)
             return True
-        fill = _match_order(order, self.commission)
+        fill = _match_order(order, self.commission, trade_on_close=trade_on_close)
         if fill is None:
             return False
         signed_size, price, commission, _slippage = fill
@@ -389,7 +403,12 @@ def _current_close(data: DataFeed) -> float:
         return 0.0
 
 
-def _match_order(order: Order, commission: float) -> tuple[float, float, float, float] | None:
+def _match_order(
+    order: Order,
+    commission: float,
+    *,
+    trade_on_close: bool = False,
+) -> tuple[float, float, float, float] | None:
     try:
         from tradelearn import _rust
 
@@ -419,10 +438,16 @@ def _match_order(order: Order, commission: float) -> tuple[float, float, float, 
             float(order.data.low[0]),
             float(order.data.close[0]),
             float(order.data.volume[0]),
-            False,
+            trade_on_close,
             commission,
         )
-    return _python_match_order(order, limit_price, stop_price, commission)
+    return _python_match_order(
+        order,
+        limit_price,
+        stop_price,
+        commission,
+        trade_on_close=trade_on_close,
+    )
 
 
 def _rust_order_type(order: Order) -> str:
@@ -440,11 +465,17 @@ def _python_match_order(
     limit_price: float | None,
     stop_price: float | None,
     commission: float,
+    *,
+    trade_on_close: bool = False,
 ) -> tuple[float, float, float, float] | None:
     if order.exectype == Order.Limit:
         price = _limit_fill_price(order, limit_price)
     elif order.exectype == Order.Stop:
-        price = float(order.data.open[0]) if _stop_triggered(order, stop_price) else None
+        price = (
+            _execution_price(order, trade_on_close)
+            if _stop_triggered(order, stop_price)
+            else None
+        )
     elif order.exectype == Order.StopLimit:
         price = (
             _limit_fill_price(order, limit_price)
@@ -452,7 +483,7 @@ def _python_match_order(
             else None
         )
     else:
-        price = float(order.data.open[0])
+        price = _execution_price(order, trade_on_close)
     if price is None:
         return None
     signed_size = order.size if order.ordtype == Order.Buy else -order.size
@@ -462,6 +493,10 @@ def _python_match_order(
         abs(signed_size) * price * commission,
         0.0,
     )
+
+
+def _execution_price(order: Order, trade_on_close: bool) -> float:
+    return float(order.data.close[0] if trade_on_close else order.data.open[0])
 
 
 def _limit_fill_price(order: Order, limit_price: float | None) -> float | None:
@@ -631,6 +666,7 @@ class Cerebro:
         self._analyzer_specs: list[tuple[str, type[Analyzer], dict[str, Any]]] = []
         self.analyzer_results: dict[str, Any] = {}
         self.broker = SimBroker()
+        self.broker.trade_on_close = self.trade_on_close
 
     def adddata(self, data: pd.DataFrame | DataFeed, name: str | None = None) -> DataFeed:
         feed = data if isinstance(data, DataFeed) else DataFeed(data, name=name)
@@ -666,6 +702,8 @@ class Cerebro:
                 data._advance(cursor)
             self.broker.process_bar(strategy, analyzers)
             strategy.next()
+            if self.trade_on_close:
+                self.broker.process_close(strategy, analyzers)
             bar = self._snapshot(self.datas[0])
             for analyzer in analyzers.values():
                 analyzer.on_bar(bar)
