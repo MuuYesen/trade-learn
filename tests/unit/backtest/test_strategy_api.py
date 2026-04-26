@@ -8,13 +8,16 @@ import pytest
 import tradelearn
 from tradelearn.backtest import (
     Analyzer,
+    BarRangeSlippage,
     Cerebro,
+    CommissionModel,
     FixedCommission,
     FixedSlippage,
     Order,
     PercentCommission,
     PercentSlippage,
     SimBroker,
+    SlippageModel,
     Stats,
     Strategy,
 )
@@ -121,6 +124,34 @@ def test_percent_slippage_and_commission_models_apply_by_side() -> None:
         {"size": -1.0, "price": 9.0, "commission": 0.09}
     ]
     assert strategy.broker.getcash() == 108.91
+
+
+def test_bar_range_slippage_uses_seeded_bar_range_fraction() -> None:
+    class BuyAndShort(Strategy):
+        def next(self) -> None:
+            if len(self.broker.fills_frame()) == 0:
+                self.buy(size=1)
+            elif len(self.broker.fills_frame()) == 1:
+                self.sell(size=1)
+
+    cerebro = Cerebro(slippage=BarRangeSlippage(ratio=0.5, seed=7), commission=FixedCommission(0))
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(BuyAndShort)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.stats.fills[["size", "price", "slippage"]].to_dict("records") == [
+        {"size": 1.0, "price": 10.485749, "slippage": 0.485749},
+        {"size": -1.0, "price": 10.514251, "slippage": -0.485749},
+    ]
+
+
+def test_backtest_model_aliases_and_defaults_match_spec() -> None:
+    assert SlippageModel == FixedSlippage | PercentSlippage | BarRangeSlippage
+    assert CommissionModel == FixedCommission | PercentCommission
+    assert isinstance(Cerebro().broker._slippage_model, FixedSlippage)
+    assert isinstance(Cerebro().broker._commission_model, FixedCommission)
 
 
 def test_analyzer_receives_strategy_and_bar_lifecycle() -> None:

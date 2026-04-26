@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from typing import Any
 
@@ -158,7 +159,7 @@ class Stats:
 class FixedSlippage:
     amount: float = 0.0
 
-    def apply(self, price: float, side: int) -> float:
+    def apply(self, price: float, side: int, order: Order | None = None) -> float:
         adjustment = float(self.amount)
         return price + adjustment if side == Order.Buy else price - adjustment
 
@@ -167,9 +168,23 @@ class FixedSlippage:
 class PercentSlippage:
     ratio: float = 0.0
 
-    def apply(self, price: float, side: int) -> float:
+    def apply(self, price: float, side: int, order: Order | None = None) -> float:
         multiplier = 1.0 + float(self.ratio) if side == Order.Buy else 1.0 - float(self.ratio)
         return price * multiplier
+
+
+@dataclass(frozen=True)
+class BarRangeSlippage:
+    ratio: float = 0.0
+    seed: int | None = None
+
+    def apply(self, price: float, side: int, order: Order | None = None) -> float:
+        if order is None:
+            return price
+        bar_range = max(0.0, float(order.data.high[0]) - float(order.data.low[0]))
+        random_fraction = random.Random(0 if self.seed is None else self.seed).random()
+        adjustment = bar_range * float(self.ratio) * random_fraction
+        return price + adjustment if side == Order.Buy else price - adjustment
 
 
 @dataclass(frozen=True)
@@ -194,8 +209,10 @@ class PercentCommission:
         return float(self.ratio)
 
 
-SlippageConfig = FixedSlippage | PercentSlippage
-CommissionConfig = FixedCommission | PercentCommission
+SlippageModel = FixedSlippage | PercentSlippage | BarRangeSlippage
+CommissionModel = FixedCommission | PercentCommission
+SlippageConfig = SlippageModel
+CommissionConfig = CommissionModel
 
 
 @dataclass
@@ -204,6 +221,7 @@ class ExecutedInfo:
     price: float = 0.0
     value: float = 0.0
     comm: float = 0.0
+    slippage: float = 0.0
     pnl: float = 0.0
 
 
@@ -284,7 +302,17 @@ _ORDER_COLUMNS = [
     "commission",
     "pnl",
 ]
-_FILL_COLUMNS = ["order_ref", "datetime", "data", "size", "price", "value", "commission", "pnl"]
+_FILL_COLUMNS = [
+    "order_ref",
+    "datetime",
+    "data",
+    "size",
+    "price",
+    "value",
+    "commission",
+    "slippage",
+    "pnl",
+]
 _TRADE_COLUMNS = [
     "ref",
     "datetime",
@@ -318,7 +346,7 @@ class SimBroker:
     def __init__(self) -> None:
         self._cash = 10000.0
         self._slippage_model: SlippageConfig = FixedSlippage(0.0)
-        self._commission_model: CommissionConfig = PercentCommission(0.0)
+        self._commission_model: CommissionConfig = FixedCommission(0.0)
         self.trade_on_close = False
         self._next_order_ref = 1
         self._next_trade_ref = 1
@@ -353,10 +381,10 @@ class SimBroker:
     def commission(self) -> float:
         return self._commission_model.as_config()
 
-    def set_slippage_model(self, slippage: SlippageConfig) -> None:
+    def set_slippage_model(self, slippage: SlippageModel) -> None:
         self._slippage_model = slippage
 
-    def set_commission_model(self, commission: CommissionConfig) -> None:
+    def set_commission_model(self, commission: CommissionModel) -> None:
         self._commission_model = commission
 
     def buy(
@@ -491,7 +519,7 @@ class SimBroker:
         )
         if fill is None:
             return False
-        signed_size, price, commission, _slippage = fill
+        signed_size, price, commission, slippage = fill
         if not self._has_required_cash(strategy, order, signed_size, price, commission):
             order.status = Order.Rejected
             self._record_order(order)
@@ -512,6 +540,7 @@ class SimBroker:
             price=price,
             value=abs(signed_size) * price,
             comm=commission,
+            slippage=slippage,
             pnl=realized,
         )
         trades = self._build_trade_legs(
@@ -752,6 +781,7 @@ class SimBroker:
                 "price": order.executed.price,
                 "value": order.executed.value,
                 "commission": order.executed.comm,
+                "slippage": order.executed.slippage,
                 "pnl": order.executed.pnl,
             }
         )
@@ -833,8 +863,8 @@ def _order_exectype_name(exectype: int) -> str:
 
 def _match_order(
     order: Order,
-    commission: CommissionConfig,
-    slippage: SlippageConfig,
+    commission: CommissionModel,
+    slippage: SlippageModel,
     *,
     trade_on_close: bool = False,
 ) -> tuple[float, float, float, float] | None:
@@ -899,8 +929,8 @@ def _python_match_order(
     order: Order,
     limit_price: float | None,
     stop_price: float | None,
-    commission: CommissionConfig,
-    slippage: SlippageConfig,
+    commission: CommissionModel,
+    slippage: SlippageModel,
     *,
     trade_on_close: bool = False,
 ) -> tuple[float, float, float, float] | None:
@@ -924,7 +954,7 @@ def _python_match_order(
         return None
     signed_size = _round_execution(order.size if order.ordtype == Order.Buy else -order.size)
     raw_price = price
-    price = slippage.apply(price, order.ordtype)
+    price = slippage.apply(price, order.ordtype, order)
     price = _round_execution(price)
     slippage_amount = _round_execution(price - raw_price)
     return (
@@ -1108,8 +1138,8 @@ class Cerebro:
         self,
         *,
         callback_batch: int = 1,
-        slippage: SlippageConfig | None = None,
-        commission: CommissionConfig | float | None = None,
+        slippage: SlippageModel | None = None,
+        commission: CommissionModel | float | None = None,
         trade_on_close: bool = False,
         exactbars: bool = False,
         stdstats: bool = True,
