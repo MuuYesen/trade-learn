@@ -10,6 +10,7 @@ from tradelearn.backtest.engine import (
     Order,
     Params,
     SimBroker,
+    Stats,
     Strategy,
     Trade,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "Order",
     "Params",
     "SimBroker",
+    "Stats",
     "Strategy",
     "Trade",
     "grid_search",

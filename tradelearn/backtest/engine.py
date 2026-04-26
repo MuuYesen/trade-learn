@@ -139,6 +139,19 @@ class BarSnapshot:
 
 
 @dataclass
+class Stats:
+    returns: pd.Series
+    equity: pd.Series
+    trades: pd.DataFrame
+    positions: pd.DataFrame
+    orders: pd.DataFrame
+    summary: dict[str, Any]
+    analyzers: dict[str, Any]
+    config: dict[str, Any]
+    fills: pd.DataFrame
+
+
+@dataclass
 class ExecutedInfo:
     size: float = 0.0
     price: float = 0.0
@@ -204,6 +217,53 @@ class Trade:
     dtclose: Any | None = None
 
 
+_ORDER_COLUMNS = [
+    "ref",
+    "datetime",
+    "data",
+    "side",
+    "ordtype",
+    "exectype",
+    "status",
+    "status_code",
+    "size",
+    "price",
+    "pricelimit",
+    "time_in_force",
+    "executed_size",
+    "executed_price",
+    "executed_value",
+    "commission",
+    "pnl",
+]
+_FILL_COLUMNS = ["order_ref", "datetime", "data", "size", "price", "value", "commission", "pnl"]
+_TRADE_COLUMNS = [
+    "ref",
+    "datetime",
+    "data",
+    "size",
+    "price",
+    "value",
+    "commission",
+    "pnl",
+    "pnlcomm",
+    "isopen",
+    "isclosed",
+    "status",
+    "dtopen",
+    "dtclose",
+]
+_POSITION_COLUMNS = [
+    "datetime",
+    "data",
+    "size",
+    "avg_price",
+    "mark_price",
+    "value",
+    "unrealized_pnl",
+]
+
+
 class SimBroker:
     def __init__(self) -> None:
         self._cash = 10000.0
@@ -213,6 +273,11 @@ class SimBroker:
         self._next_trade_ref = 1
         self._pending: list[Order] = []
         self._last_strategy: Strategy | None = None
+        self._order_records: list[dict[str, Any]] = []
+        self._fill_records: list[dict[str, Any]] = []
+        self._trade_records: list[dict[str, Any]] = []
+        self._equity_records: list[dict[str, Any]] = []
+        self._position_records: list[dict[str, Any]] = []
 
     def setcash(self, cash: float) -> None:
         self._cash = float(cash)
@@ -317,17 +382,21 @@ class SimBroker:
             time_in_force=Order.GTC if time_in_force is None else time_in_force,
         )
         self._next_order_ref += 1
+        self._record_order(order)
         _notify_order(strategy, order)
         if order.time_in_force not in {Order.DAY, Order.GTC, Order.IOC}:
             order.status = Order.Rejected
+            self._record_order(order)
             _notify_order(strategy, order)
             return order
         if order.size <= 0:
             order.status = Order.Rejected
+            self._record_order(order)
             _notify_order(strategy, order)
             return order
         order.status = Order.Accepted
         self._pending.append(order)
+        self._record_order(order)
         _notify_order(strategy, order)
         return order
 
@@ -341,6 +410,7 @@ class SimBroker:
     ) -> bool:
         if order.size > float(order.data.volume[0]):
             order.status = Order.Rejected
+            self._record_order(order)
             _notify_order(strategy, order)
             return True
         fill = _match_order(order, self.commission, trade_on_close=trade_on_close)
@@ -380,6 +450,9 @@ class SimBroker:
         )
         self._next_trade_ref += 1
 
+        self._record_order(order)
+        self._record_fill(order)
+        self._record_trade(trade)
         _notify_order(strategy, order)
         strategy.notify_trade(trade)
         for analyzer in analyzers.values():
@@ -390,13 +463,112 @@ class SimBroker:
     def _handle_unfilled_order(self, strategy: Strategy, order: Order) -> None:
         if order.time_in_force == Order.IOC:
             order.status = Order.Canceled
+            self._record_order(order)
             _notify_order(strategy, order)
             return
         if order.time_in_force == Order.DAY:
             order.status = Order.Expired
+            self._record_order(order)
             _notify_order(strategy, order)
             return
         self._pending.append(order)
+
+    def snapshot_portfolio(self, strategy: Strategy, timestamp: Any) -> None:
+        self._last_strategy = strategy
+        value = self.getvalue()
+        self._equity_records.append({"datetime": timestamp, "cash": self._cash, "value": value})
+        for data, position in strategy._positions.items():
+            if not position:
+                continue
+            mark_price = _current_close(data)
+            self._position_records.append(
+                {
+                    "datetime": timestamp,
+                    "data": _data_name(data),
+                    "size": position.size,
+                    "avg_price": position.price,
+                    "mark_price": mark_price,
+                    "value": position.size * mark_price,
+                    "unrealized_pnl": (mark_price - position.price) * position.size,
+                }
+            )
+
+    def orders_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(self._order_records, columns=_ORDER_COLUMNS)
+
+    def fills_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(self._fill_records, columns=_FILL_COLUMNS)
+
+    def trades_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(self._trade_records, columns=_TRADE_COLUMNS)
+
+    def positions_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(self._position_records, columns=_POSITION_COLUMNS)
+
+    def equity_series(self) -> pd.Series:
+        if not self._equity_records:
+            return pd.Series(dtype="float64", name="equity")
+        frame = pd.DataFrame(self._equity_records)
+        series = pd.Series(frame["value"].to_numpy(), index=frame["datetime"], name="equity")
+        series.index.name = None
+        return series
+
+    def _record_order(self, order: Order) -> None:
+        self._order_records.append(
+            {
+                "ref": order.ref,
+                "datetime": _current_datetime(order.data),
+                "data": _data_name(order.data),
+                "side": _order_side_name(order.ordtype),
+                "ordtype": order.ordtype,
+                "exectype": _order_exectype_name(order.exectype),
+                "status": _order_status_name(order.status),
+                "status_code": order.status,
+                "size": order.size,
+                "price": order.price,
+                "pricelimit": order.pricelimit,
+                "time_in_force": order.time_in_force,
+                "executed_size": order.executed.size,
+                "executed_price": order.executed.price,
+                "executed_value": order.executed.value,
+                "commission": order.executed.comm,
+                "pnl": order.executed.pnl,
+            }
+        )
+
+    def _record_fill(self, order: Order) -> None:
+        self._fill_records.append(
+            {
+                "order_ref": order.ref,
+                "datetime": _current_datetime(order.data),
+                "data": _data_name(order.data),
+                "size": order.executed.size,
+                "price": order.executed.price,
+                "value": order.executed.value,
+                "commission": order.executed.comm,
+                "pnl": order.executed.pnl,
+            }
+        )
+
+    def _record_trade(self, trade: Trade) -> None:
+        self._trade_records.append(
+            {
+                "ref": trade.ref,
+                "datetime": trade.dtclose or trade.dtopen,
+                "data": _data_name(trade.data),
+                "size": trade.size,
+                "price": trade.price,
+                "value": trade.value,
+                "commission": trade.commission,
+                "pnl": trade.pnl,
+                "pnlcomm": trade.pnlcomm,
+                "isopen": trade.isopen,
+                "isclosed": trade.isclosed,
+                "status": trade.status,
+                "dtopen": trade.dtopen,
+                "dtclose": trade.dtclose,
+            }
+        )
 
 
 def _realized_pnl(old_size: float, old_price: float, fill_size: float, fill_price: float) -> float:
@@ -411,6 +583,46 @@ def _current_close(data: DataFeed) -> float:
         return float(data.close[0])
     except IndexError:
         return 0.0
+
+
+def _current_datetime(data: DataFeed) -> Any:
+    try:
+        return data.datetime[0]
+    except IndexError:
+        return None
+
+
+def _data_name(data: DataFeed) -> str:
+    return data._name or "data0"
+
+
+def _order_side_name(ordtype: int) -> str:
+    return "buy" if ordtype == Order.Buy else "sell"
+
+
+def _order_status_name(status: int) -> str:
+    names = {
+        Order.Submitted: "Submitted",
+        Order.Accepted: "Accepted",
+        Order.Partial: "Partial",
+        Order.Completed: "Completed",
+        Order.Canceled: "Canceled",
+        Order.Expired: "Expired",
+        Order.Margin: "Margin",
+        Order.Rejected: "Rejected",
+    }
+    return names.get(status, f"Unknown({status})")
+
+
+def _order_exectype_name(exectype: int) -> str:
+    names = {
+        Order.Market: "Market",
+        Order.Limit: "Limit",
+        Order.Stop: "Stop",
+        Order.StopLimit: "StopLimit",
+        Order.Close: "Close",
+    }
+    return names.get(exectype, f"Unknown({exectype})")
 
 
 def _match_order(
@@ -688,6 +900,7 @@ class Cerebro:
         self._strategy_spec: tuple[type[Strategy], dict[str, Any]] | None = None
         self._analyzer_specs: list[tuple[str, type[Analyzer], dict[str, Any]]] = []
         self.analyzer_results: dict[str, Any] = {}
+        self.stats: Stats | None = None
         self.broker = SimBroker()
         self.broker.trade_on_close = self.trade_on_close
 
@@ -742,14 +955,17 @@ class Cerebro:
             bar = self._snapshot(self.datas[0])
             for analyzer in analyzers.values():
                 analyzer.on_bar(bar)
+            self.broker.snapshot_portfolio(strategy, bar.datetime)
 
-        stats = {"bars": total_bars}
+        analyzer_stats = {"bars": total_bars}
         for analyzer in analyzers.values():
-            analyzer.on_end(stats)
+            analyzer.on_end(analyzer_stats)
         self.analyzer_results = {
             name: analyzer.get_analysis() for name, analyzer in analyzers.items()
         }
         strategy.analyzer_results = dict(self.analyzer_results)
+        self.stats = self._build_stats(strategy, total_bars)
+        strategy.stats = self.stats
         strategy.stop()
         return [strategy]
 
@@ -788,6 +1004,43 @@ class Cerebro:
             close=data.close[0],
             volume=data.volume[0],
             data=data,
+        )
+
+    def _build_stats(self, strategy: Strategy, total_bars: int) -> Stats:
+        equity = self.broker.equity_series()
+        returns = equity.pct_change().fillna(0.0).rename("returns")
+        trades = self.broker.trades_frame()
+        orders = self.broker.orders_frame()
+        fills = self.broker.fills_frame()
+        summary = {
+            "bars": total_bars,
+            "final_cash": self.broker.getcash(),
+            "final_value": self.broker.getvalue(),
+            "total_trades": len(trades),
+            "total_orders": len(orders),
+            "total_fills": len(fills),
+        }
+        config = {
+            "callback_batch": self.callback_batch,
+            "trade_on_close": self.trade_on_close,
+            "exactbars": self.exactbars,
+            "stdstats": self.stdstats,
+            "broker": {
+                "cash": self.broker.getcash(),
+                "commission": self.broker.commission,
+            },
+        }
+        config.update(self.options)
+        return Stats(
+            returns=returns,
+            equity=equity,
+            trades=trades,
+            positions=self.broker.positions_frame(),
+            orders=orders,
+            summary=summary,
+            analyzers=dict(strategy.analyzer_results),
+            config=config,
+            fills=fills,
         )
 
 

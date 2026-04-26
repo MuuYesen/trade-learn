@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 import tradelearn
-from tradelearn.backtest import Analyzer, Cerebro, Order, SimBroker, Strategy
+from tradelearn.backtest import Analyzer, Cerebro, Order, SimBroker, Stats, Strategy
 
 
 def bars() -> pd.DataFrame:
@@ -303,6 +303,112 @@ def test_simbroker_executes_pending_orders_and_notifies_strategy_and_analyzers()
     assert strategy.analyzers["fills"].get_analysis() == {
         "fills": [(2.0, 10.0), (-2.0, 11.0)],
         "trades": [(2.0, 10.0, True, False), (0.0, 11.0, False, True)],
+    }
+
+
+def test_cerebro_exposes_report_ready_stats_artifacts() -> None:
+    class BuyThenClose(Strategy):
+        def __init__(self) -> None:
+            self.values: list[tuple[float, float]] = []
+
+        def next(self) -> None:
+            self.values.append((self.position.size, self.broker.getcash()))
+            if len(self.values) == 1:
+                self.buy(size=2)
+            elif len(self.values) == 2:
+                self.close()
+
+    class FillAnalyzer(Analyzer):
+        def __init__(self) -> None:
+            self.fill_count = 0
+
+        def on_fill(self, fill) -> None:
+            self.fill_count += 1
+
+        def get_analysis(self) -> dict[str, object]:
+            return {"fill_count": self.fill_count}
+
+    cerebro = Cerebro(callback_batch=3, exactbars=True, stdstats=False)
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars(), name="daily")
+    cerebro.addstrategy(BuyThenClose)
+    cerebro.addanalyzer(FillAnalyzer, name="fills")
+
+    [strategy] = cerebro.run()
+
+    assert isinstance(cerebro.stats, Stats)
+    assert strategy.stats is cerebro.stats
+    assert strategy.analyzer_results == {"fills": {"fill_count": 2}}
+    pd.testing.assert_series_equal(
+        strategy.stats.equity,
+        pd.Series(
+            [100.0, 102.0, 102.0],
+            index=bars().index,
+            name="equity",
+        ),
+    )
+    pd.testing.assert_series_equal(
+        strategy.stats.returns,
+        pd.Series(
+            [0.0, 0.02, 0.0],
+            index=bars().index,
+            name="returns",
+        ),
+    )
+    assert set(
+        [
+            "ref",
+            "datetime",
+            "data",
+            "side",
+            "exectype",
+            "status",
+            "size",
+            "executed_size",
+            "executed_price",
+        ]
+    ).issubset(strategy.stats.orders.columns)
+    assert strategy.stats.orders["status"].tolist() == [
+        "Submitted",
+        "Accepted",
+        "Completed",
+        "Submitted",
+        "Accepted",
+        "Completed",
+    ]
+    assert strategy.stats.fills[["order_ref", "data", "size", "price"]].to_dict("records") == [
+        {"order_ref": 1, "data": "daily", "size": 2.0, "price": 10.0},
+        {"order_ref": 2, "data": "daily", "size": -2.0, "price": 11.0},
+    ]
+    assert strategy.stats.trades[["ref", "data", "size", "price", "pnl"]].to_dict("records") == [
+        {"ref": 1, "data": "daily", "size": 2.0, "price": 10.0, "pnl": 0.0},
+        {"ref": 2, "data": "daily", "size": 0.0, "price": 11.0, "pnl": 2.0},
+    ]
+    assert strategy.stats.positions[["datetime", "data", "size", "mark_price"]].to_dict(
+        "records"
+    ) == [
+        {
+            "datetime": pd.Timestamp("2026-01-02", tz="UTC"),
+            "data": "daily",
+            "size": 2.0,
+            "mark_price": 11.0,
+        }
+    ]
+    assert strategy.stats.summary == {
+        "bars": 3,
+        "final_cash": 102.0,
+        "final_value": 102.0,
+        "total_trades": 2,
+        "total_orders": 6,
+        "total_fills": 2,
+    }
+    assert strategy.stats.analyzers == {"fills": {"fill_count": 2}}
+    assert strategy.stats.config == {
+        "callback_batch": 3,
+        "trade_on_close": False,
+        "exactbars": True,
+        "stdstats": False,
+        "broker": {"cash": 102.0, "commission": 0.0},
     }
 
 
