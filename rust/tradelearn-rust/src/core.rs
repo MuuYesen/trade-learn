@@ -51,6 +51,22 @@ pub struct FillEvent {
     pub ts: Timestamp,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct Position {
+    pub symbol: String,
+    pub size: f64,
+    pub avg_price: f64,
+    pub realized_pnl: f64,
+    pub unrealized_pnl: f64,
+    pub mark_price: f64,
+}
+
+#[derive(Debug)]
+pub struct Portfolio {
+    cash: f64,
+    positions: BTreeMap<String, Position>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FixedSlippage {
     pub amount: f64,
@@ -202,7 +218,7 @@ pub fn match_order(
     Some(FillEvent {
         order_id: order.order_id,
         symbol: order.symbol.clone(),
-        size: order.size,
+        size: signed_order_size(order),
         price,
         commission: calculate_commission(price, order.size, options.commission),
         slippage: price - raw_price,
@@ -248,5 +264,132 @@ fn calculate_commission(price: f64, size: f64, commission: CommissionModel) -> f
     match commission {
         CommissionModel::Fixed(model) => model.amount,
         CommissionModel::Percent(model) => price * size.abs() * model.ratio,
+    }
+}
+
+fn signed_order_size(order: &OrderEvent) -> f64 {
+    match order.side {
+        OrderSide::Buy => order.size.abs(),
+        OrderSide::Sell => -order.size.abs(),
+    }
+}
+
+impl Portfolio {
+    pub fn new(cash: f64) -> Self {
+        Self {
+            cash,
+            positions: BTreeMap::new(),
+        }
+    }
+
+    pub fn apply_fill(&mut self, fill: &FillEvent) {
+        self.cash -= fill.price * fill.size + fill.commission;
+        let position = self
+            .positions
+            .entry(fill.symbol.clone())
+            .or_insert_with(|| Position::new(fill.symbol.clone()));
+        position.apply_fill(fill.size, fill.price);
+    }
+
+    pub fn mark_to_market(&mut self, bars: &[BarEvent]) {
+        for bar in bars {
+            if let Some(position) = self.positions.get_mut(&bar.symbol) {
+                position.mark(bar.close);
+            }
+        }
+    }
+
+    pub fn cash(&self) -> f64 {
+        self.cash
+    }
+
+    pub fn equity(&self) -> f64 {
+        self.cash
+            + self
+                .positions
+                .values()
+                .map(|position| position.size * position.mark_price)
+                .sum::<f64>()
+    }
+
+    pub fn margin_used(&self) -> f64 {
+        self.positions
+            .values()
+            .map(|position| (position.size * position.mark_price).abs())
+            .sum()
+    }
+
+    pub fn realized_pnl(&self) -> f64 {
+        self.positions
+            .values()
+            .map(|position| position.realized_pnl)
+            .sum()
+    }
+
+    pub fn unrealized_pnl(&self) -> f64 {
+        self.positions
+            .values()
+            .map(|position| position.unrealized_pnl)
+            .sum()
+    }
+
+    pub fn position(&self, symbol: &str) -> Option<&Position> {
+        self.positions.get(symbol)
+    }
+}
+
+impl Position {
+    fn new(symbol: String) -> Self {
+        Self {
+            symbol,
+            size: 0.0,
+            avg_price: 0.0,
+            realized_pnl: 0.0,
+            unrealized_pnl: 0.0,
+            mark_price: 0.0,
+        }
+    }
+
+    fn apply_fill(&mut self, fill_size: f64, fill_price: f64) {
+        if self.size == 0.0 || self.size.signum() == fill_size.signum() {
+            let total_size = self.size + fill_size;
+            self.avg_price = weighted_average(self.size, self.avg_price, fill_size, fill_price);
+            self.size = total_size;
+            self.mark_price = fill_price;
+            self.mark(fill_price);
+            return;
+        }
+
+        let existing_sign = self.size.signum();
+        let closing_size = self.size.abs().min(fill_size.abs());
+        self.realized_pnl += (fill_price - self.avg_price) * closing_size * existing_sign;
+        let remaining_size = self.size + fill_size;
+        self.size = remaining_size;
+        if remaining_size == 0.0 {
+            self.avg_price = 0.0;
+        } else if remaining_size.signum() != existing_sign {
+            self.avg_price = fill_price;
+        }
+        self.mark_price = fill_price;
+        self.mark(fill_price);
+    }
+
+    fn mark(&mut self, price: f64) {
+        self.mark_price = price;
+        self.unrealized_pnl = (price - self.avg_price) * self.size;
+    }
+}
+
+fn weighted_average(
+    existing_size: f64,
+    existing_price: f64,
+    fill_size: f64,
+    fill_price: f64,
+) -> f64 {
+    let total_abs_size = existing_size.abs() + fill_size.abs();
+    if total_abs_size == 0.0 {
+        0.0
+    } else {
+        (existing_size.abs() * existing_price + fill_size.abs() * fill_price) / total_abs_size
     }
 }
