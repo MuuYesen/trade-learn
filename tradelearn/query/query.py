@@ -207,22 +207,14 @@ class Query:
 
         if engine == 'tdx':
             try:
-                from mootdx.quotes import Quotes
+                from tradelearn.data import OpenTdxProvider
 
-                client = Quotes.factory(
-                    market='std',
-                    multithread=True,
-                    heartbeat=True,
-                    timeout=15,
-                    auto_retry=True,
-                )
-                data = client.ohlc(symbol=symbol, begin=start, end=end, adjust=adjust)
-                data = data.drop(['date'], axis=1).reset_index()
-                data[['open', 'close', 'high', 'low']] = data[
-                    ['open', 'close', 'high', 'low']
-                ].apply(lambda x: x / data['factor'], axis=0)
-                if data is not None:
-                    data['vwap'] = data.amount / data.volume / 100
+                data = OpenTdxProvider().history_ohlc(symbol, start=start, end=end)
+                data = data.rename(columns={'timestamp': 'date', 'symbol': 'code'})
+                data['date'] = pd.to_datetime(data['date']).dt.tz_localize(None)
+                if 'amount' not in data.columns:
+                    data['amount'] = data['close'] * data['volume'] * 100
+                data['vwap'] = data['amount'] / data['volume'] / 100
             except Exception:
                 data = None
 

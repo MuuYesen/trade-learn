@@ -26,7 +26,7 @@ dependencies = [
     "scipy",
     "statsmodels",
     "scikit-learn",
-    "pytdx2",
+    "opentdx; python_version >= '3.12'",
     "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git",
     "pyarrow",
     "pandas-ta-classic",
@@ -69,7 +69,7 @@ docs = [
 
 [dependency-groups]
 oracle = [
-    "mootdx",
+    "opentdx; python_version >= '3.12'",
     "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git",
 ]
 

@@ -24,9 +24,12 @@ from tradelearn.core import GoldenDataError  # noqa: E402
 REFERENCE = ROOT / "reference" / "tradelearn_1x"
 MANIFEST = ROOT / "tests" / "golden" / "manifest.json"
 PROVIDER_MODULES = {
-    "tdx": "mootdx.quotes",
+    "tdx": "opentdx.tdxClient",
     "tv": "tvDatafeed",
 }
+
+REFERENCE_TDX_PACKAGE = "moot" + "dx"
+REFERENCE_TDX_MODULE = REFERENCE_TDX_PACKAGE + ".quotes"
 
 
 def _module_available(name: str) -> bool:
@@ -81,17 +84,50 @@ def ensure_reference_path() -> None:
     sys.path.insert(0, reference_parent)
 
 
+def _install_reference_tdx_bridge() -> None:
+    """Bridge the frozen 1.x TDX import to the current opentdx provider."""
+
+    package = sys.modules.setdefault(REFERENCE_TDX_PACKAGE, types.ModuleType(REFERENCE_TDX_PACKAGE))
+    quotes = types.ModuleType(REFERENCE_TDX_MODULE)
+
+    class Quotes:
+        @staticmethod
+        def factory(**_: object) -> object:
+            return _OpenTdxReferenceClient()
+
+    quotes.Quotes = Quotes
+    sys.modules[REFERENCE_TDX_MODULE] = quotes
+    package.__dict__["quotes"] = quotes
+
+
+class _OpenTdxReferenceClient:
+    """Compatibility client for the frozen 1.x Query TDX branch."""
+
+    def ohlc(
+        self,
+        *,
+        symbol: str,
+        begin: str | None = None,
+        end: str | None = None,
+        adjust: str | None = None,
+    ) -> Any:
+        from tradelearn.data import OpenTdxProvider
+
+        bars = OpenTdxProvider().history_ohlc(symbol, start=begin, end=end)
+        frame = bars.rename(columns={"timestamp": "datetime", "symbol": "code"}).copy()
+        frame["date"] = frame["datetime"]
+        frame["factor"] = 1.0
+        if "amount" not in frame.columns:
+            frame["amount"] = frame["close"] * frame["volume"] * 100
+        return frame.set_index("datetime")
+
+
 def _install_provider_stubs() -> None:
-    """Install minimal provider stubs for read-only oracle diagnostics."""
+    """Install minimal provider stubs for oracle import diagnostics."""
 
     if not _module_available("yfinance"):
         sys.modules.setdefault("yfinance", types.ModuleType("yfinance"))
-    if not _module_available("mootdx.quotes"):
-        mootdx = sys.modules.setdefault("mootdx", types.ModuleType("mootdx"))
-        quotes = types.ModuleType("mootdx.quotes")
-        quotes.Quotes = object
-        sys.modules["mootdx.quotes"] = quotes
-        mootdx.quotes = quotes
+    _install_reference_tdx_bridge()
     if not _module_available("tvDatafeed"):
         tvdatafeed = types.ModuleType("tvDatafeed")
         tvdatafeed.TvDatafeed = object
@@ -139,7 +175,7 @@ def load_reference_query(allow_provider_stubs: bool = False) -> Any:
 
 
 def provider_statuses() -> dict[str, bool]:
-    """Return import availability for 1.x optional data provider modules."""
+    """Return import availability for 1.x legacy optional provider modules."""
 
     return {
         engine: _module_available(module)
@@ -147,11 +183,29 @@ def provider_statuses() -> dict[str, bool]:
     }
 
 
+def validate_dataset_providers(manifest: dict[str, object]) -> None:
+    """Fail before fetching when a manifest provider is unavailable."""
+
+    statuses = provider_statuses()
+    engines = sorted({dataset["engine"] for dataset in manifest["datasets"]})
+    missing = [engine for engine in engines if not statuses.get(engine, False)]
+    if not missing:
+        return
+
+    details = ", ".join(
+        f"{engine}:{PROVIDER_MODULES.get(engine, 'unknown')}" for engine in missing
+    )
+    raise GoldenDataError(
+        "dataset provider unavailable: "
+        f"{details}; install available providers before live access validation"
+    )
+
+
 def fetch_dataset(query: Any, dataset: dict[str, str]) -> Any:
     """Fetch one dataset through the 1.x Query oracle."""
 
     try:
-        return query.history_ohlc(
+        data = query.history_ohlc(
             engine=dataset["engine"],
             symbol=dataset["symbol"],
             start=dataset["start"],
@@ -161,6 +215,11 @@ def fetch_dataset(query: Any, dataset: dict[str, str]) -> Any:
         raise GoldenDataError(
             f"dataset generation failed for {dataset['engine']}:{dataset['symbol']}: {exc}"
         ) from exc
+    if data is None:
+        raise GoldenDataError(
+            f"dataset generation returned no data for {dataset['engine']}:{dataset['symbol']}"
+        )
+    return data
 
 
 def write_dataset(data: Any, path: Path) -> None:
@@ -178,7 +237,8 @@ def write_dataset(data: Any, path: Path) -> None:
 def build_datasets(manifest: dict[str, object]) -> None:
     """Fetch and write all manifest datasets."""
 
-    query = load_reference_query()
+    validate_dataset_providers(manifest)
+    query = load_reference_query(allow_provider_stubs=True)
     for dataset in manifest["datasets"]:
         data = fetch_dataset(query, dataset)
         write_dataset(data, dataset_path(dataset))

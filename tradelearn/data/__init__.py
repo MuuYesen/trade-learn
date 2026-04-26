@@ -2,7 +2,7 @@
 
 from tradelearn.data.bars import bars_fingerprint, normalize_bars
 from tradelearn.data.cache import BarsCache, CacheEntry, CacheExpiredError, CacheMissError
-from tradelearn.data.providers import DataProvider, PytdxProvider, infer_tdx_market
+from tradelearn.data.providers import DataProvider, OpenTdxProvider, infer_tdx_market
 
 __all__ = [
     "BarsCache",
@@ -10,7 +10,7 @@ __all__ = [
     "CacheExpiredError",
     "CacheMissError",
     "DataProvider",
-    "PytdxProvider",
+    "OpenTdxProvider",
     "bars_fingerprint",
     "infer_tdx_market",
     "normalize_bars",
