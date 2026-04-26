@@ -60,6 +60,8 @@ class MLStrategy(Strategy):
             return float(result.iloc[0])
         if isinstance(result, Sequence) and not isinstance(result, str | bytes):
             return float(result[0])
+        if hasattr(result, "__len__") and not isinstance(result, str | bytes):
+            return float(result[0])
         return float(result)
 
     def feature_vector(self) -> list[float]:

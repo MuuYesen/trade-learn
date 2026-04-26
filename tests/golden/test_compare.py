@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
+SUBPROCESS_ENV = {**os.environ, "ARROW_NUM_THREADS": "1"}
 
 
 def _write_tv_subset(datasets_root: Path) -> None:
@@ -56,6 +58,7 @@ def _build_expected(
             oracle,
         ],
         cwd=ROOT,
+        env=SUBPROCESS_ENV,
         check=False,
         capture_output=True,
         text=True,
@@ -82,6 +85,7 @@ def test_compare_golden_tv_subset_passes_against_expected(tmp_path: Path) -> Non
             str(expected_root),
         ],
         cwd=ROOT,
+        env=SUBPROCESS_ENV,
         check=False,
         capture_output=True,
         text=True,
@@ -112,6 +116,7 @@ def test_compare_golden_tv_subset_passes_against_backtrader_expected(tmp_path: P
             str(expected_root),
         ],
         cwd=ROOT,
+        env=SUBPROCESS_ENV,
         check=False,
         capture_output=True,
         text=True,
@@ -146,6 +151,7 @@ def test_compare_golden_detects_trade_differences(tmp_path: Path) -> None:
             str(expected_root),
         ],
         cwd=ROOT,
+        env=SUBPROCESS_ENV,
         check=False,
         capture_output=True,
         text=True,
