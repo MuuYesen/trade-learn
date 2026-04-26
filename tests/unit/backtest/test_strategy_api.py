@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import get_type_hints
+
 import pandas as pd
 import pytest
 
@@ -589,6 +591,12 @@ def test_analyzer_on_end_receives_stats_object() -> None:
         "stats": {"stats_type": "Stats", "final_value": 100.0, "equity_points": 3}
     }
     assert strategy.stats.analyzers == strategy.analyzer_results
+
+
+def test_analyzer_on_end_type_hint_matches_stats_contract() -> None:
+    hints = get_type_hints(Analyzer.on_end)
+
+    assert hints["stats"] is Stats
 
 
 def test_simbroker_getvalue_marks_open_position_to_current_close() -> None:

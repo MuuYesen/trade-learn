@@ -992,7 +992,7 @@ class Analyzer:
     def on_trade(self, trade: Any) -> None:
         pass
 
-    def on_end(self, stats: dict[str, Any]) -> None:
+    def on_end(self, stats: Stats) -> None:
         pass
 
     def get_analysis(self) -> dict[str, Any]:
