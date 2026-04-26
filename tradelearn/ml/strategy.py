@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 
 from tradelearn.backtest import Strategy
+from tradelearn.ml.registry import ModelRegistry
 
 FeatureSpec = str | Callable[[Any], float]
 TargetSpec = str | Callable[[pd.DataFrame], Sequence[float] | pd.Series]
@@ -22,6 +23,7 @@ class MLStrategy(Strategy):
         ("size", 1.0),
         ("training_data", None),
         ("allow_short", False),
+        ("model_registry", None),
     )
     model: Any = None
     features: tuple[FeatureSpec, ...] = ()
@@ -30,7 +32,11 @@ class MLStrategy(Strategy):
     def start(self) -> None:
         if self.model is None:
             raise ValueError("MLStrategy requires a model with predict().")
-        self.model_ = copy.deepcopy(self.model)
+        if isinstance(self.model, str):
+            registry = self.p.model_registry or ModelRegistry()
+            self.model_ = registry.load(self.model)
+        else:
+            self.model_ = copy.deepcopy(self.model)
         self.predictions: list[float] = []
         training_data = self.p.training_data
         if training_data is None:
