@@ -109,6 +109,7 @@ class Position:
     size: float = 0.0
     price: float = 0.0
     adjbase: float = 0.0
+    realized_pnl: float = 0.0
 
     def __bool__(self) -> bool:
         return self.size != 0.0
@@ -261,6 +262,8 @@ _POSITION_COLUMNS = [
     "mark_price",
     "value",
     "unrealized_pnl",
+    "realized_pnl",
+    "margin_used",
 ]
 
 
@@ -424,6 +427,7 @@ class SimBroker:
 
         self._cash -= signed_size * price + commission
         position.update(signed_size, price)
+        position.realized_pnl += realized
 
         order.status = Order.Completed
         order.executed = ExecutedInfo(
@@ -478,9 +482,10 @@ class SimBroker:
         value = self.getvalue()
         self._equity_records.append({"datetime": timestamp, "cash": self._cash, "value": value})
         for data, position in strategy._positions.items():
-            if not position:
+            if not position and position.realized_pnl == 0.0:
                 continue
             mark_price = _current_close(data)
+            position_value = position.size * mark_price
             self._position_records.append(
                 {
                     "datetime": timestamp,
@@ -488,8 +493,10 @@ class SimBroker:
                     "size": position.size,
                     "avg_price": position.price,
                     "mark_price": mark_price,
-                    "value": position.size * mark_price,
+                    "value": position_value,
                     "unrealized_pnl": (mark_price - position.price) * position.size,
+                    "realized_pnl": position.realized_pnl,
+                    "margin_used": abs(position_value),
                 }
             )
 
@@ -512,6 +519,27 @@ class SimBroker:
         series = pd.Series(frame["value"].to_numpy(), index=frame["datetime"], name="equity")
         series.index.name = None
         return series
+
+    def realized_pnl(self) -> float:
+        if self._last_strategy is None:
+            return 0.0
+        return sum(position.realized_pnl for position in self._last_strategy._positions.values())
+
+    def unrealized_pnl(self) -> float:
+        if self._last_strategy is None:
+            return 0.0
+        return sum(
+            (_current_close(data) - position.price) * position.size
+            for data, position in self._last_strategy._positions.items()
+        )
+
+    def margin_used(self) -> float:
+        if self._last_strategy is None:
+            return 0.0
+        return sum(
+            abs(position.size * _current_close(data))
+            for data, position in self._last_strategy._positions.items()
+        )
 
     def _record_order(self, order: Order) -> None:
         self._order_records.append(
@@ -1017,6 +1045,9 @@ class Cerebro:
             "bars": total_bars,
             "final_cash": self.broker.getcash(),
             "final_value": self.broker.getvalue(),
+            "final_realized_pnl": self.broker.realized_pnl(),
+            "final_unrealized_pnl": self.broker.unrealized_pnl(),
+            "final_margin_used": self.broker.margin_used(),
             "total_trades": len(trades),
             "total_orders": len(orders),
             "total_fills": len(fills),

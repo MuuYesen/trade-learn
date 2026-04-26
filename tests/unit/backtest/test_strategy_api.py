@@ -392,12 +392,21 @@ def test_cerebro_exposes_report_ready_stats_artifacts() -> None:
             "data": "daily",
             "size": 2.0,
             "mark_price": 11.0,
-        }
+        },
+        {
+            "datetime": pd.Timestamp("2026-01-03", tz="UTC"),
+            "data": "daily",
+            "size": 0.0,
+            "mark_price": 12.0,
+        },
     ]
     assert strategy.stats.summary == {
         "bars": 3,
         "final_cash": 102.0,
         "final_value": 102.0,
+        "final_realized_pnl": 2.0,
+        "final_unrealized_pnl": 0.0,
+        "final_margin_used": 0.0,
         "total_trades": 2,
         "total_orders": 6,
         "total_fills": 2,
@@ -410,6 +419,66 @@ def test_cerebro_exposes_report_ready_stats_artifacts() -> None:
         "stdstats": False,
         "broker": {"cash": 102.0, "commission": 0.0},
     }
+
+
+def test_positions_artifact_tracks_flat_snapshot_realized_pnl_and_margin() -> None:
+    class BuyThenClose(Strategy):
+        def __init__(self) -> None:
+            self.seen = 0
+
+        def next(self) -> None:
+            self.seen += 1
+            if self.seen == 1:
+                self.buy(size=2)
+            elif self.seen == 2:
+                self.close()
+
+    cerebro = Cerebro()
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars(), name="daily")
+    cerebro.addstrategy(BuyThenClose)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.stats.positions[
+        [
+            "datetime",
+            "data",
+            "size",
+            "avg_price",
+            "mark_price",
+            "value",
+            "unrealized_pnl",
+            "realized_pnl",
+            "margin_used",
+        ]
+    ].to_dict("records") == [
+        {
+            "datetime": pd.Timestamp("2026-01-02", tz="UTC"),
+            "data": "daily",
+            "size": 2.0,
+            "avg_price": 10.0,
+            "mark_price": 11.0,
+            "value": 22.0,
+            "unrealized_pnl": 2.0,
+            "realized_pnl": 0.0,
+            "margin_used": 22.0,
+        },
+        {
+            "datetime": pd.Timestamp("2026-01-03", tz="UTC"),
+            "data": "daily",
+            "size": 0.0,
+            "avg_price": 0.0,
+            "mark_price": 12.0,
+            "value": 0.0,
+            "unrealized_pnl": 0.0,
+            "realized_pnl": 2.0,
+            "margin_used": 0.0,
+        },
+    ]
+    assert strategy.stats.summary["final_realized_pnl"] == 2.0
+    assert strategy.stats.summary["final_unrealized_pnl"] == 0.0
+    assert strategy.stats.summary["final_margin_used"] == 0.0
 
 
 def test_analyzer_on_end_receives_stats_object() -> None:
