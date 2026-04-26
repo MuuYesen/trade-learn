@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
 
 [project]
 name = "trade-learn"
@@ -75,6 +75,12 @@ oracle = [
 [tool.setuptools.packages.find]
 include = ["tradelearn*"]
 exclude = ["reference*", "tests*"]
+
+[tool.maturin]
+manifest-path = "rust/tradelearn-rust/Cargo.toml"
+module-name = "tradelearn._rust"
+python-source = "."
+features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/golden", "tests/consistency"]

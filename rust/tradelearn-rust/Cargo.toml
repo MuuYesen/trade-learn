@@ -1,0 +1,13 @@
+[package]
+name = "tradelearn-rust"
+version = "0.1.2"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+name = "_rust"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module"] }
