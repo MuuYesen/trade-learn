@@ -189,11 +189,6 @@ def test_build_golden_datasets_only_attempts_every_dataset(
     monkeypatch.setattr(build_golden, "load_manifest", lambda: manifest)
     monkeypatch.setattr(build_golden, "load_reference_query", lambda **_: query)
     monkeypatch.setattr(build_golden, "provider_statuses", lambda: {"tdx": True, "tv": True})
-    monkeypatch.setattr(
-        build_golden,
-        "dataset_path",
-        lambda dataset: tmp_path / f"{dataset['engine']}_{dataset['symbol']}.parquet",
-    )
 
     result = build_golden.main(
         ["--version", "1.x", "--out", str(tmp_path), "--datasets-only"]
@@ -206,6 +201,72 @@ def test_build_golden_datasets_only_attempts_every_dataset(
     assert "dataset=tv:NASDAQ:GOOG status=failed reason=bad tv symbol" in captured.out
     assert "dataset=tdx:SZ.000001 status=ok" in captured.out
     assert "datasets=1/2" in captured.out
+
+
+def test_build_golden_datasets_only_can_generate_tv_subset_without_tdx(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    manifest = {
+        "datasets": [
+            {
+                "symbol": "GOOG",
+                "exchange": "NASDAQ",
+                "engine": "tv",
+                "start": "2020-01-01",
+                "end": "2020-01-02",
+                "freq": "1d",
+            },
+            {
+                "symbol": "000001",
+                "engine": "tdx",
+                "start": "2020-01-01",
+                "end": "2020-01-02",
+                "freq": "1d",
+            },
+        ],
+        "strategies": [],
+    }
+    query = Mock()
+    query.history_ohlc.return_value = pd.DataFrame(
+        {
+            "date": pd.date_range("2020-01-01", periods=1),
+            "code": ["GOOG"],
+            "open": [1.0],
+            "high": [1.1],
+            "low": [0.9],
+            "close": [1.0],
+            "volume": [100.0],
+        }
+    )
+
+    monkeypatch.setattr(build_golden, "load_manifest", lambda: manifest)
+    monkeypatch.setattr(build_golden, "load_reference_query", lambda **_: query)
+    monkeypatch.setattr(build_golden, "provider_statuses", lambda: {"tdx": False, "tv": True})
+    datasets_root = tmp_path / "datasets"
+
+    result = build_golden.main(
+        [
+            "--version",
+            "1.x",
+            "--out",
+            str(tmp_path),
+            "--datasets-only",
+            "--engine",
+            "tv",
+            "--datasets-root",
+            str(datasets_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert query.history_ohlc.call_count == 1
+    assert query.history_ohlc.call_args.kwargs["engine"] == "tv"
+    assert "dataset=tv:NASDAQ:GOOG status=ok" in captured.out
+    assert "datasets=1/1" in captured.out
+    assert (
+        datasets_root / "tv" / "GOOG_2020-01-01_2020-01-02_1d.parquet"
+    ).exists()
 
 
 def test_build_golden_datasets_only_reports_unavailable_opentdx(

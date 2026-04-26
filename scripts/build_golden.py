@@ -23,6 +23,7 @@ from tradelearn.core import GoldenDataError  # noqa: E402
 
 REFERENCE = ROOT / "reference" / "tradelearn_1x"
 MANIFEST = ROOT / "tests" / "golden" / "manifest.json"
+DATASETS_ROOT = ROOT / "tests" / "golden" / "datasets"
 PROVIDER_MODULES = {
     "tdx": "opentdx.tdxClient",
     "tv": "tvDatafeed",
@@ -60,13 +61,16 @@ def planned_jobs(manifest: dict[str, object]) -> list[tuple[str, str]]:
     return [(strategy, dataset) for strategy in strategies for dataset in datasets]
 
 
-def dataset_path(dataset: dict[str, str]) -> Path:
+def dataset_filename(dataset: dict[str, str]) -> str:
+    """Return the documented parquet filename for a manifest dataset."""
+
+    return f"{dataset['symbol']}_{dataset['start']}_{dataset['end']}_{dataset['freq']}.parquet"
+
+
+def dataset_path(dataset: dict[str, str], datasets_root: Path = DATASETS_ROOT) -> Path:
     """Return the documented parquet path for a manifest dataset."""
 
-    filename = (
-        f"{dataset['symbol']}_{dataset['start']}_{dataset['end']}_{dataset['freq']}.parquet"
-    )
-    return ROOT / "tests" / "golden" / "datasets" / dataset["engine"] / filename
+    return datasets_root / dataset["engine"] / dataset_filename(dataset)
 
 
 def dataset_label(dataset: dict[str, str]) -> str:
@@ -215,6 +219,21 @@ def validate_dataset_providers(manifest: dict[str, object]) -> None:
     )
 
 
+def filter_manifest_by_engine(manifest: dict[str, object], engine: str) -> dict[str, object]:
+    """Return a manifest limited to one data engine, or the original manifest."""
+
+    if engine == "all":
+        return manifest
+    return {
+        **manifest,
+        "datasets": [
+            dataset
+            for dataset in manifest["datasets"]
+            if dataset["engine"] == engine
+        ],
+    }
+
+
 def fetch_dataset(query: Any, dataset: dict[str, str]) -> Any:
     """Fetch one dataset through the 1.x Query oracle."""
 
@@ -257,7 +276,10 @@ def write_dataset(data: Any, path: Path) -> None:
         raise GoldenDataError(f"dataset generation failed while writing {path}: {exc}") from exc
 
 
-def build_datasets(manifest: dict[str, object]) -> tuple[int, int]:
+def build_datasets(
+    manifest: dict[str, object],
+    datasets_root: Path = DATASETS_ROOT,
+) -> tuple[int, int]:
     """Fetch and write all manifest datasets."""
 
     validate_dataset_providers(manifest)
@@ -269,7 +291,7 @@ def build_datasets(manifest: dict[str, object]) -> tuple[int, int]:
         label = dataset_label(dataset)
         try:
             data = fetch_dataset(query, dataset)
-            path = dataset_path(dataset)
+            path = dataset_path(dataset, datasets_root)
             write_dataset(data, path)
         except Exception as exc:
             failures.append(f"{label}: {exc}")
@@ -286,13 +308,20 @@ def build_datasets(manifest: dict[str, object]) -> tuple[int, int]:
     return successes, total
 
 
-def build(version: str, out: Path, dry_run: bool, datasets_only: bool) -> int:
+def build(
+    version: str,
+    out: Path,
+    dry_run: bool,
+    datasets_only: bool,
+    engine: str,
+    datasets_root: Path,
+) -> int:
     """Validate inputs and either print planned jobs or fail clearly."""
 
     if version != "1.x":
         raise GoldenDataError("Stage 0 only supports --version 1.x")
     validate_reference()
-    manifest = load_manifest()
+    manifest = filter_manifest_by_engine(load_manifest(), engine)
     out.mkdir(parents=True, exist_ok=True)
     jobs = planned_jobs(manifest)
 
@@ -306,7 +335,7 @@ def build(version: str, out: Path, dry_run: bool, datasets_only: bool) -> int:
 
     if datasets_only:
         try:
-            build_datasets(manifest)
+            build_datasets(manifest, datasets_root)
         except GoldenDataError as exc:
             raise GoldenDataError(f"dataset generation failed: {exc}") from exc
         return 0
@@ -328,6 +357,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Only build dataset parquet files",
     )
+    parser.add_argument(
+        "--engine",
+        choices=["all", "tv", "tdx"],
+        default="all",
+        help="Limit dataset generation and dry-run jobs to one provider engine",
+    )
+    parser.add_argument(
+        "--datasets-root",
+        type=Path,
+        default=DATASETS_ROOT,
+        help="Root directory for generated golden dataset parquet files",
+    )
     return parser.parse_args(argv)
 
 
@@ -336,7 +377,14 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parse_args(argv)
     try:
-        return build(args.version, args.out, args.dry_run, args.datasets_only)
+        return build(
+            args.version,
+            args.out,
+            args.dry_run,
+            args.datasets_only,
+            args.engine,
+            args.datasets_root,
+        )
     except GoldenDataError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
