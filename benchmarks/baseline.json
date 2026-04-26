@@ -6,5 +6,22 @@
     "portfolio_500_symbols_10y_daily_s": 5,
     "stream_bar_ms": 1
   },
-  "measured": {}
+  "measured": {
+    "stage3_backtest": {
+      "recorded_at": "2026-04-26 11:25 Asia/Tokyo",
+      "command": "uv run python scripts/check_stage3_benchmark.py --single-bars 2520 --max-single-ms 50 --portfolio-bars 2520 --portfolio-symbols 500 --max-portfolio-ms 5000 --json",
+      "single": {
+        "bars": 2520,
+        "symbols": 1,
+        "elapsed_ms": 3.173332996084355,
+        "max_ms": 50.0
+      },
+      "portfolio": {
+        "bars": 2520,
+        "symbols": 500,
+        "elapsed_ms": 312.5693330075592,
+        "max_ms": 5000.0
+      }
+    }
+  }
 }
