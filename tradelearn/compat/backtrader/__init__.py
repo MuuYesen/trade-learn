@@ -1,6 +1,6 @@
 """Backtrader-compatible facade backed by tradelearn's backtest engine."""
 
-from tradelearn.compat.backtrader import feeds
+from tradelearn.compat.backtrader import feeds, indicators
 from tradelearn.compat.backtrader.cerebro import Cerebro
 from tradelearn.compat.backtrader.strategy import (
     DataFeed,
@@ -24,4 +24,5 @@ __all__ = [
     "Strategy",
     "Trade",
     "feeds",
+    "indicators",
 ]
