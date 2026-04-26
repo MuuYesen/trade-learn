@@ -26,9 +26,12 @@ def test_build_alpha101_features_returns_selected_feature_frame() -> None:
 
 
 def test_ml_strategy_example_runs_deterministically() -> None:
-    result = run_example()
+    first = run_example()
+    second = run_example()
 
-    assert result.selected_features
-    assert result.stats.summary["final_value"] == result.final_value
-    assert not result.stats.equity.empty
-    assert isinstance(result.factors, pd.DataFrame)
+    assert first.selected_features
+    assert first.selected_features == second.selected_features
+    assert first.final_value == second.final_value
+    assert first.stats.summary["final_value"] == first.final_value
+    assert not first.stats.equity.empty
+    assert isinstance(first.factors, pd.DataFrame)
