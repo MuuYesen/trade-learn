@@ -83,8 +83,39 @@ def test_mlflow_analyzer_logs_params_stats_and_artifacts(monkeypatch) -> None:
     assert fake.params[0]["strategy.fast"] == 5
     assert fake.params[0]["broker.cash"] == 123.0
     assert fake.params[0]["broker.commission"] == 0.001
-    assert fake.metrics == [{"bars": 3.0}]
-    assert fake.dicts == [({"bars": 3}, "stats.json")]
+    assert fake.metrics == [
+        {
+            "bars": 3.0,
+            "final_cash": 123.0,
+            "final_value": 123.0,
+            "total_trades": 0.0,
+            "total_orders": 0.0,
+            "total_fills": 0.0,
+        }
+    ]
+    assert fake.dicts == [
+        (
+            {
+                "summary": {
+                    "bars": 3,
+                    "final_cash": 123.0,
+                    "final_value": 123.0,
+                    "total_trades": 0,
+                    "total_orders": 0,
+                    "total_fills": 0,
+                },
+                "analyzers": {},
+                "config": {
+                    "callback_batch": 1,
+                    "trade_on_close": False,
+                    "exactbars": False,
+                    "stdstats": True,
+                    "broker": {"cash": 123.0, "commission": 0.001},
+                },
+            },
+            "stats.json",
+        )
+    ]
     assert strategy.analyzer_results["mlflow"]["status"] == "logged"
 
 

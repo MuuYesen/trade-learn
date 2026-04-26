@@ -957,14 +957,15 @@ class Cerebro:
                 analyzer.on_bar(bar)
             self.broker.snapshot_portfolio(strategy, bar.datetime)
 
-        analyzer_stats = {"bars": total_bars}
+        strategy.analyzer_results = {}
+        self.stats = self._build_stats(strategy, total_bars)
         for analyzer in analyzers.values():
-            analyzer.on_end(analyzer_stats)
+            analyzer.on_end(self.stats)
         self.analyzer_results = {
             name: analyzer.get_analysis() for name, analyzer in analyzers.items()
         }
         strategy.analyzer_results = dict(self.analyzer_results)
-        self.stats = self._build_stats(strategy, total_bars)
+        self.stats.analyzers = dict(self.analyzer_results)
         strategy.stats = self.stats
         strategy.stop()
         return [strategy]

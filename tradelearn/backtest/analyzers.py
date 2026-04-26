@@ -28,7 +28,7 @@ class MLflowAnalyzer(Analyzer):
         self._status = "pending"
         self._message = ""
 
-    def on_end(self, stats: dict[str, Any]) -> None:
+    def on_end(self, stats: Any) -> None:
         try:
             mlflow = self.p.mlflow_module or _import_mlflow()
             uri = self.p.uri or os.environ.get("MLFLOW_TRACKING_URI") or DEFAULT_MLFLOW_URI
@@ -38,7 +38,7 @@ class MLflowAnalyzer(Analyzer):
             with mlflow.start_run(run_name=self.p.run_name, nested=bool(self.p.nested)):
                 mlflow.log_params(_params_payload(self.strategy))
                 mlflow.log_metrics(_metrics_payload(stats))
-                mlflow.log_dict(dict(stats), self.p.artifact_file)
+                mlflow.log_dict(_stats_payload(stats), self.p.artifact_file)
             self._status = "logged"
         except Exception as exc:  # pragma: no cover - exercised through fake module
             self._status = "warning"
@@ -74,9 +74,30 @@ def _params_payload(strategy: Any) -> dict[str, Any]:
     return payload
 
 
-def _metrics_payload(stats: dict[str, Any]) -> dict[str, float]:
+def _metrics_payload(stats: Any) -> dict[str, float]:
+    summary = _stats_summary(stats)
     return {
         key: float(value)
-        for key, value in stats.items()
+        for key, value in summary.items()
         if isinstance(value, int | float) and not isinstance(value, bool)
     }
+
+
+def _stats_payload(stats: Any) -> dict[str, Any]:
+    return {
+        "summary": _stats_summary(stats),
+        "analyzers": _stats_field(stats, "analyzers", {}),
+        "config": _stats_field(stats, "config", {}),
+    }
+
+
+def _stats_summary(stats: Any) -> dict[str, Any]:
+    if isinstance(stats, dict):
+        return dict(stats)
+    return dict(_stats_field(stats, "summary", {}) or {})
+
+
+def _stats_field(stats: Any, name: str, default: Any) -> Any:
+    if isinstance(stats, dict):
+        return stats.get(name, default)
+    return getattr(stats, name, default)

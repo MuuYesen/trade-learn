@@ -66,7 +66,7 @@ def test_analyzer_receives_strategy_and_bar_lifecycle() -> None:
             self.values.append(bar.close * self.p.scale)
 
         def on_end(self, stats) -> None:
-            self.ended = stats["bars"] == 3
+            self.ended = stats.summary["bars"] == 3
 
         def get_analysis(self) -> dict[str, object]:
             return {"started": self.started, "values": self.values, "ended": self.ended}
@@ -410,6 +410,43 @@ def test_cerebro_exposes_report_ready_stats_artifacts() -> None:
         "stdstats": False,
         "broker": {"cash": 102.0, "commission": 0.0},
     }
+
+
+def test_analyzer_on_end_receives_stats_object() -> None:
+    class NoopStrategy(Strategy):
+        def next(self) -> None:
+            pass
+
+    class StatsAnalyzer(Analyzer):
+        def __init__(self) -> None:
+            self.stats_type = ""
+            self.final_value = 0.0
+            self.equity_points = 0
+
+        def on_end(self, stats) -> None:
+            self.stats_type = type(stats).__name__
+            self.final_value = stats.summary["final_value"]
+            self.equity_points = len(stats.equity)
+
+        def get_analysis(self) -> dict[str, object]:
+            return {
+                "stats_type": self.stats_type,
+                "final_value": self.final_value,
+                "equity_points": self.equity_points,
+            }
+
+    cerebro = Cerebro()
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(NoopStrategy)
+    cerebro.addanalyzer(StatsAnalyzer, name="stats")
+
+    [strategy] = cerebro.run()
+
+    assert strategy.analyzer_results == {
+        "stats": {"stats_type": "Stats", "final_value": 100.0, "equity_points": 3}
+    }
+    assert strategy.stats.analyzers == strategy.analyzer_results
 
 
 def test_simbroker_getvalue_marks_open_position_to_current_close() -> None:
