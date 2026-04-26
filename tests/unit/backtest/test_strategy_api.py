@@ -438,6 +438,47 @@ def test_simbroker_ioc_order_cancels_when_not_filled_immediately() -> None:
     assert strategy.broker.getcash() == 100.0
 
 
+def test_analyzer_receives_order_lifecycle_events_for_cancel_and_reject() -> None:
+    class CancelAndReject(Strategy):
+        def __init__(self) -> None:
+            self.submitted = False
+
+        def next(self) -> None:
+            if not self.submitted:
+                self.buy(size=2, price=8.5, exectype=Order.Limit, time_in_force=Order.IOC)
+                self.buy(size=2000)
+                self.submitted = True
+
+    class OrderAnalyzer(Analyzer):
+        def __init__(self) -> None:
+            self.events: list[tuple[int, int, int]] = []
+
+        def on_order(self, order) -> None:
+            self.events.append((order.ref, order.ordtype, order.status))
+
+        def get_analysis(self) -> dict[str, object]:
+            return {"events": self.events}
+
+    cerebro = Cerebro()
+    cerebro.broker.setcash(100000.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(CancelAndReject)
+    cerebro.addanalyzer(OrderAnalyzer, name="orders")
+
+    [strategy] = cerebro.run()
+
+    assert strategy.analyzers.orders.get_analysis() == {
+        "events": [
+            (1, Order.Buy, Order.Submitted),
+            (1, Order.Buy, Order.Accepted),
+            (2, Order.Buy, Order.Submitted),
+            (2, Order.Buy, Order.Accepted),
+            (1, Order.Buy, Order.Canceled),
+            (2, Order.Buy, Order.Rejected),
+        ]
+    }
+
+
 def test_simbroker_day_order_expires_after_first_unfilled_bar() -> None:
     class BuyLimitDay(Strategy):
         def __init__(self) -> None:

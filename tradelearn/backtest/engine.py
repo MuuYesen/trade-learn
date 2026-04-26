@@ -317,18 +317,18 @@ class SimBroker:
             time_in_force=Order.GTC if time_in_force is None else time_in_force,
         )
         self._next_order_ref += 1
-        strategy.notify_order(order)
+        _notify_order(strategy, order)
         if order.time_in_force not in {Order.DAY, Order.GTC, Order.IOC}:
             order.status = Order.Rejected
-            strategy.notify_order(order)
+            _notify_order(strategy, order)
             return order
         if order.size <= 0:
             order.status = Order.Rejected
-            strategy.notify_order(order)
+            _notify_order(strategy, order)
             return order
         order.status = Order.Accepted
         self._pending.append(order)
-        strategy.notify_order(order)
+        _notify_order(strategy, order)
         return order
 
     def _execute_order(
@@ -341,7 +341,7 @@ class SimBroker:
     ) -> bool:
         if order.size > float(order.data.volume[0]):
             order.status = Order.Rejected
-            strategy.notify_order(order)
+            _notify_order(strategy, order)
             return True
         fill = _match_order(order, self.commission, trade_on_close=trade_on_close)
         if fill is None:
@@ -380,7 +380,7 @@ class SimBroker:
         )
         self._next_trade_ref += 1
 
-        strategy.notify_order(order)
+        _notify_order(strategy, order)
         strategy.notify_trade(trade)
         for analyzer in analyzers.values():
             analyzer.on_fill(order.executed)
@@ -390,11 +390,11 @@ class SimBroker:
     def _handle_unfilled_order(self, strategy: Strategy, order: Order) -> None:
         if order.time_in_force == Order.IOC:
             order.status = Order.Canceled
-            strategy.notify_order(order)
+            _notify_order(strategy, order)
             return
         if order.time_in_force == Order.DAY:
             order.status = Order.Expired
-            strategy.notify_order(order)
+            _notify_order(strategy, order)
             return
         self._pending.append(order)
 
@@ -527,6 +527,12 @@ def _stop_triggered(order: Order, stop_price: float | None) -> bool:
     return bool(order.data.low[0] <= stop_price)
 
 
+def _notify_order(strategy: Strategy, order: Order) -> None:
+    strategy.notify_order(order)
+    for analyzer in getattr(strategy, "analyzers", {}).values():
+        analyzer.on_order(order)
+
+
 class Strategy:
     """Base strategy class with backtrader-style lifecycle hooks."""
 
@@ -626,6 +632,9 @@ class Analyzer:
         pass
 
     def on_start(self) -> None:
+        pass
+
+    def on_order(self, order: Any) -> None:
         pass
 
     def on_bar(self, bar: BarSnapshot) -> None:
