@@ -195,6 +195,7 @@ class SimBroker:
         self._next_order_ref = 1
         self._next_trade_ref = 1
         self._pending: list[Order] = []
+        self._last_strategy: Strategy | None = None
 
     def setcash(self, cash: float) -> None:
         self._cash = float(cash)
@@ -203,6 +204,11 @@ class SimBroker:
         return self._cash
 
     def getvalue(self) -> float:
+        if self._last_strategy is not None:
+            return self._cash + sum(
+                position.size * _current_close(data)
+                for data, position in self._last_strategy._positions.items()
+            )
         return self._cash
 
     def setcommission(self, commission: float) -> None:
@@ -229,9 +235,12 @@ class SimBroker:
         return self._submit(strategy, data, Order.Sell, size, price, exectype)
 
     def process_bar(self, strategy: Strategy, analyzers: AnalyzerCollection) -> None:
+        self._last_strategy = strategy
         pending, self._pending = self._pending, []
         for order in pending:
-            self._execute_order(strategy, order, analyzers)
+            executed = self._execute_order(strategy, order, analyzers)
+            if not executed:
+                self._pending.append(order)
 
     def _submit(
         self,
@@ -261,10 +270,11 @@ class SimBroker:
         strategy: Strategy,
         order: Order,
         analyzers: AnalyzerCollection,
-    ) -> None:
-        price = order.price if order.price is not None else order.data.open[0]
-        signed_size = order.size if order.ordtype == Order.Buy else -order.size
-        commission = abs(signed_size) * price * self.commission
+    ) -> bool:
+        fill = _match_order(order, self.commission)
+        if fill is None:
+            return False
+        signed_size, price, commission, _slippage = fill
         position = strategy.getposition(order.data)
         old_size = position.size
         old_price = position.price
@@ -303,6 +313,7 @@ class SimBroker:
         for analyzer in analyzers.values():
             analyzer.on_fill(order.executed)
             analyzer.on_trade(trade)
+        return True
 
 
 def _realized_pnl(old_size: float, old_price: float, fill_size: float, fill_price: float) -> float:
@@ -310,6 +321,106 @@ def _realized_pnl(old_size: float, old_price: float, fill_size: float, fill_pric
         return 0.0
     closing_size = min(abs(old_size), abs(fill_size))
     return (fill_price - old_price) * closing_size * (1.0 if old_size > 0 else -1.0)
+
+
+def _current_close(data: DataFeed) -> float:
+    try:
+        return float(data.close[0])
+    except IndexError:
+        return 0.0
+
+
+def _match_order(order: Order, commission: float) -> tuple[float, float, float, float] | None:
+    try:
+        from tradelearn import _rust
+
+        rust_match_order = _rust.match_order_fill
+    except (ImportError, AttributeError):
+        rust_match_order = None
+
+    side = "buy" if order.ordtype == Order.Buy else "sell"
+    order_type = _rust_order_type(order)
+    limit_price = order.price if order.exectype in {Order.Limit, Order.StopLimit} else None
+    stop_price = order.price if order.exectype in {Order.Stop, Order.StopLimit} else None
+    if rust_match_order is not None:
+        return rust_match_order(
+            order.ref,
+            order.data._name or "data0",
+            side,
+            order_type,
+            order.size,
+            limit_price,
+            stop_price,
+            0,
+            int(order.data.datetime[0].timestamp())
+            if hasattr(order.data.datetime[0], "timestamp")
+            else 0,
+            float(order.data.open[0]),
+            float(order.data.high[0]),
+            float(order.data.low[0]),
+            float(order.data.close[0]),
+            float(order.data.volume[0]),
+            False,
+            commission,
+        )
+    return _python_match_order(order, limit_price, stop_price, commission)
+
+
+def _rust_order_type(order: Order) -> str:
+    if order.exectype == Order.Limit:
+        return "limit"
+    if order.exectype == Order.Stop:
+        return "stop"
+    if order.exectype == Order.StopLimit:
+        return "stop_limit"
+    return "market"
+
+
+def _python_match_order(
+    order: Order,
+    limit_price: float | None,
+    stop_price: float | None,
+    commission: float,
+) -> tuple[float, float, float, float] | None:
+    if order.exectype == Order.Limit:
+        price = _limit_fill_price(order, limit_price)
+    elif order.exectype == Order.Stop:
+        price = float(order.data.open[0]) if _stop_triggered(order, stop_price) else None
+    elif order.exectype == Order.StopLimit:
+        price = (
+            _limit_fill_price(order, limit_price)
+            if _stop_triggered(order, stop_price)
+            else None
+        )
+    else:
+        price = float(order.data.open[0])
+    if price is None:
+        return None
+    signed_size = order.size if order.ordtype == Order.Buy else -order.size
+    return (
+        signed_size,
+        price,
+        abs(signed_size) * price * commission,
+        0.0,
+    )
+
+
+def _limit_fill_price(order: Order, limit_price: float | None) -> float | None:
+    if limit_price is None:
+        return None
+    if order.ordtype == Order.Buy and order.data.low[0] <= limit_price:
+        return min(limit_price, float(order.data.open[0]))
+    if order.ordtype == Order.Sell and order.data.high[0] >= limit_price:
+        return max(limit_price, float(order.data.open[0]))
+    return None
+
+
+def _stop_triggered(order: Order, stop_price: float | None) -> bool:
+    if stop_price is None:
+        return False
+    if order.ordtype == Order.Buy:
+        return bool(order.data.high[0] >= stop_price)
+    return bool(order.data.low[0] <= stop_price)
 
 
 class Strategy:
