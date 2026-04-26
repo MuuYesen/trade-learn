@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from tradelearn.backtest import Analyzer, Cerebro, Strategy
+from tradelearn.backtest import Analyzer, Cerebro, Order, SimBroker, Strategy
 
 
 def bars() -> pd.DataFrame:
@@ -94,3 +94,67 @@ def test_strategy_params_must_be_tuple_pairs() -> None:
 
     with pytest.raises(ValueError, match="Strategy.params must be a tuple"):
         cerebro.run()
+
+
+def test_simbroker_executes_pending_orders_and_notifies_strategy_and_analyzers() -> None:
+    class BuyThenClose(Strategy):
+        def __init__(self) -> None:
+            self.orders = []
+            self.trades = []
+            self.values: list[tuple[float, float]] = []
+
+        def next(self) -> None:
+            self.values.append((self.position.size, self.broker.getcash()))
+            if len(self.values) == 1:
+                self.buy(size=2)
+            elif len(self.values) == 2:
+                self.close()
+
+        def notify_order(self, order) -> None:
+            self.orders.append((order.status, order.ordtype, order.executed.price))
+
+        def notify_trade(self, trade) -> None:
+            self.trades.append((trade.size, trade.price, trade.isopen, trade.isclosed))
+
+    class FillAnalyzer(Analyzer):
+        def __init__(self) -> None:
+            self.fills = []
+            self.trades = []
+
+        def on_fill(self, fill) -> None:
+            self.fills.append((fill.size, fill.price))
+
+        def on_trade(self, trade) -> None:
+            self.trades.append((trade.size, trade.price, trade.isopen, trade.isclosed))
+
+        def get_analysis(self) -> dict[str, object]:
+            return {"fills": self.fills, "trades": self.trades}
+
+    cerebro = Cerebro()
+    assert isinstance(cerebro.broker, SimBroker)
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(BuyThenClose)
+    cerebro.addanalyzer(FillAnalyzer, name="fills")
+
+    [strategy] = cerebro.run()
+
+    assert strategy.values == [(0.0, 100.0), (2.0, 80.0), (0.0, 102.0)]
+    assert strategy.orders == [
+        (Order.Accepted, Order.Buy, 0.0),
+        (Order.Completed, Order.Buy, 10.0),
+        (Order.Accepted, Order.Sell, 0.0),
+        (Order.Completed, Order.Sell, 11.0),
+    ]
+    assert strategy.trades == [
+        (2.0, 10.0, True, False),
+        (0.0, 11.0, False, True),
+    ]
+    assert strategy.position.size == 0.0
+    assert strategy.position.price == 0.0
+    assert strategy.broker.getcash() == 102.0
+    assert strategy.broker.getvalue() == 102.0
+    assert strategy.analyzers["fills"].get_analysis() == {
+        "fills": [(2.0, 10.0), (-2.0, 11.0)],
+        "trades": [(2.0, 10.0, True, False), (0.0, 11.0, False, True)],
+    }

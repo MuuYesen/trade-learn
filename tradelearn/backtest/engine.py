@@ -103,6 +103,19 @@ class Position:
     def __bool__(self) -> bool:
         return self.size != 0.0
 
+    def update(self, size_delta: float, price: float) -> None:
+        new_size = self.size + size_delta
+        if new_size == 0.0:
+            self.size = 0.0
+            self.price = 0.0
+            return
+        if self.size == 0.0 or self.size * size_delta > 0:
+            total_abs = abs(self.size) + abs(size_delta)
+            self.price = (abs(self.size) * self.price + abs(size_delta) * price) / total_abs
+        elif self.size * new_size < 0:
+            self.price = price
+        self.size = new_size
+
 
 @dataclass
 class BarSnapshot:
@@ -115,9 +128,73 @@ class BarSnapshot:
     data: DataFeed
 
 
-class BrokerFacade:
+@dataclass
+class ExecutedInfo:
+    size: float = 0.0
+    price: float = 0.0
+    value: float = 0.0
+    comm: float = 0.0
+    pnl: float = 0.0
+
+
+@dataclass
+class Order:
+    Submitted = 1
+    Accepted = 2
+    Partial = 3
+    Completed = 4
+    Canceled = 5
+    Expired = 6
+    Margin = 7
+    Rejected = 8
+
+    Buy = 1
+    Sell = 2
+
+    Market = 1
+    Limit = 2
+    Stop = 3
+    StopLimit = 4
+    Close = 5
+
+    ref: int
+    data: DataFeed
+    ordtype: int
+    size: float
+    price: float | None = None
+    exectype: int = Market
+    status: int = Submitted
+    executed: ExecutedInfo = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.executed is None:
+            self.executed = ExecutedInfo()
+
+
+@dataclass
+class Trade:
+    ref: int
+    data: DataFeed
+    size: float
+    price: float
+    value: float
+    commission: float
+    pnl: float
+    pnlcomm: float
+    isopen: bool
+    isclosed: bool
+    status: int
+    dtopen: Any
+    dtclose: Any | None = None
+
+
+class SimBroker:
     def __init__(self) -> None:
         self._cash = 10000.0
+        self.commission = 0.0
+        self._next_order_ref = 1
+        self._next_trade_ref = 1
+        self._pending: list[Order] = []
 
     def setcash(self, cash: float) -> None:
         self._cash = float(cash)
@@ -130,6 +207,109 @@ class BrokerFacade:
 
     def setcommission(self, commission: float) -> None:
         self.commission = float(commission)
+
+    def buy(
+        self,
+        strategy: Strategy,
+        data: DataFeed,
+        size: float | None = None,
+        price: float | None = None,
+        exectype: int | None = None,
+    ) -> Order:
+        return self._submit(strategy, data, Order.Buy, size, price, exectype)
+
+    def sell(
+        self,
+        strategy: Strategy,
+        data: DataFeed,
+        size: float | None = None,
+        price: float | None = None,
+        exectype: int | None = None,
+    ) -> Order:
+        return self._submit(strategy, data, Order.Sell, size, price, exectype)
+
+    def process_bar(self, strategy: Strategy, analyzers: dict[str, Analyzer]) -> None:
+        pending, self._pending = self._pending, []
+        for order in pending:
+            self._execute_order(strategy, order, analyzers)
+
+    def _submit(
+        self,
+        strategy: Strategy,
+        data: DataFeed,
+        ordtype: int,
+        size: float | None,
+        price: float | None,
+        exectype: int | None,
+    ) -> Order:
+        order = Order(
+            ref=self._next_order_ref,
+            data=data,
+            ordtype=ordtype,
+            size=float(1.0 if size is None else abs(size)),
+            price=price,
+            exectype=Order.Market if exectype is None else exectype,
+        )
+        self._next_order_ref += 1
+        order.status = Order.Accepted
+        self._pending.append(order)
+        strategy.notify_order(order)
+        return order
+
+    def _execute_order(
+        self,
+        strategy: Strategy,
+        order: Order,
+        analyzers: dict[str, Analyzer],
+    ) -> None:
+        price = order.price if order.price is not None else order.data.open[0]
+        signed_size = order.size if order.ordtype == Order.Buy else -order.size
+        commission = abs(signed_size) * price * self.commission
+        position = strategy.getposition(order.data)
+        old_size = position.size
+        old_price = position.price
+        realized = _realized_pnl(old_size, old_price, signed_size, price)
+
+        self._cash -= signed_size * price + commission
+        position.update(signed_size, price)
+
+        order.status = Order.Completed
+        order.executed = ExecutedInfo(
+            size=signed_size,
+            price=price,
+            value=abs(signed_size) * price,
+            comm=commission,
+            pnl=realized,
+        )
+        trade = Trade(
+            ref=self._next_trade_ref,
+            data=order.data,
+            size=position.size,
+            price=price,
+            value=abs(position.size) * price,
+            commission=commission,
+            pnl=realized,
+            pnlcomm=realized - commission,
+            isopen=position.size != 0.0,
+            isclosed=position.size == 0.0 and old_size != 0.0,
+            status=1 if position.size != 0.0 else 2,
+            dtopen=order.data.datetime[0],
+            dtclose=order.data.datetime[0] if position.size == 0.0 else None,
+        )
+        self._next_trade_ref += 1
+
+        strategy.notify_order(order)
+        strategy.notify_trade(trade)
+        for analyzer in analyzers.values():
+            analyzer.on_fill(order.executed)
+            analyzer.on_trade(trade)
+
+
+def _realized_pnl(old_size: float, old_price: float, fill_size: float, fill_price: float) -> float:
+    if old_size == 0.0 or old_size * fill_size > 0:
+        return 0.0
+    closing_size = min(abs(old_size), abs(fill_size))
+    return (fill_price - old_price) * closing_size * (1.0 if old_size > 0 else -1.0)
 
 
 class Strategy:
@@ -163,6 +343,35 @@ class Strategy:
 
     def notify_timer(self, timer: Any, when: Any, *args: Any, **kwargs: Any) -> None:
         pass
+
+    def buy(
+        self,
+        data: DataFeed | None = None,
+        size: float | None = None,
+        price: float | None = None,
+        exectype: int | None = None,
+        **kwargs: Any,
+    ) -> Order:
+        return self.broker.buy(self, data or self.data, size, price, exectype)
+
+    def sell(
+        self,
+        data: DataFeed | None = None,
+        size: float | None = None,
+        price: float | None = None,
+        exectype: int | None = None,
+        **kwargs: Any,
+    ) -> Order:
+        return self.broker.sell(self, data or self.data, size, price, exectype)
+
+    def close(self, data: DataFeed | None = None, **kwargs: Any) -> Order | None:
+        target_data = data or self.data
+        position = self.getposition(target_data)
+        if position.size > 0:
+            return self.sell(data=target_data, size=position.size)
+        if position.size < 0:
+            return self.buy(data=target_data, size=abs(position.size))
+        return None
 
     def getposition(self, data: DataFeed | None = None) -> Position:
         return self._positions.setdefault(data or self.data, Position())
@@ -220,7 +429,7 @@ class Cerebro:
         self.datas: list[DataFeed] = []
         self._strategy_spec: tuple[type[Strategy], dict[str, Any]] | None = None
         self._analyzer_specs: list[tuple[str, type[Analyzer], dict[str, Any]]] = []
-        self.broker = BrokerFacade()
+        self.broker = SimBroker()
 
     def adddata(self, data: pd.DataFrame | DataFeed, name: str | None = None) -> DataFeed:
         feed = data if isinstance(data, DataFeed) else DataFeed(data, name=name)
@@ -254,6 +463,7 @@ class Cerebro:
         for cursor in range(total_bars):
             for data in self.datas:
                 data._advance(cursor)
+            self.broker.process_bar(strategy, analyzers)
             strategy.next()
             bar = self._snapshot(self.datas[0])
             for analyzer in analyzers.values():
