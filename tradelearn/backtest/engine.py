@@ -270,6 +270,7 @@ class Order:
     Partial = 3
     Completed = 4
     Canceled = 5
+    Cancelled = Canceled
     Expired = 6
     Margin = 7
     Rejected = 8
@@ -303,9 +304,25 @@ class Order:
         if self.executed is None:
             self.executed = ExecutedInfo()
 
+    def isbuy(self) -> bool:
+        return self.ordtype == self.Buy
+
+    def issell(self) -> bool:
+        return self.ordtype == self.Sell
+
+    def alive(self) -> bool:
+        return self.status in {self.Submitted, self.Accepted, self.Partial}
+
+    def getstatusname(self) -> str:
+        return _order_status_name(self.status)
+
 
 @dataclass
 class Trade:
+    Created = 0
+    Open = 1
+    Closed = 2
+
     ref: int
     data: DataFeed
     size: float
@@ -319,6 +336,15 @@ class Trade:
     status: int
     dtopen: Any
     dtclose: Any | None = None
+
+    def getstatusname(self) -> str:
+        if self.status == self.Created:
+            return "Created"
+        if self.status == self.Open:
+            return "Open"
+        if self.status == self.Closed:
+            return "Closed"
+        return str(self.status)
 
 
 _ORDER_COLUMNS = [
