@@ -49,6 +49,29 @@ def test_cerebro_runs_strategy_with_params_and_current_bar_index() -> None:
     assert strategy.values == [(10.0, None), (11.0, 10.0), (12.0, 11.0)]
 
 
+def test_callback_batch_delays_orders_by_batch_size() -> None:
+    class BuyFirstBar(Strategy):
+        def __init__(self) -> None:
+            self.cash_seen: list[float] = []
+
+        def next(self) -> None:
+            self.cash_seen.append(self.broker.getcash())
+            if len(self.cash_seen) == 1:
+                self.buy(size=1)
+
+    cerebro = Cerebro(callback_batch=2)
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(BuyFirstBar)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.cash_seen == [100.0, 100.0, 89.0]
+    assert strategy.stats.fills[["datetime", "size", "price"]].to_dict("records") == [
+        {"datetime": pd.Timestamp("2026-01-03", tz="UTC"), "size": 1.0, "price": 11.0}
+    ]
+
+
 def test_analyzer_receives_strategy_and_bar_lifecycle() -> None:
     class NoopStrategy(Strategy):
         def next(self) -> None:
@@ -331,7 +354,7 @@ def test_cerebro_exposes_report_ready_stats_artifacts() -> None:
         def get_analysis(self) -> dict[str, object]:
             return {"fill_count": self.fill_count}
 
-    cerebro = Cerebro(callback_batch=3, exactbars=True, stdstats=False)
+    cerebro = Cerebro(exactbars=True, stdstats=False)
     cerebro.broker.setcash(100.0)
     cerebro.adddata(bars(), name="daily")
     cerebro.addstrategy(BuyThenClose)
@@ -418,7 +441,7 @@ def test_cerebro_exposes_report_ready_stats_artifacts() -> None:
     }
     assert strategy.stats.analyzers == {"fills": {"fill_count": 2}}
     assert strategy.stats.config == {
-        "callback_batch": 3,
+        "callback_batch": 1,
         "trade_on_close": False,
         "exactbars": True,
         "stdstats": False,

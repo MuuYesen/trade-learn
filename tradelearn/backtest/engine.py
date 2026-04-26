@@ -197,6 +197,7 @@ class Order:
     time_in_force: str = GTC
     status: int = Submitted
     executed: ExecutedInfo = None  # type: ignore[assignment]
+    activation_bar: int = 0
 
     def __post_init__(self) -> None:
         if self.executed is None:
@@ -277,6 +278,8 @@ class SimBroker:
         self._next_order_ref = 1
         self._next_trade_ref = 1
         self._pending: list[Order] = []
+        self._current_bar_index = 0
+        self._submit_activation_bar = 1
         self._last_strategy: Strategy | None = None
         self._order_records: list[dict[str, Any]] = []
         self._fill_records: list[dict[str, Any]] = []
@@ -349,6 +352,9 @@ class SimBroker:
         self._last_strategy = strategy
         pending, self._pending = self._pending, []
         for order in pending:
+            if order.activation_bar > self._current_bar_index:
+                self._pending.append(order)
+                continue
             executed = self._execute_order(strategy, order, analyzers)
             if not executed:
                 self._handle_unfilled_order(strategy, order)
@@ -357,6 +363,9 @@ class SimBroker:
         self._last_strategy = strategy
         pending, self._pending = self._pending, []
         for order in pending:
+            if order.activation_bar > self._current_bar_index:
+                self._pending.append(order)
+                continue
             if order.exectype != Order.Market:
                 self._pending.append(order)
                 continue
@@ -385,6 +394,7 @@ class SimBroker:
             pricelimit=pricelimit,
             exectype=Order.Market if exectype is None else exectype,
             time_in_force=Order.GTC if time_in_force is None else time_in_force,
+            activation_bar=self._submit_activation_bar,
         )
         self._next_order_ref += 1
         self._record_order(order)
@@ -1076,6 +1086,7 @@ class Cerebro:
         total_bars = len(self.datas[0])
         data_cursors = [-1 for _ in self.datas]
         for cursor in range(total_bars):
+            self.broker._current_bar_index = cursor
             current_ts = self.datas[0]._frame.index[cursor]
             data_cursors[0] = cursor
             for index, data in enumerate(self.datas):
@@ -1087,6 +1098,11 @@ class Cerebro:
                     )
                 data._advance(data_cursors[index])
             self.broker.process_bar(strategy, analyzers)
+            self.broker._submit_activation_bar = (
+                cursor
+                if self.trade_on_close and self.callback_batch == 1
+                else cursor + self.callback_batch
+            )
             if cursor < strategy._min_period:
                 strategy.prenext()
             else:
