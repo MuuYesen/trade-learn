@@ -719,10 +719,19 @@ class Cerebro:
         for analyzer in analyzers.values():
             analyzer.on_start()
 
-        total_bars = min(len(data) for data in self.datas)
+        total_bars = len(self.datas[0])
+        data_cursors = [-1 for _ in self.datas]
         for cursor in range(total_bars):
-            for data in self.datas:
-                data._advance(cursor)
+            current_ts = self.datas[0]._frame.index[cursor]
+            data_cursors[0] = cursor
+            for index, data in enumerate(self.datas):
+                if index > 0:
+                    data_cursors[index] = _cursor_at_or_before(
+                        data,
+                        current_ts,
+                        data_cursors[index],
+                    )
+                data._advance(data_cursors[index])
             self.broker.process_bar(strategy, analyzers)
             if cursor < strategy._min_period:
                 strategy.prenext()
@@ -780,3 +789,12 @@ class Cerebro:
             volume=data.volume[0],
             data=data,
         )
+
+
+def _cursor_at_or_before(data: DataFeed, timestamp: Any, current_cursor: int) -> int:
+    cursor = current_cursor
+    next_cursor = max(cursor + 1, 0)
+    while next_cursor < len(data) and data._frame.index[next_cursor] <= timestamp:
+        cursor = next_cursor
+        next_cursor += 1
+    return cursor

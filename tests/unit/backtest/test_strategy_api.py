@@ -113,6 +113,62 @@ def test_cerebro_exposes_named_analyzers_and_run_analysis() -> None:
     assert cerebro.analyzer_results == {"close": {"values": [10.0, 11.0, 12.0]}}
 
 
+def test_cerebro_aligns_secondary_data_to_primary_clock() -> None:
+    primary = bars()
+    secondary = pd.DataFrame(
+        {
+            "open": [90.0, 120.0],
+            "high": [91.0, 121.0],
+            "low": [89.0, 119.0],
+            "close": [100.0, 130.0],
+            "volume": [500.0, 700.0],
+        },
+        index=pd.to_datetime(["2026-01-01", "2026-01-03"], utc=True),
+    )
+
+    class MultiDataStrategy(Strategy):
+        def __init__(self) -> None:
+            self.rows: list[tuple[pd.Timestamp, float, pd.Timestamp, float]] = []
+
+        def next(self) -> None:
+            self.rows.append(
+                (
+                    self.data.datetime[0],
+                    self.data.close[0],
+                    self.datas[1].datetime[0],
+                    self.datas[1].close[0],
+                )
+            )
+
+    cerebro = Cerebro()
+    cerebro.adddata(primary, name="daily")
+    cerebro.adddata(secondary, name="sparse")
+    cerebro.addstrategy(MultiDataStrategy)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.rows == [
+        (
+            pd.Timestamp("2026-01-01", tz="UTC"),
+            10.0,
+            pd.Timestamp("2026-01-01", tz="UTC"),
+            100.0,
+        ),
+        (
+            pd.Timestamp("2026-01-02", tz="UTC"),
+            11.0,
+            pd.Timestamp("2026-01-01", tz="UTC"),
+            100.0,
+        ),
+        (
+            pd.Timestamp("2026-01-03", tz="UTC"),
+            12.0,
+            pd.Timestamp("2026-01-03", tz="UTC"),
+            130.0,
+        ),
+    ]
+
+
 def test_strategy_addminperiod_skips_next_until_warmup_finishes() -> None:
     class WarmupStrategy(Strategy):
         def __init__(self) -> None:
