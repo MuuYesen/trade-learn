@@ -29,6 +29,26 @@ NOTE_TITLES = {
     "portfolio.md": "Portfolio",
 }
 
+NOTE_TITLE_ALIASES = {
+    "matching-design.md": ("Matching Design", "撮合设计"),
+    "event-loop.md": ("Event Loop", "事件循环"),
+    "portfolio.md": ("Portfolio", "组合记账"),
+}
+
+SECTION_ALIASES = {
+    "## Scope": ("## Scope", "## 范围"),
+    "## Clean-room Boundary": ("## Clean-room Boundary", "## Clean-room 边界"),
+    "## Source Notes": ("## Source Notes", "## 来源笔记"),
+    "## Implementation Decisions": ("## Implementation Decisions", "## 实现决策"),
+    "## Open Questions": ("## Open Questions", "## 开放问题"),
+}
+
+SECTION_ALIAS_TO_CANONICAL = {
+    alias: canonical
+    for canonical, aliases in SECTION_ALIASES.items()
+    for alias in aliases
+}
+
 SECTION_PROMPTS = {
     "## Scope": "Define the design boundary and the behavior this note covers.",
     "## Clean-room Boundary": "Record source separation rules before implementation starts.",
@@ -64,6 +84,11 @@ SectionCounts = dict[str, int]
 def normalized_heading(line: str) -> str:
     """Return a stripped markdown heading line without a leading UTF-8 BOM."""
     return line.strip().removeprefix("\ufeff")
+
+
+def canonical_section_heading(line: str) -> str | None:
+    """Return the canonical required section for an English or Chinese heading."""
+    return SECTION_ALIAS_TO_CANONICAL.get(normalized_heading(line))
 
 
 def fence_marker(line: str) -> tuple[str, int, str] | None:
@@ -131,9 +156,10 @@ def section_heading_spans(content: str) -> SectionSpans:
         if fence is not None:
             offset += len(line)
             continue
-        heading = line.strip()
-        if heading in REQUIRED_SECTIONS and heading not in spans:
-            spans[heading] = (offset + line.index(heading), offset + len(line))
+        heading = normalized_heading(line)
+        canonical = canonical_section_heading(heading)
+        if canonical is not None and canonical not in spans:
+            spans[canonical] = (offset + line.index(heading), offset + len(line))
         offset += len(line)
     return spans
 
@@ -157,9 +183,9 @@ def section_heading_counts(content: str) -> SectionCounts:
             continue
         if fence is not None:
             continue
-        heading = line.strip()
-        if heading in REQUIRED_SECTIONS:
-            counts[heading] = counts.get(heading, 0) + 1
+        canonical = canonical_section_heading(line)
+        if canonical is not None:
+            counts[canonical] = counts.get(canonical, 0) + 1
     return counts
 
 
@@ -210,11 +236,11 @@ def has_placeholder_token(content: str, token: str) -> bool:
 
 def has_expected_title(content: str, filename: str) -> bool:
     """Return whether a note starts with the expected top-level heading."""
-    expected = f"# {NOTE_TITLES[filename]}"
+    expected = {f"# {title}" for title in NOTE_TITLE_ALIASES[filename]}
     for line in content.splitlines():
         heading = normalized_heading(line)
         if heading:
-            return heading == expected
+            return heading in expected
     return False
 
 

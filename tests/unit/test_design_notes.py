@@ -61,6 +61,57 @@ def test_check_design_notes_accepts_required_clean_room_notes(tmp_path: Path) ->
     assert result.stderr == ""
 
 
+def test_check_design_notes_accepts_chinese_clean_room_notes(tmp_path: Path) -> None:
+    """The checker accepts Chinese titles and required section headings."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    chinese_titles = {
+        "matching-design.md": "撮合设计",
+        "event-loop.md": "事件循环",
+        "portfolio.md": "组合记账",
+    }
+    for filename, title in chinese_titles.items():
+        (docs_internal / filename).write_text(
+            "\n".join(
+                [
+                    f"# {title}",
+                    "",
+                    "## 范围",
+                    "记录该设计笔记覆盖的行为边界。",
+                    "",
+                    "## Clean-room 边界",
+                    "记录源码隔离规则,不复制外部实现。",
+                    "",
+                    "## 来源笔记",
+                    "列出冻结前阅读的参考材料和观察。",
+                    "",
+                    "## 实现决策",
+                    "记录 v2 独立实现需要遵守的设计决策。",
+                    "",
+                    "## 开放问题",
+                    "记录冻结前必须关闭或显式延期的问题。",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_design_notes.py", "--strict", str(docs_internal)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "design-note:matching-design.md=ok",
+        "design-note:event-loop.md=ok",
+        "design-note:portfolio.md=ok",
+    ]
+    assert result.stderr == ""
+
+
 def test_check_design_notes_reports_missing_note(tmp_path: Path) -> None:
     """The design-note checker fails when one required note is missing."""
     docs_internal = tmp_path / "docs" / "internal"
