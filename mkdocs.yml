@@ -1,0 +1,46 @@
+site_name: trade-learn
+site_description: Python quantitative research framework for traditional and ML strategies.
+repo_url: https://github.com/MuuYesen/trade-learn
+docs_dir: docs
+exclude_docs: |
+  PROGRESS.md
+  superpowers/
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+
+nav:
+  - Quickstart: README.md
+  - Vision: VISION.md
+  - Runbook: RUNBOOK.md
+  - Specs:
+      - Index: specs/README.md
+      - Architecture: specs/ARCHITECTURE.md
+      - Contracts: specs/CONTRACTS.md
+      - Backtest: specs/BACKTEST_SPEC.md
+      - Strategy: specs/STRATEGY_SPEC.md
+      - Migration: specs/MIGRATION.md
+      - Consistency: specs/CONSISTENCY.md
+      - Indicators: specs/INDICATORS_SPEC.md
+      - Metrics: specs/METRICS_SPEC.md
+      - Report: specs/REPORT_SPEC.md
+  - Internal:
+      - Event Loop: internal/event-loop.md
+      - Matching: internal/matching-design.md
+      - Portfolio: internal/portfolio.md
