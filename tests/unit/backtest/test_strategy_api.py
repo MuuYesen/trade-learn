@@ -795,6 +795,56 @@ def test_simbroker_rejects_partial_fill_when_bar_volume_is_insufficient() -> Non
     assert strategy.broker.getcash() == 100000.0
 
 
+def test_simbroker_rejects_buy_when_cash_is_insufficient() -> None:
+    class UnderfundedBuy(Strategy):
+        def __init__(self) -> None:
+            self.statuses: list[int] = []
+
+        def next(self) -> None:
+            if not self.statuses:
+                self.buy(size=2)
+
+        def notify_order(self, order) -> None:
+            self.statuses.append(order.status)
+
+    cerebro = Cerebro()
+    cerebro.broker.setcash(10.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(UnderfundedBuy)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.statuses == [Order.Submitted, Order.Accepted, Order.Rejected]
+    assert strategy.position.size == 0.0
+    assert strategy.broker.getcash() == 10.0
+    assert strategy.broker.getvalue() == 10.0
+
+
+def test_simbroker_rejects_short_when_margin_cash_is_insufficient() -> None:
+    class UnderfundedShort(Strategy):
+        def __init__(self) -> None:
+            self.statuses: list[int] = []
+
+        def next(self) -> None:
+            if not self.statuses:
+                self.sell(size=2)
+
+        def notify_order(self, order) -> None:
+            self.statuses.append(order.status)
+
+    cerebro = Cerebro()
+    cerebro.broker.setcash(10.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(UnderfundedShort)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.statuses == [Order.Submitted, Order.Accepted, Order.Rejected]
+    assert strategy.position.size == 0.0
+    assert strategy.broker.getcash() == 10.0
+    assert strategy.broker.margin_used() == 0.0
+
+
 def test_simbroker_prefers_rust_match_order_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict[str, object]] = []
 

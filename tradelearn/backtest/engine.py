@@ -420,6 +420,11 @@ class SimBroker:
         if fill is None:
             return False
         signed_size, price, commission, _slippage = fill
+        if not self._has_required_cash(strategy, order, signed_size, price, commission):
+            order.status = Order.Rejected
+            self._record_order(order)
+            _notify_order(strategy, order)
+            return True
         position = strategy.getposition(order.data)
         old_size = position.size
         old_price = position.price
@@ -476,6 +481,22 @@ class SimBroker:
             _notify_order(strategy, order)
             return
         self._pending.append(order)
+
+    def _has_required_cash(
+        self,
+        strategy: Strategy,
+        order: Order,
+        signed_size: float,
+        price: float,
+        commission: float,
+    ) -> bool:
+        if signed_size > 0:
+            return self._cash >= signed_size * price + commission
+        position = strategy.getposition(order.data)
+        short_open_size = max(0.0, abs(signed_size) - max(position.size, 0.0))
+        if short_open_size == 0.0:
+            return self._cash >= commission
+        return self._cash >= short_open_size * price + commission
 
     def snapshot_portfolio(self, strategy: Strategy, timestamp: Any) -> None:
         self._last_strategy = strategy
