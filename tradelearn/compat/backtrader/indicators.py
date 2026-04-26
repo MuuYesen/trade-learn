@@ -44,7 +44,9 @@ class IndicatorLine(LineSeries):
 
     @property
     def _effective_cursor(self) -> int:
-        return self._source._cursor if self._source is not None else self._cursor
+        if self._source is None:
+            return self._cursor
+        return getattr(self._source, "_effective_cursor", self._source._cursor)
 
     def __getitem__(self, ago: int) -> Any:
         index = self._effective_cursor + ago
