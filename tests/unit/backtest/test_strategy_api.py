@@ -481,6 +481,79 @@ def test_positions_artifact_tracks_flat_snapshot_realized_pnl_and_margin() -> No
     assert strategy.stats.summary["final_margin_used"] == 0.0
 
 
+def test_reversal_fill_splits_trade_artifacts_into_close_and_open_legs() -> None:
+    class LongThenReverseShort(Strategy):
+        def __init__(self) -> None:
+            self.seen = 0
+            self.trades: list[tuple[float, float, float, bool, bool]] = []
+
+        def next(self) -> None:
+            self.seen += 1
+            if self.seen == 1:
+                self.buy(size=2)
+            elif self.seen == 2:
+                self.sell(size=3)
+
+        def notify_trade(self, trade) -> None:
+            self.trades.append(
+                (
+                    trade.size,
+                    trade.price,
+                    trade.pnl,
+                    trade.isopen,
+                    trade.isclosed,
+                )
+            )
+
+    cerebro = Cerebro()
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars(), name="daily")
+    cerebro.addstrategy(LongThenReverseShort)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.position.size == -1.0
+    assert strategy.position.price == 11.0
+    assert strategy.broker.getcash() == 113.0
+    assert strategy.broker.getvalue() == 101.0
+    assert strategy.trades == [
+        (2.0, 10.0, 0.0, True, False),
+        (0.0, 11.0, 2.0, False, True),
+        (-1.0, 11.0, 0.0, True, False),
+    ]
+    assert strategy.stats.trades[
+        ["size", "price", "pnl", "commission", "isopen", "isclosed"]
+    ].to_dict("records") == [
+        {
+            "size": 2.0,
+            "price": 10.0,
+            "pnl": 0.0,
+            "commission": 0.0,
+            "isopen": True,
+            "isclosed": False,
+        },
+        {
+            "size": 0.0,
+            "price": 11.0,
+            "pnl": 2.0,
+            "commission": 0.0,
+            "isopen": False,
+            "isclosed": True,
+        },
+        {
+            "size": -1.0,
+            "price": 11.0,
+            "pnl": 0.0,
+            "commission": 0.0,
+            "isopen": True,
+            "isclosed": False,
+        },
+    ]
+    assert strategy.stats.summary["final_realized_pnl"] == 2.0
+    assert strategy.stats.summary["final_unrealized_pnl"] == -1.0
+    assert strategy.stats.summary["final_margin_used"] == 12.0
+
+
 def test_analyzer_on_end_receives_stats_object() -> None:
     class NoopStrategy(Strategy):
         def next(self) -> None:

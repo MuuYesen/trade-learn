@@ -442,32 +442,117 @@ class SimBroker:
             comm=commission,
             pnl=realized,
         )
-        trade = Trade(
-            ref=self._next_trade_ref,
-            data=order.data,
-            size=position.size,
+        trades = self._build_trade_legs(
+            order=order,
+            old_size=old_size,
+            new_size=position.size,
             price=price,
-            value=abs(position.size) * price,
             commission=commission,
-            pnl=realized,
-            pnlcomm=realized - commission,
-            isopen=position.size != 0.0,
-            isclosed=position.size == 0.0 and old_size != 0.0,
-            status=1 if position.size != 0.0 else 2,
-            dtopen=order.data.datetime[0],
-            dtclose=order.data.datetime[0] if position.size == 0.0 else None,
+            realized=realized,
         )
-        self._next_trade_ref += 1
 
         self._record_order(order)
         self._record_fill(order)
-        self._record_trade(trade)
+        for trade in trades:
+            self._record_trade(trade)
         _notify_order(strategy, order)
-        strategy.notify_trade(trade)
+        for trade in trades:
+            strategy.notify_trade(trade)
         for analyzer in analyzers.values():
             analyzer.on_fill(order.executed)
-            analyzer.on_trade(trade)
+            for trade in trades:
+                analyzer.on_trade(trade)
         return True
+
+    def _build_trade_legs(
+        self,
+        *,
+        order: Order,
+        old_size: float,
+        new_size: float,
+        price: float,
+        commission: float,
+        realized: float,
+    ) -> list[Trade]:
+        timestamp = order.data.datetime[0]
+        if old_size != 0.0 and old_size * new_size < 0.0:
+            closing_size = abs(old_size)
+            opening_size = abs(new_size)
+            total_size = closing_size + opening_size
+            close_commission = commission * closing_size / total_size if total_size else 0.0
+            open_commission = commission - close_commission
+            return [
+                self._make_trade(
+                    data=order.data,
+                    size=0.0,
+                    price=price,
+                    commission=close_commission,
+                    pnl=realized,
+                    isopen=False,
+                    isclosed=True,
+                    status=2,
+                    dtopen=timestamp,
+                    dtclose=timestamp,
+                ),
+                self._make_trade(
+                    data=order.data,
+                    size=new_size,
+                    price=price,
+                    commission=open_commission,
+                    pnl=0.0,
+                    isopen=True,
+                    isclosed=False,
+                    status=1,
+                    dtopen=timestamp,
+                    dtclose=None,
+                ),
+            ]
+        return [
+            self._make_trade(
+                data=order.data,
+                size=new_size,
+                price=price,
+                commission=commission,
+                pnl=realized,
+                isopen=new_size != 0.0,
+                isclosed=new_size == 0.0 and old_size != 0.0,
+                status=1 if new_size != 0.0 else 2,
+                dtopen=timestamp,
+                dtclose=timestamp if new_size == 0.0 else None,
+            )
+        ]
+
+    def _make_trade(
+        self,
+        *,
+        data: DataFeed,
+        size: float,
+        price: float,
+        commission: float,
+        pnl: float,
+        isopen: bool,
+        isclosed: bool,
+        status: int,
+        dtopen: Any,
+        dtclose: Any | None,
+    ) -> Trade:
+        trade = Trade(
+            ref=self._next_trade_ref,
+            data=data,
+            size=size,
+            price=price,
+            value=abs(size) * price,
+            commission=commission,
+            pnl=pnl,
+            pnlcomm=pnl - commission,
+            isopen=isopen,
+            isclosed=isclosed,
+            status=status,
+            dtopen=dtopen,
+            dtclose=dtclose,
+        )
+        self._next_trade_ref += 1
+        return trade
 
     def _handle_unfilled_order(self, strategy: Strategy, order: Order) -> None:
         if order.time_in_force == Order.IOC:
