@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "recorded_at": "2026-04-26 11:31 Asia/Tokyo",
+  "entries": [
+    {
+      "id": "golden-datasets",
+      "status": "blocked",
+      "ready": 0,
+      "total": 10,
+      "reason": "missing real parquet datasets because external provider live access is unavailable",
+      "next": "run provider live access and materialize tests/golden/data parquet files"
+    },
+    {
+      "id": "golden-expected-v1",
+      "status": "blocked",
+      "ready": 0,
+      "total": 100,
+      "reason": "missing expected v1.0 results because real parquet and adapter execution are unavailable",
+      "next": "run scripts/build_golden.py after datasets and adapters are ready"
+    },
+    {
+      "id": "golden-strategy-adapters",
+      "status": "blocked",
+      "ready": 0,
+      "total": 10,
+      "reason": "golden strategy adapters still raise NotImplementedError",
+      "next": "replace Stage 0 placeholder adapters with runnable Stage 3 strategies"
+    },
+    {
+      "id": "full-golden-comparison",
+      "status": "blocked",
+      "reason": "trades zero-diff and pnl rtol=1e-4 comparison requires datasets, expected v1.0, and runnable adapters",
+      "next": "run full golden comparison after readiness check reports ok=true"
+    }
+  ]
+}
