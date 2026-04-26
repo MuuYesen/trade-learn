@@ -72,6 +72,7 @@ docs = [
 
 [dependency-groups]
 oracle = [
+    "backtrader",
     "opentdx; python_version >= '3.12'",
     "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git",
 ]

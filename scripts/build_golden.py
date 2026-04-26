@@ -405,6 +405,23 @@ def run_expected_job(
     }
 
 
+def run_backtrader_expected_job(
+    strategy_name: str,
+    dataset: dict[str, str],
+    datasets_root: Path,
+) -> dict[str, Any]:
+    """Run one Backtrader oracle job and return expected payload."""
+
+    if strategy_name not in {"sma_cross", "macd_cross", "tdx30_kdj"}:
+        raise GoldenDataError(
+            "Backtrader oracle currently supports sma_cross, macd_cross, tdx30_kdj"
+        )
+    from scripts.run_backtrader_oracle import run_backtrader_oracle
+
+    path = dataset_path(dataset, datasets_root)
+    return run_backtrader_oracle(strategy_name, path, dataset=dataset["symbol"])
+
+
 def expected_path(strategy: str, dataset: str, out: Path) -> Path:
     """Return the expected JSON path used by readiness checks."""
 
@@ -415,6 +432,7 @@ def build_expected(
     manifest: dict[str, object],
     out: Path,
     datasets_root: Path,
+    oracle: str = "tradelearn",
 ) -> tuple[int, int]:
     """Build expected JSON files for every manifest strategy/dataset job."""
 
@@ -422,11 +440,20 @@ def build_expected(
     failures: list[str] = []
     successes = 0
     jobs = planned_jobs(manifest)
+    if oracle == "backtrader":
+        jobs = [
+            (strategy, dataset)
+            for strategy, dataset in jobs
+            if strategy in {"sma_cross", "macd_cross", "tdx30_kdj"}
+        ]
     for strategy_name, dataset_symbol in jobs:
         dataset = datasets_by_symbol[dataset_symbol]
         label = f"{strategy_name}:{dataset_symbol}"
         try:
-            payload = run_expected_job(strategy_name, dataset, datasets_root)
+            if oracle == "backtrader":
+                payload = run_backtrader_expected_job(strategy_name, dataset, datasets_root)
+            else:
+                payload = run_expected_job(strategy_name, dataset, datasets_root)
             path = expected_path(strategy_name, dataset_symbol, out)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(
@@ -455,6 +482,7 @@ def build(
     datasets_only: bool,
     engine: str,
     datasets_root: Path,
+    oracle: str,
 ) -> int:
     """Validate inputs and either print planned jobs or fail clearly."""
 
@@ -481,7 +509,7 @@ def build(
         return 0
 
     try:
-        build_expected(manifest, out, datasets_root)
+        build_expected(manifest, out, datasets_root, oracle=oracle)
     except GoldenDataError as exc:
         raise GoldenDataError(f"expected generation failed: {exc}") from exc
     return 0
@@ -511,6 +539,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DATASETS_ROOT,
         help="Root directory for generated golden dataset parquet files",
     )
+    parser.add_argument(
+        "--oracle",
+        choices=["tradelearn", "backtrader"],
+        default="tradelearn",
+        help="Expected generator backend; backtrader currently supports SMA/MACD/KDJ parity smoke",
+    )
     return parser.parse_args(argv)
 
 
@@ -526,6 +560,7 @@ def main(argv: list[str] | None = None) -> int:
             args.datasets_only,
             args.engine,
             args.datasets_root,
+            args.oracle,
         )
     except GoldenDataError as exc:
         print(f"error: {exc}", file=sys.stderr)

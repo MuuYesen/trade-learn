@@ -372,6 +372,14 @@ wheels = [
 ]
 
 [[package]]
+name = "backtrader"
+version = "1.9.78.123"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f3/ef/328c6ec332435f63b3e18febd263686b8ba07e990676a862cc8522ba38f5/backtrader-1.9.78.123-py2.py3-none-any.whl", hash = "sha256:9a07a516b0de9155539a35c56e9404d8711dd7020b3d37b30495e83e1b9d5dfd", size = 419517 },
+]
+
+[[package]]
 name = "bashlex"
 version = "0.18"
 source = { registry = "https://pypi.org/simple" }
@@ -5906,6 +5914,7 @@ lab = [
 
 [package.dev-dependencies]
 oracle = [
+    { name = "backtrader" },
     { name = "opentdx", marker = "python_full_version >= '3.12'" },
     { name = "tvdatafeed" },
 ]
@@ -5949,6 +5958,7 @@ provides-extras = ["lab", "dev", "docs"]
 
 [package.metadata.requires-dev]
 oracle = [
+    { name = "backtrader" },
     { name = "opentdx", marker = "python_full_version >= '3.12'" },
     { name = "tvdatafeed", git = "https://github.com/rongardF/tvdatafeed.git" },
 ]

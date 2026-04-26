@@ -6,7 +6,7 @@ pub mod core;
 #[cfg(feature = "extension-module")]
 use crate::core::{
     match_order, BarEvent, CommissionModel, ExecutionOptions, FixedSlippage, OrderEvent, OrderSide,
-    OrderType, PercentCommission, PercentSlippage, SlippageModel,
+    OrderType, PercentCommission, SlippageModel,
 };
 
 #[cfg(feature = "extension-module")]
@@ -17,6 +17,24 @@ fn tradelearn_rust_version() -> &'static str {
 
 #[cfg(feature = "extension-module")]
 #[pyfunction]
+#[pyo3(signature = (
+    order_id,
+    symbol,
+    side,
+    order_type,
+    size,
+    limit_price,
+    stop_price,
+    created_ts,
+    ts,
+    open,
+    high,
+    low,
+    close,
+    volume,
+    trade_on_close,
+    commission_ratio
+))]
 #[allow(clippy::too_many_arguments)]
 fn match_order_fill(
     order_id: u64,
