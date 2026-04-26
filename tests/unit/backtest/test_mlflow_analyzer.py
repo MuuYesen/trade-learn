@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from contextlib import contextmanager
 
 import pandas as pd
@@ -91,25 +92,22 @@ def test_mlflow_analyzer_logs_params_stats_and_artifacts(monkeypatch) -> None:
             "final_realized_pnl": 0.0,
             "final_unrealized_pnl": 0.0,
             "final_margin_used": 0.0,
+            "max_drawdown": 0.0,
             "total_trades": 0.0,
             "total_orders": 0.0,
             "total_fills": 0.0,
         }
     ]
+    assert "sharpe" not in fake.metrics[0]
+    [artifact] = fake.dicts
+    payload, artifact_file = artifact
+    summary = payload["summary"]
+    assert summary["max_drawdown"] == 0.0
+    assert math.isnan(summary["sharpe"])
     assert fake.dicts == [
         (
             {
-                "summary": {
-                    "bars": 3,
-                    "final_cash": 123.0,
-                    "final_value": 123.0,
-                    "final_realized_pnl": 0.0,
-                    "final_unrealized_pnl": 0.0,
-                    "final_margin_used": 0.0,
-                    "total_trades": 0,
-                    "total_orders": 0,
-                    "total_fills": 0,
-                },
+                "summary": summary,
                 "analyzers": {},
                 "config": {
                     "callback_batch": 1,
@@ -119,9 +117,10 @@ def test_mlflow_analyzer_logs_params_stats_and_artifacts(monkeypatch) -> None:
                     "broker": {"cash": 123.0, "commission": 0.001},
                 },
             },
-            "stats.json",
+            artifact_file,
         )
     ]
+    assert artifact_file == "stats.json"
     assert strategy.analyzer_results["mlflow"]["status"] == "logged"
 
 

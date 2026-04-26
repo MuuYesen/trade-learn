@@ -7,6 +7,8 @@ from typing import Any
 
 import pandas as pd
 
+from tradelearn.metrics import max_drawdown, sharpe
+
 
 class Params:
     """Attribute access wrapper for strategy and analyzer params."""
@@ -1159,6 +1161,8 @@ class Cerebro:
             "final_realized_pnl": self.broker.realized_pnl(),
             "final_unrealized_pnl": self.broker.unrealized_pnl(),
             "final_margin_used": self.broker.margin_used(),
+            "sharpe": sharpe(returns, periods=252),
+            "max_drawdown": max_drawdown(returns),
             "total_trades": len(trades),
             "total_orders": len(orders),
             "total_fills": len(fills),

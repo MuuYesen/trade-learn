@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 from typing import Any
 
@@ -76,11 +77,14 @@ def _params_payload(strategy: Any) -> dict[str, Any]:
 
 def _metrics_payload(stats: Any) -> dict[str, float]:
     summary = _stats_summary(stats)
-    return {
-        key: float(value)
-        for key, value in summary.items()
-        if isinstance(value, int | float) and not isinstance(value, bool)
-    }
+    payload: dict[str, float] = {}
+    for key, value in summary.items():
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            continue
+        metric = float(value)
+        if math.isfinite(metric):
+            payload[key] = metric
+    return payload
 
 
 def _stats_payload(stats: Any) -> dict[str, Any]:

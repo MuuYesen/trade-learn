@@ -7,6 +7,7 @@ import pytest
 
 import tradelearn
 from tradelearn.backtest import Analyzer, Cerebro, Order, SimBroker, Stats, Strategy
+from tradelearn.metrics import max_drawdown, sharpe
 
 
 def bars() -> pd.DataFrame:
@@ -409,6 +410,8 @@ def test_cerebro_exposes_report_ready_stats_artifacts() -> None:
         "final_realized_pnl": 2.0,
         "final_unrealized_pnl": 0.0,
         "final_margin_used": 0.0,
+        "sharpe": sharpe(strategy.stats.returns, periods=252),
+        "max_drawdown": max_drawdown(strategy.stats.returns),
         "total_trades": 2,
         "total_orders": 6,
         "total_fills": 2,
