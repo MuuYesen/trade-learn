@@ -347,14 +347,15 @@ pub fn match_order(
             }
         }
     }?;
-    let price = apply_slippage(raw_price, order.side, options.slippage);
+    let price = round_precision(apply_slippage(raw_price, order.side, options.slippage));
+    let size = round_precision(signed_order_size(order));
     Some(FillEvent {
         order_id: order.order_id,
         symbol: order.symbol.clone(),
-        size: signed_order_size(order),
+        size,
         price,
-        commission: calculate_commission(price, order.size, options.commission),
-        slippage: price - raw_price,
+        commission: round_precision(calculate_commission(price, size, options.commission)),
+        slippage: round_precision(price - raw_price),
         ts: bar.ts,
     })
 }
@@ -398,6 +399,11 @@ fn calculate_commission(price: f64, size: f64, commission: CommissionModel) -> f
         CommissionModel::Fixed(model) => model.amount,
         CommissionModel::Percent(model) => price * size.abs() * model.ratio,
     }
+}
+
+fn round_precision(value: f64) -> f64 {
+    const SCALE: f64 = 1_000_000.0;
+    (value * SCALE).round() / SCALE
 }
 
 fn signed_order_size(order: &OrderEvent) -> f64 {

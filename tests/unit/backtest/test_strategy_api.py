@@ -996,3 +996,38 @@ def test_simbroker_prefers_rust_match_order_bridge(monkeypatch: pytest.MonkeyPat
     ]
     assert strategy.order_prices == [10.5]
     assert strategy.broker.getcash() == 79.0
+
+
+def test_simbroker_precision_rounds_after_price_adjustment_before_commission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delattr(tradelearn, "_rust", raising=False)
+    data = pd.DataFrame(
+        {
+            "open": [9.0, 10.0000004, 11.0],
+            "high": [11.0, 12.0, 13.0],
+            "low": [8.0, 9.0, 10.0],
+            "close": [10.0, 11.0, 12.0],
+            "volume": [1000.0, 1100.0, 1200.0],
+        },
+        index=pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"], utc=True),
+    )
+
+    class BuyFractionalSize(Strategy):
+        def next(self) -> None:
+            if not self.position:
+                self.buy(size=3.333333333)
+
+    cerebro = Cerebro()
+    cerebro.broker.setcash(100.0)
+    cerebro.broker.setcommission(0.001)
+    cerebro.adddata(data, name="precision")
+    cerebro.addstrategy(BuyFractionalSize)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.position.size == 3.333333
+    assert strategy.position.price == 10.000000
+    assert strategy.stats.fills[["size", "price", "commission"]].to_dict("records") == [
+        {"size": 3.333333, "price": 10.0, "commission": 0.033333}
+    ]

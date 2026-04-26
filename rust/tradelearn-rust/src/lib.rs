@@ -82,14 +82,8 @@ fn match_order_fill(
             ratio: commission_ratio,
         }),
     };
-    Ok(match_order(&order, &bar, &options).map(|fill| {
-        (
-            fill.size,
-            fill.price,
-            fill.commission,
-            fill.slippage,
-        )
-    }))
+    Ok(match_order(&order, &bar, &options)
+        .map(|fill| (fill.size, fill.price, fill.commission, fill.slippage)))
 }
 
 #[cfg(feature = "extension-module")]

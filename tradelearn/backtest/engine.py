@@ -842,11 +842,12 @@ def _python_match_order(
         price = _execution_price(order, trade_on_close)
     if price is None:
         return None
-    signed_size = order.size if order.ordtype == Order.Buy else -order.size
+    signed_size = _round_execution(order.size if order.ordtype == Order.Buy else -order.size)
+    price = _round_execution(price)
     return (
         signed_size,
         price,
-        abs(signed_size) * price * commission,
+        _round_execution(abs(signed_size) * price * commission),
         0.0,
     )
 
@@ -871,6 +872,10 @@ def _stop_triggered(order: Order, stop_price: float | None) -> bool:
     if order.ordtype == Order.Buy:
         return bool(order.data.high[0] >= stop_price)
     return bool(order.data.low[0] <= stop_price)
+
+
+def _round_execution(value: float) -> float:
+    return round(float(value), 6)
 
 
 def _notify_order(strategy: Strategy, order: Order) -> None:

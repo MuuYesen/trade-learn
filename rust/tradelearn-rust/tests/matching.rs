@@ -130,3 +130,25 @@ fn commission_models_are_applied_to_fill_events() {
     assert_eq!(fixed_fill.commission, 5.0);
     assert_eq!(percent_fill.commission, 1.0);
 }
+
+#[test]
+fn fill_precision_is_frozen_after_slippage_before_commission() {
+    let mut order = order(OrderType::Market, OrderSide::Buy);
+    order.size = 3.333333333;
+    let bar = BarEvent {
+        open: 10.0000004,
+        ..bar()
+    };
+    let options = ExecutionOptions {
+        slippage: SlippageModel::Fixed(FixedSlippage { amount: 0.0000004 }),
+        commission: CommissionModel::Percent(PercentCommission { ratio: 0.001 }),
+        ..options()
+    };
+
+    let fill = match_order(&order, &bar, &options).expect("market fills");
+
+    assert_eq!(fill.size, 3.333333);
+    assert_eq!(fill.price, 10.000001);
+    assert_eq!(fill.slippage, 0.000001);
+    assert_eq!(fill.commission, 0.033333);
+}
