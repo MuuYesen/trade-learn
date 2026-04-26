@@ -6,7 +6,18 @@ import pandas as pd
 import pytest
 
 import tradelearn
-from tradelearn.backtest import Analyzer, Cerebro, Order, SimBroker, Stats, Strategy
+from tradelearn.backtest import (
+    Analyzer,
+    Cerebro,
+    FixedCommission,
+    FixedSlippage,
+    Order,
+    PercentCommission,
+    PercentSlippage,
+    SimBroker,
+    Stats,
+    Strategy,
+)
 from tradelearn.metrics import max_drawdown, sharpe
 
 
@@ -70,6 +81,46 @@ def test_callback_batch_delays_orders_by_batch_size() -> None:
     assert strategy.stats.fills[["datetime", "size", "price"]].to_dict("records") == [
         {"datetime": pd.Timestamp("2026-01-03", tz="UTC"), "size": 1.0, "price": 11.0}
     ]
+
+
+def test_cerebro_accepts_slippage_and_commission_models() -> None:
+    class BuyAndShort(Strategy):
+        def next(self) -> None:
+            if len(self.broker.fills_frame()) == 0:
+                self.buy(size=1)
+            elif len(self.broker.fills_frame()) == 1:
+                self.sell(size=2)
+
+    cerebro = Cerebro(slippage=FixedSlippage(0.5), commission=FixedCommission(2.0))
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(BuyAndShort)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.stats.fills[["size", "price", "commission"]].to_dict("records") == [
+        {"size": 1.0, "price": 10.5, "commission": 2.0},
+        {"size": -2.0, "price": 10.5, "commission": 2.0},
+    ]
+
+
+def test_percent_slippage_and_commission_models_apply_by_side() -> None:
+    class SellOnce(Strategy):
+        def next(self) -> None:
+            if not self.position:
+                self.sell(size=1)
+
+    cerebro = Cerebro(slippage=PercentSlippage(0.1), commission=PercentCommission(0.01))
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(SellOnce)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.stats.fills[["size", "price", "commission"]].to_dict("records") == [
+        {"size": -1.0, "price": 9.0, "commission": 0.09}
+    ]
+    assert strategy.broker.getcash() == 108.91
 
 
 def test_analyzer_receives_strategy_and_bar_lifecycle() -> None:
