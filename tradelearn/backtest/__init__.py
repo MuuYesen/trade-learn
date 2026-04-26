@@ -13,6 +13,7 @@ from tradelearn.backtest.engine import (
     Strategy,
     Trade,
 )
+from tradelearn.backtest.grid import GridSearchResult, grid_search
 
 __all__ = [
     "Analyzer",
@@ -20,10 +21,12 @@ __all__ = [
     "Cerebro",
     "DataFeed",
     "ExecutedInfo",
+    "GridSearchResult",
     "LineSeries",
     "Order",
     "Params",
     "SimBroker",
     "Strategy",
     "Trade",
+    "grid_search",
 ]
