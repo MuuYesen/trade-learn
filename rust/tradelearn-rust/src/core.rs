@@ -14,6 +14,30 @@ pub struct BarEvent {
     pub volume: f64,
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BarBatch {
+    pub ts: Vec<Timestamp>,
+    pub symbol: Vec<String>,
+    pub open: Vec<f64>,
+    pub high: Vec<f64>,
+    pub low: Vec<f64>,
+    pub close: Vec<f64>,
+    pub volume: Vec<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CallbackBatch {
+    pub sequence: usize,
+    pub bars: BarBatch,
+}
+
+#[derive(Debug)]
+pub struct CallbackBatcher {
+    callback_batch: usize,
+    next_sequence: usize,
+    pending: Vec<BarEvent>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OrderSide {
     Buy,
@@ -207,6 +231,96 @@ impl EventQueue {
 
     pub fn is_empty(&self) -> bool {
         self.events.is_empty()
+    }
+}
+
+impl BarBatch {
+    pub fn from_bars(bars: &[BarEvent]) -> Self {
+        let mut batch = Self {
+            ts: Vec::with_capacity(bars.len()),
+            symbol: Vec::with_capacity(bars.len()),
+            open: Vec::with_capacity(bars.len()),
+            high: Vec::with_capacity(bars.len()),
+            low: Vec::with_capacity(bars.len()),
+            close: Vec::with_capacity(bars.len()),
+            volume: Vec::with_capacity(bars.len()),
+        };
+        for bar in bars {
+            batch.ts.push(bar.ts);
+            batch.symbol.push(bar.symbol.clone());
+            batch.open.push(bar.open);
+            batch.high.push(bar.high);
+            batch.low.push(bar.low);
+            batch.close.push(bar.close);
+            batch.volume.push(bar.volume);
+        }
+        batch
+    }
+
+    pub fn len(&self) -> usize {
+        self.ts.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.ts.is_empty()
+    }
+
+    pub fn bar(&self, index: usize) -> Option<BarEvent> {
+        Some(BarEvent {
+            ts: *self.ts.get(index)?,
+            symbol: self.symbol.get(index)?.clone(),
+            open: *self.open.get(index)?,
+            high: *self.high.get(index)?,
+            low: *self.low.get(index)?,
+            close: *self.close.get(index)?,
+            volume: *self.volume.get(index)?,
+        })
+    }
+}
+
+impl CallbackBatcher {
+    pub fn new(callback_batch: usize) -> Self {
+        Self {
+            callback_batch: callback_batch.max(1),
+            next_sequence: 0,
+            pending: Vec::new(),
+        }
+    }
+
+    pub fn push_bar(&mut self, bar: BarEvent) -> Option<CallbackBatch> {
+        self.pending.push(bar);
+        if self.pending.len() >= self.callback_batch {
+            self.drain_pending()
+        } else {
+            None
+        }
+    }
+
+    pub fn flush(&mut self) -> Option<CallbackBatch> {
+        if self.pending.is_empty() {
+            None
+        } else {
+            self.drain_pending()
+        }
+    }
+
+    pub fn callback_batch(&self) -> usize {
+        self.callback_batch
+    }
+
+    pub fn pending_len(&self) -> usize {
+        self.pending.len()
+    }
+
+    fn drain_pending(&mut self) -> Option<CallbackBatch> {
+        if self.pending.is_empty() {
+            return None;
+        }
+        let sequence = self.next_sequence;
+        self.next_sequence += 1;
+        let bars = BarBatch::from_bars(&self.pending);
+        self.pending.clear();
+        Some(CallbackBatch { sequence, bars })
     }
 }
 
