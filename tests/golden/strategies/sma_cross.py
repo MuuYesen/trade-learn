@@ -1,12 +1,17 @@
-"""Golden strategy placeholder: moving average crossover."""
+"""Golden strategy adapter: moving average crossover."""
+
+from tests.golden.strategies._helpers import GoldenAdapterBase
 
 STRATEGY_NAME = "sma_cross"
 
 
-class SmaCrossStrategy:
-    """Stage 0 placeholder for the documented SMA crossover strategy."""
+class SmaCrossStrategy(GoldenAdapterBase):
+    """Buy when a fast SMA is above a slow SMA, close on reversal."""
 
-    def run(self) -> None:
-        """Block execution until the Stage 3 backtest API exists."""
+    min_period = 3
 
-        raise NotImplementedError("Golden strategy execution requires Stage 3 backtest API")
+    def should_enter(self) -> bool:
+        return self._sma(2) > self._sma(3)
+
+    def should_exit(self) -> bool:
+        return self._sma(2) < self._sma(3)

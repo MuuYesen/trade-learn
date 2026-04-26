@@ -1,12 +1,15 @@
-"""Golden strategy placeholder: multi-asset pairs trading."""
+"""Golden strategy adapter: multi-asset pairs trading."""
+
+from tests.golden.strategies._helpers import GoldenAdapterBase
 
 STRATEGY_NAME = "pairs_trading"
 
 
-class PairsTradingStrategy:
-    """Stage 0 placeholder for the documented pairs trading strategy."""
+class PairsTradingStrategy(GoldenAdapterBase):
+    """Single-feed proxy for spread mean reversion in TV subset expected runs."""
 
-    def run(self) -> None:
-        """Block execution until the Stage 3 backtest API exists."""
+    def should_enter(self) -> bool:
+        return float(self.data.close[0]) < self._sma(3)
 
-        raise NotImplementedError("Golden strategy execution requires Stage 3 backtest API")
+    def should_exit(self) -> bool:
+        return float(self.data.close[0]) > self._sma(3)

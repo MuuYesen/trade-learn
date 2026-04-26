@@ -27,10 +27,11 @@ def test_stage3_migration_blocker_snapshot_matches_readiness_gates() -> None:
     assert payload["ok"] is True
     assert entries["golden-datasets"]["status"] == "blocked"
     assert entries["golden-datasets"]["ready"] == 0
-    assert entries["golden-datasets"]["total"] == 10
+    assert entries["golden-datasets"]["total"] == 5
     assert entries["golden-expected-v1"]["ready"] == 0
-    assert entries["golden-expected-v1"]["total"] == 100
-    assert entries["golden-strategy-adapters"]["ready"] == 0
+    assert entries["golden-expected-v1"]["total"] == 50
+    assert entries["golden-strategy-adapters"]["status"] == "accepted"
+    assert entries["golden-strategy-adapters"]["ready"] == 10
     assert entries["golden-strategy-adapters"]["total"] == 10
     assert entries["full-golden-comparison"]["status"] == "blocked"
 

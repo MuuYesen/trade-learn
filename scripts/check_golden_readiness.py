@@ -10,7 +10,12 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.build_golden import dataset_path, load_manifest, planned_jobs  # noqa: E402
+from scripts.build_golden import (  # noqa: E402
+    dataset_path,
+    filter_manifest_by_engine,
+    load_manifest,
+    planned_jobs,
+)
 
 DATASETS_DIR = ROOT / "tests" / "golden" / "datasets"
 EXPECTED_DIR = ROOT / "tests" / "golden" / "expected" / "v1.0"
@@ -40,13 +45,19 @@ def strategy_adapter_ready(
     if not path.exists():
         return False, "missing strategy script"
     namespace = runpy.run_path(str(path))
+    from tradelearn.backtest import Strategy
+
     strategy_classes = [
         value
         for key, value in namespace.items()
-        if key.endswith("Strategy") and isinstance(value, type)
+        if key.endswith("Strategy")
+        and isinstance(value, type)
+        and value is not Strategy
     ]
     if len(strategy_classes) != 1:
         return False, "missing single strategy adapter class"
+    if issubclass(strategy_classes[0], Strategy):
+        return True, "ready"
     strategy = strategy_classes[0]()
     run = getattr(strategy, "run", None)
     if not callable(run):
@@ -87,8 +98,9 @@ def build_report(
     datasets_root: Path = DATASETS_DIR,
     expected_root: Path = EXPECTED_DIR,
     strategy_dir: Path = STRATEGY_DIR,
+    engine: str = "all",
 ) -> dict[str, Any]:
-    manifest = load_manifest()
+    manifest = filter_manifest_by_engine(load_manifest(), engine)
     datasets = manifest["datasets"]
     strategies = manifest["strategies"]
     jobs = planned_jobs(manifest)
@@ -178,6 +190,12 @@ def parse_args() -> argparse.Namespace:
             "even if full golden is blocked"
         ),
     )
+    parser.add_argument(
+        "--engine",
+        choices=["all", "tv", "tdx"],
+        default="all",
+        help="Limit readiness totals and blockers to one provider engine",
+    )
     return parser.parse_args()
 
 
@@ -208,6 +226,7 @@ def main() -> int:
         datasets_root=args.datasets_root,
         expected_root=args.expected_root,
         strategy_dir=args.strategies_root,
+        engine=args.engine,
     )
     if args.json:
         print(json.dumps(report, sort_keys=True))

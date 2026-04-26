@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -267,6 +268,63 @@ def test_build_golden_datasets_only_can_generate_tv_subset_without_tdx(
     assert (
         datasets_root / "tv" / "GOOG_2020-01-01_2020-01-02_1d.parquet"
     ).exists()
+
+
+def test_build_golden_expected_can_generate_tv_subset_from_strategy_adapter(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    manifest = {
+        "datasets": [
+            {
+                "symbol": "GOOG",
+                "exchange": "NASDAQ",
+                "engine": "tv",
+                "start": "2020-01-01",
+                "end": "2020-01-02",
+                "freq": "1d",
+            },
+        ],
+        "strategies": [{"name": "sma_cross"}],
+    }
+    datasets_root = tmp_path / "datasets"
+    tv_dir = datasets_root / "tv"
+    tv_dir.mkdir(parents=True)
+    frame = pd.DataFrame(
+        {
+            "open": [10.0, 11.0, 12.0, 13.0],
+            "high": [11.0, 12.0, 13.0, 14.0],
+            "low": [9.0, 10.0, 11.0, 12.0],
+            "close": [10.5, 11.5, 12.5, 13.5],
+            "volume": [1000.0, 1000.0, 1000.0, 1000.0],
+        },
+        index=pd.date_range("2026-01-01", periods=4, freq="D", tz="UTC"),
+    )
+    frame.to_parquet(tv_dir / "GOOG_2020-01-01_2020-01-02_1d.parquet")
+
+    monkeypatch.setattr(build_golden, "load_manifest", lambda: manifest)
+
+    result = build_golden.main(
+        [
+            "--version",
+            "1.x",
+            "--out",
+            str(tmp_path / "expected"),
+            "--engine",
+            "tv",
+            "--datasets-root",
+            str(datasets_root),
+        ]
+    )
+
+    payload = json.loads((tmp_path / "expected" / "sma_cross__GOOG.json").read_text())
+    captured = capsys.readouterr()
+    assert result == 0
+    assert payload["strategy"] == "sma_cross"
+    assert payload["dataset"] == "GOOG"
+    assert payload["engine"] == "tv"
+    assert payload["summary"]["bars"] == 4
+    assert isinstance(payload["trades"], list)
+    assert "expected=1/1" in captured.out
 
 
 def test_build_golden_datasets_only_reports_unavailable_opentdx(

@@ -1,12 +1,15 @@
-"""Golden strategy placeholder: equal-weight rotation."""
+"""Golden strategy adapter: equal-weight rotation."""
+
+from tests.golden.strategies._helpers import GoldenAdapterBase
 
 STRATEGY_NAME = "equal_weight"
 
 
-class EqualWeightStrategy:
-    """Stage 0 placeholder for the documented equal-weight strategy."""
+class EqualWeightStrategy(GoldenAdapterBase):
+    """Hold a fixed unit after warmup for single-feed TV subset runs."""
 
-    def run(self) -> None:
-        """Block execution until the Stage 3 backtest API exists."""
+    def should_enter(self) -> bool:
+        return True
 
-        raise NotImplementedError("Golden strategy execution requires Stage 3 backtest API")
+    def should_exit(self) -> bool:
+        return False

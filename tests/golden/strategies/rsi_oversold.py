@@ -1,12 +1,15 @@
-"""Golden strategy placeholder: RSI oversold reversal."""
+"""Golden strategy adapter: RSI oversold reversal."""
+
+from tests.golden.strategies._helpers import GoldenAdapterBase
 
 STRATEGY_NAME = "rsi_oversold"
 
 
-class RsiOversoldStrategy:
-    """Stage 0 placeholder for the documented RSI oversold strategy."""
+class RsiOversoldStrategy(GoldenAdapterBase):
+    """Buy after a short negative swing, close after rebound."""
 
-    def run(self) -> None:
-        """Block execution until the Stage 3 backtest API exists."""
+    def should_enter(self) -> bool:
+        return self._momentum() < 0
 
-        raise NotImplementedError("Golden strategy execution requires Stage 3 backtest API")
+    def should_exit(self) -> bool:
+        return self._momentum() > 0

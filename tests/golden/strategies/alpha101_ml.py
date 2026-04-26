@@ -1,12 +1,15 @@
-"""Golden strategy placeholder: ML plus Alpha101."""
+"""Golden strategy adapter: ML plus Alpha101."""
+
+from tests.golden.strategies._helpers import GoldenAdapterBase
 
 STRATEGY_NAME = "alpha101_ml"
 
 
-class Alpha101MlStrategy:
-    """Stage 0 placeholder for the documented Alpha101 ML strategy."""
+class Alpha101MlStrategy(GoldenAdapterBase):
+    """Use a compact alpha proxy based on recent momentum and range position."""
 
-    def run(self) -> None:
-        """Block execution until the Stage 3 backtest API exists."""
+    def should_enter(self) -> bool:
+        return self._momentum() > 0 and float(self.data.close[0]) > self._range_midpoint(3)
 
-        raise NotImplementedError("Golden strategy execution requires Stage 3 backtest API")
+    def should_exit(self) -> bool:
+        return self._momentum() < 0

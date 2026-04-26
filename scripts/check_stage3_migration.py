@@ -91,7 +91,7 @@ def validate_snapshot(snapshot: dict[str, Any], readiness: dict[str, Any]) -> li
 
 def build_payload(path: Path = SNAPSHOT) -> dict[str, Any]:
     snapshot = load_snapshot(path)
-    readiness = build_report()
+    readiness = build_report(engine="tv")
     errors = validate_snapshot(snapshot, readiness)
     return {
         "ok": not errors,

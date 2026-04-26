@@ -11,10 +11,14 @@ import argparse
 import importlib
 import importlib.util
 import json
+import math
+import runpy
 import sys
 import types
 from pathlib import Path
 from typing import Any
+
+import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -24,6 +28,7 @@ from tradelearn.core import GoldenDataError  # noqa: E402
 REFERENCE = ROOT / "reference" / "tradelearn_1x"
 MANIFEST = ROOT / "tests" / "golden" / "manifest.json"
 DATASETS_ROOT = ROOT / "tests" / "golden" / "datasets"
+STRATEGY_DIR = ROOT / "tests" / "golden" / "strategies"
 PROVIDER_MODULES = {
     "tdx": "opentdx.tdxClient",
     "tv": "tvDatafeed",
@@ -308,6 +313,141 @@ def build_datasets(
     return successes, total
 
 
+def _strategy_class(strategy_name: str, strategy_dir: Path = STRATEGY_DIR) -> type[Any]:
+    """Load one golden Strategy adapter by manifest name."""
+
+    path = strategy_dir / f"{strategy_name}.py"
+    if not path.exists():
+        raise GoldenDataError(f"missing strategy adapter: {strategy_name}")
+    namespace = runpy.run_path(str(path))
+    from tradelearn.backtest import Strategy
+
+    strategy_classes = [
+        value
+        for key, value in namespace.items()
+        if key.endswith("Strategy")
+        and isinstance(value, type)
+        and value is not Strategy
+        and issubclass(value, Strategy)
+    ]
+    if len(strategy_classes) != 1:
+        raise GoldenDataError(f"missing runnable Strategy adapter: {strategy_name}")
+    return strategy_classes[0]
+
+
+def _clean_json_value(value: Any) -> Any:
+    """Convert pandas/numpy scalar values into stable JSON payloads."""
+
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    if isinstance(value, dict):
+        return {str(key): _clean_json_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_clean_json_value(item) for item in value]
+    return value
+
+
+def _frame_records(frame: Any) -> list[dict[str, Any]]:
+    """Return JSON-safe records for a pandas DataFrame-like object."""
+
+    if getattr(frame, "empty", False):
+        return []
+    records = frame.reset_index().to_dict(orient="records")
+    return [_clean_json_value(record) for record in records]
+
+
+def _series_records(series: Any) -> list[dict[str, Any]]:
+    """Return JSON-safe records for a pandas Series-like object."""
+
+    if getattr(series, "empty", False):
+        return []
+    frame = series.rename("value").reset_index()
+    frame.columns = ["datetime", "value"]
+    return [_clean_json_value(record) for record in frame.to_dict(orient="records")]
+
+
+def run_expected_job(
+    strategy_name: str,
+    dataset: dict[str, str],
+    datasets_root: Path,
+) -> dict[str, Any]:
+    """Run one TV subset golden adapter and return expected payload."""
+
+    from tradelearn.backtest import Cerebro
+
+    path = dataset_path(dataset, datasets_root)
+    if not path.exists():
+        raise GoldenDataError(f"missing dataset parquet: {path}")
+    strategy_cls = _strategy_class(strategy_name)
+    bars = pd.read_parquet(path)
+    cerebro = Cerebro()
+    cerebro.broker.setcash(100_000.0)
+    cerebro.adddata(bars, name=dataset["symbol"])
+    cerebro.addstrategy(strategy_cls)
+    [strategy] = cerebro.run()
+    stats = strategy.stats
+    if stats is None:
+        raise GoldenDataError(f"strategy did not produce stats: {strategy_name}")
+    return {
+        "version": "v1.0",
+        "strategy": strategy_name,
+        "dataset": dataset["symbol"],
+        "engine": dataset["engine"],
+        "source": str(path),
+        "summary": _clean_json_value(stats.summary),
+        "trades": _frame_records(stats.trades),
+        "orders": _frame_records(stats.orders),
+        "fills": _frame_records(stats.fills),
+        "positions": _frame_records(stats.positions),
+        "equity": _series_records(stats.equity),
+    }
+
+
+def expected_path(strategy: str, dataset: str, out: Path) -> Path:
+    """Return the expected JSON path used by readiness checks."""
+
+    return out / f"{strategy}__{dataset}.json"
+
+
+def build_expected(
+    manifest: dict[str, object],
+    out: Path,
+    datasets_root: Path,
+) -> tuple[int, int]:
+    """Build expected JSON files for every manifest strategy/dataset job."""
+
+    datasets_by_symbol = {dataset["symbol"]: dataset for dataset in manifest["datasets"]}
+    failures: list[str] = []
+    successes = 0
+    jobs = planned_jobs(manifest)
+    for strategy_name, dataset_symbol in jobs:
+        dataset = datasets_by_symbol[dataset_symbol]
+        label = f"{strategy_name}:{dataset_symbol}"
+        try:
+            payload = run_expected_job(strategy_name, dataset, datasets_root)
+            path = expected_path(strategy_name, dataset_symbol, out)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            failures.append(f"{label}: {exc}")
+            print(f"expected={label} status=failed reason={exc}")
+            continue
+        successes += 1
+        print(f"expected={label} status=ok path={path}")
+
+    total = len(jobs)
+    print(f"expected={successes}/{total}")
+    if failures:
+        joined = "; ".join(failures)
+        raise GoldenDataError(f"{successes}/{total} expected generated; failures: {joined}")
+    return successes, total
+
+
 def build(
     version: str,
     out: Path,
@@ -340,9 +480,11 @@ def build(
             raise GoldenDataError(f"dataset generation failed: {exc}") from exc
         return 0
 
-    raise GoldenDataError(
-        "expected generation is blocked until a concrete 1.x backtest adapter exists"
-    )
+    try:
+        build_expected(manifest, out, datasets_root)
+    except GoldenDataError as exc:
+        raise GoldenDataError(f"expected generation failed: {exc}") from exc
+    return 0
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

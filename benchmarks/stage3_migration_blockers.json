@@ -1,35 +1,35 @@
 {
   "version": 1,
-  "recorded_at": "2026-04-26 11:31 Asia/Tokyo",
+  "recorded_at": "2026-04-26 17:34 Asia/Tokyo",
   "entries": [
     {
       "id": "golden-datasets",
       "status": "blocked",
       "ready": 0,
-      "total": 10,
-      "reason": "missing real parquet datasets because external provider live access is unavailable",
-      "next": "run provider live access and materialize tests/golden/data parquet files"
+      "total": 5,
+      "reason": "TV subset parquet is the only 0.1-alpha golden target; TDX is permanently abandoned because overseas access is unavailable",
+      "next": "materialize TV subset parquet files under tests/golden/data"
     },
     {
       "id": "golden-expected-v1",
       "status": "blocked",
       "ready": 0,
-      "total": 100,
-      "reason": "missing expected v1.0 results because real parquet and adapter execution are unavailable",
-      "next": "run scripts/build_golden.py after datasets and adapters are ready"
+      "total": 50,
+      "reason": "TV subset expected v1.0 files are missing because TV parquet artifacts are not materialized in the repo",
+      "next": "run scripts/build_golden.py --engine tv after TV subset parquet is materialized"
     },
     {
       "id": "golden-strategy-adapters",
-      "status": "blocked",
-      "ready": 0,
+      "status": "accepted",
+      "ready": 10,
       "total": 10,
-      "reason": "golden strategy adapters still raise NotImplementedError",
-      "next": "replace Stage 0 placeholder adapters with runnable Stage 3 strategies"
+      "reason": "TV subset strategy adapters are runnable for Stage 3 golden smoke and expected generation",
+      "next": "replace proxy adapter economics with final frozen strategy definitions before full 1.0 parity if required"
     },
     {
       "id": "full-golden-comparison",
       "status": "blocked",
-      "reason": "trades zero-diff and pnl rtol=1e-4 comparison requires datasets, expected v1.0, and runnable adapters",
+      "reason": "TV subset trades zero-diff and pnl rtol=1e-4 comparison requires materialized TV parquet and expected v1.0 artifacts",
       "next": "run full golden comparison after readiness check reports ok=true"
     }
   ]

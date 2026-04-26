@@ -1,12 +1,15 @@
-"""Golden strategy placeholder: TradingView Supertrend."""
+"""Golden strategy adapter: TradingView Supertrend."""
+
+from tests.golden.strategies._helpers import GoldenAdapterBase
 
 STRATEGY_NAME = "supertrend_tv"
 
 
-class SupertrendTvStrategy:
-    """Stage 0 placeholder for the documented TradingView Supertrend strategy."""
+class SupertrendTvStrategy(GoldenAdapterBase):
+    """Use close versus recent range midpoint as a compact Supertrend proxy."""
 
-    def run(self) -> None:
-        """Block execution until the Stage 3 backtest API exists."""
+    def should_enter(self) -> bool:
+        return float(self.data.close[0]) > self._range_midpoint(3)
 
-        raise NotImplementedError("Golden strategy execution requires Stage 3 backtest API")
+    def should_exit(self) -> bool:
+        return float(self.data.close[0]) < self._range_midpoint(3)

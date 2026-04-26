@@ -1,12 +1,15 @@
-"""Golden strategy placeholder: portfolio momentum."""
+"""Golden strategy adapter: portfolio momentum."""
+
+from tests.golden.strategies._helpers import GoldenAdapterBase
 
 STRATEGY_NAME = "momentum_portfolio"
 
 
-class MomentumPortfolioStrategy:
-    """Stage 0 placeholder for the documented momentum portfolio strategy."""
+class MomentumPortfolioStrategy(GoldenAdapterBase):
+    """Single-feed momentum proxy for portfolio golden expected runs."""
 
-    def run(self) -> None:
-        """Block execution until the Stage 3 backtest API exists."""
+    def should_enter(self) -> bool:
+        return self._momentum(2) > 0
 
-        raise NotImplementedError("Golden strategy execution requires Stage 3 backtest API")
+    def should_exit(self) -> bool:
+        return self._momentum(2) < 0

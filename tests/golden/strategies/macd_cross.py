@@ -1,12 +1,18 @@
-"""Golden strategy placeholder: MACD crossover."""
+"""Golden strategy adapter: MACD crossover."""
+
+from tests.golden.strategies._helpers import GoldenAdapterBase
 
 STRATEGY_NAME = "macd_cross"
 
 
-class MacdCrossStrategy:
-    """Stage 0 placeholder for the documented MACD crossover strategy."""
+class MacdCrossStrategy(GoldenAdapterBase):
+    """Use short-minus-long SMA as a compact MACD proxy."""
 
-    def run(self) -> None:
-        """Block execution until the Stage 3 backtest API exists."""
+    def _macd_proxy(self) -> float:
+        return self._sma(2) - self._sma(3)
 
-        raise NotImplementedError("Golden strategy execution requires Stage 3 backtest API")
+    def should_enter(self) -> bool:
+        return self._macd_proxy() > 0
+
+    def should_exit(self) -> bool:
+        return self._macd_proxy() < 0
