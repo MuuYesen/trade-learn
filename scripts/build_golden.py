@@ -30,6 +30,7 @@ PROVIDER_MODULES = {
 
 REFERENCE_TDX_PACKAGE = "moot" + "dx"
 REFERENCE_TDX_MODULE = REFERENCE_TDX_PACKAGE + ".quotes"
+_LAST_REFERENCE_TDX_ERROR: str | None = None
 
 
 def _module_available(name: str) -> bool:
@@ -121,7 +122,12 @@ class _OpenTdxReferenceClient:
     ) -> Any:
         from tradelearn.data import OpenTdxProvider
 
-        bars = OpenTdxProvider().history_ohlc(symbol, start=begin, end=end)
+        global _LAST_REFERENCE_TDX_ERROR
+        try:
+            bars = OpenTdxProvider().history_ohlc(symbol, start=begin, end=end)
+        except Exception as exc:
+            _LAST_REFERENCE_TDX_ERROR = f"{type(exc).__name__}: {exc}"
+            raise
         frame = bars.rename(columns={"timestamp": "datetime", "symbol": "code"}).copy()
         frame["date"] = frame["datetime"]
         frame["factor"] = 1.0
@@ -212,6 +218,9 @@ def validate_dataset_providers(manifest: dict[str, object]) -> None:
 def fetch_dataset(query: Any, dataset: dict[str, str]) -> Any:
     """Fetch one dataset through the 1.x Query oracle."""
 
+    global _LAST_REFERENCE_TDX_ERROR
+    if dataset["engine"] == "tdx":
+        _LAST_REFERENCE_TDX_ERROR = None
     try:
         data = query.history_ohlc(
             engine=dataset["engine"],
@@ -225,6 +234,11 @@ def fetch_dataset(query: Any, dataset: dict[str, str]) -> Any:
             f"{exc}"
         ) from exc
     if data is None:
+        if dataset["engine"] == "tdx" and _LAST_REFERENCE_TDX_ERROR:
+            raise GoldenDataError(
+                "reference Query returned no data for "
+                f"{dataset_label(dataset)}; {_LAST_REFERENCE_TDX_ERROR}"
+            )
         raise GoldenDataError(
             f"reference Query returned no data for {dataset_label(dataset)}"
         )

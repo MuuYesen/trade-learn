@@ -60,6 +60,42 @@ class EmptyTdxClient:
         return []
 
 
+class FakeQuotationClient:
+    """Small fake quotation connection object."""
+
+    def __init__(self, *, connected: bool) -> None:
+        """Initialize fake connection state."""
+        self.connected = connected
+        self.ip = None
+        self.port = None
+        self.calls: list[tuple[str | None, int, float]] = []
+
+    def connect(
+        self,
+        ip: str | None = None,
+        port: int = 7709,
+        time_out: float = 5.0,
+    ) -> object:
+        """Record explicit connection parameters."""
+        self.calls.append((ip, port, time_out))
+        self.ip = ip
+        self.port = port
+        return self
+
+    def login(self) -> object:
+        """Return the fake connection object."""
+        return self
+
+
+class ConnectableTdxClient(FakeTdxClient):
+    """Fake client with an opentdx-style quotation connection."""
+
+    def __init__(self, *, connected: bool = True) -> None:
+        """Initialize fake data and connection state."""
+        super().__init__()
+        self.quotation_client = FakeQuotationClient(connected=connected)
+
+
 def test_opentdx_provider_fetches_and_normalizes_daily_bars() -> None:
     """OpenTdxProvider converts opentdx rows into Bars."""
     client = FakeTdxClient()
@@ -100,6 +136,45 @@ def test_opentdx_provider_maps_symbol_market_and_frequency() -> None:
     )
 
 
+def test_opentdx_provider_connects_with_configured_host() -> None:
+    """Provider uses configured host/port before fetching live rows."""
+    client = ConnectableTdxClient()
+    provider = OpenTdxProvider(
+        host="1.2.3.4",
+        port=7710,
+        timeout=2.5,
+        client_factory=lambda: client,
+    )
+
+    provider.history_ohlc("000001")
+
+    assert client.quotation_client.calls == [("1.2.3.4", 7710, 2.5)]
+
+
+def test_opentdx_provider_reports_unestablished_connection() -> None:
+    """Provider reports host diagnostics when opentdx never connects."""
+    client = ConnectableTdxClient(connected=False)
+    provider = OpenTdxProvider(
+        host="1.2.3.4",
+        port=7710,
+        timeout=2.5,
+        client_factory=lambda: client,
+    )
+
+    with pytest.raises(ConnectionError, match="connection not established.*1.2.3.4:7710"):
+        provider.history_ohlc("000001")
+
+
+def test_opentdx_provider_uses_official_auto_server_by_default() -> None:
+    """Provider follows opentdx's default auto server selection."""
+    client = ConnectableTdxClient()
+    provider = OpenTdxProvider(client_factory=lambda: client)
+
+    provider.history_ohlc("000001")
+
+    assert client.quotation_client.calls == [(None, 7709, 5.0)]
+
+
 def test_opentdx_provider_rejects_unsupported_frequency() -> None:
     """Unsupported frequencies fail before network access."""
     provider = OpenTdxProvider(client_factory=FakeTdxClient)
@@ -120,3 +195,12 @@ def test_infer_tdx_market_supports_explicit_exchange_prefix() -> None:
     """Symbol prefixes can explicitly select the TDX market."""
     assert infer_tdx_market("SH.600519") == (1, "600519")
     assert infer_tdx_market("SZ.000001") == (0, "000001")
+
+
+def test_infer_tdx_market_maps_common_index_and_etf_symbols() -> None:
+    """Common index and ETF codes map to their documented TDX markets."""
+    assert infer_tdx_market("000001") == (0, "000001")
+    assert infer_tdx_market("600519") == (1, "600519")
+    assert infer_tdx_market("SH.000300") == (1, "000300")
+    assert infer_tdx_market("510300") == (1, "510300")
+    assert infer_tdx_market("159919") == (0, "159919")

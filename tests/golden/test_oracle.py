@@ -211,3 +211,28 @@ def test_build_golden_datasets_only_reports_unavailable_opentdx(
 
     assert result == 2
     assert "dataset provider unavailable: tdx:opentdx.tdxClient" in capsys.readouterr().err
+
+
+def test_fetch_dataset_reports_opentdx_bridge_error(monkeypatch) -> None:
+    """TDX oracle failures preserve the underlying opentdx diagnostics."""
+    query = Mock()
+    def fail_with_recorded_bridge_error(**_: object) -> None:
+        build_golden._LAST_REFERENCE_TDX_ERROR = (
+            "opentdx connection not established for 1.2.3.4:7709"
+        )
+        return None
+
+    query.history_ohlc.side_effect = fail_with_recorded_bridge_error
+    dataset = {
+        "symbol": "000001",
+        "engine": "tdx",
+        "start": "2020-01-01",
+        "end": "2020-01-02",
+        "freq": "1d",
+    }
+    try:
+        build_golden.fetch_dataset(query, dataset)
+    except build_golden.GoldenDataError as exc:
+        assert "opentdx connection not established for 1.2.3.4:7709" in str(exc)
+    else:
+        raise AssertionError("expected GoldenDataError")

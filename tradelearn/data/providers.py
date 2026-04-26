@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol
+from typing import Any, Protocol
 
 import pandas as pd
 
@@ -41,7 +41,7 @@ class OpenTdxProvider:
     def __init__(
         self,
         *,
-        host: str = "119.147.212.81",
+        host: str | None = None,
         port: int = 7709,
         timeout: float = 5.0,
         count: int = 800,
@@ -68,6 +68,7 @@ class OpenTdxProvider:
 
         market, code = infer_tdx_market(symbol)
         client = self._make_client()
+        self._prepare_client(client)
         rows = client.stock_kline(
             market=self._market_value(market),
             code=code,
@@ -86,7 +87,7 @@ class OpenTdxProvider:
             market="CN",
             freq=freq,
             engine="opentdx",
-            source=f"{self.host}:{self.port}",
+            source=self._source_label(client),
             adjust="none",
         )
 
@@ -98,6 +99,52 @@ class OpenTdxProvider:
         from opentdx.tdxClient import TdxClient
 
         return TdxClient()
+
+    def _prepare_client(self, client: object) -> None:
+        """Connect opentdx quotation client following the official default flow."""
+        quotation_client = getattr(client, "quotation_client", None)
+        connect = getattr(quotation_client, "connect", None)
+        if quotation_client is None or connect is None:
+            return
+
+        connection = (
+            connect(time_out=self.timeout)
+            if self.host is None
+            else connect(ip=self.host, port=self.port, time_out=self.timeout)
+        )
+        if connection is None:
+            self._raise_connection_error(quotation_client)
+        login = getattr(connection, "login", None)
+        login_ok = login() if callable(login) else True
+        if not getattr(quotation_client, "connected", False):
+            self._raise_connection_error(quotation_client)
+        if login_ok is False:
+            self._raise_connection_error(quotation_client, reason="login failed")
+
+    def _raise_connection_error(
+        self,
+        quotation_client: object,
+        *,
+        reason: str = "connection not established",
+    ) -> None:
+        """Raise a provider error with endpoint diagnostics."""
+        selected_ip = getattr(quotation_client, "ip", None)
+        selected_port = getattr(quotation_client, "port", None)
+        configured = f"{self.host}:{self.port}" if self.host is not None else "auto"
+        selected = (
+            f"; selected={selected_ip}:{selected_port}"
+            if selected_ip is not None or selected_port is not None
+            else ""
+        )
+        raise ConnectionError(f"opentdx {reason} for {configured}{selected}")
+
+    @staticmethod
+    def _source_label(client: object) -> str:
+        """Return the connected opentdx endpoint label when available."""
+        quotation_client: Any = getattr(client, "quotation_client", None)
+        ip = getattr(quotation_client, "ip", None)
+        port = getattr(quotation_client, "port", None)
+        return f"{ip}:{port}" if ip is not None and port is not None else "opentdx:auto"
 
     @staticmethod
     def _market_value(market: int) -> object:
