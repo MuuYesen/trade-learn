@@ -157,12 +157,18 @@ class Order:
     StopLimit = 4
     Close = 5
 
+    DAY = "day"
+    GTC = "gtc"
+    IOC = "ioc"
+
     ref: int
     data: DataFeed
     ordtype: int
     size: float
     price: float | None = None
+    pricelimit: float | None = None
     exectype: int = Market
+    time_in_force: str = GTC
     status: int = Submitted
     executed: ExecutedInfo = None  # type: ignore[assignment]
 
@@ -221,8 +227,20 @@ class SimBroker:
         size: float | None = None,
         price: float | None = None,
         exectype: int | None = None,
+        *,
+        pricelimit: float | None = None,
+        time_in_force: str | None = None,
     ) -> Order:
-        return self._submit(strategy, data, Order.Buy, size, price, exectype)
+        return self._submit(
+            strategy,
+            data,
+            Order.Buy,
+            size,
+            price,
+            exectype,
+            pricelimit=pricelimit,
+            time_in_force=time_in_force,
+        )
 
     def sell(
         self,
@@ -231,8 +249,20 @@ class SimBroker:
         size: float | None = None,
         price: float | None = None,
         exectype: int | None = None,
+        *,
+        pricelimit: float | None = None,
+        time_in_force: str | None = None,
     ) -> Order:
-        return self._submit(strategy, data, Order.Sell, size, price, exectype)
+        return self._submit(
+            strategy,
+            data,
+            Order.Sell,
+            size,
+            price,
+            exectype,
+            pricelimit=pricelimit,
+            time_in_force=time_in_force,
+        )
 
     def process_bar(self, strategy: Strategy, analyzers: AnalyzerCollection) -> None:
         self._last_strategy = strategy
@@ -240,7 +270,7 @@ class SimBroker:
         for order in pending:
             executed = self._execute_order(strategy, order, analyzers)
             if not executed:
-                self._pending.append(order)
+                self._handle_unfilled_order(strategy, order)
 
     def _submit(
         self,
@@ -250,6 +280,9 @@ class SimBroker:
         size: float | None,
         price: float | None,
         exectype: int | None,
+        *,
+        pricelimit: float | None,
+        time_in_force: str | None,
     ) -> Order:
         order = Order(
             ref=self._next_order_ref,
@@ -257,9 +290,20 @@ class SimBroker:
             ordtype=ordtype,
             size=float(1.0 if size is None else abs(size)),
             price=price,
+            pricelimit=pricelimit,
             exectype=Order.Market if exectype is None else exectype,
+            time_in_force=Order.GTC if time_in_force is None else time_in_force,
         )
         self._next_order_ref += 1
+        strategy.notify_order(order)
+        if order.time_in_force not in {Order.DAY, Order.GTC, Order.IOC}:
+            order.status = Order.Rejected
+            strategy.notify_order(order)
+            return order
+        if order.size <= 0:
+            order.status = Order.Rejected
+            strategy.notify_order(order)
+            return order
         order.status = Order.Accepted
         self._pending.append(order)
         strategy.notify_order(order)
@@ -271,6 +315,10 @@ class SimBroker:
         order: Order,
         analyzers: AnalyzerCollection,
     ) -> bool:
+        if order.size > float(order.data.volume[0]):
+            order.status = Order.Rejected
+            strategy.notify_order(order)
+            return True
         fill = _match_order(order, self.commission)
         if fill is None:
             return False
@@ -315,6 +363,17 @@ class SimBroker:
             analyzer.on_trade(trade)
         return True
 
+    def _handle_unfilled_order(self, strategy: Strategy, order: Order) -> None:
+        if order.time_in_force == Order.IOC:
+            order.status = Order.Canceled
+            strategy.notify_order(order)
+            return
+        if order.time_in_force == Order.DAY:
+            order.status = Order.Expired
+            strategy.notify_order(order)
+            return
+        self._pending.append(order)
+
 
 def _realized_pnl(old_size: float, old_price: float, fill_size: float, fill_price: float) -> float:
     if old_size == 0.0 or old_size * fill_size > 0:
@@ -340,7 +399,7 @@ def _match_order(order: Order, commission: float) -> tuple[float, float, float, 
 
     side = "buy" if order.ordtype == Order.Buy else "sell"
     order_type = _rust_order_type(order)
-    limit_price = order.price if order.exectype in {Order.Limit, Order.StopLimit} else None
+    limit_price = order.price if order.exectype == Order.Limit else order.pricelimit
     stop_price = order.price if order.exectype in {Order.Stop, Order.StopLimit} else None
     if rust_match_order is not None:
         return rust_match_order(
@@ -463,7 +522,15 @@ class Strategy:
         exectype: int | None = None,
         **kwargs: Any,
     ) -> Order:
-        return self.broker.buy(self, data or self.data, size, price, exectype)
+        return self.broker.buy(
+            self,
+            data or self.data,
+            size,
+            price,
+            exectype,
+            pricelimit=kwargs.get("pricelimit"),
+            time_in_force=kwargs.get("time_in_force"),
+        )
 
     def sell(
         self,
@@ -473,7 +540,15 @@ class Strategy:
         exectype: int | None = None,
         **kwargs: Any,
     ) -> Order:
-        return self.broker.sell(self, data or self.data, size, price, exectype)
+        return self.broker.sell(
+            self,
+            data or self.data,
+            size,
+            price,
+            exectype,
+            pricelimit=kwargs.get("pricelimit"),
+            time_in_force=kwargs.get("time_in_force"),
+        )
 
     def close(self, data: DataFeed | None = None, **kwargs: Any) -> Order | None:
         target_data = data or self.data

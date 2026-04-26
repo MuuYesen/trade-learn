@@ -170,8 +170,10 @@ def test_simbroker_executes_pending_orders_and_notifies_strategy_and_analyzers()
 
     assert strategy.values == [(0.0, 100.0), (2.0, 80.0), (0.0, 102.0)]
     assert strategy.orders == [
+        (Order.Submitted, Order.Buy, 0.0),
         (Order.Accepted, Order.Buy, 0.0),
         (Order.Completed, Order.Buy, 10.0),
+        (Order.Submitted, Order.Sell, 0.0),
         (Order.Accepted, Order.Sell, 0.0),
         (Order.Completed, Order.Sell, 11.0),
     ]
@@ -232,10 +234,157 @@ def test_simbroker_limit_order_waits_until_bar_crosses_limit() -> None:
 
     [strategy] = cerebro.run()
 
-    assert strategy.statuses == [Order.Accepted]
+    assert strategy.statuses == [Order.Submitted, Order.Accepted]
     assert strategy.position.size == 0.0
     assert strategy.broker.getcash() == 100.0
     assert strategy.cash_values == [100.0, 100.0, 100.0]
+
+
+def test_simbroker_limit_order_fills_after_bar_crosses_limit() -> None:
+    class BuyLimitAtMarket(Strategy):
+        def __init__(self) -> None:
+            self.statuses: list[int] = []
+
+        def next(self) -> None:
+            if not self.position and not self.statuses:
+                self.buy(size=2, price=9.5, exectype=Order.Limit)
+
+        def notify_order(self, order) -> None:
+            self.statuses.append(order.status)
+
+    cerebro = Cerebro()
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(BuyLimitAtMarket)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.statuses == [Order.Submitted, Order.Accepted, Order.Completed]
+    assert strategy.position.size == 2.0
+    assert strategy.position.price == 9.5
+    assert strategy.broker.getcash() == 81.0
+
+
+def test_simbroker_stop_order_triggers_on_bar_high() -> None:
+    class BuyStop(Strategy):
+        def __init__(self) -> None:
+            self.statuses: list[int] = []
+
+        def next(self) -> None:
+            if not self.position and not self.statuses:
+                self.buy(size=2, price=11.5, exectype=Order.Stop)
+
+        def notify_order(self, order) -> None:
+            self.statuses.append(order.status)
+
+    cerebro = Cerebro()
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(BuyStop)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.statuses == [Order.Submitted, Order.Accepted, Order.Completed]
+    assert strategy.position.size == 2.0
+    assert strategy.position.price == 10.0
+    assert strategy.broker.getcash() == 80.0
+
+
+def test_simbroker_stop_limit_uses_distinct_stop_and_limit_prices() -> None:
+    class BuyStopLimit(Strategy):
+        def __init__(self) -> None:
+            self.statuses: list[int] = []
+
+        def next(self) -> None:
+            if not self.position and not self.statuses:
+                self.buy(size=2, price=11.5, pricelimit=10.5, exectype=Order.StopLimit)
+
+        def notify_order(self, order) -> None:
+            self.statuses.append(order.status)
+
+    cerebro = Cerebro()
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(BuyStopLimit)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.statuses == [Order.Submitted, Order.Accepted, Order.Completed]
+    assert strategy.position.size == 2.0
+    assert strategy.position.price == 10.0
+    assert strategy.broker.getcash() == 80.0
+
+
+def test_simbroker_ioc_order_cancels_when_not_filled_immediately() -> None:
+    class BuyLimitIoc(Strategy):
+        def __init__(self) -> None:
+            self.statuses: list[int] = []
+
+        def next(self) -> None:
+            if not self.statuses:
+                self.buy(size=2, price=8.5, exectype=Order.Limit, time_in_force=Order.IOC)
+
+        def notify_order(self, order) -> None:
+            self.statuses.append(order.status)
+
+    cerebro = Cerebro()
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(BuyLimitIoc)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.statuses == [Order.Submitted, Order.Accepted, Order.Canceled]
+    assert strategy.position.size == 0.0
+    assert strategy.broker.getcash() == 100.0
+
+
+def test_simbroker_day_order_expires_after_first_unfilled_bar() -> None:
+    class BuyLimitDay(Strategy):
+        def __init__(self) -> None:
+            self.statuses: list[int] = []
+
+        def next(self) -> None:
+            if not self.statuses:
+                self.buy(size=2, price=8.5, exectype=Order.Limit, time_in_force=Order.DAY)
+
+        def notify_order(self, order) -> None:
+            self.statuses.append(order.status)
+
+    cerebro = Cerebro()
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(BuyLimitDay)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.statuses == [Order.Submitted, Order.Accepted, Order.Expired]
+    assert strategy.position.size == 0.0
+    assert strategy.broker.getcash() == 100.0
+
+
+def test_simbroker_rejects_partial_fill_when_bar_volume_is_insufficient() -> None:
+    class OversizedBuy(Strategy):
+        def __init__(self) -> None:
+            self.statuses: list[int] = []
+
+        def next(self) -> None:
+            if not self.statuses:
+                self.buy(size=2000)
+
+        def notify_order(self, order) -> None:
+            self.statuses.append(order.status)
+
+    cerebro = Cerebro()
+    cerebro.broker.setcash(100000.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(OversizedBuy)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.statuses == [Order.Submitted, Order.Accepted, Order.Rejected]
+    assert strategy.position.size == 0.0
+    assert strategy.broker.getcash() == 100000.0
 
 
 def test_simbroker_prefers_rust_match_order_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
