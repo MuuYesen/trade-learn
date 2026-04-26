@@ -228,7 +228,7 @@ class SimBroker:
     ) -> Order:
         return self._submit(strategy, data, Order.Sell, size, price, exectype)
 
-    def process_bar(self, strategy: Strategy, analyzers: dict[str, Analyzer]) -> None:
+    def process_bar(self, strategy: Strategy, analyzers: AnalyzerCollection) -> None:
         pending, self._pending = self._pending, []
         for order in pending:
             self._execute_order(strategy, order, analyzers)
@@ -260,7 +260,7 @@ class SimBroker:
         self,
         strategy: Strategy,
         order: Order,
-        analyzers: dict[str, Analyzer],
+        analyzers: AnalyzerCollection,
     ) -> None:
         price = order.price if order.price is not None else order.data.open[0]
         signed_size = order.size if order.ordtype == Order.Buy else -order.size
@@ -409,6 +409,20 @@ class Analyzer:
         return {}
 
 
+class AnalyzerCollection(dict[str, Analyzer]):
+    """Named analyzers with backtrader-style attribute access."""
+
+    def __getattr__(self, name: str) -> Analyzer:
+        try:
+            return self[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+    def getbyname(self, name: str) -> Analyzer:
+        """Return a named analyzer."""
+        return self[name]
+
+
 class Cerebro:
     """Small Cerebro facade for Stage 3 Python strategy API scaffolding."""
 
@@ -429,6 +443,7 @@ class Cerebro:
         self.datas: list[DataFeed] = []
         self._strategy_spec: tuple[type[Strategy], dict[str, Any]] | None = None
         self._analyzer_specs: list[tuple[str, type[Analyzer], dict[str, Any]]] = []
+        self.analyzer_results: dict[str, Any] = {}
         self.broker = SimBroker()
 
     def adddata(self, data: pd.DataFrame | DataFeed, name: str | None = None) -> DataFeed:
@@ -472,6 +487,10 @@ class Cerebro:
         stats = {"bars": total_bars}
         for analyzer in analyzers.values():
             analyzer.on_end(stats)
+        self.analyzer_results = {
+            name: analyzer.get_analysis() for name, analyzer in analyzers.items()
+        }
+        strategy.analyzer_results = dict(self.analyzer_results)
         strategy.stop()
         return [strategy]
 
@@ -487,8 +506,8 @@ class Cerebro:
         strategy_cls.__init__(strategy)
         return strategy
 
-    def _instantiate_analyzers(self, strategy: Strategy) -> dict[str, Analyzer]:
-        analyzers: dict[str, Analyzer] = {}
+    def _instantiate_analyzers(self, strategy: Strategy) -> AnalyzerCollection:
+        analyzers = AnalyzerCollection()
         for name, analyzer_cls, params in self._analyzer_specs:
             analyzer = analyzer_cls.__new__(analyzer_cls)
             analyzer.strategy = strategy

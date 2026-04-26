@@ -2,6 +2,7 @@
 
 from tradelearn.backtest.engine import (
     Analyzer,
+    AnalyzerCollection,
     Cerebro,
     DataFeed,
     ExecutedInfo,
@@ -15,6 +16,7 @@ from tradelearn.backtest.engine import (
 
 __all__ = [
     "Analyzer",
+    "AnalyzerCollection",
     "Cerebro",
     "DataFeed",
     "ExecutedInfo",

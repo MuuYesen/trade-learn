@@ -84,6 +84,34 @@ def test_analyzer_receives_strategy_and_bar_lifecycle() -> None:
     }
 
 
+def test_cerebro_exposes_named_analyzers_and_run_analysis() -> None:
+    class NoopStrategy(Strategy):
+        def next(self) -> None:
+            pass
+
+    class CloseAnalyzer(Analyzer):
+        def __init__(self) -> None:
+            self.values: list[float] = []
+
+        def on_bar(self, bar) -> None:
+            self.values.append(bar.close)
+
+        def get_analysis(self) -> dict[str, object]:
+            return {"values": self.values}
+
+    cerebro = Cerebro()
+    cerebro.adddata(bars())
+    cerebro.addstrategy(NoopStrategy)
+    cerebro.addanalyzer(CloseAnalyzer, name="close")
+
+    [strategy] = cerebro.run()
+
+    assert strategy.analyzers.close.get_analysis() == {"values": [10.0, 11.0, 12.0]}
+    assert strategy.analyzers.getbyname("close") is strategy.analyzers.close
+    assert strategy.analyzer_results == {"close": {"values": [10.0, 11.0, 12.0]}}
+    assert cerebro.analyzer_results == {"close": {"values": [10.0, 11.0, 12.0]}}
+
+
 def test_strategy_params_must_be_tuple_pairs() -> None:
     class BadParams(Strategy):
         params = {"fast": 10}
