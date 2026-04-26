@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from scripts import build_golden
+
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "tests" / "golden" / "manifest.json"
 
@@ -19,6 +21,16 @@ def test_manifest_matches_documented_shape() -> None:
     assert len(manifest["datasets"]) == 10
     assert len(manifest["strategies"]) == 10
     assert {item["engine"] for item in manifest["datasets"]} == {"tv", "tdx"}
+    tv_datasets = [item for item in manifest["datasets"] if item["engine"] == "tv"]
+    assert {
+        f"{item['exchange']}:{item['symbol']}" for item in tv_datasets
+    } == {
+        "NASDAQ:GOOG",
+        "NASDAQ:AAPL",
+        "NASDAQ:MSFT",
+        "AMEX:SPY",
+        "BINANCE:BTCUSDT",
+    }
 
 
 def test_golden_directories_exist() -> None:
@@ -59,25 +71,18 @@ def test_documented_strategy_scripts_exist_and_import() -> None:
         assert len(classes) == 1
 
 
-def test_build_golden_datasets_only_reports_unavailable_provider() -> None:
-    result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/build_golden.py",
-            "--version",
-            "1.x",
-            "--out",
-            "tests/golden/expected/v1.0/",
-            "--datasets-only",
-        ],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
+def test_build_golden_datasets_only_reports_unavailable_provider(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    monkeypatch.setattr(build_golden, "provider_statuses", lambda: {"tdx": False, "tv": True})
+
+    result = build_golden.main(
+        ["--version", "1.x", "--out", str(tmp_path), "--datasets-only"]
     )
 
-    assert result.returncode == 2
-    assert "dataset generation failed" in result.stderr
+    captured = capsys.readouterr()
+    assert result == 2
+    assert "dataset provider unavailable: tdx:opentdx.tdxClient" in captured.err
 
 
 def test_build_golden_default_mode_does_not_write_fake_expected(tmp_path: Path) -> None:

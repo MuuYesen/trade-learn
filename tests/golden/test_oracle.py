@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from unittest.mock import Mock
 
+import pandas as pd
 import tomllib
 
 from scripts import build_golden
@@ -95,6 +96,7 @@ def test_build_golden_default_failure_writes_no_expected_json(tmp_path: Path) ->
 
     assert result.returncode == 2
     assert not list(tmp_path.glob("*.json"))
+    assert not list((ROOT / "tests" / "golden" / "datasets").glob("**/*.parquet"))
 
 
 def test_build_golden_dry_run_is_read_only(tmp_path: Path) -> None:
@@ -137,6 +139,65 @@ def test_build_golden_datasets_only_uses_provider_stubs(monkeypatch, tmp_path: P
 
     assert result == 2
     assert calls == [True]
+
+
+def test_build_golden_datasets_only_attempts_every_dataset(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    manifest = {
+        "datasets": [
+            {
+                "symbol": "GOOG",
+                "exchange": "NASDAQ",
+                "engine": "tv",
+                "start": "2020-01-01",
+                "end": "2020-01-02",
+                "freq": "1d",
+            },
+            {
+                "symbol": "SZ.000001",
+                "engine": "tdx",
+                "start": "2020-01-01",
+                "end": "2020-01-02",
+                "freq": "1d",
+            },
+        ],
+        "strategies": [],
+    }
+    query = Mock()
+    frame = pd.DataFrame(
+        {
+            "date": pd.date_range("2020-01-01", periods=1),
+            "code": ["000001"],
+            "open": [1.0],
+            "high": [1.1],
+            "low": [0.9],
+            "close": [1.0],
+            "volume": [100.0],
+        }
+    )
+    query.history_ohlc.side_effect = [build_golden.GoldenDataError("bad tv symbol"), frame]
+
+    monkeypatch.setattr(build_golden, "load_manifest", lambda: manifest)
+    monkeypatch.setattr(build_golden, "load_reference_query", lambda **_: query)
+    monkeypatch.setattr(build_golden, "provider_statuses", lambda: {"tdx": True, "tv": True})
+    monkeypatch.setattr(
+        build_golden,
+        "dataset_path",
+        lambda dataset: tmp_path / f"{dataset['engine']}_{dataset['symbol']}.parquet",
+    )
+
+    result = build_golden.main(
+        ["--version", "1.x", "--out", str(tmp_path), "--datasets-only"]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 2
+    assert query.history_ohlc.call_count == 2
+    assert query.history_ohlc.call_args_list[0].kwargs["exchange"] == "NASDAQ"
+    assert "dataset=tv:NASDAQ:GOOG status=failed reason=bad tv symbol" in captured.out
+    assert "dataset=tdx:SZ.000001 status=ok" in captured.out
+    assert "datasets=1/2" in captured.out
 
 
 def test_build_golden_datasets_only_reports_unavailable_opentdx(

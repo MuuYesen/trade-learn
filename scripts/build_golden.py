@@ -68,6 +68,14 @@ def dataset_path(dataset: dict[str, str]) -> Path:
     return ROOT / "tests" / "golden" / "datasets" / dataset["engine"] / filename
 
 
+def dataset_label(dataset: dict[str, str]) -> str:
+    """Return a provider-aware dataset label for diagnostics."""
+
+    if dataset["engine"] == "tv" and dataset.get("exchange"):
+        return f"tv:{dataset['exchange']}:{dataset['symbol']}"
+    return f"{dataset['engine']}:{dataset['symbol']}"
+
+
 def validate_reference() -> None:
     """Ensure the frozen 1.x oracle exists."""
 
@@ -208,16 +216,17 @@ def fetch_dataset(query: Any, dataset: dict[str, str]) -> Any:
         data = query.history_ohlc(
             engine=dataset["engine"],
             symbol=dataset["symbol"],
+            exchange=dataset.get("exchange"),
             start=dataset["start"],
             end=dataset["end"],
         )
     except Exception as exc:
         raise GoldenDataError(
-            f"dataset generation failed for {dataset['engine']}:{dataset['symbol']}: {exc}"
+            f"{exc}"
         ) from exc
     if data is None:
         raise GoldenDataError(
-            f"dataset generation returned no data for {dataset['engine']}:{dataset['symbol']}"
+            f"reference Query returned no data for {dataset_label(dataset)}"
         )
     return data
 
@@ -234,14 +243,33 @@ def write_dataset(data: Any, path: Path) -> None:
         raise GoldenDataError(f"dataset generation failed while writing {path}: {exc}") from exc
 
 
-def build_datasets(manifest: dict[str, object]) -> None:
+def build_datasets(manifest: dict[str, object]) -> tuple[int, int]:
     """Fetch and write all manifest datasets."""
 
     validate_dataset_providers(manifest)
     query = load_reference_query(allow_provider_stubs=True)
+    datasets = manifest["datasets"]
+    failures: list[str] = []
+    successes = 0
     for dataset in manifest["datasets"]:
-        data = fetch_dataset(query, dataset)
-        write_dataset(data, dataset_path(dataset))
+        label = dataset_label(dataset)
+        try:
+            data = fetch_dataset(query, dataset)
+            path = dataset_path(dataset)
+            write_dataset(data, path)
+        except Exception as exc:
+            failures.append(f"{label}: {exc}")
+            print(f"dataset={label} status=failed reason={exc}")
+            continue
+        successes += 1
+        print(f"dataset={label} status=ok path={path}")
+
+    total = len(datasets)
+    print(f"datasets={successes}/{total}")
+    if failures:
+        joined = "; ".join(failures)
+        raise GoldenDataError(f"{successes}/{total} datasets generated; failures: {joined}")
+    return successes, total
 
 
 def build(version: str, out: Path, dry_run: bool, datasets_only: bool) -> int:
@@ -262,13 +290,11 @@ def build(version: str, out: Path, dry_run: bool, datasets_only: bool) -> int:
             print(f"{strategy}:{dataset}")
         return 0
 
-    try:
-        build_datasets(manifest)
-    except GoldenDataError as exc:
-        raise GoldenDataError(f"dataset generation failed: {exc}") from exc
-
     if datasets_only:
-        print("datasets=10")
+        try:
+            build_datasets(manifest)
+        except GoldenDataError as exc:
+            raise GoldenDataError(f"dataset generation failed: {exc}") from exc
         return 0
 
     raise GoldenDataError(
