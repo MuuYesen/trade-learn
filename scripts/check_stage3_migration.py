@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
-from scripts.check_golden_readiness import build_report
-
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from scripts.check_golden_readiness import build_report  # noqa: E402
+
 SNAPSHOT = ROOT / "benchmarks" / "stage3_migration_blockers.json"
 REQUIRED_IDS = {
     "golden-datasets",

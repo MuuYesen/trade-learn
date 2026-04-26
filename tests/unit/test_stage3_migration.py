@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -32,3 +33,20 @@ def test_stage3_migration_blocker_snapshot_matches_readiness_gates() -> None:
     assert entries["golden-strategy-adapters"]["ready"] == 0
     assert entries["golden-strategy-adapters"]["total"] == 10
     assert entries["full-golden-comparison"]["status"] == "blocked"
+
+
+def test_stage3_migration_script_runs_without_pythonpath() -> None:
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--json"],
+        cwd=ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True

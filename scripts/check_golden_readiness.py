@@ -3,12 +3,15 @@ from __future__ import annotations
 import argparse
 import json
 import runpy
+import sys
 from pathlib import Path
 from typing import Any
 
-from scripts.build_golden import dataset_path, load_manifest, planned_jobs
-
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from scripts.build_golden import dataset_path, load_manifest, planned_jobs  # noqa: E402
+
 DATASETS_DIR = ROOT / "tests" / "golden" / "datasets"
 EXPECTED_DIR = ROOT / "tests" / "golden" / "expected" / "v1.0"
 STRATEGY_DIR = ROOT / "tests" / "golden" / "strategies"
