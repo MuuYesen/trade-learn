@@ -79,24 +79,32 @@ def test_current_provider_source_uses_opentdx_not_retired_names() -> None:
 
 
 def test_build_golden_default_failure_writes_no_expected_json(tmp_path: Path) -> None:
-    result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/build_golden.py",
-            "--version",
-            "1.x",
-            "--out",
-            str(tmp_path),
-        ],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
+    existing_dataset = (
+        ROOT / "tests" / "golden" / "datasets" / "tv" / "EXISTING_TEST.parquet"
     )
+    existing_dataset.parent.mkdir(parents=True, exist_ok=True)
+    existing_dataset.write_bytes(b"existing")
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/build_golden.py",
+                "--version",
+                "1.x",
+                "--out",
+                str(tmp_path),
+            ],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
 
-    assert result.returncode == 2
-    assert not list(tmp_path.glob("*.json"))
-    assert not list((ROOT / "tests" / "golden" / "datasets").glob("**/*.parquet"))
+        assert result.returncode == 2
+        assert not list(tmp_path.glob("*.json"))
+        assert existing_dataset.read_bytes() == b"existing"
+    finally:
+        existing_dataset.unlink(missing_ok=True)
 
 
 def test_build_golden_dry_run_is_read_only(tmp_path: Path) -> None:
