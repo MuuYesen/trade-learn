@@ -338,6 +338,15 @@ def design_note_summary(report: dict[str, object]) -> str:
     )
 
 
+def design_note_freeze_ready_summary(report: dict[str, object]) -> str:
+    """Return a compact strict readiness summary for Stage 2 note freeze."""
+    return design_note_summary(report).replace(
+        "design-note-summary:",
+        "design-note-freeze-ready:",
+        1,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the design note readiness check."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -373,6 +382,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print a compact readiness summary.",
     )
+    parser.add_argument(
+        "--freeze-ready",
+        action="store_true",
+        help="Print the strict Stage 2 design-note freeze readiness summary.",
+    )
     args = parser.parse_args(argv)
 
     if args.list:
@@ -391,6 +405,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.summary:
         report = design_note_report(args.directory, strict=args.strict)
         print(design_note_summary(report))
+        return 0 if report["ok"] else 1
+
+    if args.freeze_ready:
+        report = design_note_report(args.directory, strict=True)
+        print(design_note_freeze_ready_summary(report))
         return 0 if report["ok"] else 1
 
     errors = check_design_notes(args.directory, strict=args.strict)

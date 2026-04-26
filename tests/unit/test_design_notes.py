@@ -786,6 +786,39 @@ def test_check_design_notes_summary_reports_ready_counts(tmp_path: Path) -> None
     assert result.stderr == ""
 
 
+def test_check_design_notes_freeze_ready_uses_strict_readiness(
+    tmp_path: Path,
+) -> None:
+    """Freeze readiness reports strict design-note readiness in one command."""
+    docs_internal = tmp_path / "docs" / "internal"
+    docs_internal.mkdir(parents=True)
+    for filename, title in [
+        ("matching-design.md", "Matching Design"),
+        ("event-loop.md", "Event Loop"),
+        ("portfolio.md", "Portfolio"),
+    ]:
+        write_design_note(docs_internal / filename, title)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/check_design_notes.py",
+            "--freeze-ready",
+            str(docs_internal),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout == (
+        "design-note-freeze-ready:required=3 existing=3 "
+        "missing=0 errors=0 strict=True\n"
+    )
+    assert result.stderr == ""
+
+
 def test_check_design_notes_summary_reports_failure_counts(tmp_path: Path) -> None:
     """Summary output returns nonzero while still printing compact counts."""
     docs_internal = tmp_path / "docs" / "internal"
