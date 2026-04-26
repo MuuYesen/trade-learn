@@ -60,6 +60,7 @@ dev = [
     "pytest-cov",
     "ruff",
     "interrogate",
+    "cibuildwheel",
 ]
 docs = [
     "mkdocs-material",
@@ -81,6 +82,20 @@ manifest-path = "rust/tradelearn-rust/Cargo.toml"
 module-name = "tradelearn._rust"
 python-source = "."
 features = ["extension-module"]
+
+[tool.cibuildwheel]
+build = "cp310-* cp311-* cp312-*"
+skip = "*-musllinux_* pp*"
+test-command = "python -c \"import tradelearn._rust as rust; assert rust.tradelearn_rust_version() == '0.1.2'\""
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64"]
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/golden", "tests/consistency"]
