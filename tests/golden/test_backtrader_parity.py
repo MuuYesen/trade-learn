@@ -40,9 +40,10 @@ def _dataset(symbol: str) -> dict[str, str]:
     }
 
 
-def _trade_signature(payload: dict[str, object]) -> list[tuple[float, float, bool, bool]]:
+def _trade_signature(payload: dict[str, object]) -> list[tuple[str, float, float, bool, bool]]:
     return [
         (
+            str(trade["datetime"]),
             float(trade["size"]),
             float(trade["price"]),
             bool(trade["isopen"]),

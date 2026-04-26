@@ -7,6 +7,7 @@ import argparse
 import json
 import math
 import sys
+from datetime import timezone
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,12 @@ def _clean_json_value(value: Any) -> Any:
         return {str(key): _clean_json_value(item) for key, item in value.items()}
     if isinstance(value, list):
         return [_clean_json_value(item) for item in value]
+    return value
+
+
+def _utc_datetime(value: Any) -> Any:
+    if hasattr(value, "tzinfo") and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
     return value
 
 
@@ -131,7 +138,7 @@ class GoldenRecorder:
         strategy._golden_recorder = self
 
     def record_order(self, strategy: Any, order: Any) -> None:
-        dt = strategy.data.datetime.datetime(0)
+        dt = _utc_datetime(strategy.data.datetime.datetime(0))
         status = order.getstatusname()
         executed_size = float(order.executed.size)
         executed_price = float(order.executed.price)
@@ -207,7 +214,7 @@ class GoldenRecorder:
     def record_equity(self, strategy: Any) -> None:
         self.equity.append(
             {
-                "datetime": strategy.data.datetime.datetime(0),
+                "datetime": _utc_datetime(strategy.data.datetime.datetime(0)),
                 "value": float(strategy.broker.getvalue()),
             }
         )
