@@ -29,6 +29,9 @@ def test_cli_new_creates_project_skeleton(tmp_path) -> None:
     project = tmp_path / "demo"
     assert (project / ".tradelearn" / "config.yaml").exists()
     assert (project / "strategy.py").exists()
+    assert (project / "notebooks" / "01_explore.ipynb").exists()
+    assert (project / "notebooks" / "02_factor.ipynb").exists()
+    assert (project / "notebooks" / "03_backtest.ipynb").exists()
 
 
 def test_cli_data_and_run_use_config_file(tmp_path) -> None:
@@ -49,11 +52,39 @@ def test_cli_data_and_run_use_config_file(tmp_path) -> None:
     assert "http://mlflow.local" in run_result.output
 
 
-def test_cli_lab_and_mcp_support_dry_run() -> None:
-    lab = runner.invoke(app, ["lab", "--dry-run"])
+def test_cli_lab_and_mcp_support_dry_run(tmp_path) -> None:
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "mlflow:\n  tracking_uri: http://mlflow.local\n",
+        encoding="utf-8",
+    )
+
+    lab = runner.invoke(
+        app,
+        [
+            "lab",
+            "--dry-run",
+            "--config",
+            str(config),
+            "--port",
+            "9999",
+            "--no-browser",
+        ],
+    )
     mcp = runner.invoke(app, ["mcp", "--dry-run"])
 
     assert lab.exit_code == 0
     assert "jupyter" in lab.output.lower()
+    assert "tradelearn mcp --dry-run" in lab.output
+    assert "http://mlflow.local" in lab.output
+    assert "--port=9999" in lab.output
     assert mcp.exit_code == 0
     assert "mcp" in mcp.output.lower()
+
+
+def test_cli_doctor_reports_lab_dependency_status(tmp_path) -> None:
+    result = runner.invoke(app, ["doctor", "--lab", "--config", str(tmp_path / "missing.yaml")])
+
+    assert result.exit_code == 0
+    assert "lab_required=" in result.output
+    assert "lab_missing=" in result.output
