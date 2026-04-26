@@ -47,6 +47,9 @@ dependencies = [
 Homepage = "https://github.com/MuuYesen/trade-learn"
 Documentation = "https://github.com/MuuYesen/trade-learn/tree/main/docs"
 
+[project.scripts]
+tradelearn = "tradelearn.cli:main"
+
 [project.optional-dependencies]
 lab = [
     "jupyterlab",

@@ -1,5 +1,6 @@
 """Stage 0 core contracts and foundation helpers."""
 
+from tradelearn.core.config import TradelearnConfig, load_config
 from tradelearn.core.contracts import Broker, Experiment, StreamBar, validate_bars, validate_returns
 from tradelearn.core.errors import (
     ConfigurationError,
@@ -22,11 +23,13 @@ __all__ = [
     "GoldenDataError",
     "StreamBar",
     "TradelearnError",
+    "TradelearnConfig",
     "configure_logging",
     "ensure_utc",
     "get_logger",
     "get_seed",
     "iter_progress",
+    "load_config",
     "progress",
     "set_global_seed",
     "utc_now",
