@@ -113,6 +113,65 @@ def test_cerebro_exposes_named_analyzers_and_run_analysis() -> None:
     assert cerebro.analyzer_results == {"close": {"values": [10.0, 11.0, 12.0]}}
 
 
+def test_strategy_addminperiod_skips_next_until_warmup_finishes() -> None:
+    class WarmupStrategy(Strategy):
+        def __init__(self) -> None:
+            self.addminperiod(2)
+            self.prenext_values: list[float] = []
+            self.next_values: list[float] = []
+
+        def prenext(self) -> None:
+            self.prenext_values.append(self.data.close[0])
+
+        def next(self) -> None:
+            self.next_values.append(self.data.close[0])
+
+    class CloseAnalyzer(Analyzer):
+        def __init__(self) -> None:
+            self.values: list[float] = []
+
+        def on_bar(self, bar) -> None:
+            self.values.append(bar.close)
+
+        def get_analysis(self) -> dict[str, object]:
+            return {"values": self.values}
+
+    cerebro = Cerebro()
+    cerebro.adddata(bars())
+    cerebro.addstrategy(WarmupStrategy)
+    cerebro.addanalyzer(CloseAnalyzer, name="close")
+
+    [strategy] = cerebro.run()
+
+    assert strategy.prenext_values == [10.0, 11.0]
+    assert strategy.next_values == [12.0]
+    assert strategy.analyzers.close.get_analysis() == {"values": [10.0, 11.0, 12.0]}
+
+
+def test_strategy_min_period_class_attribute_controls_warmup() -> None:
+    class WarmupStrategy(Strategy):
+        min_period = 1
+
+        def __init__(self) -> None:
+            self.prenext_values: list[float] = []
+            self.next_values: list[float] = []
+
+        def prenext(self) -> None:
+            self.prenext_values.append(self.data.close[0])
+
+        def next(self) -> None:
+            self.next_values.append(self.data.close[0])
+
+    cerebro = Cerebro()
+    cerebro.adddata(bars())
+    cerebro.addstrategy(WarmupStrategy)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.prenext_values == [10.0]
+    assert strategy.next_values == [11.0, 12.0]
+
+
 def test_strategy_params_must_be_tuple_pairs() -> None:
     class BadParams(Strategy):
         params = {"fast": 10}

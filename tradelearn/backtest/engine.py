@@ -41,6 +41,16 @@ def _build_params(owner: type[Any], overrides: dict[str, Any], label: str) -> Pa
     return Params(values)
 
 
+def _coerce_min_period(value: Any, label: str) -> int:
+    try:
+        period = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must be a non-negative integer.") from exc
+    if period < 0:
+        raise ValueError(f"{label} must be a non-negative integer.")
+    return period
+
+
 class LineSeries:
     """Backtrader-style line where index 0 is the current bar."""
 
@@ -521,6 +531,7 @@ class Strategy:
     """Base strategy class with backtrader-style lifecycle hooks."""
 
     params: tuple[tuple[str, Any], ...] = ()
+    min_period = 0
 
     def __init__(self) -> None:
         pass
@@ -548,6 +559,9 @@ class Strategy:
 
     def notify_timer(self, timer: Any, when: Any, *args: Any, **kwargs: Any) -> None:
         pass
+
+    def addminperiod(self, period: int) -> None:
+        self._min_period = max(self._min_period, _coerce_min_period(period, "period"))
 
     def buy(
         self,
@@ -701,7 +715,10 @@ class Cerebro:
             for data in self.datas:
                 data._advance(cursor)
             self.broker.process_bar(strategy, analyzers)
-            strategy.next()
+            if cursor < strategy._min_period:
+                strategy.prenext()
+            else:
+                strategy.next()
             if self.trade_on_close:
                 self.broker.process_close(strategy, analyzers)
             bar = self._snapshot(self.datas[0])
@@ -727,6 +744,9 @@ class Cerebro:
         strategy.p = _build_params(strategy_cls, params, "Strategy")
         strategy.params = strategy.p
         strategy._positions = {}
+        strategy._min_period = _coerce_min_period(
+            getattr(strategy_cls, "min_period", 0), "Strategy.min_period"
+        )
         strategy_cls.__init__(strategy)
         return strategy
 
