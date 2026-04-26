@@ -1,10 +1,15 @@
+#[cfg(feature = "extension-module")]
 use pyo3::prelude::*;
 
+pub mod core;
+
+#[cfg(feature = "extension-module")]
 #[pyfunction]
 fn tradelearn_rust_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
+#[cfg(feature = "extension-module")]
 #[pymodule]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tradelearn_rust_version, m)?)?;

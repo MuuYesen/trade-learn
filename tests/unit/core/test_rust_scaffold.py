@@ -26,7 +26,7 @@ def test_maturin_build_backend_points_to_tradelearn_rust_extension() -> None:
         "manifest-path": "rust/tradelearn-rust/Cargo.toml",
         "module-name": "tradelearn._rust",
         "python-source": ".",
-        "features": ["pyo3/extension-module"],
+        "features": ["extension-module"],
     }
 
 
