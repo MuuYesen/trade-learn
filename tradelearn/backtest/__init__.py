@@ -5,6 +5,7 @@ from tradelearn.backtest.engine import (
     AnalyzerCollection,
     BarRangeSlippage,
     Cerebro,
+    CNAStockCommission,
     CommissionModel,
     DataFeed,
     ExecutedInfo,
@@ -19,6 +20,7 @@ from tradelearn.backtest.engine import (
     SlippageModel,
     Stats,
     Strategy,
+    TieredCommission,
     Trade,
 )
 from tradelearn.backtest.grid import GridSearchResult, grid_search
@@ -27,6 +29,7 @@ __all__ = [
     "Analyzer",
     "AnalyzerCollection",
     "BarRangeSlippage",
+    "CNAStockCommission",
     "Cerebro",
     "CommissionModel",
     "DataFeed",
@@ -43,6 +46,7 @@ __all__ = [
     "SlippageModel",
     "Stats",
     "Strategy",
+    "TieredCommission",
     "Trade",
     "grid_search",
 ]

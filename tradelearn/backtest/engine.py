@@ -209,8 +209,46 @@ class PercentCommission:
         return float(self.ratio)
 
 
+@dataclass(frozen=True)
+class TieredCommission:
+    tiers: list[tuple[float, float]]
+
+    def calculate(self, size: float, price: float, side: int) -> float:
+        if not self.tiers:
+            return 0.0
+        notional = abs(size) * price
+        threshold, ratio = max(
+            ((float(threshold), float(ratio)) for threshold, ratio in self.tiers),
+            key=lambda tier: (tier[0] <= notional, tier[0]),
+        )
+        if threshold > notional:
+            ratio = 0.0
+        return _round_execution(notional * ratio)
+
+    def as_config(self) -> float:
+        return float(self.tiers[0][1]) if self.tiers else 0.0
+
+
+@dataclass(frozen=True)
+class CNAStockCommission:
+    commission_rate: float = 0.00025
+    min_commission: float = 5.0
+    stamp_tax_rate: float = 0.001
+    transfer_fee_rate: float = 0.00002
+
+    def calculate(self, size: float, price: float, side: int) -> float:
+        notional = abs(size) * price
+        broker_fee = max(notional * self.commission_rate, self.min_commission)
+        stamp_tax = notional * self.stamp_tax_rate if side == Order.Sell else 0.0
+        transfer_fee = notional * self.transfer_fee_rate
+        return _round_execution(broker_fee + stamp_tax + transfer_fee)
+
+    def as_config(self) -> float:
+        return float(self.commission_rate)
+
+
 SlippageModel = FixedSlippage | PercentSlippage | BarRangeSlippage
-CommissionModel = FixedCommission | PercentCommission
+CommissionModel = FixedCommission | PercentCommission | TieredCommission | CNAStockCommission
 SlippageConfig = SlippageModel
 CommissionConfig = CommissionModel
 

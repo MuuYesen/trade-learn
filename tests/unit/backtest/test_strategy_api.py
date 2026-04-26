@@ -10,6 +10,7 @@ from tradelearn.backtest import (
     Analyzer,
     BarRangeSlippage,
     Cerebro,
+    CNAStockCommission,
     CommissionModel,
     FixedCommission,
     FixedSlippage,
@@ -20,6 +21,7 @@ from tradelearn.backtest import (
     SlippageModel,
     Stats,
     Strategy,
+    TieredCommission,
 )
 from tradelearn.metrics import max_drawdown, sharpe
 
@@ -149,9 +151,42 @@ def test_bar_range_slippage_uses_seeded_bar_range_fraction() -> None:
 
 def test_backtest_model_aliases_and_defaults_match_spec() -> None:
     assert SlippageModel == FixedSlippage | PercentSlippage | BarRangeSlippage
-    assert CommissionModel == FixedCommission | PercentCommission
+    assert (
+        CommissionModel
+        == FixedCommission | PercentCommission | TieredCommission | CNAStockCommission
+    )
     assert isinstance(Cerebro().broker._slippage_model, FixedSlippage)
     assert isinstance(Cerebro().broker._commission_model, FixedCommission)
+
+
+def test_tiered_commission_uses_highest_matching_notional_threshold() -> None:
+    model = TieredCommission(tiers=[(0.0, 0.01), (100.0, 0.005), (500.0, 0.001)])
+
+    assert model.calculate(size=5, price=10, side=Order.Buy) == 0.5
+    assert model.calculate(size=20, price=10, side=Order.Buy) == 1.0
+    assert model.calculate(size=-100, price=10, side=Order.Sell) == 1.0
+    assert TieredCommission(tiers=[]).calculate(size=100, price=10, side=Order.Buy) == 0.0
+
+
+def test_cna_stock_commission_applies_minimum_stamp_tax_and_transfer_fee() -> None:
+    class BuyAndSell(Strategy):
+        def next(self) -> None:
+            if len(self.broker.fills_frame()) == 0:
+                self.buy(size=1)
+            elif len(self.broker.fills_frame()) == 1:
+                self.sell(size=1)
+
+    cerebro = Cerebro(commission=CNAStockCommission())
+    cerebro.broker.setcash(100.0)
+    cerebro.adddata(bars())
+    cerebro.addstrategy(BuyAndSell)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.stats.fills[["size", "price", "commission"]].to_dict("records") == [
+        {"size": 1.0, "price": 10.0, "commission": 5.0002},
+        {"size": -1.0, "price": 11.0, "commission": 5.01122},
+    ]
 
 
 def test_analyzer_receives_strategy_and_bar_lifecycle() -> None:
