@@ -1,12 +1,19 @@
 """Tests for Bars normalization and cache."""
 
+from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from tradelearn.core import ContractError
-from tradelearn.data import BarsCache, bars_fingerprint, normalize_bars
+from tradelearn.data import (
+    BarsCache,
+    CacheExpiredError,
+    CacheMissError,
+    bars_fingerprint,
+    normalize_bars,
+)
 
 
 def test_normalize_bars_builds_utc_multiindex_and_metadata() -> None:
@@ -104,3 +111,68 @@ def test_bars_cache_round_trips_with_fingerprint(tmp_path: Path) -> None:
     pd.testing.assert_frame_equal(loaded, bars)
     assert loaded.attrs == bars.attrs
     assert cache.fingerprint("test", "AAA", "1d") == bars_fingerprint(bars)
+
+
+def test_bars_cache_reports_ttl_freshness(tmp_path: Path) -> None:
+    """BarsCache freshness compares metadata age against the configured TTL."""
+    bars = _sample_bars()
+    cache = BarsCache(tmp_path, ttl=timedelta(days=1))
+
+    cache.write("test", "AAA", "1d", bars, now=pd.Timestamp("2024-01-01T00:00:00Z"))
+
+    assert cache.exists("test", "AAA", "1d")
+    assert cache.is_fresh("test", "AAA", "1d", now=pd.Timestamp("2024-01-01T12:00:00Z"))
+    assert not cache.is_fresh(
+        "test",
+        "AAA",
+        "1d",
+        now=pd.Timestamp("2024-01-03T00:00:00Z"),
+    )
+
+
+def test_bars_cache_rejects_stale_entries_unless_offline(tmp_path: Path) -> None:
+    """Online reads reject stale cache entries while offline reads reuse them."""
+    bars = _sample_bars()
+    cache = BarsCache(tmp_path, ttl=timedelta(hours=1))
+    cache.write("test", "AAA", "1d", bars, now=pd.Timestamp("2024-01-02T00:00:00Z"))
+
+    stale_now = pd.Timestamp("2024-01-02T02:00:00Z")
+
+    with pytest.raises(CacheExpiredError, match="stale"):
+        cache.read("test", "AAA", "1d", now=stale_now)
+
+    loaded = BarsCache(tmp_path, ttl=timedelta(hours=1), offline=True).read(
+        "test",
+        "AAA",
+        "1d",
+        now=stale_now,
+    )
+
+    expected = bars.copy()
+    expected.attrs["cache_stale"] = True
+    pd.testing.assert_frame_equal(loaded, expected)
+    assert loaded.attrs["cache_stale"] is True
+
+
+def test_bars_cache_offline_mode_still_requires_cached_files(tmp_path: Path) -> None:
+    """Offline mode does not hide missing cache entries."""
+    cache = BarsCache(tmp_path, offline=True)
+
+    with pytest.raises(CacheMissError, match="missing"):
+        cache.read("test", "AAA", "1d")
+
+
+def _sample_bars() -> pd.DataFrame:
+    """Build a small deterministic Bars frame for cache tests."""
+    raw = pd.DataFrame(
+        {
+            "timestamp": ["2024-01-01", "2024-01-02"],
+            "symbol": ["AAA", "AAA"],
+            "open": [10.0, 11.0],
+            "high": [11.0, 12.0],
+            "low": [9.0, 10.0],
+            "close": [10.5, 11.5],
+            "volume": [100.0, 120.0],
+        }
+    )
+    return normalize_bars(raw, market="US", freq="1d", engine="test", source="fixture")
