@@ -368,6 +368,19 @@ def _series_records(series: Any) -> list[dict[str, Any]]:
     return [_clean_json_value(record) for record in frame.to_dict(orient="records")]
 
 
+def _utc_index(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return bars with a UTC-aware datetime index for stable golden JSON."""
+
+    if not isinstance(frame.index, pd.DatetimeIndex):
+        return frame
+    bars = frame.copy()
+    if bars.index.tz is None:
+        bars.index = bars.index.tz_localize("UTC")
+    else:
+        bars.index = bars.index.tz_convert("UTC")
+    return bars
+
+
 def run_expected_job(
     strategy_name: str,
     dataset: dict[str, str],
@@ -381,7 +394,7 @@ def run_expected_job(
     if not path.exists():
         raise GoldenDataError(f"missing dataset parquet: {path}")
     strategy_cls = _strategy_class(strategy_name)
-    bars = pd.read_parquet(path)
+    bars = _utc_index(pd.read_parquet(path))
     cerebro = Cerebro()
     cerebro.broker.setcash(100_000.0)
     cerebro.adddata(bars, name=dataset["symbol"])
@@ -412,9 +425,12 @@ def run_backtrader_expected_job(
 ) -> dict[str, Any]:
     """Run one Backtrader oracle job and return expected payload."""
 
-    if strategy_name not in {"sma_cross", "macd_cross", "tdx30_kdj"}:
+    from scripts.run_backtrader_oracle import SUPPORTED_BACKTRADER_STRATEGIES
+
+    if strategy_name not in SUPPORTED_BACKTRADER_STRATEGIES:
         raise GoldenDataError(
-            "Backtrader oracle currently supports sma_cross, macd_cross, tdx30_kdj"
+            "Backtrader oracle currently supports "
+            f"{', '.join(SUPPORTED_BACKTRADER_STRATEGIES)}"
         )
     from scripts.run_backtrader_oracle import run_backtrader_oracle
 
@@ -441,11 +457,14 @@ def build_expected(
     successes = 0
     jobs = planned_jobs(manifest)
     if oracle == "backtrader":
+        from scripts.run_backtrader_oracle import SUPPORTED_BACKTRADER_STRATEGIES
+
         jobs = [
             (strategy, dataset)
             for strategy, dataset in jobs
-            if strategy in {"sma_cross", "macd_cross", "tdx30_kdj"}
+            if strategy in SUPPORTED_BACKTRADER_STRATEGIES
         ]
+    payloads: list[tuple[str, Path, dict[str, Any]]] = []
     for strategy_name, dataset_symbol in jobs:
         dataset = datasets_by_symbol[dataset_symbol]
         label = f"{strategy_name}:{dataset_symbol}"
@@ -455,23 +474,25 @@ def build_expected(
             else:
                 payload = run_expected_job(strategy_name, dataset, datasets_root)
             path = expected_path(strategy_name, dataset_symbol, out)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(
-                json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2),
-                encoding="utf-8",
-            )
         except Exception as exc:
             failures.append(f"{label}: {exc}")
             print(f"expected={label} status=failed reason={exc}")
             continue
         successes += 1
-        print(f"expected={label} status=ok path={path}")
+        payloads.append((label, path, payload))
 
     total = len(jobs)
     print(f"expected={successes}/{total}")
     if failures:
         joined = "; ".join(failures)
         raise GoldenDataError(f"{successes}/{total} expected generated; failures: {joined}")
+    for label, path, payload in payloads:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2),
+            encoding="utf-8",
+        )
+        print(f"expected={label} status=ok path={path}")
     return successes, total
 
 

@@ -11,9 +11,17 @@ SCRIPT = ROOT / "scripts" / "check_stage3_migration.py"
 SNAPSHOT = ROOT / "benchmarks" / "stage3_migration_blockers.json"
 
 
-def test_stage3_migration_blocker_snapshot_matches_readiness_gates() -> None:
+def test_stage3_migration_blocker_snapshot_matches_readiness_gates(tmp_path: Path) -> None:
     result = subprocess.run(
-        [sys.executable, str(SCRIPT), "--json"],
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--json",
+            "--datasets-root",
+            str(tmp_path / "datasets"),
+            "--expected-root",
+            str(tmp_path / "expected"),
+        ],
         cwd=ROOT,
         check=True,
         capture_output=True,
@@ -36,12 +44,20 @@ def test_stage3_migration_blocker_snapshot_matches_readiness_gates() -> None:
     assert entries["full-golden-comparison"]["status"] == "blocked"
 
 
-def test_stage3_migration_script_runs_without_pythonpath() -> None:
+def test_stage3_migration_script_runs_without_pythonpath(tmp_path: Path) -> None:
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
 
     result = subprocess.run(
-        [sys.executable, str(SCRIPT), "--json"],
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--json",
+            "--datasets-root",
+            str(tmp_path / "datasets"),
+            "--expected-root",
+            str(tmp_path / "expected"),
+        ],
         cwd=ROOT,
         env=env,
         check=True,

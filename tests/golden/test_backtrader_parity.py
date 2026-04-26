@@ -60,7 +60,21 @@ def test_oracle_group_includes_backtrader() -> None:
     assert "backtrader" in oracle
 
 
-@pytest.mark.parametrize("strategy", ["sma_cross", "macd_cross", "tdx30_kdj"])
+@pytest.mark.parametrize(
+    "strategy",
+    [
+        "sma_cross",
+        "rsi_oversold",
+        "bollinger_breakout",
+        "macd_cross",
+        "tdx30_kdj",
+        "supertrend_tv",
+        "pairs_trading",
+        "equal_weight",
+        "alpha101_ml",
+        "momentum_portfolio",
+    ],
+)
 def test_backtrader_oracle_matches_tradelearn_proxy_strategy(
     tmp_path: Path,
     strategy: str,

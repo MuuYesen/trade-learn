@@ -39,6 +39,48 @@ def _summary_value(payload: dict[str, Any], key: str) -> float:
     return float(value)
 
 
+def _trade_signature(payload: dict[str, Any]) -> list[tuple[str, float, float, bool, bool]]:
+    return [
+        (
+            str(trade["datetime"]),
+            float(trade["size"]),
+            float(trade["price"]),
+            bool(trade["isopen"]),
+            bool(trade["isclosed"]),
+        )
+        for trade in payload.get("trades", [])
+    ]
+
+
+def _equity_signature(payload: dict[str, Any]) -> list[tuple[str, float]]:
+    return [
+        (str(row["datetime"]), float(row["value"]))
+        for row in payload.get("equity", [])
+    ]
+
+
+def _equity_differs(
+    actual: dict[str, Any],
+    expected: dict[str, Any],
+    *,
+    rtol: float,
+) -> bool:
+    actual_equity = _equity_signature(actual)
+    expected_equity = _equity_signature(expected)
+    if len(actual_equity) != len(expected_equity):
+        return True
+    for (actual_dt, actual_value), (expected_dt, expected_value) in zip(
+        actual_equity,
+        expected_equity,
+        strict=True,
+    ):
+        if actual_dt != expected_dt:
+            return True
+        if not math.isclose(actual_value, expected_value, rel_tol=rtol, abs_tol=rtol):
+            return True
+    return False
+
+
 def _compare_job(
     *,
     strategy: str,
@@ -50,11 +92,25 @@ def _compare_job(
     dataset_symbol = dataset["symbol"]
     expected = _load_expected(strategy, dataset_symbol, expected_root)
     actual = run_expected_job(strategy, dataset, datasets_root)
-    if actual["trades"] != expected.get("trades", []):
+    try:
+        trades_differ = _trade_signature(actual) != _trade_signature(expected)
+    except (KeyError, TypeError, ValueError):
+        trades_differ = True
+    if trades_differ:
         return {
             "strategy": strategy,
             "dataset": dataset_symbol,
             "reason": "trades differ",
+        }
+    try:
+        equity_differs = _equity_differs(actual, expected, rtol=1e-6)
+    except (KeyError, TypeError, ValueError):
+        equity_differs = True
+    if equity_differs:
+        return {
+            "strategy": strategy,
+            "dataset": dataset_symbol,
+            "reason": "equity differs",
         }
     for key in ("final_cash", "final_value"):
         actual_value = _summary_value(actual, key)

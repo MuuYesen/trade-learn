@@ -26,7 +26,7 @@ def _write_tv_subset(datasets_root: Path) -> None:
                 "close": [base + 1, base + 2, base + 3, base + 4, base + 5, base + 6],
                 "volume": [1000, 1100, 1200, 1300, 1400, 1500],
             },
-            index=pd.date_range("2026-01-01", periods=6, freq="D", tz="UTC"),
+            index=pd.date_range("2026-01-01", periods=6, freq="D"),
         )
         filename = (
             f"{dataset['symbol']}_{dataset['start']}_{dataset['end']}_{dataset['freq']}.parquet"
@@ -34,7 +34,12 @@ def _write_tv_subset(datasets_root: Path) -> None:
         frame.to_parquet(tv_dir / filename)
 
 
-def _build_expected(datasets_root: Path, expected_root: Path) -> None:
+def _build_expected(
+    datasets_root: Path,
+    expected_root: Path,
+    *,
+    oracle: str = "tradelearn",
+) -> None:
     result = subprocess.run(
         [
             sys.executable,
@@ -47,6 +52,8 @@ def _build_expected(datasets_root: Path, expected_root: Path) -> None:
             str(datasets_root),
             "--out",
             str(expected_root),
+            "--oracle",
+            oracle,
         ],
         cwd=ROOT,
         check=False,
@@ -61,6 +68,36 @@ def test_compare_golden_tv_subset_passes_against_expected(tmp_path: Path) -> Non
     expected_root = tmp_path / "expected"
     _write_tv_subset(datasets_root)
     _build_expected(datasets_root, expected_root)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/compare_golden.py",
+            "--json",
+            "--engine",
+            "tv",
+            "--datasets-root",
+            str(datasets_root),
+            "--expected-root",
+            str(expected_root),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(result.stdout)
+    assert result.returncode == 0
+    assert payload["ok"] is True
+    assert payload["summary"] == {"compared": 50, "failed": 0}
+
+
+def test_compare_golden_tv_subset_passes_against_backtrader_expected(tmp_path: Path) -> None:
+    datasets_root = tmp_path / "datasets"
+    expected_root = tmp_path / "expected"
+    _write_tv_subset(datasets_root)
+    _build_expected(datasets_root, expected_root, oracle="backtrader")
 
     result = subprocess.run(
         [

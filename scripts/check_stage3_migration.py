@@ -89,9 +89,19 @@ def validate_snapshot(snapshot: dict[str, Any], readiness: dict[str, Any]) -> li
     return errors
 
 
-def build_payload(path: Path = SNAPSHOT) -> dict[str, Any]:
+def build_payload(
+    path: Path = SNAPSHOT,
+    *,
+    datasets_root: Path | None = None,
+    expected_root: Path | None = None,
+) -> dict[str, Any]:
     snapshot = load_snapshot(path)
-    readiness = build_report(engine="tv")
+    kwargs: dict[str, Any] = {"engine": "tv"}
+    if datasets_root is not None:
+        kwargs["datasets_root"] = datasets_root
+    if expected_root is not None:
+        kwargs["expected_root"] = expected_root
+    readiness = build_report(**kwargs)
     errors = validate_snapshot(snapshot, readiness)
     return {
         "ok": not errors,
@@ -106,12 +116,28 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Check Stage 3 migration blocker snapshot.")
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     parser.add_argument("--snapshot", type=Path, default=SNAPSHOT)
+    parser.add_argument(
+        "--datasets-root",
+        type=Path,
+        default=None,
+        help="root containing golden dataset engine folders",
+    )
+    parser.add_argument(
+        "--expected-root",
+        type=Path,
+        default=None,
+        help="root containing expected v1.0 result files",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    payload = build_payload(args.snapshot)
+    payload = build_payload(
+        args.snapshot,
+        datasets_root=args.datasets_root,
+        expected_root=args.expected_root,
+    )
     if args.json:
         print(json.dumps(payload, sort_keys=True))
     else:

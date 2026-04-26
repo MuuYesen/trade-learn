@@ -18,6 +18,19 @@ sys.path.insert(0, str(ROOT))
 
 from tradelearn.core import GoldenDataError  # noqa: E402
 
+SUPPORTED_BACKTRADER_STRATEGIES = (
+    "sma_cross",
+    "rsi_oversold",
+    "bollinger_breakout",
+    "macd_cross",
+    "tdx30_kdj",
+    "supertrend_tv",
+    "pairs_trading",
+    "equal_weight",
+    "alpha101_ml",
+    "momentum_portfolio",
+)
+
 
 def _clean_json_value(value: Any) -> Any:
     if hasattr(value, "isoformat"):
@@ -57,6 +70,19 @@ def _sma(line: Any, size: int) -> float:
     return sum(values) / len(values) if values else float(line[0])
 
 
+def _momentum(line: Any, size: int = 2) -> float:
+    values = _values(line, size + 1)
+    if len(values) <= size:
+        return 0.0
+    return values[-1] - values[0]
+
+
+def _range_midpoint(data: Any, size: int = 3) -> float:
+    highs = _values(data.high, size)
+    lows = _values(data.low, size)
+    return (max(highs) + min(lows)) / 2.0
+
+
 def _strategy_class(strategy_name: str) -> type[Any]:
     bt = _load_backtrader()
 
@@ -84,6 +110,20 @@ def _strategy_class(strategy_name: str) -> type[Any]:
         def should_exit(self) -> bool:
             return _sma(self.data.close, 2) < _sma(self.data.close, 3)
 
+    class RsiOversold(GoldenBacktraderBase):
+        def should_enter(self) -> bool:
+            return _momentum(self.data.close) < 0
+
+        def should_exit(self) -> bool:
+            return _momentum(self.data.close) > 0
+
+    class BollingerBreakout(GoldenBacktraderBase):
+        def should_enter(self) -> bool:
+            return float(self.data.close[0]) >= max(_values(self.data.high, 3))
+
+        def should_exit(self) -> bool:
+            return float(self.data.close[0]) < _range_midpoint(self.data, 3)
+
     class MacdCross(GoldenBacktraderBase):
         def _macd_proxy(self) -> float:
             return _sma(self.data.close, 2) - _sma(self.data.close, 3)
@@ -93,6 +133,44 @@ def _strategy_class(strategy_name: str) -> type[Any]:
 
         def should_exit(self) -> bool:
             return self._macd_proxy() < 0
+
+    class SupertrendTv(GoldenBacktraderBase):
+        def should_enter(self) -> bool:
+            return float(self.data.close[0]) > _range_midpoint(self.data, 3)
+
+        def should_exit(self) -> bool:
+            return float(self.data.close[0]) < _range_midpoint(self.data, 3)
+
+    class PairsTrading(GoldenBacktraderBase):
+        def should_enter(self) -> bool:
+            return float(self.data.close[0]) < _sma(self.data.close, 3)
+
+        def should_exit(self) -> bool:
+            return float(self.data.close[0]) > _sma(self.data.close, 3)
+
+    class EqualWeight(GoldenBacktraderBase):
+        def should_enter(self) -> bool:
+            return True
+
+        def should_exit(self) -> bool:
+            return False
+
+    class Alpha101Ml(GoldenBacktraderBase):
+        def should_enter(self) -> bool:
+            return (
+                _momentum(self.data.close) > 0
+                and float(self.data.close[0]) > _range_midpoint(self.data, 3)
+            )
+
+        def should_exit(self) -> bool:
+            return _momentum(self.data.close) < 0
+
+    class MomentumPortfolio(GoldenBacktraderBase):
+        def should_enter(self) -> bool:
+            return _momentum(self.data.close, 2) > 0
+
+        def should_exit(self) -> bool:
+            return _momentum(self.data.close, 2) < 0
 
     class Tdx30Kdj(GoldenBacktraderBase):
         def _k_value(self) -> float:
@@ -111,13 +189,20 @@ def _strategy_class(strategy_name: str) -> type[Any]:
 
     strategies = {
         "sma_cross": SmaCross,
+        "rsi_oversold": RsiOversold,
+        "bollinger_breakout": BollingerBreakout,
         "macd_cross": MacdCross,
         "tdx30_kdj": Tdx30Kdj,
+        "supertrend_tv": SupertrendTv,
+        "pairs_trading": PairsTrading,
+        "equal_weight": EqualWeight,
+        "alpha101_ml": Alpha101Ml,
+        "momentum_portfolio": MomentumPortfolio,
     }
     try:
         return strategies[strategy_name]
     except KeyError as exc:
-        supported = ", ".join(sorted(strategies))
+        supported = ", ".join(SUPPORTED_BACKTRADER_STRATEGIES)
         raise GoldenDataError(
             f"unsupported Backtrader oracle strategy: {strategy_name}; supported: {supported}"
         ) from exc
@@ -304,7 +389,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--strategy",
         required=True,
-        choices=["sma_cross", "macd_cross", "tdx30_kdj"],
+        choices=SUPPORTED_BACKTRADER_STRATEGIES,
     )
     parser.add_argument("--parquet", required=True, type=Path)
     parser.add_argument("--out", type=Path)

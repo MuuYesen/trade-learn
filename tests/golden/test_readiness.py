@@ -29,9 +29,19 @@ def test_golden_readiness_script_runs_without_pythonpath() -> None:
     assert "summary" in payload
 
 
-def test_golden_readiness_reports_missing_real_artifacts_as_blocked() -> None:
+def test_golden_readiness_reports_missing_real_artifacts_as_blocked(tmp_path: Path) -> None:
+    datasets_root = tmp_path / "datasets"
+    expected_root = tmp_path / "expected"
     result = subprocess.run(
-        [sys.executable, "scripts/check_golden_readiness.py", "--json"],
+        [
+            sys.executable,
+            "scripts/check_golden_readiness.py",
+            "--json",
+            "--datasets-root",
+            str(datasets_root),
+            "--expected-root",
+            str(expected_root),
+        ],
         cwd=ROOT,
         check=False,
         capture_output=True,
@@ -54,9 +64,18 @@ def test_golden_readiness_reports_missing_real_artifacts_as_blocked() -> None:
     assert payload["blockers"]["strategies"] == []
 
 
-def test_golden_readiness_text_output_is_actionable() -> None:
+def test_golden_readiness_text_output_is_actionable(tmp_path: Path) -> None:
+    datasets_root = tmp_path / "datasets"
+    expected_root = tmp_path / "expected"
     result = subprocess.run(
-        [sys.executable, "scripts/check_golden_readiness.py"],
+        [
+            sys.executable,
+            "scripts/check_golden_readiness.py",
+            "--datasets-root",
+            str(datasets_root),
+            "--expected-root",
+            str(expected_root),
+        ],
         cwd=ROOT,
         check=False,
         capture_output=True,

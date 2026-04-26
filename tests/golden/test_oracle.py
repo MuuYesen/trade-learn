@@ -330,6 +330,18 @@ def test_build_golden_expected_can_generate_tv_subset_from_strategy_adapter(
 def test_build_golden_backtrader_oracle_generates_supported_tv_subset(
     monkeypatch, tmp_path: Path, capsys
 ) -> None:
+    strategies = [
+        "sma_cross",
+        "rsi_oversold",
+        "bollinger_breakout",
+        "macd_cross",
+        "tdx30_kdj",
+        "supertrend_tv",
+        "pairs_trading",
+        "equal_weight",
+        "alpha101_ml",
+        "momentum_portfolio",
+    ]
     manifest = {
         "datasets": [
             {
@@ -341,7 +353,7 @@ def test_build_golden_backtrader_oracle_generates_supported_tv_subset(
                 "freq": "1d",
             },
         ],
-        "strategies": [{"name": "sma_cross"}, {"name": "rsi_oversold"}],
+        "strategies": [{"name": name} for name in strategies],
     }
     datasets_root = tmp_path / "datasets"
     tv_dir = datasets_root / "tv"
@@ -381,8 +393,9 @@ def test_build_golden_backtrader_oracle_generates_supported_tv_subset(
     assert payload["source_engine"] == "backtrader"
     assert payload["strategy"] == "sma_cross"
     assert payload["dataset"] == "GOOG"
-    assert not (tmp_path / "expected" / "rsi_oversold__GOOG.json").exists()
-    assert "expected=1/1" in captured.out
+    assert (tmp_path / "expected" / "rsi_oversold__GOOG.json").exists()
+    assert (tmp_path / "expected" / "momentum_portfolio__GOOG.json").exists()
+    assert "expected=10/10" in captured.out
 
 
 def test_build_golden_datasets_only_reports_unavailable_opentdx(
