@@ -1,432 +1,242 @@
-"""Backtrader-style indicator aliases backed by pandas computations."""
 
-from __future__ import annotations
-
-from dataclasses import dataclass
-from typing import Any
-import inspect
-
+import numpy as np
 import pandas as pd
-
-from tradelearn.backtest import DataFeed, LineSeries
-
-# Global context to track current data feed during strategy initialization
-_CURRENT_DATA = None
-_CURRENT_STRATEGY = None
-
-def set_current_data(data):
-    global _CURRENT_DATA
-    _CURRENT_DATA = data
-
-def set_current_strategy(strategy):
-    global _CURRENT_STRATEGY
-    _CURRENT_STRATEGY = strategy
-
-SUPPORTED_INDICATOR_ALIASES = (
-    "SMA",
-    "SimpleMovingAverage",
-    "MovingAverageSimple",
-    "EMA",
-    "ExponentialMovingAverage",
-    "WMA",
-    "WeightedMovingAverage",
-    "RSI",
-    "RelativeStrengthIndex",
-    "MACD",
-    "BollingerBands",
-    "BBands",
-    "Highest",
-    "Lowest",
-    "ATR",
-    "AverageTrueRange",
-    "TrueRange",
-    "CrossOver",
-    "CrossUp",
-    "CrossDown",
-    "Stochastic",
+from tradelearn.backtest import base
+from tradelearn.backtest.base import (
+    LineRoot, LineSeries,
+    set_current_data
 )
 
-
-class MetaIndicator(type):
-    """Metaclass to handle Backtrader-style parameter stripping."""
-    def __call__(cls, *args, **kwargs):
-        # Check if __init__ accepts the arguments
-        sig = inspect.signature(cls.__init__)
-        params = list(sig.parameters.values())
+def _series(line, target_len=None):
+    """Universal extractor for Pandas Series, handles scalars and forced alignment."""
+    if hasattr(line, 'lines'):
+        if hasattr(line.lines, 'close'):
+            line = line.lines.close
+        else:
+            line = line.lines[0]
+    
+    if hasattr(line, '_values'):
+        res = pd.Series(line._values)
+    elif isinstance(line, (pd.Series, np.ndarray)):
+        res = pd.Series(line)
+    elif isinstance(line, (int, float)):
+        res = pd.Series([float(line)])
+    else:
+        res = pd.Series(line)
         
-        # If __init__ only takes 'self', we need to strip args/kwargs
-        # and store them on the instance instead
-        if len(params) == 1:
-            instance = cls.__new__(cls)
-            # Standard Backtrader behavior: first arg is often data
-            if args:
-                instance.data = args[0]
-            # Store kwargs as params (p)
-            class Params: pass
-            instance.p = Params()
+    res = res.reset_index(drop=True)
+    
+    # Forced Alignment
+    if target_len is not None and len(res) != target_len:
+        if len(res) == 1:
+            res = pd.Series(np.full(target_len, res.iloc[0]))
+        else:
+            new_res = np.full(target_len, np.nan)
+            limit = min(len(res), target_len)
+            new_res[:limit] = res.values[:limit]
+            res = pd.Series(new_res)
             
-            # Support self.lines and self.l
-            class Lines: pass
-            instance.lines = instance.l = Lines()
-            
-            # If class has params defined, use them as defaults
+    return res
 
-            base_params = getattr(cls, 'params', ())
-            if isinstance(base_params, tuple):
-                for k, v in base_params:
-                    setattr(instance.p, k, v)
-            for k, v in kwargs.items():
-                setattr(instance.p, k, v)
-            
-            instance.__init__()
-            return instance
-        
-        return super().__call__(*args, **kwargs)
-
-
-class Indicator(LineSeries, metaclass=MetaIndicator):
-    """Base class for all Backtrader-style indicators."""
-    params = ()
-
-    def __init__(self, *args, **kwargs):
-        super().__init__([])
-
-    def __getattr__(self, name: str) -> Any:
-        # Support accessing lines directly as attributes (e.g. indicator.dch)
-        if hasattr(self, "lines") and hasattr(self.lines, name):
-            return getattr(self.lines, name)
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-
-
-
-class IndicatorLine(LineSeries):
-    """Computed line whose cursor follows a source line."""
-
-    def __init__(self, values: pd.Series, source: LineSeries | None = None) -> None:
-        import numpy as np
-        # Convert to raw numpy array immediately
-        super().__init__(values.to_numpy(dtype=np.float64))
-        self._source = source
-
-    @property
-    def _cursor(self) -> int:
-        if self._source is None:
-            return self.__dict__.get('_cursor', -1)
-        return self._source._cursor
-
-    @_cursor.setter
-    def _cursor(self, value: int):
-        self.__dict__['_cursor'] = value
-
-    def _advance(self, cursor: int) -> None:
-        # Cursor is synced via the property linked to source
-        pass
-
-    def _to_series(self) -> pd.Series:
-        return pd.Series(self._values, dtype="float64")
-
-    def _get_other_vals(self, other: Any) -> Any:
-        from tradelearn.backtest import LineSeries
-        if isinstance(other, LineSeries):
-            return pd.Series(other._values, dtype="float64")
-        return other
-
-    def __add__(self, other: Any) -> IndicatorLine:
-        return IndicatorLine(self._to_series() + self._get_other_vals(other), source=self._source)
-
-    def __sub__(self, other: Any) -> IndicatorLine:
-        return IndicatorLine(self._to_series() - self._get_other_vals(other), source=self._source)
-
-    def __mul__(self, other: Any) -> IndicatorLine:
-        return IndicatorLine(self._to_series() * self._get_other_vals(other), source=self._source)
-
-    def __truediv__(self, other: Any) -> IndicatorLine:
-        return IndicatorLine(self._to_series() / self._get_other_vals(other), source=self._source)
-
-
-
-@dataclass
-class MACDLines:
-    macd: IndicatorLine | pd.Series
-    signal: IndicatorLine | pd.Series
-    histo: IndicatorLine | pd.Series
-
-    @property
-    def hist(self) -> IndicatorLine | pd.Series:
-        return self.histo
-
-
-@dataclass
-class BollingerBandLines:
-    top: IndicatorLine | pd.Series
-    mid: IndicatorLine | pd.Series
-    bot: IndicatorLine | pd.Series
-
-
-@dataclass
-class StochasticLines:
-    percK: IndicatorLine | pd.Series
-    percD: IndicatorLine | pd.Series
-
-
-def _line_source(data: Any) -> LineSeries | None:
-    return data if isinstance(data, LineSeries) else None
-
-
-def _close_line(data: Any) -> Any:
-    return data.close if isinstance(data, DataFeed) else data
-
-
-def _series(data: Any) -> pd.Series:
-    if isinstance(data, LineSeries):
-        return pd.Series(data._values, dtype="float64")
-    if isinstance(data, pd.Series):
-        return data.astype("float64")
-    return pd.Series(data, dtype="float64")
-
-
-def _wrap(data: Any, values: pd.Series) -> IndicatorLine | pd.Series:
-    source = _line_source(data)
-    if source is None:
-        return values
-    line = IndicatorLine(values.reset_index(drop=True), source=source)
-    # Auto-register min_period with the strategy being constructed
-    if _CURRENT_STRATEGY is not None and hasattr(_CURRENT_STRATEGY, 'addminperiod'):
-        import numpy as np
-        arr = line._values
-        non_nan = np.where(~np.isnan(arr))[0]
-        if len(non_nan) > 0:
-            _CURRENT_STRATEGY.addminperiod(int(non_nan[0]))
+def _wrap(source, values):
+    """Wraps result in a LineSeries and updates strategy warmup."""
+    vals = values.values if hasattr(values, 'values') else np.asarray(values)
+    line = LineSeries(vals)
+    non_nan = np.where(~np.isnan(vals))[0]
+    line.min_period = int(non_nan[0]) if len(non_nan) > 0 else 0
+    if base._CURRENT_STRATEGY:
+        base._CURRENT_STRATEGY.addminperiod(line.min_period)
     return line
 
-
-def _period(kwargs: dict[str, Any], default: int = 30) -> int:
-    return int(kwargs.pop("period", kwargs.pop("length", default)))
-
-
-def _get_data(data: Any, kwargs: dict[str, Any]) -> tuple[Any, int]:
-    """Smartly extract data and period from args."""
-    period = _period(kwargs)
+class Indicator(LineRoot):
+    def __init__(self, *args, **kwargs):
+        if not hasattr(self, 'data') or self.data is None:
+            if args and hasattr(args[0], 'lines'):
+                self.data = args[0]
+            else:
+                self.data = base._CURRENT_DATA
+        super().__init__(*args, **kwargs)
+            
+    def __getitem__(self, ago): return self.lines[0][ago]
+    def __call__(self, ago): return self.lines[0](ago)
     
-    # Check if first arg is an integer (period)
-    if isinstance(data, (int, float)):
-        period = int(data)
-        data = None
+    def __add__(self, other): return self.lines[0] + other
+    def __sub__(self, other): return self.lines[0] - other
+    def __mul__(self, other): return self.lines[0] * other
+    def __truediv__(self, other): return self.lines[0] / other
+    def __lt__(self, other): return self.lines[0] < other
+    def __gt__(self, other): return self.lines[0] > other
 
-    if data is None:
-        # Auto-bind to current data context
-        data = _CURRENT_DATA
+class SMA(Indicator):
+    lines = ('sma',)
+    params = (('period', 30),)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        s = _series(self.data)
+        res = s.rolling(self.p.period).mean()
+        self.lines.sma = _wrap(self.data, res)
 
-    return data, period
-
-
-def SMA(data: Any = None, **kwargs: Any) -> IndicatorLine | pd.Series:
-    data, period = _get_data(data, kwargs)
-    source = _close_line(data)
-    return _wrap(source, _series(source).rolling(period).mean())
-
-
-SimpleMovingAverage = SMA
 MovingAverageSimple = SMA
 
+class EMA(Indicator):
+    lines = ('ema',)
+    params = (('period', 30),)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        s = _series(self.data)
+        res = s.ewm(span=self.p.period, adjust=False).mean()
+        self.lines.ema = _wrap(self.data, res)
 
-def EMA(data: Any = None, **kwargs: Any) -> IndicatorLine | pd.Series:
-    data, period = _get_data(data, kwargs)
-    source = _close_line(data)
-    return _wrap(source, _series(source).ewm(span=period, adjust=False, min_periods=period).mean())
+class MACD(Indicator):
+    lines = ('macd', 'signal', 'histo')
+    params = (('period_me1', 12), ('period_me2', 26), ('period_signal', 9))
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        s = _series(self.data)
+        me1 = s.ewm(span=self.p.period_me1, adjust=False).mean()
+        me2 = s.ewm(span=self.p.period_me2, adjust=False).mean()
+        macd = me1 - me2
+        signal = macd.ewm(span=self.p.period_signal, adjust=False).mean()
+        self.lines.macd = _wrap(self.data, macd)
+        self.lines.signal = _wrap(self.data, signal)
+        self.lines.histo = _wrap(self.data, macd - signal)
 
+class RSI(Indicator):
+    lines = ('rsi',)
+    params = (('period', 14),)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        s = _series(self.data)
+        delta = s.diff()
+        gain = delta.clip(lower=0.0)
+        loss = (-delta.clip(upper=0.0))
+        
+        # Wilder's Smoothing: first value is SMA, then EWM
+        # For simplicity and performance, we'll use a close approximation 
+        # or implement the exact recursive formula if needed.
+        # Backtrader uses:
+        # gain = gain.ewm(alpha=1/period, adjust=False).mean()
+        # but the first (period) bars are SMA.
+        
+        alpha = 1.0 / self.p.period
+        
+        def wilder_smooth(series, period):
+            res = np.full(len(series), np.nan)
+            if len(series) < period: return res
+            # Initial SMA (from index 0 to period-1)
+            first_sma = series.iloc[:period].mean()
+            res[period-1] = first_sma
+            # Recursive (from index period onwards)
+            for i in range(period, len(series)):
+                res[i] = (res[i-1] * (period - 1) + series.iloc[i]) / period
+            return pd.Series(res)
 
-ExponentialMovingAverage = EMA
+        g_smooth = wilder_smooth(gain, self.p.period)
+        l_smooth = wilder_smooth(loss, self.p.period)
+        
+        rs = g_smooth / l_smooth.replace(0, np.nan)
+        rsi = 100.0 - (100.0 / (1.0 + rs))
+        self.lines.rsi = _wrap(self.data, rsi.fillna(100.0))
 
+class RSI_SMA(RSI):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-def WMA(data: Any = None, **kwargs: Any) -> IndicatorLine | pd.Series:
-    data, period = _get_data(data, kwargs)
-    source = _close_line(data)
-    weights = pd.Series(range(1, period + 1), dtype="float64")
-    values = _series(source).rolling(period).apply(
-        lambda window: float((window * weights).sum() / weights.sum()),
-        raw=False,
-    )
-    return _wrap(source, values)
+class DonchianChannels(Indicator):
+    lines = ('upper', 'lower', 'middle')
+    params = (('period', 20),)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        s_h = _series(self.data.high)
+        s_l = _series(self.data.low)
+        upper = s_h.rolling(self.p.period).max()
+        lower = s_l.rolling(self.p.period).min()
+        self.lines.upper = _wrap(self.data, upper)
+        self.lines.lower = _wrap(self.data, lower)
+        self.lines.middle = _wrap(self.data, (upper + lower) / 2.0)
 
+def _shift(arr, n=1):
+    res = np.full(arr.shape, np.nan)
+    if n > 0: res[n:] = arr[:-n]
+    elif n < 0: res[:n] = arr[-n:]
+    return res
 
-WeightedMovingAverage = WMA
+class CrossOver(Indicator):
+    lines = ('crossover',)
+    def __init__(self, d0, d1):
+        super().__init__()
+        v0 = _series(d0)
+        v1 = _series(d1, target_len=len(v0))
+        s0, s1 = v0.to_numpy(), v1.to_numpy()
+        
+        s0_1, s1_1 = _shift(s0, 1), _shift(s1, 1)
+        
+        cond_up = (s0 > s1) & (s0_1 <= s1_1)
+        cond_down = (s0 < s1) & (s0_1 >= s1_1)
+        res = np.zeros(len(s0))
+        res[cond_up] = 1.0
+        res[cond_down] = -1.0
+        self.lines.crossover = _wrap(d0, res)
 
+class CrossUp(Indicator):
+    lines = ('crossover',)
+    def __init__(self, d0, d1):
+        super().__init__()
+        v0 = _series(d0)
+        v1 = _series(d1, target_len=len(v0))
+        s0, s1 = v0.to_numpy(), v1.to_numpy()
+        s0_1, s1_1 = _shift(s0, 1), _shift(s1, 1)
+        res = (s0 > s1) & (s0_1 <= s1_1)
+        self.lines.crossover = _wrap(d0, res.astype(float))
 
-def RSI(data: Any = None, **kwargs: Any) -> IndicatorLine | pd.Series:
-    data, period = _get_data(data, kwargs)
-    source = _close_line(data)
-    close = _series(source)
-    delta = close.diff()
-    gain = delta.clip(lower=0.0).rolling(period).mean()
-    loss = (-delta.clip(upper=0.0)).rolling(period).mean()
-    values = 100.0 - (100.0 / (1.0 + gain / loss))
-    return _wrap(source, values)
+class CrossDown(Indicator):
+    lines = ('crossover',)
+    def __init__(self, d0, d1):
+        super().__init__()
+        v0 = _series(d0)
+        v1 = _series(d1, target_len=len(v0))
+        s0, s1 = v0.to_numpy(), v1.to_numpy()
+        s0_1, s1_1 = _shift(s0, 1), _shift(s1, 1)
+        res = (s0 < s1) & (s0_1 >= s1_1)
+        self.lines.crossover = _wrap(d0, res.astype(float))
 
+class Highest(Indicator):
+    lines = ('highest',)
+    params = (('period', 30),)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        res = _series(self.data).rolling(self.p.period).max()
+        self.lines.highest = _wrap(self.data, res)
 
-RelativeStrengthIndex = RSI
-RSI_SMA = RSI
+class Lowest(Indicator):
+    lines = ('lowest',)
+    params = (('period', 30),)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        res = _series(self.data).rolling(self.p.period).min()
+        self.lines.lowest = _wrap(self.data, res)
 
+class ATR(Indicator):
+    lines = ('atr',)
+    params = (('period', 14),)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.data is None:
+            raise ValueError("ATR requires data feed")
+            
+        h = _series(self.data.high)
+        l = _series(self.data.low)
+        c = _series(self.data.close).shift(1)
+        tr = pd.concat([h-l, (h-c).abs(), (l-c).abs()], axis=1).max(axis=1)
+        
+        def wilder_smooth(series, period):
+            res = np.full(len(series), np.nan)
+            if len(series) < period: return res
+            first_sma = series.iloc[:period].mean()
+            res[period-1] = first_sma
+            for i in range(period, len(series)):
+                res[i] = (res[i-1] * (period - 1) + series.iloc[i]) / period
+            return pd.Series(res)
 
-def MACD(
-    data: Any = None,
-    **kwargs: Any,
-) -> MACDLines:
-    fast = int(kwargs.pop("period_me1", kwargs.pop("fast", 12)))
-    slow = int(kwargs.pop("period_me2", kwargs.pop("slow", 26)))
-    signal = int(kwargs.pop("period_signal", kwargs.pop("signal", 9)))
-    data, _ = _get_data(data, kwargs)
-    source = _close_line(data)
-    close = _series(source)
-    fast_line = close.ewm(span=int(fast), adjust=False, min_periods=int(fast)).mean()
-    slow_line = close.ewm(span=int(slow), adjust=False, min_periods=int(slow)).mean()
-    macd_line = fast_line - slow_line
-    signal_line = macd_line.ewm(span=int(signal), adjust=False, min_periods=int(signal)).mean()
-    hist_line = macd_line - signal_line
-    return MACDLines(
-        macd=_wrap(source, macd_line),
-        signal=_wrap(source, signal_line),
-        histo=_wrap(source, hist_line),
-    )
-
-
-def BollingerBands(
-    data: Any = None,
-    **kwargs: Any,
-) -> BollingerBandLines:
-    period = int(kwargs.pop("period", 20))
-    devfactor = float(kwargs.pop("devfactor", 2.0))
-    data, _ = _get_data(data, kwargs)
-    source = _close_line(data)
-    close = _series(source)
-    mid = close.rolling(period).mean()
-    deviation = close.rolling(period).std()
-    return BollingerBandLines(
-        top=_wrap(source, mid + float(devfactor) * deviation),
-        mid=_wrap(source, mid),
-        bot=_wrap(source, mid - float(devfactor) * deviation),
-    )
-
-
-BBands = BollingerBands
-
-
-def Highest(data: Any = None, **kwargs: Any) -> IndicatorLine | pd.Series:
-    data, period = _get_data(data, kwargs)
-    source = _close_line(data)
-    return _wrap(source, _series(source).rolling(period).max())
-
-
-def Lowest(data: Any = None, **kwargs: Any) -> IndicatorLine | pd.Series:
-    data, period = _get_data(data, kwargs)
-    source = _close_line(data)
-    return _wrap(source, _series(source).rolling(period).min())
-
-
-def TrueRange(data: DataFeed, **kwargs: Any) -> IndicatorLine | pd.Series:
-    high = _series(data.high)
-    low = _series(data.low)
-    previous_close = _series(data.close).shift(1)
-    values = pd.concat(
-        [high - low, (high - previous_close).abs(), (low - previous_close).abs()],
-        axis=1,
-    ).max(axis=1)
-    return _wrap(data.close, values)
-
-
-def ATR(data: DataFeed = None, **kwargs: Any) -> IndicatorLine | pd.Series:
-    data, period = _get_data(data, kwargs)
-    true_range = _series(TrueRange(data))
-    # Wilder's smoothing used in BT's ATR is an EMA with span = 2*period - 1
-    return _wrap(data.close, true_range.ewm(span=2 * period - 1, adjust=False, min_periods=period).mean())
-
-
-AverageTrueRange = ATR
-
-
-def _compare_values(left: Any, right: Any) -> tuple[pd.Series, pd.Series, LineSeries | None]:
-    source = _line_source(left) or _line_source(right)
-    return _series(left), _series(right), source
-
-
-def _non_zero_diff(left: pd.Series, right: pd.Series) -> pd.Series:
-    """Backtrader's NonZeroDifference: remembers last non-zero diff value."""
-    diff = left - right
-    nzd = diff.copy()
-    # Forward-fill zeros with previous non-zero value
-    nzd[nzd == 0.0] = float('nan')
-    nzd = nzd.ffill()
-    nzd = nzd.fillna(0.0)
-    return nzd
-
-
-def CrossOver(left: Any, right: Any) -> IndicatorLine | pd.Series:
-    left_values, right_values, source = _compare_values(left, right)
-    diff = left_values - right_values
-    nzd_prev = _non_zero_diff(left_values, right_values).shift(1)
-    values = pd.Series(0.0, index=diff.index)
-    # CrossUp: last non-zero diff was negative, now data0 > data1
-    values[(nzd_prev < 0.0) & (left_values > right_values)] = 1.0
-    # CrossDown: last non-zero diff was positive, now data0 < data1
-    values[(nzd_prev > 0.0) & (left_values < right_values)] = -1.0
-    return IndicatorLine(values, source=source) if source is not None else values
-
-
-def CrossUp(left: Any, right: Any) -> IndicatorLine | pd.Series:
-    values = _series(CrossOver(left, right)).eq(1.0).astype("float64")
-    source = _line_source(left) or _line_source(right)
-    return IndicatorLine(values, source=source) if source is not None else values
-
-
-def CrossDown(left: Any, right: Any) -> IndicatorLine | pd.Series:
-    values = _series(CrossOver(left, right)).eq(-1.0).astype("float64")
-    source = _line_source(left) or _line_source(right)
-    return IndicatorLine(values, source=source) if source is not None else values
-
-
-def Stochastic(
-    data: DataFeed = None,
-    **kwargs: Any,
-) -> StochasticLines:
-    period = int(kwargs.pop("period", 14))
-    period_dfast = int(kwargs.pop("period_dfast", 3))
-    data, _ = _get_data(data, kwargs)
-    low = _series(data.low).rolling(period).min()
-    high = _series(data.high).rolling(period).max()
-    close = _series(data.close)
-    k_line = 100.0 * (close - low) / (high - low)
-    d_line = k_line.rolling(int(period_dfast)).mean()
-    return StochasticLines(
-        percK=_wrap(data.close, k_line),
-        percD=_wrap(data.close, d_line),
-    )
-
-
-__all__ = [
-    "ATR",
-    "AverageTrueRange",
-    "BBands",
-    "BollingerBands",
-    "CrossDown",
-    "CrossOver",
-    "CrossUp",
-    "EMA",
-    "ExponentialMovingAverage",
-    "Highest",
-    "Indicator",
-    "IndicatorLine",
-    "Lowest",
-    "MACD",
-    "MovingAverageSimple",
-    "RSI",
-    "RSI_SMA",
-    "RelativeStrengthIndex",
-    "SMA",
-    "SUPPORTED_INDICATOR_ALIASES",
-    "SimpleMovingAverage",
-    "Stochastic",
-    "TrueRange",
-    "WMA",
-    "WeightedMovingAverage",
-    "set_current_data",
-]
+        atr = wilder_smooth(tr, self.p.period)
+        self.lines.atr = _wrap(self.data, atr)

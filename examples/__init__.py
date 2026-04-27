@@ -9,8 +9,16 @@ def _import_strategy(module_name: str, class_name: str):
 
 QuickstartSmaCross = _import_strategy("01_quickstart", "QuickstartSmaCross")
 SmaCross = _import_strategy("02_sma_cross", "SmaCross")
-RandomForestRotation = _import_strategy("03_rf_rotation", "RandomForestRotation")
-Alpha101GBMStrategy = _import_strategy("04_ml_gbm", "Alpha101GBMStrategy")
+try:
+    RandomForestRotation = _import_strategy("03_rf_rotation", "RandomForestRotation")
+except Exception:
+    RandomForestRotation = None
+
+try:
+    Alpha101GBMStrategy = _import_strategy("04_ml_gbm", "Alpha101GBMStrategy")
+except Exception:
+    Alpha101GBMStrategy = None
+
 MigratedSmaCross = _import_strategy("05_migration", "MigratedSmaCross")
 Turtle = _import_strategy("06_turtle", "Turtle")
 EnhancedRSI = _import_strategy("07_rsi_enhanced", "EnhancedRSI")

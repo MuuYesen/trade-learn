@@ -1,21 +1,14 @@
-#[cfg(feature = "extension-module")]
 use pyo3::prelude::*;
+use pyo3::exceptions::PyValueError;
 
 pub mod core;
+use crate::core::*;
 
-#[cfg(feature = "extension-module")]
-use crate::core::{
-    match_order, BacktestEngine, BarEvent, CommissionModel, ExecutionOptions, FixedSlippage,
-    OrderEvent, OrderSide, OrderType, PercentCommission, SlippageModel,
-};
-
-#[cfg(feature = "extension-module")]
 #[pyfunction]
 fn tradelearn_rust_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
-#[cfg(feature = "extension-module")]
 #[pyfunction]
 #[pyo3(signature = (
     order_id,
@@ -58,7 +51,7 @@ fn match_order_fill(
         "buy" => OrderSide::Buy,
         "sell" => OrderSide::Sell,
         other => {
-            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            return Err(PyValueError::new_err(format!(
                 "unsupported order side: {other}"
             )));
         }
@@ -69,7 +62,7 @@ fn match_order_fill(
         "stop" => OrderType::Stop,
         "stop_limit" => OrderType::StopLimit,
         other => {
-            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            return Err(PyValueError::new_err(format!(
                 "unsupported order type: {other}"
             )));
         }
@@ -95,30 +88,34 @@ fn match_order_fill(
     };
     let options = ExecutionOptions {
         trade_on_close,
+        cheat_on_close: false,
+        cheat_on_open: false,
+        slip_perc: 0.0,
+        slip_fixed: 0.0,
+        slip_match: true,
+        slip_limit: true,
+        slip_out: false,
         slippage: SlippageModel::Fixed(FixedSlippage { amount: 0.0 }),
         commission: CommissionModel::Percent(PercentCommission {
             ratio: commission_ratio,
         }),
+        mult: 1.0,
+        margin: 1.0,
     };
     Ok(match_order(&order, &bar, &options)
         .map(|fill| (fill.size, fill.price, fill.commission, fill.slippage)))
 }
 
-// ---------------------------------------------------------------------------
-// RustBacktestEngine – PyO3 wrapper around core::BacktestEngine
-// ---------------------------------------------------------------------------
-
-#[cfg(feature = "extension-module")]
 #[pyclass]
 struct RustBacktestEngine {
     inner: BacktestEngine,
 }
 
-#[cfg(feature = "extension-module")]
 #[pymethods]
 impl RustBacktestEngine {
     #[new]
-    #[pyo3(signature = (timestamps, opens, highs, lows, closes, volumes, cash, commission_ratio, trade_on_close, mult=1.0, margin=1.0))]
+    #[pyo3(signature = (timestamps, opens, highs, lows, closes, volumes, cash, commission_ratio, trade_on_close, cheat_on_close, cheat_on_open, slip_perc, slip_fixed, slip_match, slip_limit, slip_out, mult=1.0, margin=1.0))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         timestamps: Vec<i64>,
         opens: Vec<f64>,
@@ -129,6 +126,13 @@ impl RustBacktestEngine {
         cash: f64,
         commission_ratio: f64,
         trade_on_close: bool,
+        cheat_on_close: bool,
+        cheat_on_open: bool,
+        slip_perc: f64,
+        slip_fixed: f64,
+        slip_match: bool,
+        slip_limit: bool,
+        slip_out: bool,
         mult: f64,
         margin: f64,
     ) -> Self {
@@ -143,6 +147,13 @@ impl RustBacktestEngine {
                 cash,
                 commission_ratio,
                 trade_on_close,
+                cheat_on_close,
+                cheat_on_open,
+                slip_perc,
+                slip_fixed,
+                slip_match,
+                slip_limit,
+                slip_out,
                 mult,
                 margin,
             ),
@@ -153,23 +164,21 @@ impl RustBacktestEngine {
         self.inner.total_bars()
     }
 
-    /// Process pending orders at given cursor. Returns list of fill tuples:
-    /// (order_id, side_str, size, price, commission, slippage, pnl)
     fn step(&mut self, cursor: usize) -> Vec<(u64, String, f64, f64, f64, f64, f64)> {
-        self.inner
-            .step(cursor)
-            .into_iter()
-            .map(|f| {
-                let side_str = match f.side {
-                    OrderSide::Buy => "buy".to_string(),
-                    OrderSide::Sell => "sell".to_string(),
-                };
-                (f.order_id, side_str, f.size, f.price, f.commission, f.slippage, f.pnl)
-            })
-            .collect()
+        let fills = self.inner.step(cursor);
+        self.map_fills(fills)
     }
 
-    /// Submit an order. Returns order_id.
+    fn step_close(&mut self, cursor: usize) -> Vec<(u64, String, f64, f64, f64, f64, f64)> {
+        let fills = self.inner.step_close(cursor);
+        self.map_fills(fills)
+    }
+
+    fn step_open(&mut self, cursor: usize) -> Vec<(u64, String, f64, f64, f64, f64, f64)> {
+        let fills = self.inner.step_open(cursor);
+        self.map_fills(fills)
+    }
+
     #[pyo3(signature = (side, order_type, size, limit_price=None, stop_price=None))]
     fn submit_order(
         &mut self,
@@ -183,7 +192,7 @@ impl RustBacktestEngine {
             "buy" => OrderSide::Buy,
             "sell" => OrderSide::Sell,
             other => {
-                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                return Err(PyValueError::new_err(format!(
                     "unsupported order side: {other}"
                 )));
             }
@@ -194,7 +203,7 @@ impl RustBacktestEngine {
             "stop" => OrderType::Stop,
             "stop_limit" => OrderType::StopLimit,
             other => {
-                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                return Err(PyValueError::new_err(format!(
                     "unsupported order type: {other}"
                 )));
             }
@@ -202,7 +211,6 @@ impl RustBacktestEngine {
         Ok(self.inner.submit_order(side, order_type, size, limit_price, stop_price))
     }
 
-    /// Returns (size, avg_price) for the default data.
     fn get_position(&self) -> (f64, f64) {
         self.inner.get_position()
     }
@@ -215,7 +223,6 @@ impl RustBacktestEngine {
         self.inner.get_equity()
     }
 
-    /// Returns (equity_ts, equity_cash, equity_value) as three lists.
     fn get_equity_curve(&self) -> (Vec<i64>, Vec<f64>, Vec<f64>) {
         let results = self.inner.get_results();
         let mut ts = Vec::with_capacity(results.equity.len());
@@ -229,7 +236,6 @@ impl RustBacktestEngine {
         (ts, cash, value)
     }
 
-    /// Returns fills as list of tuples: (order_id, side, size, price, commission, slippage, pnl, ts)
     fn get_fills(&self) -> Vec<(u64, String, f64, f64, f64, f64, f64, i64)> {
         self.inner
             .get_results()
@@ -244,9 +250,40 @@ impl RustBacktestEngine {
             })
             .collect()
     }
+
+    fn get_new_fills(&self, start_idx: usize) -> Vec<(u64, String, f64, f64, f64, f64, f64, i64)> {
+        let fills = &self.inner.get_results().fills;
+        if start_idx >= fills.len() {
+            return Vec::new();
+        }
+        fills[start_idx..]
+            .iter()
+            .map(|f| {
+                let side_str = match f.side {
+                    OrderSide::Buy => "buy".to_string(),
+                    OrderSide::Sell => "sell".to_string(),
+                };
+                (f.order_id, side_str, f.size, f.price, f.commission, f.slippage, f.pnl, f.ts)
+            })
+            .collect()
+    }
 }
 
-#[cfg(feature = "extension-module")]
+impl RustBacktestEngine {
+    fn map_fills(&self, fills: Vec<FillRecord>) -> Vec<(u64, String, f64, f64, f64, f64, f64)> {
+        fills
+            .into_iter()
+            .map(|f| {
+                let side_str = match f.side {
+                    OrderSide::Buy => "buy".to_string(),
+                    OrderSide::Sell => "sell".to_string(),
+                };
+                (f.order_id, side_str, f.size, f.price, f.commission, f.slippage, f.pnl)
+            })
+            .collect()
+    }
+}
+
 #[pymodule]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tradelearn_rust_version, m)?)?;

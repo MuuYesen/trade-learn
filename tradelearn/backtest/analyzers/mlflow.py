@@ -1,17 +1,12 @@
-"""Built-in analyzers for the backtest facade."""
-
 from __future__ import annotations
-
 import logging
 import math
 import os
-from typing import Any
-
-from tradelearn.backtest.engine import Analyzer
+from typing import Any, Dict
+from tradelearn.backtest.analyzer import Analyzer
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_MLFLOW_URI = "https://mlflow.leafquant.com"
-
 
 class MLflowAnalyzer(Analyzer):
     """Log strategy params, broker settings, stats, and artifacts to MLflow."""
@@ -25,7 +20,8 @@ class MLflowAnalyzer(Analyzer):
         ("artifact_file", "stats.json"),
     )
 
-    def __init__(self) -> None:
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
         self._status = "pending"
         self._message = ""
 
@@ -55,7 +51,6 @@ class MLflowAnalyzer(Analyzer):
 
 def _import_mlflow() -> Any:
     import mlflow
-
     return mlflow
 
 

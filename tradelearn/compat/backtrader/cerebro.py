@@ -23,7 +23,7 @@ class Cerebro(BacktestCerebro):
         super().addstrategy(strategy, **params)
 
     def run(self, *args, **kwargs):
-        from tradelearn.compat.backtrader.indicators import set_current_data
+        from tradelearn.backtest.base import set_current_data
         # Set context before strategies are instantiated in run()
         if self.datas:
             set_current_data(self.datas[0])

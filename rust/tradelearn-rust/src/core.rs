@@ -145,6 +145,13 @@ pub enum CommissionModel {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ExecutionOptions {
     pub trade_on_close: bool,
+    pub cheat_on_close: bool,
+    pub cheat_on_open: bool,
+    pub slip_perc: f64,
+    pub slip_fixed: f64,
+    pub slip_match: bool,
+    pub slip_limit: bool,
+    pub slip_out: bool,
     pub slippage: SlippageModel,
     pub commission: CommissionModel,
     pub mult: f64,
@@ -326,74 +333,79 @@ impl CallbackBatcher {
     }
 }
 
-pub fn match_order(
+pub fn match_order_at_price(
     order: &OrderEvent,
+    price: f64,
     bar: &BarEvent,
     options: &ExecutionOptions,
 ) -> Option<FillEvent> {
-    let raw_price = match order.order_type {
-        OrderType::Market => Some(execution_price(bar, options)),
-        OrderType::Limit => limit_fill_price(order, bar),
-        OrderType::Stop => {
-            if stop_triggered(order, bar) {
-                Some(execution_price(bar, options))
+    let fill_price = match order.order_type {
+        OrderType::Market => Some(price),
+        OrderType::Limit => {
+            if order.side == OrderSide::Buy {
+                if price <= order.limit_price? { Some(price) } else { None }
             } else {
-                None
+                if price >= order.limit_price? { Some(price) } else { None }
+            }
+        }
+        OrderType::Stop => {
+            if order.side == OrderSide::Buy {
+                if price >= order.stop_price? { Some(price) } else { None }
+            } else {
+                if price <= order.stop_price? { Some(price) } else { None }
             }
         }
         OrderType::StopLimit => {
-            if stop_triggered(order, bar) {
-                limit_fill_price(order, bar)
+            // Complex. For simplicity, match against the current point price.
+            // If stop is hit, it becomes a limit order.
+            let stop = order.stop_price?;
+            let limit = order.limit_price?;
+            if order.side == OrderSide::Buy {
+                if price >= stop && price <= limit { Some(price) } else { None }
             } else {
-                None
+                if price <= stop && price >= limit { Some(price) } else { None }
             }
         }
     }?;
-    let price = round_precision(apply_slippage(raw_price, order.side, options.slippage));
+
     let size = round_precision(signed_order_size(order));
     Some(FillEvent {
         order_id: order.order_id,
         symbol: order.symbol.clone(),
         size,
-        price,
-        commission: round_precision(calculate_commission(price, size, options.commission, options.mult)),
-        slippage: round_precision(price - raw_price),
+        price: round_precision(fill_price),
+        commission: round_precision(calculate_commission(
+            fill_price,
+            size,
+            options.commission,
+            options.mult
+        )),
+        slippage: 0.0,
         ts: bar.ts,
     })
 }
 
-fn execution_price(bar: &BarEvent, options: &ExecutionOptions) -> f64 {
-    if options.trade_on_close {
-        bar.close
+pub fn match_order(
+    order: &OrderEvent,
+    bar: &BarEvent,
+    options: &ExecutionOptions,
+) -> Option<FillEvent> {
+    // Re-implement simplified matching for single-call compatibility (like in lib.rs)
+    // Uses the same path assumption as the main engine loop.
+    let hp = bar.high - bar.open;
+    let lp = bar.open - bar.low;
+    let path = if hp < lp {
+        [bar.open, bar.high, bar.low, bar.close]
     } else {
-        bar.open
-    }
-}
+        [bar.open, bar.low, bar.high, bar.close]
+    };
 
-fn limit_fill_price(order: &OrderEvent, bar: &BarEvent) -> Option<f64> {
-    let limit = order.limit_price?;
-    match order.side {
-        OrderSide::Buy if bar.low <= limit => Some(limit.min(bar.open)),
-        OrderSide::Sell if bar.high >= limit => Some(limit.max(bar.open)),
-        _ => None,
+    for &price in &path {
+        if let Some(fill) = match_order_at_price(order, price, bar, options) {
+            return Some(fill);
+        }
     }
-}
-
-fn stop_triggered(order: &OrderEvent, bar: &BarEvent) -> bool {
-    match (order.side, order.stop_price) {
-        (OrderSide::Buy, Some(stop)) => bar.high >= stop,
-        (OrderSide::Sell, Some(stop)) => bar.low <= stop,
-        _ => false,
-    }
-}
-
-fn apply_slippage(price: f64, side: OrderSide, slippage: SlippageModel) -> f64 {
-    match (side, slippage) {
-        (OrderSide::Buy, SlippageModel::Fixed(model)) => price + model.amount,
-        (OrderSide::Sell, SlippageModel::Fixed(model)) => price - model.amount,
-        (OrderSide::Buy, SlippageModel::Percent(model)) => price * (1.0 + model.ratio),
-        (OrderSide::Sell, SlippageModel::Percent(model)) => price * (1.0 - model.ratio),
-    }
+    None
 }
 
 fn calculate_commission(price: f64, size: f64, commission: CommissionModel, mult: f64) -> f64 {
@@ -655,6 +667,13 @@ impl BacktestEngine {
         cash: f64,
         commission_ratio: f64,
         trade_on_close: bool,
+        cheat_on_close: bool,
+        cheat_on_open: bool,
+        slip_perc: f64,
+        slip_fixed: f64,
+        slip_match: bool,
+        slip_limit: bool,
+        slip_out: bool,
         mult: f64,
         margin: f64,
     ) -> Self {
@@ -670,6 +689,13 @@ impl BacktestEngine {
             portfolio: Portfolio::new(cash),
             options: ExecutionOptions {
                 trade_on_close,
+                cheat_on_close,
+                cheat_on_open,
+                slip_perc,
+                slip_fixed,
+                slip_match,
+                slip_limit,
+                slip_out,
                 slippage: SlippageModel::Fixed(FixedSlippage { amount: 0.0 }),
                 commission: CommissionModel::Percent(PercentCommission {
                     ratio: commission_ratio,
@@ -704,35 +730,7 @@ impl BacktestEngine {
     /// Returns list of fills that occurred.
     pub fn step(&mut self, cursor: usize) -> Vec<FillRecord> {
         let bar = self.bar_at(cursor);
-        let mut fills = Vec::new();
-
-        // Process pending orders
-        let mut remaining = Vec::new();
-        for order in self.pending.drain(..) {
-            if let Some(fill_event) = match_order(&order, &bar, &self.options) {
-                // Calculate realized PnL
-                let position = self.portfolio.position(&order.symbol);
-                let old_size = position.map(|p| p.size).unwrap_or(0.0);
-                let old_price = position.map(|p| p.avg_price).unwrap_or(0.0);
-                let pnl = realized_pnl(old_size, old_price, fill_event.size, fill_event.price, self.options.mult);
-
-                self.portfolio.apply_fill(&fill_event, self.options.mult);
-
-                fills.push(FillRecord {
-                    order_id: fill_event.order_id,
-                    ts: fill_event.ts,
-                    side: order.side,
-                    size: fill_event.size,
-                    price: fill_event.price,
-                    commission: fill_event.commission,
-                    slippage: fill_event.slippage,
-                    pnl,
-                });
-            } else {
-                remaining.push(order);
-            }
-        }
-        self.pending = remaining;
+        let fills = self.match_all_pending(&bar);
 
         // Snapshot portfolio
         self.portfolio.mark_to_market(&[bar], self.options.mult);
@@ -742,6 +740,77 @@ impl BacktestEngine {
             value: self.portfolio.equity(self.options.mult),
         });
 
+        fills
+    }
+
+    pub fn step_close(&mut self, cursor: usize) -> Vec<FillRecord> {
+        let bar = self.bar_at(cursor);
+        let mut options = self.options;
+        options.trade_on_close = true;
+        self.match_all_pending_internal(&bar, &options)
+    }
+
+    pub fn step_open(&mut self, cursor: usize) -> Vec<FillRecord> {
+        let bar = self.bar_at(cursor);
+        let mut options = self.options;
+        options.trade_on_close = false;
+        self.match_all_pending_internal(&bar, &options)
+    }
+
+    fn match_all_pending(&mut self, bar: &BarEvent) -> Vec<FillRecord> {
+        let options = self.options;
+        self.match_all_pending_internal(bar, &options)
+    }
+
+    fn match_all_pending_internal(&mut self, bar: &BarEvent, options: &ExecutionOptions) -> Vec<FillRecord> {
+        let mut fills = Vec::new();
+        
+        // Backtrader-style Price Path Assumption
+        let hp = bar.high - bar.open;
+        let lp = bar.open - bar.low;
+        let path = if hp < lp {
+            [bar.open, bar.high, bar.low, bar.close]
+        } else {
+            [bar.open, bar.low, bar.high, bar.close]
+        };
+
+        for &price in &path {
+            let mut remaining = Vec::new();
+            let current_pending = std::mem::take(&mut self.pending);
+            
+            for order in current_pending {
+                if let Some(fill_event) = match_order_at_price(&order, price, bar, options) {
+                    let position = self.portfolio.position(&order.symbol);
+                    let old_size = position.map(|p| p.size).unwrap_or(0.0);
+                    let old_price = position.map(|p| p.avg_price).unwrap_or(0.0);
+                    let pnl = realized_pnl(
+                        old_size,
+                        old_price,
+                        fill_event.size,
+                        fill_event.price,
+                        options.mult,
+                    );
+
+                    self.portfolio.apply_fill(&fill_event, options.mult);
+
+                    let record = FillRecord {
+                        order_id: fill_event.order_id,
+                        ts: fill_event.ts,
+                        side: order.side,
+                        size: fill_event.size,
+                        price: fill_event.price,
+                        commission: fill_event.commission,
+                        slippage: fill_event.slippage,
+                        pnl,
+                    };
+                    self.results.fills.push(record.clone());
+                    fills.push(record);
+                } else {
+                    remaining.push(order);
+                }
+            }
+            self.pending = remaining;
+        }
         fills
     }
 

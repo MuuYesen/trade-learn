@@ -15,7 +15,7 @@ from tradelearn.backtest import (
     Strategy as _BaseStrategy,
     Trade,
 )
-from tradelearn.compat.backtrader.indicators import set_current_data, set_current_strategy
+from tradelearn.backtest.base import set_current_data, set_current_strategy
 
 class Strategy(_BaseStrategy):
     """Backtrader-compatible Strategy that maintains data context."""
@@ -23,11 +23,7 @@ class Strategy(_BaseStrategy):
         # Set context for indicators created during __init__
         if self.datas:
             set_current_data(self.datas[0])
-        set_current_strategy(self)
         super().__init__(*args, **kwargs)
-        # Clear context after init
-        set_current_data(None)
-        set_current_strategy(None)
         
     @property
     def datetime(self):
@@ -38,7 +34,8 @@ class Strategy(_BaseStrategy):
         """Place an order to rebalance position to have final size of target."""
         if data is None:
             data = self.data
-        possize = self.getposition(data).size
+        # Use the effective position (including pending orders) to avoid duplicate orders
+        possize = self.getposition(data).size + self._pending_size.get(data, 0.0)
         if not target and possize:
             return self.close(data=data, **kwargs)
         elif target > possize:
@@ -51,17 +48,22 @@ class Strategy(_BaseStrategy):
         """Place an order to rebalance position to have final value of target."""
         if data is None:
             data = self.data
-        possize = self.getposition(data).size
+        # Use effective position to account for pending rebalances
+        possize = self.getposition(data).size + self._pending_size.get(data, 0.0)
         if not target and possize:
             return self.close(data=data, **kwargs)
         price = price if price is not None else data.close[0]
-        current_value = possize * price
+        # Get multiplier from commission info if possible
+        comminfo = self.broker.getcommissioninfo(data)
+        mult = getattr(comminfo.p, 'mult', 1.0)
+        
+        current_value = possize * price * mult
         if target > current_value:
-            size = int((target - current_value) / price)
+            size = int((target - current_value) / (price * mult))
             if size:
                 return self.buy(data=data, size=size, price=price, **kwargs)
         elif target < current_value:
-            size = int((current_value - target) / price)
+            size = int((current_value - target) / (price * mult))
             if size:
                 return self.sell(data=data, size=size, price=price, **kwargs)
         return None

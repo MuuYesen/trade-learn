@@ -1,0 +1,10 @@
+DEBUG: SEARCHING MATCH FOR ID=1 BUY=True
+  CHECKING ORDER ref=1 status=2 isbuy=True
+  EXACT MATCH FOUND!
+DEBUG: CALLING _on_fill FOR <tradelearn.backtest.datafeed.DataFeed object at 0x156fde3c0> size=10.0
+DEBUG: SEARCHING MATCH FOR ID=2 BUY=False
+  CHECKING ORDER ref=1 status=4 isbuy=True
+  CHECKING ORDER ref=2 status=2 isbuy=False
+  EXACT MATCH FOUND!
+DEBUG: CALLING _on_fill FOR <tradelearn.backtest.datafeed.DataFeed object at 0x156fde3c0> size=10.0
+100013.19674

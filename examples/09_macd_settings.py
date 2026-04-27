@@ -57,6 +57,7 @@ class MacdTharp(bt.Strategy):
         # Control market trend
         self.sma = bt.indicators.SMA(self.data, period=self.p.smaperiod)
         self.smadir = self.sma - self.sma(-self.p.dirperiod)
+        self.order = None
 
     def start(self):
         self.order = None  # sentinel to avoid operrations on pending order
