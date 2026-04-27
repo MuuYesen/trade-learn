@@ -8,11 +8,12 @@ from tradelearn.backtest.analyzer import Analyzer
 
 class Cerebro:
     """Main orchestrator for backtesting."""
-    def __init__(self) -> None:
+    def __init__(self, match_mode: str = 'bt') -> None:
         self.datas: List[DataFeed] = []
         self.strats: List[Tuple[Type[Strategy], tuple, dict]] = []
+        self.match_mode = match_mode
         from tradelearn.backtest.brokers.rust_broker import RustBroker
-        self.broker = RustBroker()
+        self.broker = RustBroker(match_mode=match_mode)
         self._sizer_spec = (FixedSize, {})
         self.analyzers: Dict[str, Tuple[Type[Analyzer], dict]] = {}
 

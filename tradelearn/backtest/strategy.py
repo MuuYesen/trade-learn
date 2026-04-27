@@ -90,10 +90,13 @@ class Strategy(LineRoot):
         price = data.close[0]
         if price <= 0: return None
         
+        mult = getattr(self.broker, "get_mult", lambda d: 1.0)(data)
         pos = self.getposition(data)
-        current_value = pos.size * price
+        current_value = pos.size * price * mult
         needed_value = target_value - current_value
-        needed_size = needed_value / price
+        needed_size = needed_value / (price * mult)
+        
+        if abs(needed_size) < 1e-6: return None # Avoid tiny orders
         
         if needed_size > 0:
             return self.buy(data=data, size=needed_size, **kwargs)

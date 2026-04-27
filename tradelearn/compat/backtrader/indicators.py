@@ -38,20 +38,56 @@ def _series(line, target_len=None):
             
     return res
 
-def _wrap(source, values):
+def _wrap(source, values, min_period=None):
     """Wraps result in a LineSeries and updates strategy warmup."""
     vals = values.values if hasattr(values, 'values') else np.asarray(values)
     line = LineSeries(vals)
-    non_nan = np.where(~np.isnan(vals))[0]
-    line.min_period = int(non_nan[0]) if len(non_nan) > 0 else 0
+    if min_period is not None:
+        line.min_period = min_period
+    else:
+        non_nan = np.where(~np.isnan(vals))[0]
+        line.min_period = int(non_nan[0]) if len(non_nan) > 0 else 0
+        
     if base._CURRENT_STRATEGY:
         base._CURRENT_STRATEGY.addminperiod(line.min_period)
     return line
 
+
+def bt_ema(series, period):
+    """Backtrader-style EMA initialization: first value is SMA(period)."""
+    res = np.full(len(series), np.nan)
+    if len(series) < period: return pd.Series(res)
+    # Initial SMA
+    first_sma = series.iloc[:period].mean()
+    res[period-1] = first_sma
+    alpha = 2.0 / (period + 1.0)
+    for i in range(period, len(series)):
+        val = series.iloc[i]
+        if not np.isnan(val):
+            res[i] = (val - res[i-1]) * alpha + res[i-1]
+        else:
+            res[i] = res[i-1]
+    return pd.Series(res)
+
+def bt_wilder(series, period):
+    """Backtrader-style Wilder's Smoothing (SmoothedMovingAverage)."""
+    res = np.full(len(series), np.nan)
+    if len(series) < period: return pd.Series(res)
+    # Initial SMA
+    first_sma = series.iloc[:period].mean()
+    res[period-1] = first_sma
+    for i in range(period, len(series)):
+        val = series.iloc[i]
+        if not np.isnan(val):
+            res[i] = (res[i-1] * (period - 1) + val) / period
+        else:
+            res[i] = res[i-1]
+    return pd.Series(res)
+
 class Indicator(LineRoot):
     def __init__(self, *args, **kwargs):
         if not hasattr(self, 'data') or self.data is None:
-            if args and hasattr(args[0], 'lines'):
+            if args and (hasattr(args[0], 'lines') or hasattr(args[0], '_values')):
                 self.data = args[0]
             else:
                 self.data = base._CURRENT_DATA
@@ -74,7 +110,7 @@ class SMA(Indicator):
         super().__init__(*args, **kwargs)
         s = _series(self.data)
         res = s.rolling(self.p.period).mean()
-        self.lines.sma = _wrap(self.data, res)
+        self.lines.sma = _wrap(self.data, res, min_period=self.p.period - 1)
 
 MovingAverageSimple = SMA
 
@@ -84,8 +120,8 @@ class EMA(Indicator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         s = _series(self.data)
-        res = s.ewm(span=self.p.period, adjust=False).mean()
-        self.lines.ema = _wrap(self.data, res)
+        res = bt_ema(s, self.p.period)
+        self.lines.ema = _wrap(self.data, res, min_period=self.p.period - 1)
 
 class MACD(Indicator):
     lines = ('macd', 'signal', 'histo')
@@ -93,17 +129,22 @@ class MACD(Indicator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         s = _series(self.data)
-        me1 = s.ewm(span=self.p.period_me1, adjust=False).mean()
-        me2 = s.ewm(span=self.p.period_me2, adjust=False).mean()
+        me1 = bt_ema(s, self.p.period_me1)
+        me2 = bt_ema(s, self.p.period_me2)
         macd = me1 - me2
-        signal = macd.ewm(span=self.p.period_signal, adjust=False).mean()
-        self.lines.macd = _wrap(self.data, macd)
-        self.lines.signal = _wrap(self.data, signal)
-        self.lines.histo = _wrap(self.data, macd - signal)
+        signal = bt_ema(macd, self.p.period_signal)
+        # MACD min_period is max of me1, me2 plus signal period
+        m_period = max(self.p.period_me1, self.p.period_me2) + self.p.period_signal - 1
+        self.lines.macd = _wrap(self.data, macd, min_period=max(self.p.period_me1, self.p.period_me2) - 1)
+        self.lines.signal = _wrap(self.data, signal, min_period=m_period)
+        self.lines.histo = _wrap(self.data, macd - signal, min_period=m_period)
 
 class RSI(Indicator):
     lines = ('rsi',)
-    params = (('period', 14),)
+    params = (
+        ('period', 14),
+        ('movav', None), # Will default to SmoothedMovingAverage if None
+    )
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         s = _series(self.data)
@@ -111,35 +152,27 @@ class RSI(Indicator):
         gain = delta.clip(lower=0.0)
         loss = (-delta.clip(upper=0.0))
         
-        # Wilder's Smoothing: first value is SMA, then EWM
-        # For simplicity and performance, we'll use a close approximation 
-        # or implement the exact recursive formula if needed.
-        # Backtrader uses:
-        # gain = gain.ewm(alpha=1/period, adjust=False).mean()
-        # but the first (period) bars are SMA.
+        movav = self.p.movav
+        if movav is None:
+            g_smooth = bt_wilder(gain, self.p.period)
+            l_smooth = bt_wilder(loss, self.p.period)
+            m_period = self.p.period # RSI Wilder needs period+1 bars to start
+        else:
+            # Handle class-based movav like bt.ind.SMA
+            g_ind = movav(gain, period=self.p.period)
+            l_ind = movav(loss, period=self.p.period)
+            g_smooth = g_ind.lines[0]._values
+            l_smooth = l_ind.lines[0]._values
+            m_period = g_ind.lines[0].min_period
         
-        alpha = 1.0 / self.p.period
-        
-        def wilder_smooth(series, period):
-            res = np.full(len(series), np.nan)
-            if len(series) < period: return res
-            # Initial SMA (from index 0 to period-1)
-            first_sma = series.iloc[:period].mean()
-            res[period-1] = first_sma
-            # Recursive (from index period onwards)
-            for i in range(period, len(series)):
-                res[i] = (res[i-1] * (period - 1) + series.iloc[i]) / period
-            return pd.Series(res)
-
-        g_smooth = wilder_smooth(gain, self.p.period)
-        l_smooth = wilder_smooth(loss, self.p.period)
-        
-        rs = g_smooth / l_smooth.replace(0, np.nan)
+        # Avoid division by zero
+        rs = pd.Series(g_smooth) / pd.Series(l_smooth).replace(0, np.nan)
         rsi = 100.0 - (100.0 / (1.0 + rs))
-        self.lines.rsi = _wrap(self.data, rsi.fillna(100.0))
+        self.lines.rsi = _wrap(self.data, rsi.fillna(100.0), min_period=m_period)
 
 class RSI_SMA(RSI):
     def __init__(self, *args, **kwargs):
+        kwargs['movav'] = SMA
         super().__init__(*args, **kwargs)
 
 class DonchianChannels(Indicator):
@@ -151,9 +184,10 @@ class DonchianChannels(Indicator):
         s_l = _series(self.data.low)
         upper = s_h.rolling(self.p.period).max()
         lower = s_l.rolling(self.p.period).min()
-        self.lines.upper = _wrap(self.data, upper)
-        self.lines.lower = _wrap(self.data, lower)
-        self.lines.middle = _wrap(self.data, (upper + lower) / 2.0)
+        m_period = self.p.period - 1
+        self.lines.upper = _wrap(self.data, upper, min_period=m_period)
+        self.lines.lower = _wrap(self.data, lower, min_period=m_period)
+        self.lines.middle = _wrap(self.data, (upper + lower) / 2.0, min_period=m_period)
 
 def _shift(arr, n=1):
     res = np.full(arr.shape, np.nan)
@@ -169,14 +203,33 @@ class CrossOver(Indicator):
         v1 = _series(d1, target_len=len(v0))
         s0, s1 = v0.to_numpy(), v1.to_numpy()
         
-        s0_1, s1_1 = _shift(s0, 1), _shift(s1, 1)
-        
-        cond_up = (s0 > s1) & (s0_1 <= s1_1)
-        cond_down = (s0 < s1) & (s0_1 >= s1_1)
         res = np.zeros(len(s0))
+        # Backtrader's CrossOver uses non-zero difference memory
+        # We simulate this by finding the last non-zero difference at each point
+        diff = s0 - s1
+        
+        # Vectorized non-zero diff: 
+        # 1. Get signs of diffs
+        # 2. Forward fill non-zero signs
+        signs = np.sign(diff)
+        # We need to handle NaNs and Zeros
+        # Replace 0 with NaN for forward filling, then ffill
+        signs_to_fill = np.where(signs == 0, np.nan, signs)
+        # Use pandas to ffill
+        filled_signs = pd.Series(signs_to_fill).ffill().shift(1).fillna(0).to_numpy()
+        
+        # Trigger when current sign is positive and previous non-zero sign was <= 0
+        cond_up = (signs > 0) & (filled_signs <= 0)
+        # Trigger when current sign is negative and previous non-zero sign was >= 0
+        cond_down = (signs < 0) & (filled_signs >= 0)
+        
         res[cond_up] = 1.0
         res[cond_down] = -1.0
-        self.lines.crossover = _wrap(d0, res)
+        
+        m0 = getattr(d0, "min_period", 0) if hasattr(d0, "min_period") else 0
+        m1 = getattr(d1, "min_period", 0) if hasattr(d1, "min_period") else 0
+        m_period = max(m0, m1, 1)
+        self.lines.crossover = _wrap(d0, res, min_period=m_period)
 
 class CrossUp(Indicator):
     lines = ('crossover',)
@@ -185,9 +238,18 @@ class CrossUp(Indicator):
         v0 = _series(d0)
         v1 = _series(d1, target_len=len(v0))
         s0, s1 = v0.to_numpy(), v1.to_numpy()
-        s0_1, s1_1 = _shift(s0, 1), _shift(s1, 1)
-        res = (s0 > s1) & (s0_1 <= s1_1)
-        self.lines.crossover = _wrap(d0, res.astype(float))
+        
+        diff = s0 - s1
+        signs = np.sign(diff)
+        signs_to_fill = np.where(signs == 0, np.nan, signs)
+        filled_signs = pd.Series(signs_to_fill).ffill().shift(1).fillna(0).to_numpy()
+        
+        res = (signs > 0) & (filled_signs <= 0)
+        
+        m0 = getattr(d0, "min_period", 0) if hasattr(d0, "min_period") else 0
+        m1 = getattr(d1, "min_period", 0) if hasattr(d1, "min_period") else 0
+        m_period = max(m0, m1, 1)
+        self.lines.crossover = _wrap(d0, res.astype(float), min_period=m_period)
 
 class CrossDown(Indicator):
     lines = ('crossover',)
@@ -196,9 +258,18 @@ class CrossDown(Indicator):
         v0 = _series(d0)
         v1 = _series(d1, target_len=len(v0))
         s0, s1 = v0.to_numpy(), v1.to_numpy()
-        s0_1, s1_1 = _shift(s0, 1), _shift(s1, 1)
-        res = (s0 < s1) & (s0_1 >= s1_1)
-        self.lines.crossover = _wrap(d0, res.astype(float))
+        
+        diff = s0 - s1
+        signs = np.sign(diff)
+        signs_to_fill = np.where(signs == 0, np.nan, signs)
+        filled_signs = pd.Series(signs_to_fill).ffill().shift(1).fillna(0).to_numpy()
+        
+        res = (signs < 0) & (filled_signs >= 0)
+        
+        m0 = getattr(d0, "min_period", 0) if hasattr(d0, "min_period") else 0
+        m1 = getattr(d1, "min_period", 0) if hasattr(d1, "min_period") else 0
+        m_period = max(m0, m1, 1)
+        self.lines.crossover = _wrap(d0, res.astype(float), min_period=m_period)
 
 class Highest(Indicator):
     lines = ('highest',)
@@ -206,7 +277,7 @@ class Highest(Indicator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         res = _series(self.data).rolling(self.p.period).max()
-        self.lines.highest = _wrap(self.data, res)
+        self.lines.highest = _wrap(self.data, res, min_period=self.p.period - 1)
 
 class Lowest(Indicator):
     lines = ('lowest',)
@@ -214,7 +285,7 @@ class Lowest(Indicator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         res = _series(self.data).rolling(self.p.period).min()
-        self.lines.lowest = _wrap(self.data, res)
+        self.lines.lowest = _wrap(self.data, res, min_period=self.p.period - 1)
 
 class ATR(Indicator):
     lines = ('atr',)
@@ -227,16 +298,10 @@ class ATR(Indicator):
         h = _series(self.data.high)
         l = _series(self.data.low)
         c = _series(self.data.close).shift(1)
-        tr = pd.concat([h-l, (h-c).abs(), (l-c).abs()], axis=1).max(axis=1)
         
-        def wilder_smooth(series, period):
-            res = np.full(len(series), np.nan)
-            if len(series) < period: return res
-            first_sma = series.iloc[:period].mean()
-            res[period-1] = first_sma
-            for i in range(period, len(series)):
-                res[i] = (res[i-1] * (period - 1) + series.iloc[i]) / period
-            return pd.Series(res)
-
-        atr = wilder_smooth(tr, self.p.period)
+        # Backtrader's first TR is High - Low
+        tr = pd.concat([h-l, (h-c).abs(), (l-c).abs()], axis=1).max(axis=1)
+        tr.iloc[0] = h.iloc[0] - l.iloc[0]
+        
+        atr = bt_wilder(tr, self.p.period)
         self.lines.atr = _wrap(self.data, atr)

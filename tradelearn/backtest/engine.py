@@ -60,6 +60,10 @@ def run_backtest(cerebro: Cerebro) -> List[Strategy]:
             float(cerebro.broker._mult), 1.0
         )
         cerebro.broker._engine = rust_engine
+        cerebro.broker._open_prices = opens
+        cerebro.broker._high_prices = highs
+        cerebro.broker._low_prices = lows
+        cerebro.broker._close_prices = closes
     
     strategy.broker = cerebro.broker
     
@@ -71,6 +75,7 @@ def run_backtest(cerebro: Cerebro) -> List[Strategy]:
     
     limit = cerebro.datas[0].buflen()
     min_period = strategy._min_period
+    print(f"DEBUG: Strategy {strategy.__class__.__name__} min_period: {min_period}")
     
     for i in range(limit):
         # 1. Advance all lines

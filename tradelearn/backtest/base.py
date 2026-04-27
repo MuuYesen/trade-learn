@@ -90,9 +90,14 @@ class MetaParams(type):
             # Fallback if signature can't be determined
             instance.__init__(*args, **other_kwargs)
         finally:
-            if 'prev_strat' in locals():
+            if 'prev_strat' in locals() and prev_strat:
                 set_current_strategy(prev_strat)
             
+        # 7. Register with current strategy if this is an indicator
+        if prev_strat and not isinstance(instance, prev_strat.__class__):
+            if cls.__name__ not in ('Strategy', 'DataFeed', 'Cerebro'):
+                prev_strat._register_indicator(instance)
+
         return instance
 
 class LineRoot(metaclass=MetaParams):
@@ -117,13 +122,6 @@ class LineRoot(metaclass=MetaParams):
             for name in line_names:
                 if not hasattr(self.lines, name):
                     setattr(self.lines, name, None)
-                    
-        # Register with current strategy if this is an indicator
-        if _CURRENT_STRATEGY and not isinstance(self, _CURRENT_STRATEGY.__class__):
-            # Only register indicators, not strategies or datafeeds
-            # (Strategies and datafeeds are handled separately by the engine)
-            if self.__class__.__name__ not in ('Strategy', 'DataFeed', 'Cerebro'):
-                _CURRENT_STRATEGY._register_indicator(self)
 
     def _advance(self, i: int) -> None:
         if hasattr(self, 'lines'):
@@ -253,6 +251,10 @@ class BaseBroker:
     def setcommission(self, commission: float): pass
     def getcash(self) -> float: return 0.0
     def getvalue(self) -> float: return 0.0
+    
+    # Aliases for Backtrader compatibility
+    def get_cash(self) -> float: return self.getcash()
+    def get_value(self) -> float: return self.getvalue()
 
 class BaseSizer: pass
 class BaseAnalyzer:

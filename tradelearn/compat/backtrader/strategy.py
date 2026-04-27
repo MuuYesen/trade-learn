@@ -79,8 +79,21 @@ class Strategy(_BaseStrategy):
 
 class Sizer:
     """Base class for strategy sizing logic."""
-    def __init__(self):
-        pass
+    def __init__(self, *args, **kwargs):
+        from tradelearn.backtest.base import Params
+        cls_params = getattr(self.__class__, 'params', [])
+        self.params = self.p = Params(cls_params, **kwargs)
+        self.strategy = None
+        self.broker = None
+
+    def _set(self, strategy, broker):
+        self.strategy = strategy
+        self.broker = broker
+
+    def getsizing(self, data, isbuy, **kwargs):
+        comminfo = self.broker.getcommissioninfo(data)
+        cash = self.broker.getcash()
+        return self._getsizing(comminfo, cash, data, isbuy)
 
     def _getsizing(self, comminfo, cash, data, isbuy):
         raise NotImplementedError

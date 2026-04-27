@@ -59,7 +59,6 @@ def run_benchmark(engine_name: str, bt_module):
             print(f"[{cls_name}] MRO: {[c.__name__ for c in strategy_cls.mro()]}")
             
             # Setup Cerebro
-
             cerebro = bt_module.Cerebro()
             cerebro.broker.setcash(100000.0)
             
@@ -68,10 +67,15 @@ def run_benchmark(engine_name: str, bt_module):
             cerebro.addstrategy(strategy_cls)
             
             start_time = time.perf_counter()
-            cerebro.run()
+            strats = cerebro.run()
             end_time = time.perf_counter()
             
+            strategy = strats[0]
             final_value = cerebro.broker.getvalue()
+            final_cash = cerebro.broker.getcash()
+            # Get position for first data
+            pos = strategy.getposition(strategy.datas[0])
+            print(f"[{cls_name}] Final Cash: {final_cash:.2f} | Pos: {pos.size} @ {pos.price:.2f}")
             elapsed_ms = (end_time - start_time) * 1000
             
             results[cls_name] = {
