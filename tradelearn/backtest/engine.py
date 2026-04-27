@@ -105,6 +105,13 @@ class LineSeries:
     def __le__(self, other: Any) -> bool:
         return self[0] <= other
 
+    def __bool__(self) -> bool:
+        """Match Backtrader: bool(line) returns True if current value is non-zero."""
+        val = self[0]
+        if isinstance(val, float) and np.isnan(val):
+            return False
+        return bool(val != 0)
+
     def get(self, ago: int = 0, size: int = 1) -> list[Any]:
         end = self._cursor + ago + 1
         start = max(0, end - size)
@@ -118,6 +125,10 @@ class LineSeries:
         if isinstance(val, (np.int64, int)):
              return pd.Timestamp(val, unit='s')
         return val
+
+    def datetime(self, ago: int = 0) -> Any:
+        """Match Backtrader: return a datetime object for the bar at 'ago'."""
+        return self.date(ago)
 
 
 class ShiftedLine(LineSeries):
@@ -1429,19 +1440,30 @@ class Cerebro:
         closes = frame["close"].to_numpy(dtype=np.float64)
         volumes = frame["volume"].to_numpy(dtype=np.float64)
 
-        # Get commission ratio from broker
+        # Get commission ratio, multiplier and margin from broker
         comm_ratio = 0.0
+        mult = 1.0
+        margin = 1.0
         if hasattr(self.broker._commission_model, 'ratio'):
             comm_ratio = self.broker._commission_model.ratio
+            
+        comminfo = getattr(self.broker, 'comminfo', None)
+        if comminfo:
+            p = getattr(comminfo, 'p', None)
+            if p:
+                comm_ratio = getattr(p, 'commission', comm_ratio)
+                mult = getattr(p, 'mult', mult)
+                margin = getattr(p, 'margin', margin)
 
         rust_engine = RustBacktestEngine(
             timestamps, opens, highs, lows, closes, volumes,
             self.broker._cash, comm_ratio, self.trade_on_close,
+            mult, margin
         )
 
         # Replace broker with Rust proxy
         original_broker = self.broker
-        rust_proxy = RustBrokerProxy(rust_engine, original_broker)
+        rust_proxy = RustBrokerProxy(rust_engine, original_broker, mult=mult)
         strategy.broker = rust_proxy
         self.broker = rust_proxy
 

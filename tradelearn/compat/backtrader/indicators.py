@@ -349,13 +349,26 @@ def _compare_values(left: Any, right: Any) -> tuple[pd.Series, pd.Series, LineSe
     return _series(left), _series(right), source
 
 
+def _non_zero_diff(left: pd.Series, right: pd.Series) -> pd.Series:
+    """Backtrader's NonZeroDifference: remembers last non-zero diff value."""
+    diff = left - right
+    nzd = diff.copy()
+    # Forward-fill zeros with previous non-zero value
+    nzd[nzd == 0.0] = float('nan')
+    nzd = nzd.ffill()
+    nzd = nzd.fillna(0.0)
+    return nzd
+
+
 def CrossOver(left: Any, right: Any) -> IndicatorLine | pd.Series:
     left_values, right_values, source = _compare_values(left, right)
     diff = left_values - right_values
-    previous = diff.shift(1)
+    nzd_prev = _non_zero_diff(left_values, right_values).shift(1)
     values = pd.Series(0.0, index=diff.index)
-    values[(previous <= 0.0) & (diff > 0.0)] = 1.0
-    values[(previous >= 0.0) & (diff < 0.0)] = -1.0
+    # CrossUp: last non-zero diff was negative, now data0 > data1
+    values[(nzd_prev < 0.0) & (left_values > right_values)] = 1.0
+    # CrossDown: last non-zero diff was positive, now data0 < data1
+    values[(nzd_prev > 0.0) & (left_values < right_values)] = -1.0
     return IndicatorLine(values, source=source) if source is not None else values
 
 

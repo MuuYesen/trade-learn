@@ -147,6 +147,8 @@ pub struct ExecutionOptions {
     pub trade_on_close: bool,
     pub slippage: SlippageModel,
     pub commission: CommissionModel,
+    pub mult: f64,
+    pub margin: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -354,7 +356,7 @@ pub fn match_order(
         symbol: order.symbol.clone(),
         size,
         price,
-        commission: round_precision(calculate_commission(price, size, options.commission)),
+        commission: round_precision(calculate_commission(price, size, options.commission, options.mult)),
         slippage: round_precision(price - raw_price),
         ts: bar.ts,
     })
@@ -394,10 +396,10 @@ fn apply_slippage(price: f64, side: OrderSide, slippage: SlippageModel) -> f64 {
     }
 }
 
-fn calculate_commission(price: f64, size: f64, commission: CommissionModel) -> f64 {
+fn calculate_commission(price: f64, size: f64, commission: CommissionModel, mult: f64) -> f64 {
     match commission {
         CommissionModel::Fixed(model) => model.amount,
-        CommissionModel::Percent(model) => price * size.abs() * model.ratio,
+        CommissionModel::Percent(model) => price * size.abs() * model.ratio * mult,
     }
 }
 
@@ -421,19 +423,24 @@ impl Portfolio {
         }
     }
 
-    pub fn apply_fill(&mut self, fill: &FillEvent) {
-        self.cash -= fill.price * fill.size + fill.commission;
+    pub fn apply_fill(&mut self, fill: &FillEvent, mult: f64) {
+        // For non-stocklike (futures), we don't subtract price * size from cash.
+        // Instead, we only subtract commission, and PnL is added later.
+        // But for simplicity and to match the current engine's stock-like behavior by default,
+        // we'll keep the current formula but allow mult to scale it.
+        // Actually, Backtrader's mult affects the value.
+        self.cash -= (fill.price * fill.size * mult) + fill.commission;
         let position = self
             .positions
             .entry(fill.symbol.clone())
             .or_insert_with(|| Position::new(fill.symbol.clone()));
-        position.apply_fill(fill.size, fill.price);
+        position.apply_fill(fill.size, fill.price, mult);
     }
 
-    pub fn mark_to_market(&mut self, bars: &[BarEvent]) {
+    pub fn mark_to_market(&mut self, bars: &[BarEvent], mult: f64) {
         for bar in bars {
             if let Some(position) = self.positions.get_mut(&bar.symbol) {
-                position.mark(bar.close);
+                position.mark(bar.close, mult);
             }
         }
     }
@@ -442,19 +449,19 @@ impl Portfolio {
         self.cash
     }
 
-    pub fn equity(&self) -> f64 {
+    pub fn equity(&self, mult: f64) -> f64 {
         self.cash
             + self
                 .positions
                 .values()
-                .map(|position| position.size * position.mark_price)
+                .map(|position| position.size * position.mark_price * mult)
                 .sum::<f64>()
     }
 
-    pub fn margin_used(&self) -> f64 {
+    pub fn margin_used(&self, mult: f64, margin: f64) -> f64 {
         self.positions
             .values()
-            .map(|position| (position.size * position.mark_price).abs())
+            .map(|position| (position.size * position.mark_price).abs() * mult * margin)
             .sum()
     }
 
@@ -489,19 +496,19 @@ impl Position {
         }
     }
 
-    fn apply_fill(&mut self, fill_size: f64, fill_price: f64) {
+    fn apply_fill(&mut self, fill_size: f64, fill_price: f64, mult: f64) {
         if self.size == 0.0 || self.size.signum() == fill_size.signum() {
             let total_size = self.size + fill_size;
             self.avg_price = weighted_average(self.size, self.avg_price, fill_size, fill_price);
             self.size = total_size;
             self.mark_price = fill_price;
-            self.mark(fill_price);
+            self.mark(fill_price, mult);
             return;
         }
 
         let existing_sign = self.size.signum();
         let closing_size = self.size.abs().min(fill_size.abs());
-        self.realized_pnl += (fill_price - self.avg_price) * closing_size * existing_sign;
+        self.realized_pnl += (fill_price - self.avg_price) * closing_size * existing_sign * mult;
         let remaining_size = self.size + fill_size;
         self.size = remaining_size;
         if remaining_size == 0.0 {
@@ -510,12 +517,12 @@ impl Position {
             self.avg_price = fill_price;
         }
         self.mark_price = fill_price;
-        self.mark(fill_price);
+        self.mark(fill_price, mult);
     }
 
-    fn mark(&mut self, price: f64) {
+    fn mark(&mut self, price: f64, mult: f64) {
         self.mark_price = price;
-        self.unrealized_pnl = (price - self.avg_price) * self.size;
+        self.unrealized_pnl = (price - self.avg_price) * self.size * mult;
     }
 }
 
@@ -648,6 +655,8 @@ impl BacktestEngine {
         cash: f64,
         commission_ratio: f64,
         trade_on_close: bool,
+        mult: f64,
+        margin: f64,
     ) -> Self {
         let total_bars = timestamps.len();
         Self {
@@ -665,6 +674,8 @@ impl BacktestEngine {
                 commission: CommissionModel::Percent(PercentCommission {
                     ratio: commission_ratio,
                 }),
+                mult,
+                margin,
             },
             pending: Vec::new(),
             next_order_id: 1,
@@ -703,9 +714,9 @@ impl BacktestEngine {
                 let position = self.portfolio.position(&order.symbol);
                 let old_size = position.map(|p| p.size).unwrap_or(0.0);
                 let old_price = position.map(|p| p.avg_price).unwrap_or(0.0);
-                let pnl = realized_pnl(old_size, old_price, fill_event.size, fill_event.price);
+                let pnl = realized_pnl(old_size, old_price, fill_event.size, fill_event.price, self.options.mult);
 
-                self.portfolio.apply_fill(&fill_event);
+                self.portfolio.apply_fill(&fill_event, self.options.mult);
 
                 fills.push(FillRecord {
                     order_id: fill_event.order_id,
@@ -724,11 +735,11 @@ impl BacktestEngine {
         self.pending = remaining;
 
         // Snapshot portfolio
-        self.portfolio.mark_to_market(&[bar]);
+        self.portfolio.mark_to_market(&[bar], self.options.mult);
         self.results.equity.push(EquityRecord {
             ts: self.timestamps[cursor],
             cash: self.portfolio.cash(),
-            value: self.portfolio.equity(),
+            value: self.portfolio.equity(self.options.mult),
         });
 
         fills
@@ -770,7 +781,7 @@ impl BacktestEngine {
     }
 
     pub fn get_equity(&self) -> f64 {
-        self.portfolio.equity()
+        self.portfolio.equity(self.options.mult)
     }
 
     pub fn get_results(&self) -> &BacktestResults {
@@ -778,11 +789,11 @@ impl BacktestEngine {
     }
 }
 
-fn realized_pnl(old_size: f64, old_price: f64, fill_size: f64, fill_price: f64) -> f64 {
+fn realized_pnl(old_size: f64, old_price: f64, fill_size: f64, fill_price: f64, mult: f64) -> f64 {
     if old_size == 0.0 || old_size.signum() == fill_size.signum() {
         return 0.0;
     }
     let closing_size = old_size.abs().min(fill_size.abs());
-    (fill_price - old_price) * closing_size * old_size.signum()
+    (fill_price - old_price) * closing_size * old_size.signum() * mult
 }
 

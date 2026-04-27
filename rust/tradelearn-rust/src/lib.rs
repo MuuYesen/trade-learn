@@ -118,7 +118,7 @@ struct RustBacktestEngine {
 #[pymethods]
 impl RustBacktestEngine {
     #[new]
-    #[pyo3(signature = (timestamps, opens, highs, lows, closes, volumes, cash, commission_ratio, trade_on_close))]
+    #[pyo3(signature = (timestamps, opens, highs, lows, closes, volumes, cash, commission_ratio, trade_on_close, mult=1.0, margin=1.0))]
     fn new(
         timestamps: Vec<i64>,
         opens: Vec<f64>,
@@ -129,6 +129,8 @@ impl RustBacktestEngine {
         cash: f64,
         commission_ratio: f64,
         trade_on_close: bool,
+        mult: f64,
+        margin: f64,
     ) -> Self {
         Self {
             inner: BacktestEngine::new(
@@ -141,6 +143,8 @@ impl RustBacktestEngine {
                 cash,
                 commission_ratio,
                 trade_on_close,
+                mult,
+                margin,
             ),
         }
     }

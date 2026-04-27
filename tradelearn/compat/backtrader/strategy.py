@@ -34,25 +34,44 @@ class Strategy(_BaseStrategy):
         """Shortcut for self.data.datetime to match backtrader behavior."""
         return self.data.datetime
 
-    def order_target_percent(self, target: float = 0.0, data: None = None):
-        """Standard Backtrader order_target_percent implementation."""
-        from typing import Any
+    def order_target_size(self, data=None, target=0, **kwargs):
+        """Place an order to rebalance position to have final size of target."""
         if data is None:
             data = self.data
-            
-        value = self.broker.getvalue()
-        target_value = value * target
-        price = data.close[0]
-        
-        current_pos = self.getposition(data).size
-        target_size = int(target_value / price)
-        diff = target_size - current_pos
-        
-        if diff > 0:
-            return self.buy(data=data, size=diff)
-        elif diff < 0:
-            return self.sell(data=data, size=abs(diff))
+        possize = self.getposition(data).size
+        if not target and possize:
+            return self.close(data=data, **kwargs)
+        elif target > possize:
+            return self.buy(data=data, size=target - possize, **kwargs)
+        elif target < possize:
+            return self.sell(data=data, size=possize - target, **kwargs)
         return None
+
+    def order_target_value(self, data=None, target=0.0, price=None, **kwargs):
+        """Place an order to rebalance position to have final value of target."""
+        if data is None:
+            data = self.data
+        possize = self.getposition(data).size
+        if not target and possize:
+            return self.close(data=data, **kwargs)
+        price = price if price is not None else data.close[0]
+        current_value = possize * price
+        if target > current_value:
+            size = int((target - current_value) / price)
+            if size:
+                return self.buy(data=data, size=size, price=price, **kwargs)
+        elif target < current_value:
+            size = int((current_value - target) / price)
+            if size:
+                return self.sell(data=data, size=size, price=price, **kwargs)
+        return None
+
+    def order_target_percent(self, data=None, target=0.0, **kwargs):
+        """Place an order to rebalance position to target percentage of portfolio value."""
+        if data is None:
+            data = self.data
+        target_value = target * self.broker.getvalue()
+        return self.order_target_value(data=data, target=target_value, **kwargs)
 
 
 

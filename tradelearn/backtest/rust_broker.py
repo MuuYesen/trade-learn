@@ -23,10 +23,11 @@ from tradelearn.backtest.engine import (
 class RustBrokerProxy:
     """Thin proxy that delegates order management to a Rust BacktestEngine."""
 
-    def __init__(self, rust_engine: Any, original_broker: Any) -> None:
+    def __init__(self, rust_engine: Any, original_broker: Any, mult: float = 1.0) -> None:
         self._engine = rust_engine
         self._original = original_broker
         self._cash: float = original_broker._cash
+        self._mult = mult
         self.trade_on_close: bool = original_broker.trade_on_close
         # Track orders by id for notify callbacks
         self._orders: dict[int, Order] = {}
@@ -150,7 +151,7 @@ class RustBrokerProxy:
             order.executed = ExecutedInfo(
                 size=signed_size,
                 price=fill_price,
-                value=abs(signed_size) * fill_price,
+                value=abs(signed_size) * fill_price * self._mult,
                 comm=commission,
                 slippage=slippage,
                 pnl=pnl,
