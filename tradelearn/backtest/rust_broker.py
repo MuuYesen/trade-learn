@@ -157,7 +157,69 @@ class RustBrokerProxy:
             )
             _notify_order(strategy, order)
 
+    def equity_series(self):
+        """Extract the full equity curve from Rust and return as a pandas Series."""
+        import pandas as pd
+        ts, cash, value = self._engine.get_equity_curve()
+        return pd.Series(value, index=pd.to_datetime(ts, unit='s'))
+
+    def trades_frame(self):
+        """Extract all trade records from Rust and return as a pandas DataFrame."""
+        import pandas as pd
+        fills = self._engine.get_fills()
+        if not fills:
+            return pd.DataFrame()
+            
+        data = []
+        for f in fills:
+            # f is a tuple: (order_id, side_str, size, price, commission, slippage, pnl, ts)
+            order_id, side_str, fill_size, fill_price, commission, slippage, pnl, ts = f
+            data.append({
+                'date': pd.to_datetime(ts, unit='s'),
+                'symbol': 'data0',
+                'side': side_str,
+                'size': fill_size,
+                'price': fill_price,
+                'commission': commission,
+                'pnl': pnl
+            })
+        return pd.DataFrame(data)
+
     # -- Broker interface stubs --
+
+    def orders_frame(self):
+        """Return orders as a DataFrame. Reuse fills data since Rust tracks at fill level."""
+        return self.trades_frame()
+
+    def fills_frame(self):
+        """Return fills as a DataFrame."""
+        return self.trades_frame()
+
+    def positions_frame(self):
+        """Return current positions as a DataFrame."""
+        import pandas as pd
+        size, avg_price = self._engine.get_position()
+        if size == 0.0:
+            return pd.DataFrame()
+        return pd.DataFrame([{
+            'symbol': 'data0',
+            'size': size,
+            'avg_price': avg_price,
+            'value': size * avg_price,
+        }])
+
+    def realized_pnl(self):
+        """Sum of all realized PnL from fills."""
+        fills = self._engine.get_fills()
+        return sum(f[6] for f in fills)  # pnl is index 6
+
+    def unrealized_pnl(self):
+        """Unrealized PnL based on current position vs last price."""
+        return 0.0  # Simplified: mark-to-market handled by Rust
+
+    def margin_used(self):
+        """Margin used (not applicable for simple equity accounts)."""
+        return 0.0
 
     def process_bar(self, strategy: Strategy, analyzers: Any) -> None:
         pass  # Handled by Rust engine

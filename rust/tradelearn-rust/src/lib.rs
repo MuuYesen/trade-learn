@@ -225,8 +225,8 @@ impl RustBacktestEngine {
         (ts, cash, value)
     }
 
-    /// Returns fills as list of tuples: (order_id, side, size, price, commission, slippage, pnl)
-    fn get_fills(&self) -> Vec<(u64, String, f64, f64, f64, f64, f64)> {
+    /// Returns fills as list of tuples: (order_id, side, size, price, commission, slippage, pnl, ts)
+    fn get_fills(&self) -> Vec<(u64, String, f64, f64, f64, f64, f64, i64)> {
         self.inner
             .get_results()
             .fills
@@ -236,7 +236,7 @@ impl RustBacktestEngine {
                     OrderSide::Buy => "buy".to_string(),
                     OrderSide::Sell => "sell".to_string(),
                 };
-                (f.order_id, side_str, f.size, f.price, f.commission, f.slippage, f.pnl)
+                (f.order_id, side_str, f.size, f.price, f.commission, f.slippage, f.pnl, f.ts)
             })
             .collect()
     }

@@ -1495,7 +1495,16 @@ class Cerebro:
         strategy._min_period = _coerce_min_period(
             getattr(strategy_cls, "min_period", 0), "Strategy.min_period"
         )
+        # Set indicator context so indicators created during __init__
+        # can auto-bind to data and register min_period
+        from tradelearn.compat.backtrader.indicators import (
+            set_current_data, set_current_strategy,
+        )
+        set_current_data(self.datas[0] if self.datas else None)
+        set_current_strategy(strategy)
         strategy_cls.__init__(strategy)
+        set_current_data(None)
+        set_current_strategy(None)
         return strategy
 
     def _instantiate_analyzers(self, strategy: Strategy) -> AnalyzerCollection:

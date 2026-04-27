@@ -12,10 +12,15 @@ from tradelearn.backtest import DataFeed, LineSeries
 
 # Global context to track current data feed during strategy initialization
 _CURRENT_DATA = None
+_CURRENT_STRATEGY = None
 
 def set_current_data(data):
     global _CURRENT_DATA
     _CURRENT_DATA = data
+
+def set_current_strategy(strategy):
+    global _CURRENT_STRATEGY
+    _CURRENT_STRATEGY = strategy
 
 SUPPORTED_INDICATOR_ALIASES = (
     "SMA",
@@ -184,7 +189,15 @@ def _wrap(data: Any, values: pd.Series) -> IndicatorLine | pd.Series:
     source = _line_source(data)
     if source is None:
         return values
-    return IndicatorLine(values.reset_index(drop=True), source=source)
+    line = IndicatorLine(values.reset_index(drop=True), source=source)
+    # Auto-register min_period with the strategy being constructed
+    if _CURRENT_STRATEGY is not None and hasattr(_CURRENT_STRATEGY, 'addminperiod'):
+        import numpy as np
+        arr = line._values
+        non_nan = np.where(~np.isnan(arr))[0]
+        if len(non_nan) > 0:
+            _CURRENT_STRATEGY.addminperiod(int(non_nan[0]))
+    return line
 
 
 def _period(kwargs: dict[str, Any], default: int = 30) -> int:
@@ -207,7 +220,7 @@ def _get_data(data: Any, kwargs: dict[str, Any]) -> tuple[Any, int]:
     return data, period
 
 
-def SMA(data: Any = None, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
+def SMA(data: Any = None, **kwargs: Any) -> IndicatorLine | pd.Series:
     data, period = _get_data(data, kwargs)
     source = _close_line(data)
     return _wrap(source, _series(source).rolling(period).mean())
@@ -217,7 +230,7 @@ SimpleMovingAverage = SMA
 MovingAverageSimple = SMA
 
 
-def EMA(data: Any = None, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
+def EMA(data: Any = None, **kwargs: Any) -> IndicatorLine | pd.Series:
     data, period = _get_data(data, kwargs)
     source = _close_line(data)
     return _wrap(source, _series(source).ewm(span=period, adjust=False, min_periods=period).mean())
@@ -226,7 +239,7 @@ def EMA(data: Any = None, period: int = 30, **kwargs: Any) -> IndicatorLine | pd
 ExponentialMovingAverage = EMA
 
 
-def WMA(data: Any = None, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
+def WMA(data: Any = None, **kwargs: Any) -> IndicatorLine | pd.Series:
     data, period = _get_data(data, kwargs)
     source = _close_line(data)
     weights = pd.Series(range(1, period + 1), dtype="float64")
@@ -240,7 +253,7 @@ def WMA(data: Any = None, period: int = 30, **kwargs: Any) -> IndicatorLine | pd
 WeightedMovingAverage = WMA
 
 
-def RSI(data: Any = None, period: int = 14, **kwargs: Any) -> IndicatorLine | pd.Series:
+def RSI(data: Any = None, **kwargs: Any) -> IndicatorLine | pd.Series:
     data, period = _get_data(data, kwargs)
     source = _close_line(data)
     close = _series(source)
@@ -257,14 +270,11 @@ RSI_SMA = RSI
 
 def MACD(
     data: Any = None,
-    fast: int = 12,
-    slow: int = 26,
-    signal: int = 9,
     **kwargs: Any,
 ) -> MACDLines:
-    fast = int(kwargs.pop("period_me1", fast))
-    slow = int(kwargs.pop("period_me2", slow))
-    signal = int(kwargs.pop("period_signal", signal))
+    fast = int(kwargs.pop("period_me1", kwargs.pop("fast", 12)))
+    slow = int(kwargs.pop("period_me2", kwargs.pop("slow", 26)))
+    signal = int(kwargs.pop("period_signal", kwargs.pop("signal", 9)))
     data, _ = _get_data(data, kwargs)
     source = _close_line(data)
     close = _series(source)
@@ -282,11 +292,11 @@ def MACD(
 
 def BollingerBands(
     data: Any = None,
-    period: int = 20,
-    devfactor: float = 2.0,
     **kwargs: Any,
 ) -> BollingerBandLines:
-    data, period = _get_data(data, kwargs)
+    period = int(kwargs.pop("period", 20))
+    devfactor = float(kwargs.pop("devfactor", 2.0))
+    data, _ = _get_data(data, kwargs)
     source = _close_line(data)
     close = _series(source)
     mid = close.rolling(period).mean()
@@ -301,13 +311,13 @@ def BollingerBands(
 BBands = BollingerBands
 
 
-def Highest(data: Any = None, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
+def Highest(data: Any = None, **kwargs: Any) -> IndicatorLine | pd.Series:
     data, period = _get_data(data, kwargs)
     source = _close_line(data)
     return _wrap(source, _series(source).rolling(period).max())
 
 
-def Lowest(data: Any = None, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
+def Lowest(data: Any = None, **kwargs: Any) -> IndicatorLine | pd.Series:
     data, period = _get_data(data, kwargs)
     source = _close_line(data)
     return _wrap(source, _series(source).rolling(period).min())
@@ -324,10 +334,11 @@ def TrueRange(data: DataFeed, **kwargs: Any) -> IndicatorLine | pd.Series:
     return _wrap(data.close, values)
 
 
-def ATR(data: DataFeed = None, period: int = 14, **kwargs: Any) -> IndicatorLine | pd.Series:
+def ATR(data: DataFeed = None, **kwargs: Any) -> IndicatorLine | pd.Series:
     data, period = _get_data(data, kwargs)
     true_range = _series(TrueRange(data))
-    return _wrap(data.close, true_range.rolling(period).mean())
+    # Wilder's smoothing used in BT's ATR is an EMA with span = 2*period - 1
+    return _wrap(data.close, true_range.ewm(span=2 * period - 1, adjust=False, min_periods=period).mean())
 
 
 AverageTrueRange = ATR
@@ -362,11 +373,11 @@ def CrossDown(left: Any, right: Any) -> IndicatorLine | pd.Series:
 
 def Stochastic(
     data: DataFeed = None,
-    period: int = 14,
-    period_dfast: int = 3,
     **kwargs: Any,
 ) -> StochasticLines:
-    data, period = _get_data(data, kwargs)
+    period = int(kwargs.pop("period", 14))
+    period_dfast = int(kwargs.pop("period_dfast", 3))
+    data, _ = _get_data(data, kwargs)
     low = _series(data.low).rolling(period).min()
     high = _series(data.high).rolling(period).max()
     close = _series(data.close)
