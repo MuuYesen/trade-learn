@@ -581,3 +581,208 @@ impl MultiDataFeed {
             .map(|(_, feed_index)| feed_index)
     }
 }
+
+// ---------------------------------------------------------------------------
+// BacktestEngine – drives the main loop from Rust
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug)]
+pub struct EquityRecord {
+    pub ts: Timestamp,
+    pub cash: f64,
+    pub value: f64,
+}
+
+#[derive(Clone, Debug)]
+pub struct FillRecord {
+    pub order_id: OrderId,
+    pub ts: Timestamp,
+    pub side: OrderSide,
+    pub size: f64,
+    pub price: f64,
+    pub commission: f64,
+    pub slippage: f64,
+    pub pnl: f64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct BacktestResults {
+    pub equity: Vec<EquityRecord>,
+    pub fills: Vec<FillRecord>,
+}
+
+#[derive(Debug)]
+pub struct BacktestEngine {
+    // OHLCV data (columnar)
+    timestamps: Vec<i64>,
+    opens: Vec<f64>,
+    highs: Vec<f64>,
+    lows: Vec<f64>,
+    closes: Vec<f64>,
+    volumes: Vec<f64>,
+    total_bars: usize,
+
+    // Portfolio state
+    portfolio: Portfolio,
+
+    // Execution config
+    options: ExecutionOptions,
+
+    // Pending orders
+    pending: Vec<OrderEvent>,
+    next_order_id: OrderId,
+    activation_bar: usize,
+
+    // Records
+    results: BacktestResults,
+}
+
+impl BacktestEngine {
+    pub fn new(
+        timestamps: Vec<i64>,
+        opens: Vec<f64>,
+        highs: Vec<f64>,
+        lows: Vec<f64>,
+        closes: Vec<f64>,
+        volumes: Vec<f64>,
+        cash: f64,
+        commission_ratio: f64,
+        trade_on_close: bool,
+    ) -> Self {
+        let total_bars = timestamps.len();
+        Self {
+            timestamps,
+            opens,
+            highs,
+            lows,
+            closes,
+            volumes,
+            total_bars,
+            portfolio: Portfolio::new(cash),
+            options: ExecutionOptions {
+                trade_on_close,
+                slippage: SlippageModel::Fixed(FixedSlippage { amount: 0.0 }),
+                commission: CommissionModel::Percent(PercentCommission {
+                    ratio: commission_ratio,
+                }),
+            },
+            pending: Vec::new(),
+            next_order_id: 1,
+            activation_bar: 1,
+            results: BacktestResults::default(),
+        }
+    }
+
+    pub fn total_bars(&self) -> usize {
+        self.total_bars
+    }
+
+    fn bar_at(&self, cursor: usize) -> BarEvent {
+        BarEvent {
+            ts: self.timestamps[cursor],
+            symbol: "data0".to_string(),
+            open: self.opens[cursor],
+            high: self.highs[cursor],
+            low: self.lows[cursor],
+            close: self.closes[cursor],
+            volume: self.volumes[cursor],
+        }
+    }
+
+    /// Process pending orders against the bar at `cursor`.
+    /// Returns list of fills that occurred.
+    pub fn step(&mut self, cursor: usize) -> Vec<FillRecord> {
+        let bar = self.bar_at(cursor);
+        let mut fills = Vec::new();
+
+        // Process pending orders
+        let mut remaining = Vec::new();
+        for order in self.pending.drain(..) {
+            if let Some(fill_event) = match_order(&order, &bar, &self.options) {
+                // Calculate realized PnL
+                let position = self.portfolio.position(&order.symbol);
+                let old_size = position.map(|p| p.size).unwrap_or(0.0);
+                let old_price = position.map(|p| p.avg_price).unwrap_or(0.0);
+                let pnl = realized_pnl(old_size, old_price, fill_event.size, fill_event.price);
+
+                self.portfolio.apply_fill(&fill_event);
+
+                fills.push(FillRecord {
+                    order_id: fill_event.order_id,
+                    ts: fill_event.ts,
+                    side: order.side,
+                    size: fill_event.size,
+                    price: fill_event.price,
+                    commission: fill_event.commission,
+                    slippage: fill_event.slippage,
+                    pnl,
+                });
+            } else {
+                remaining.push(order);
+            }
+        }
+        self.pending = remaining;
+
+        // Snapshot portfolio
+        self.portfolio.mark_to_market(&[bar]);
+        self.results.equity.push(EquityRecord {
+            ts: self.timestamps[cursor],
+            cash: self.portfolio.cash(),
+            value: self.portfolio.equity(),
+        });
+
+        fills
+    }
+
+    /// Submit a new order (called from Python's strategy.buy()/sell()).
+    pub fn submit_order(
+        &mut self,
+        side: OrderSide,
+        order_type: OrderType,
+        size: f64,
+        limit_price: Option<f64>,
+        stop_price: Option<f64>,
+    ) -> OrderId {
+        let order_id = self.next_order_id;
+        self.next_order_id += 1;
+        self.pending.push(OrderEvent {
+            order_id,
+            symbol: "data0".to_string(),
+            side,
+            order_type,
+            size: size.abs(),
+            limit_price,
+            stop_price,
+            created_ts: 0,
+        });
+        order_id
+    }
+
+    pub fn get_position(&self) -> (f64, f64) {
+        self.portfolio
+            .position("data0")
+            .map(|p| (p.size, p.avg_price))
+            .unwrap_or((0.0, 0.0))
+    }
+
+    pub fn get_cash(&self) -> f64 {
+        self.portfolio.cash()
+    }
+
+    pub fn get_equity(&self) -> f64 {
+        self.portfolio.equity()
+    }
+
+    pub fn get_results(&self) -> &BacktestResults {
+        &self.results
+    }
+}
+
+fn realized_pnl(old_size: f64, old_price: f64, fill_size: f64, fill_price: f64) -> f64 {
+    if old_size == 0.0 || old_size.signum() == fill_size.signum() {
+        return 0.0;
+    }
+    let closing_size = old_size.abs().min(fill_size.abs());
+    (fill_price - old_price) * closing_size * old_size.signum()
+}
+

@@ -11,7 +11,8 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
-extension-module = ["dep:pyo3", "pyo3/extension-module"]
+extension-module = ["dep:pyo3", "pyo3/extension-module", "dep:numpy"]
 
 [dependencies]
 pyo3 = { version = "0.23", optional = true }
+numpy = { version = "0.23", optional = true }

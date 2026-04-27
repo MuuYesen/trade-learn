@@ -1,21 +1,60 @@
-"""Runnable smoke examples backing the Stage 9 tutorial pages."""
+"""Runnable smoke examples.runners backing the Stage 9 tutorial pages."""
 
 from __future__ import annotations
 
 from contextlib import contextmanager
 from typing import Any
 
+import pandas as pd
 import tradelearn.compat.backtrader as bt
-from examples.ml_strategy import build_alpha101_features
-from examples.ml_strategy import run_example as run_ml_example
-from examples.quickstart import QuickstartSmaCross, _sample_bars, run_quickstart
+from examples import QuickstartSmaCross
 from tradelearn.backtest.analyzers import MLflowAnalyzer
 from tradelearn.core.config import TradelearnConfig
 from tradelearn.lab import build_lab_plan
+from tests.runners.ml_strategy import prepare_ml_data as build_alpha101_features
+from tests.runners.ml_strategy import run_example as run_ml_example
+
+def run_quickstart() -> dict[str, Any]:
+    """Run the quickstart strategy and return a compact result summary."""
+    bars = _sample_bars()
+    cerebro = bt.Cerebro(trade_on_close=True)
+    cerebro.adddata(bt.feeds.PandasData(dataname=bars, name="demo"))
+    cerebro.addstrategy(QuickstartSmaCross)
+
+    [strategy] = cerebro.run()
+    if strategy.stats is None:
+        raise RuntimeError("quickstart strategy did not produce stats")
+
+    summary = strategy.stats.summary
+    return {
+        "strategy": QuickstartSmaCross.__name__,
+        "bars": len(bars),
+        "fills": len(strategy.stats.fills),
+        "final_value": float(summary["final_value"]),
+        "return_pct": float(strategy.stats.returns.add(1.0).prod() - 1.0),
+    }
+
+
+def _sample_bars() -> pd.DataFrame:
+    close = [
+        10.0, 10.3, 10.1, 10.8, 11.4, 10.7, 9.9, 9.4, 10.2, 11.1,
+        12.0, 11.2, 10.4, 9.8, 10.5, 11.5, 12.6, 11.7, 10.8, 10.0,
+        10.9, 12.0, 13.1, 12.2, 11.1, 10.3, 11.3, 12.5, 13.8, 12.6,
+    ]
+    return pd.DataFrame(
+        {
+            "open": [value - 0.2 for value in close],
+            "high": [value + 0.6 for value in close],
+            "low": [value - 0.7 for value in close],
+            "close": close,
+            "volume": [1000.0 + index * 25.0 for index in range(len(close))],
+        },
+        index=pd.date_range("2026-01-01", periods=len(close), freq="D", tz="UTC"),
+    )
 
 
 def run_tutorial_smoke() -> dict[str, dict[str, Any]]:
-    """Run compact examples for every Stage 9 tutorial topic."""
+    """Run compact examples.runners for every Stage 9 tutorial topic."""
     return {
         "factor_research": run_factor_research_tutorial(),
         "strategy_backtest": run_strategy_backtest_tutorial(),

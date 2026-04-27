@@ -1,5 +1,4 @@
-"""Machine-learning strategy helpers."""
-
+from tradelearn.ml import automl
 from tradelearn.ml.causal import CausalSelector
 from tradelearn.ml.features import FeatureStore, feature
 from tradelearn.ml.registry import ModelRegistry, model_uri
@@ -10,6 +9,7 @@ __all__ = [
     "FeatureStore",
     "MLStrategy",
     "ModelRegistry",
+    "automl",
     "feature",
     "model_uri",
 ]

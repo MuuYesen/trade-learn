@@ -21,3 +21,15 @@ class Cerebro(BacktestCerebro):
         if args:
             raise TypeError("compat.backtrader.Cerebro.addstrategy only supports keyword params")
         super().addstrategy(strategy, **params)
+
+    def run(self, *args, **kwargs):
+        from tradelearn.compat.backtrader.indicators import set_current_data
+        # Set context before strategies are instantiated in run()
+        if self.datas:
+            set_current_data(self.datas[0])
+        try:
+            return super().run(*args, **kwargs)
+        finally:
+            set_current_data(None)
+
+

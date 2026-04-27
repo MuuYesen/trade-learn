@@ -4,11 +4,11 @@
 
 The functions it gives including factor collection, factor processing, factor evaluation, <b>causal analysis</b>, model definition, and strategy backtesting, and supports visualization results saved as <b>HTML files</b> for sharing.
 
-<img src="docs/flow.png" alt="img" width="100%">
+<img src="docs/assets/flow.png" alt="img" width="100%">
 
 Summary of visualizations:
 
-<img src="docs/plot_list.png" alt="img" width="100%">
+<img src="docs/assets/plot_list.png" alt="img" width="100%">
 
 
 ## Key Features
@@ -34,49 +34,42 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 
 ## Usage Template
 ```python
-from tradelearn.query import Query
-from tradelearn.strategy.backtest import Backtest, Strategy
-from tradelearn.strategy.evaluate import Evaluate
+import pandas as pd
+from tradelearn.backtest import Cerebro, Strategy
+from tradelearn import ta
 
 if __name__ == '__main__':
+    # Obtain asset market data (example with pre-loaded bars)
+    # In 2.0, use tradelearn.data providers to fetch bars
+    bars = pd.read_parquet("data/tv/GOOG_daily.parquet")
 
-    # Obtain asset market data from TradingView
-    GOOG = Query.history_ohlc(engine='tv', symbol='GOOG', exchange='NASDAQ')
-
-    def crossover(series1, series2):
-        return series1[-2] < series2[-2] and series1[-1] > series2[-1]
-
-    # Define the strategy class
+    # Define the strategy class (strictly backtrader style)
     class SmaCross(Strategy):
-        fast = 10
-        slow = 20
+        params = (
+            ('fast', 10),
+            ('slow', 20),
+        )
 
-        # Compute the indicator data needed for the strategy
-        def init(self):
-            def SMA(arr, n):
-                return arr.rolling(n).mean()
-            
-            price = self.data.close.df
-            self.ma1 = self.I(SMA, price, self.fast, overlay=True)
-            self.ma2 = self.I(SMA, price, self.slow, overlay=True)
+        def __init__(self):
+            # Compute indicators using the ta namespace
+            self.ma1 = ta.sma(self.data.close, period=self.p.fast)
+            self.ma2 = ta.sma(self.data.close, period=self.p.slow)
 
-        # Generate trading signals based on the indicators and execute trades
         def next(self):
-            
-            if crossover(self.ma1, self.ma2):
-                self.position().close()
-                self.buy()
-            elif crossover(self.ma2, self.ma1):
-                self.position().close()
-                self.sell()
+            if not self.position:
+                if self.ma1[0] > self.ma2[0]:
+                    self.buy()
+            elif self.ma1[0] < self.ma2[0]:
+                self.close()
 
-    # Run the backtest and plot the results
-    bt = Backtest(GOOG, SmaCross, cash=1000000, commission=.002, trade_on_close=False)
-    stats = bt.run()
-    bt.plot(plot_volume=True, superimpose=True)
-
-    # Analyze the backtest results
-    Evaluate.analysis_report(stats, GOOG, engine='quantstats')
+    # Run the backtest via Cerebro
+    cerebro = Cerebro()
+    cerebro.adddata(bars, name="GOOG")
+    cerebro.addstrategy(SmaCross)
+    cerebro.broker.setcash(1000000)
+    
+    stats = cerebro.run()[0].stats
+    print(stats.summary)
 ```
 ```
 Start                     2014-03-27 00:00:00

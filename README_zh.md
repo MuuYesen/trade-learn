@@ -2,11 +2,11 @@
 
 trade-learn 是一个基于 alphalens、backtesting.py、pyfolio 和 quantstats 的机器学习策略研发工具包，提供因子采集、因子处理、因子评估、因果分析、模型定义和策略回测的全套策略研发流程，并支持可视化结果以 html 文件进行存档分享。
 
-<img src="docs/flow_zh.png" alt="img" width="100%">
+<img src="docs/assets/flow_zh.png" alt="img" width="100%">
 
 可视化图汇总：
 
-<img src="docs/plot_list.png" alt="img" width="100%">
+<img src="docs/assets/plot_list.png" alt="img" width="100%">
 
 ## 主要特性
 
@@ -31,49 +31,42 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 
 ## 使用模板
 ```python
-from tradelearn.query import Query
-from tradelearn.strategy.backtest import Backtest, Strategy
-from tradelearn.strategy.evaluate import Evaluate
+import pandas as pd
+from tradelearn.backtest import Cerebro, Strategy
+from tradelearn import ta
 
 if __name__ == '__main__':
+    # 获取资产市场数据 (示例：加载本地数据)
+    # 在 2.0 中，建议使用 tradelearn.data 提供的 Provider 获取数据
+    bars = pd.read_parquet("data/tv/GOOG_daily.parquet")
 
-    # 从 tradingview 中得到标的行情数据
-    GOOG = Query.history_ohlc(engine='tv', symbol='GOOG', exchange='NASDAQ')
-
-    def crossover(series1, series2):
-        return series1[-2] < series2[-2] and series1[-1] > series2[-1]
-
-    # 编写策略类
+    # 定义策略类 (严格遵循 backtrader 风格)
     class SmaCross(Strategy):
-        fast = 10
-        slow = 20
+        params = (
+            ('fast', 10),
+            ('slow', 20),
+        )
 
-        # 计算策略需要使用的指标数据
-        def init(self):
-            def SMA(arr, n):
-                return arr.rolling(n).mean()
-            
-            price = self.data.close.df
-            self.ma1 = self.I(SMA, price, self.fast, overlay=True)
-            self.ma2 = self.I(SMA, price, self.slow, overlay=True)
+        def __init__(self):
+            # 使用 ta 命名空间计算指标
+            self.ma1 = ta.sma(self.data.close, period=self.p.fast)
+            self.ma2 = ta.sma(self.data.close, period=self.p.slow)
 
-        # 根据指标得到交易信号，并进行买卖
         def next(self):
-            
-            if crossover(self.ma1, self.ma2):
-                self.position().close()
-                self.buy()
-            elif crossover(self.ma2, self.ma1):
-                self.position().close()
-                self.sell()
+            if not self.position:
+                if self.ma1[0] > self.ma2[0]:
+                    self.buy()
+            elif self.ma1[0] < self.ma2[0]:
+                self.close()
 
-    # 运行回测并绘制结果
-    bt = Backtest(GOOG, SmaCross, cash=1000000, commission=.002, trade_on_close=False)
-    stats = bt.run()
-    bt.plot(plot_volume=True, superimpose=True)
-
-    # 分析回测结果
-    Evaluate.analysis_report(stats, GOOG, engine='quantstats')
+    # 通过 Cerebro 运行回测
+    cerebro = Cerebro()
+    cerebro.adddata(bars, name="GOOG")
+    cerebro.addstrategy(SmaCross)
+    cerebro.broker.setcash(1000000)
+    
+    stats = cerebro.run()[0].stats
+    print(stats.summary)
 ```
 ```
 Start                     2014-03-27 00:00:00
@@ -111,8 +104,8 @@ _orders                              Ticke...
 _positions                {'Asset': -1154,...
 _trade_start_bar                           19
 ```
-![docs/res2.png](docs/single_res1.png)
-![docs/res3.png](docs/single_res2.png)
+![docs/assets/single_res1.png](docs/assets/single_res1.png)
+![docs/assets/single_res2.png](docs/assets/single_res2.png)
 
 ## 更多例子
 
@@ -235,7 +228,7 @@ _positions                {'600520': 0, '6...
 _trade_start_bar                          731
 dtype: object
 ```
-![docs/res4.png](docs/port_res1.png)
+![docs/assets/port_res1.png](docs/assets/port_res1.png)
 
 ## 方法指南
 ### 原始数据获取

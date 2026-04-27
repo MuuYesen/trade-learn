@@ -36,26 +36,11 @@ MIGRATION_CHECKPOINTS: tuple[MigrationCheckpoint, ...] = (
 )
 
 
-class MigratedSmaCross(bt.Strategy):
-    """Backtrader-style replacement for a legacy moving-average strategy."""
-
-    params = (("size", 1),)
-
-    def __init__(self) -> None:
-        self.fast = bt.indicators.SMA(self.data.close, period=3)
-        self.slow = bt.indicators.SMA(self.data.close, period=5)
-
-    def next(self) -> None:
-        if self.fast[0] != self.fast[0] or self.slow[0] != self.slow[0]:
-            return
-        if not self.position and self.fast[0] > self.slow[0]:
-            self.buy(size=self.p.size)
-        elif self.position and self.fast[0] < self.slow[0]:
-            self.close()
+from examples.strategies.migration_sma import MigratedSmaCross
 
 
 def run_migration_smoke() -> dict[str, Any]:
-    """Run compact checks that back the migration guide examples."""
+    """Run compact checks that back the migration guide examples.runners."""
     line = LineSeries([1.0, 2.0, 3.0])
     line._advance(2)
 

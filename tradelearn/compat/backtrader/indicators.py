@@ -4,10 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+import inspect
 
 import pandas as pd
 
 from tradelearn.backtest import DataFeed, LineSeries
+
+# Global context to track current data feed during strategy initialization
+_CURRENT_DATA = None
+
+def set_current_data(data):
+    global _CURRENT_DATA
+    _CURRENT_DATA = data
 
 SUPPORTED_INDICATOR_ALIASES = (
     "SMA",
@@ -34,34 +42,102 @@ SUPPORTED_INDICATOR_ALIASES = (
 )
 
 
+class MetaIndicator(type):
+    """Metaclass to handle Backtrader-style parameter stripping."""
+    def __call__(cls, *args, **kwargs):
+        # Check if __init__ accepts the arguments
+        sig = inspect.signature(cls.__init__)
+        params = list(sig.parameters.values())
+        
+        # If __init__ only takes 'self', we need to strip args/kwargs
+        # and store them on the instance instead
+        if len(params) == 1:
+            instance = cls.__new__(cls)
+            # Standard Backtrader behavior: first arg is often data
+            if args:
+                instance.data = args[0]
+            # Store kwargs as params (p)
+            class Params: pass
+            instance.p = Params()
+            
+            # Support self.lines and self.l
+            class Lines: pass
+            instance.lines = instance.l = Lines()
+            
+            # If class has params defined, use them as defaults
+
+            base_params = getattr(cls, 'params', ())
+            if isinstance(base_params, tuple):
+                for k, v in base_params:
+                    setattr(instance.p, k, v)
+            for k, v in kwargs.items():
+                setattr(instance.p, k, v)
+            
+            instance.__init__()
+            return instance
+        
+        return super().__call__(*args, **kwargs)
+
+
+class Indicator(LineSeries, metaclass=MetaIndicator):
+    """Base class for all Backtrader-style indicators."""
+    params = ()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__([])
+
+    def __getattr__(self, name: str) -> Any:
+        # Support accessing lines directly as attributes (e.g. indicator.dch)
+        if hasattr(self, "lines") and hasattr(self.lines, name):
+            return getattr(self.lines, name)
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+
+
+
 class IndicatorLine(LineSeries):
     """Computed line whose cursor follows a source line."""
 
     def __init__(self, values: pd.Series, source: LineSeries | None = None) -> None:
-        super().__init__(values.tolist())
+        import numpy as np
+        # Convert to raw numpy array immediately
+        super().__init__(values.to_numpy(dtype=np.float64))
         self._source = source
-        self.index = values.index
 
     @property
-    def _effective_cursor(self) -> int:
+    def _cursor(self) -> int:
         if self._source is None:
-            return self._cursor
-        return getattr(self._source, "_effective_cursor", self._source._cursor)
+            return self.__dict__.get('_cursor', -1)
+        return self._source._cursor
 
-    def __getitem__(self, ago: int) -> Any:
-        index = self._effective_cursor + ago
-        if index < 0 or index >= len(self._values):
-            raise IndexError(
-                f"tried to access line[{ago}] but current bar index is {self._effective_cursor}"
-            )
-        return self._values[index]
+    @_cursor.setter
+    def _cursor(self, value: int):
+        self.__dict__['_cursor'] = value
 
-    def get(self, ago: int = 0, size: int = 1) -> list[Any]:
-        end = self._effective_cursor + ago + 1
-        start = max(0, end - size)
-        if end < 0:
-            return []
-        return self._values[start:end]
+    def _advance(self, cursor: int) -> None:
+        # Cursor is synced via the property linked to source
+        pass
+
+    def _to_series(self) -> pd.Series:
+        return pd.Series(self._values, dtype="float64")
+
+    def _get_other_vals(self, other: Any) -> Any:
+        from tradelearn.backtest import LineSeries
+        if isinstance(other, LineSeries):
+            return pd.Series(other._values, dtype="float64")
+        return other
+
+    def __add__(self, other: Any) -> IndicatorLine:
+        return IndicatorLine(self._to_series() + self._get_other_vals(other), source=self._source)
+
+    def __sub__(self, other: Any) -> IndicatorLine:
+        return IndicatorLine(self._to_series() - self._get_other_vals(other), source=self._source)
+
+    def __mul__(self, other: Any) -> IndicatorLine:
+        return IndicatorLine(self._to_series() * self._get_other_vals(other), source=self._source)
+
+    def __truediv__(self, other: Any) -> IndicatorLine:
+        return IndicatorLine(self._to_series() / self._get_other_vals(other), source=self._source)
+
 
 
 @dataclass
@@ -115,8 +191,24 @@ def _period(kwargs: dict[str, Any], default: int = 30) -> int:
     return int(kwargs.pop("period", kwargs.pop("length", default)))
 
 
-def SMA(data: Any, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
-    period = _period(kwargs, period)
+def _get_data(data: Any, kwargs: dict[str, Any]) -> tuple[Any, int]:
+    """Smartly extract data and period from args."""
+    period = _period(kwargs)
+    
+    # Check if first arg is an integer (period)
+    if isinstance(data, (int, float)):
+        period = int(data)
+        data = None
+
+    if data is None:
+        # Auto-bind to current data context
+        data = _CURRENT_DATA
+
+    return data, period
+
+
+def SMA(data: Any = None, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
+    data, period = _get_data(data, kwargs)
     source = _close_line(data)
     return _wrap(source, _series(source).rolling(period).mean())
 
@@ -125,8 +217,8 @@ SimpleMovingAverage = SMA
 MovingAverageSimple = SMA
 
 
-def EMA(data: Any, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
-    period = _period(kwargs, period)
+def EMA(data: Any = None, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
+    data, period = _get_data(data, kwargs)
     source = _close_line(data)
     return _wrap(source, _series(source).ewm(span=period, adjust=False, min_periods=period).mean())
 
@@ -134,8 +226,8 @@ def EMA(data: Any, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series
 ExponentialMovingAverage = EMA
 
 
-def WMA(data: Any, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
-    period = _period(kwargs, period)
+def WMA(data: Any = None, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
+    data, period = _get_data(data, kwargs)
     source = _close_line(data)
     weights = pd.Series(range(1, period + 1), dtype="float64")
     values = _series(source).rolling(period).apply(
@@ -148,8 +240,8 @@ def WMA(data: Any, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series
 WeightedMovingAverage = WMA
 
 
-def RSI(data: Any, period: int = 14, **kwargs: Any) -> IndicatorLine | pd.Series:
-    period = _period(kwargs, period)
+def RSI(data: Any = None, period: int = 14, **kwargs: Any) -> IndicatorLine | pd.Series:
+    data, period = _get_data(data, kwargs)
     source = _close_line(data)
     close = _series(source)
     delta = close.diff()
@@ -160,15 +252,20 @@ def RSI(data: Any, period: int = 14, **kwargs: Any) -> IndicatorLine | pd.Series
 
 
 RelativeStrengthIndex = RSI
+RSI_SMA = RSI
 
 
 def MACD(
-    data: Any,
+    data: Any = None,
     fast: int = 12,
     slow: int = 26,
     signal: int = 9,
     **kwargs: Any,
 ) -> MACDLines:
+    fast = int(kwargs.pop("period_me1", fast))
+    slow = int(kwargs.pop("period_me2", slow))
+    signal = int(kwargs.pop("period_signal", signal))
+    data, _ = _get_data(data, kwargs)
     source = _close_line(data)
     close = _series(source)
     fast_line = close.ewm(span=int(fast), adjust=False, min_periods=int(fast)).mean()
@@ -184,12 +281,12 @@ def MACD(
 
 
 def BollingerBands(
-    data: Any,
+    data: Any = None,
     period: int = 20,
     devfactor: float = 2.0,
     **kwargs: Any,
 ) -> BollingerBandLines:
-    period = _period(kwargs, period)
+    data, period = _get_data(data, kwargs)
     source = _close_line(data)
     close = _series(source)
     mid = close.rolling(period).mean()
@@ -204,14 +301,14 @@ def BollingerBands(
 BBands = BollingerBands
 
 
-def Highest(data: Any, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
-    period = _period(kwargs, period)
+def Highest(data: Any = None, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
+    data, period = _get_data(data, kwargs)
     source = _close_line(data)
     return _wrap(source, _series(source).rolling(period).max())
 
 
-def Lowest(data: Any, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
-    period = _period(kwargs, period)
+def Lowest(data: Any = None, period: int = 30, **kwargs: Any) -> IndicatorLine | pd.Series:
+    data, period = _get_data(data, kwargs)
     source = _close_line(data)
     return _wrap(source, _series(source).rolling(period).min())
 
@@ -227,8 +324,8 @@ def TrueRange(data: DataFeed, **kwargs: Any) -> IndicatorLine | pd.Series:
     return _wrap(data.close, values)
 
 
-def ATR(data: DataFeed, period: int = 14, **kwargs: Any) -> IndicatorLine | pd.Series:
-    period = _period(kwargs, period)
+def ATR(data: DataFeed = None, period: int = 14, **kwargs: Any) -> IndicatorLine | pd.Series:
+    data, period = _get_data(data, kwargs)
     true_range = _series(TrueRange(data))
     return _wrap(data.close, true_range.rolling(period).mean())
 
@@ -264,12 +361,12 @@ def CrossDown(left: Any, right: Any) -> IndicatorLine | pd.Series:
 
 
 def Stochastic(
-    data: DataFeed,
+    data: DataFeed = None,
     period: int = 14,
     period_dfast: int = 3,
     **kwargs: Any,
 ) -> StochasticLines:
-    period = _period(kwargs, period)
+    data, period = _get_data(data, kwargs)
     low = _series(data.low).rolling(period).min()
     high = _series(data.high).rolling(period).max()
     close = _series(data.close)
@@ -292,11 +389,13 @@ __all__ = [
     "EMA",
     "ExponentialMovingAverage",
     "Highest",
+    "Indicator",
     "IndicatorLine",
     "Lowest",
     "MACD",
     "MovingAverageSimple",
     "RSI",
+    "RSI_SMA",
     "RelativeStrengthIndex",
     "SMA",
     "SUPPORTED_INDICATOR_ALIASES",
@@ -305,4 +404,5 @@ __all__ = [
     "TrueRange",
     "WMA",
     "WeightedMovingAverage",
+    "set_current_data",
 ]

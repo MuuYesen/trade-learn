@@ -1,6 +1,6 @@
 import pandas as pd
 
-from tradelearn.automl.common.lazy_predict import LazyClassifier
+from tradelearn.ml.automl.common.lazy_predict import LazyClassifier
 from sklearn.model_selection import train_test_split
 
 

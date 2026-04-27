@@ -6,6 +6,7 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from tradelearn.metrics import max_drawdown, sharpe
@@ -57,24 +58,107 @@ def _coerce_min_period(value: Any, label: str) -> int:
 class LineSeries:
     """Backtrader-style line where index 0 is the current bar."""
 
-    def __init__(self, values: list[Any]) -> None:
-        self._values = values
+    def __init__(self, values: Any) -> None:
+        if isinstance(values, np.ndarray):
+            self._values = values
+        else:
+            self._values = np.asarray(values)
+        
+        # Force to raw numpy if it's a pandas-backed array
+        if hasattr(self._values, "to_numpy"):
+            self._values = self._values.to_numpy()
+            
         self._cursor = -1
+        self._is_datetime = False
 
     def _advance(self, cursor: int) -> None:
         self._cursor = cursor
 
     def __getitem__(self, ago: int) -> Any:
-        index = self._cursor + ago
-        if index < 0 or index >= len(self._values):
-            raise IndexError(f"tried to access line[{ago}] but current bar index is {self._cursor}")
-        return self._values[index]
+        # Ultra-hot path: no checks, direct index
+        return self._values[self._cursor + ago]
+
+    def __call__(self, ago: int = 0) -> Any:
+        """Support bt-style call syntax: line(0) instead of line[0]."""
+        if self._cursor < 0:
+            return ShiftedLine(self, ago)
+        return self[ago]
+
+    def __eq__(self, other: Any) -> bool:
+        try:
+            return self[0] == other
+        except Exception:
+            return False
+
+    def __ne__(self, other: Any) -> bool:
+        return not self.__eq__(other)
+
+    def __gt__(self, other: Any) -> bool:
+        return self[0] > other
+
+    def __lt__(self, other: Any) -> bool:
+        return self[0] < other
+
+    def __ge__(self, other: Any) -> bool:
+        return self[0] >= other
+
+    def __le__(self, other: Any) -> bool:
+        return self[0] <= other
 
     def get(self, ago: int = 0, size: int = 1) -> list[Any]:
         end = self._cursor + ago + 1
         start = max(0, end - size)
-        if end < 0:
+        if end <= 0:
             return []
+        return self._values[start:end].tolist()
+
+    def date(self, ago: int = 0) -> Any:
+        # Only convert to datetime when explicitly requested via .date()
+        val = self[ago]
+        if isinstance(val, (np.int64, int)):
+             return pd.Timestamp(val, unit='s')
+        return val
+
+
+class ShiftedLine(LineSeries):
+    """A view of a LineSeries shifted by a fixed amount."""
+    def __init__(self, source: LineSeries, shift: int):
+        import numpy as np
+        self._source = source
+        self._shift = shift
+        
+        source_vals = source._values
+        if shift < 0:
+            abs_shift = abs(shift)
+            # Create object array to allow None padding if necessary, or NaN for float
+            if source_vals.dtype == np.float64:
+                pad = np.full(abs_shift, np.nan)
+            else:
+                pad = np.array([None] * abs_shift)
+            vals = np.concatenate([pad, source_vals])[:len(source_vals)]
+        else:
+            if source_vals.dtype == np.float64:
+                pad = np.full(shift, np.nan)
+            else:
+                pad = np.array([None] * shift)
+            vals = np.concatenate([source_vals[shift:], pad])
+            
+        super().__init__(vals)
+        self._is_datetime = source._is_datetime
+
+    @property
+    def _cursor(self) -> int:
+        return self._source._cursor
+
+    @_cursor.setter
+    def _cursor(self, value: int):
+        pass
+
+    def _advance(self, cursor: int) -> None:
+        # Cursor is tracked dynamically via property
+        pass
+
+
         return self._values[start:end]
 
     def date(self, ago: int = 0) -> Any:
@@ -88,15 +172,23 @@ class DataFeed:
     """Column-based OHLCV feed exposed to strategies."""
 
     def __init__(self, data: pd.DataFrame, name: str | None = None) -> None:
+        import numpy as np
         frame = data.copy()
         self._name = name
         self._frame = frame
-        self.datetime = LineSeries(list(frame.index))
-        self.open = LineSeries(frame["open"].tolist())
-        self.high = LineSeries(frame["high"].tolist())
-        self.low = LineSeries(frame["low"].tolist())
-        self.close = LineSeries(frame["close"].tolist())
-        self.volume = LineSeries(frame["volume"].tolist())
+        
+        # Use raw numpy arrays for all lines
+        # For datetime, store as Unix timestamp (int64) to avoid Pandas overhead
+        if isinstance(frame.index, pd.DatetimeIndex):
+            self.datetime = LineSeries(frame.index.values.astype('datetime64[s]').view(np.int64))
+        else:
+            self.datetime = LineSeries(frame.index.to_numpy())
+            
+        self.open = LineSeries(frame["open"].to_numpy(dtype=np.float64))
+        self.high = LineSeries(frame["high"].to_numpy(dtype=np.float64))
+        self.low = LineSeries(frame["low"].to_numpy(dtype=np.float64))
+        self.close = LineSeries(frame["close"].to_numpy(dtype=np.float64))
+        self.volume = LineSeries(frame["volume"].to_numpy(dtype=np.float64))
         self._lines = [self.datetime, self.open, self.high, self.low, self.close, self.volume]
 
     def __len__(self) -> int:
@@ -1143,7 +1235,13 @@ class Strategy:
         return None
 
     def getposition(self, data: DataFeed | None = None) -> Position:
-        return self._positions.setdefault(data or self.data, Position())
+        d = data or self.data
+        # Use simple attribute if it's the main data (most common)
+        if d is self.data:
+            if not hasattr(self, "_main_pos_cache"):
+                 self._main_pos_cache = self._positions.setdefault(d, Position())
+            return self._main_pos_cache
+        return self._positions.setdefault(d, Position())
 
     @property
     def position(self) -> Position:
@@ -1257,6 +1355,28 @@ class Cerebro:
         for analyzer in analyzers.values():
             analyzer.on_start()
 
+        # Try Rust fast-path, fallback to Python
+        try:
+            self._run_rust(strategy, analyzers)
+        except (ImportError, AttributeError, TypeError):
+            self._run_python(strategy, analyzers)
+
+        total_bars = len(self.datas[0])
+        strategy.analyzer_results = {}
+        self.stats = self._build_stats(strategy, total_bars)
+        for analyzer in analyzers.values():
+            analyzer.on_end(self.stats)
+        self.analyzer_results = {
+            name: analyzer.get_analysis() for name, analyzer in analyzers.items()
+        }
+        strategy.analyzer_results = dict(self.analyzer_results)
+        self.stats.analyzers = dict(self.analyzer_results)
+        strategy.stats = self.stats
+        strategy.stop()
+        return [strategy]
+
+    def _run_python(self, strategy: Strategy, analyzers: AnalyzerCollection) -> None:
+        """Original Python-driven main loop."""
         total_bars = len(self.datas[0])
         data_cursors = [-1 for _ in self.datas]
         for cursor in range(total_bars):
@@ -1288,18 +1408,80 @@ class Cerebro:
                 analyzer.on_bar(bar)
             self.broker.snapshot_portfolio(strategy, bar.datetime)
 
-        strategy.analyzer_results = {}
-        self.stats = self._build_stats(strategy, total_bars)
-        for analyzer in analyzers.values():
-            analyzer.on_end(self.stats)
-        self.analyzer_results = {
-            name: analyzer.get_analysis() for name, analyzer in analyzers.items()
-        }
-        strategy.analyzer_results = dict(self.analyzer_results)
-        self.stats.analyzers = dict(self.analyzer_results)
-        strategy.stats = self.stats
-        strategy.stop()
-        return [strategy]
+    def _run_rust(self, strategy: Strategy, analyzers: AnalyzerCollection) -> None:
+        """Rust-driven main loop: cursor, matching, snapshots all in Rust."""
+        from tradelearn._rust import RustBacktestEngine
+        from tradelearn.backtest.rust_broker import RustBrokerProxy
+
+        data0 = self.datas[0]
+        frame = data0._frame
+
+        # Extract OHLCV as numpy arrays for efficient passing
+        import numpy as np
+        if isinstance(frame.index, pd.DatetimeIndex):
+            timestamps = frame.index.values.astype('datetime64[s]').astype(np.int64)
+        else:
+            timestamps = frame.index.to_numpy(dtype=np.int64)
+        
+        opens = frame["open"].to_numpy(dtype=np.float64)
+        highs = frame["high"].to_numpy(dtype=np.float64)
+        lows = frame["low"].to_numpy(dtype=np.float64)
+        closes = frame["close"].to_numpy(dtype=np.float64)
+        volumes = frame["volume"].to_numpy(dtype=np.float64)
+
+        # Get commission ratio from broker
+        comm_ratio = 0.0
+        if hasattr(self.broker._commission_model, 'ratio'):
+            comm_ratio = self.broker._commission_model.ratio
+
+        rust_engine = RustBacktestEngine(
+            timestamps, opens, highs, lows, closes, volumes,
+            self.broker._cash, comm_ratio, self.trade_on_close,
+        )
+
+        # Replace broker with Rust proxy
+        original_broker = self.broker
+        rust_proxy = RustBrokerProxy(rust_engine, original_broker)
+        strategy.broker = rust_proxy
+        self.broker = rust_proxy
+
+        total_bars = rust_engine.total_bars()
+        for cursor in range(total_bars):
+            # Advance Python-side LineSeries cursors (needed for strategy.next())
+            for data in self.datas:
+                data._advance(cursor)
+
+            # Rust: process pending orders + snapshot portfolio
+            fills = rust_engine.step(cursor)
+
+            # Sync fills back to Python (notify_order, update positions)
+            if fills:
+                rust_proxy.process_fills(strategy, fills)
+
+            # Python: call strategy
+            if cursor >= strategy._min_period:
+                strategy.next()
+            else:
+                strategy.prenext()
+            
+            # Optimization: Only snapshot if analyzers exist
+            if analyzers:
+                bar = self._snapshot(data0)
+                for analyzer in analyzers.values():
+                    analyzer.on_bar(bar)
+
+        # Restore original broker for stats building, but populate equity records
+        equity_ts, equity_cash, equity_value = rust_engine.get_equity_curve()
+        original_broker._cash = rust_engine.get_cash()
+        original_broker._last_strategy = strategy
+        # Populate equity records for _build_stats
+        original_broker._equity_records = [
+            {"datetime": data0._frame.index[i] if i < len(data0._frame.index) else i,
+             "cash": equity_cash[i],
+             "value": equity_value[i]}
+            for i in range(len(equity_ts))
+        ]
+        self.broker = original_broker
 
     def _instantiate_strategy(self) -> Strategy:
         strategy_cls, params = self._strategy_spec or (Strategy, {})

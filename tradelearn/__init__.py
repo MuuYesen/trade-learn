@@ -15,4 +15,12 @@ def __getattr__(name: str) -> Any:
         from tradelearn import indicators
 
         return indicators
+    if name == "lab":
+        from tradelearn import lab
+
+        return lab
+    if name == "cli":
+        from tradelearn import cli
+
+        return cli
     raise AttributeError(f"module 'tradelearn' has no attribute {name!r}")
