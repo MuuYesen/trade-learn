@@ -187,3 +187,4 @@ worktrees/
 tests/golden/datasets/**/*.parquet
 tests/golden/expected/**/*.json
 tests/golden/indicators/**/*.parquet
+reference/

@@ -27,10 +27,9 @@ plugins:
 
 nav:
   - Quickstart: README.md
-  - Vision: VISION.md
+  - Project: PROJECT.md
   - Runbook: RUNBOOK.md
   - Specs:
-      - Index: specs/README.md
       - Architecture: specs/ARCHITECTURE.md
       - Contracts: specs/CONTRACTS.md
       - Backtest: specs/BACKTEST_SPEC.md
@@ -44,3 +43,6 @@ nav:
       - Event Loop: internal/event-loop.md
       - Matching: internal/matching-design.md
       - Portfolio: internal/portfolio.md
+  - Release:
+      - Evaluation: release/evaluation.md
+      - API Reference: api/reference.md

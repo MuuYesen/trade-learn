@@ -58,7 +58,7 @@ def write_benchmark_page(
 ) -> Path:
     """Write the generated benchmark page under ``docs_dir/benchmark.md``."""
     baseline = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
-    output = Path(docs_dir) / "benchmark.md"
+    output = Path(docs_dir) / "release" / "evaluation.md"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(render_benchmark_page(baseline), encoding="utf-8")
     return output

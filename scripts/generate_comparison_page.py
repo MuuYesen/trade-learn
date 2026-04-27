@@ -72,7 +72,7 @@ def render_comparison_page(projects: tuple[ComparisonProject, ...] = COMPARISON_
 
 def write_comparison_page(docs_dir: Path | str = Path("docs")) -> Path:
     """Write the generated comparison page under ``docs_dir/comparison.md``."""
-    output = Path(docs_dir) / "comparison.md"
+    output = Path(docs_dir) / "release" / "evaluation.md"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(render_comparison_page(), encoding="utf-8")
     return output
