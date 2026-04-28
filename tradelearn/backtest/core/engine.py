@@ -10,12 +10,19 @@ from tradelearn.compat.backtrader.base import (
 )
 
 
-def _build_bar_advancers(strategy: Any, datas: list[Any], indicators: list[Any]) -> tuple[Any, ...]:
+def _build_bar_advancers(
+    strategy: Any,
+    datas: list[Any],
+    indicators: list[Any],
+    *,
+    include_data: bool = True,
+) -> tuple[Any, ...]:
     """Build a stable per-bar advance plan for data feeds and indicators."""
     bar_advancers = []
     seen_advancer_ids = set()
     for data in datas:
-        bar_advancers.append(data._advance)
+        if include_data:
+            bar_advancers.append(data._advance)
         seen_advancer_ids.add(id(data))
     for indicator in indicators:
         advance = getattr(indicator, '_advance', None)
@@ -37,6 +44,20 @@ def _build_bar_advancers(strategy: Any, datas: list[Any], indicators: list[Any])
             bar_advancers.append(advance)
             seen_advancer_ids.add(id(val))
     return tuple(bar_advancers)
+
+
+def _build_data_advance_plan(datas: list[Any]) -> Any | None:
+    """Build a Rust primary-clock cursor plan for multi-data runs."""
+    if len(datas) <= 1:
+        return None
+    try:
+        from tradelearn._rust import RustPrimaryClockPlan
+    except (ImportError, AttributeError):
+        return None
+    return RustPrimaryClockPlan(
+        [int(ts) for ts in datas[0]._datetime],
+        [[int(ts) for ts in data._datetime] for data in datas[1:]],
+    )
 
 
 def run_backtest(cerebro: Any) -> List[Any]:
@@ -135,12 +156,38 @@ def run_backtest(cerebro: Any) -> List[Any]:
             min_period = max(min_period, int(m))
     if min_period == 0: min_period = 1
 
-    bar_advancers = _build_bar_advancers(strategy, cerebro.datas, indicators + indicators_bt)
+    data_advance_plan = _build_data_advance_plan(cerebro.datas)
+    bar_advancers = _build_bar_advancers(
+        strategy,
+        cerebro.datas,
+        indicators + indicators_bt,
+        include_data=data_advance_plan is None,
+    )
+
+    if data_advance_plan is None:
+        def advance_datas(i: int) -> None:
+            return None
+    else:
+        def advance_datas(i: int) -> None:
+            for data, cursor in zip(cerebro.datas, data_advance_plan.cursors_at(i), strict=False):
+                if cursor >= 0:
+                    data._advance(cursor)
+                else:
+                    data._advance(-1)
+
     if hasattr(strategy, "_set_bar_advancers"):
-        strategy._set_bar_advancers(bar_advancers)
+        if data_advance_plan is None:
+            strategy._set_bar_advancers(bar_advancers)
+        else:
+            def advance_bar(i: int) -> None:
+                advance_datas(i)
+                for advance in bar_advancers:
+                    advance(i)
+            strategy._set_bar_advancers((advance_bar,))
         strategy_pre_next = strategy._pre_next
     else:
         def strategy_pre_next(cursor: int) -> None:
+            advance_datas(cursor)
             for advance in bar_advancers:
                 advance(cursor)
 

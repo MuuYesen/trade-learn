@@ -1,6 +1,7 @@
 """Stage 0 core contracts and foundation helpers."""
 
 from tradelearn.core.config import TradelearnConfig, load_config
+from tradelearn.core.broker_events import BrokerEvent, BrokerEventPump
 from tradelearn.core.contracts import Broker, Experiment, StreamBar, validate_bars, validate_returns
 from tradelearn.core.errors import (
     ConfigurationError,
@@ -16,6 +17,8 @@ from tradelearn.core.time import ensure_utc, utc_now
 
 __all__ = [
     "Broker",
+    "BrokerEvent",
+    "BrokerEventPump",
     "ConfigurationError",
     "ContractError",
     "DataError",

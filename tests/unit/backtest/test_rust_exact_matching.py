@@ -5,7 +5,8 @@ import pytest
 
 from tradelearn import _rust
 from tradelearn.backtest.core.brokers.rust import RustBroker
-from tradelearn.backtest.core.engine import _build_bar_advancers
+from tradelearn.backtest.core.data import DataContainer
+from tradelearn.backtest.core.engine import _build_bar_advancers, _build_data_advance_plan
 from tradelearn.backtest.core.models import Order
 from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
 from tradelearn.compat.backtrader.base import LineSeries
@@ -594,6 +595,110 @@ def test_backtest_engine_calls_strategy_pre_next_hook() -> None:
 
     assert PreNextStrategy.seen == [0, 1]
     assert data.advance_calls == [0, 1]
+
+
+def test_rust_primary_clock_plan_aligns_secondary_latest_at_or_before() -> None:
+    plan = _rust.RustPrimaryClockPlan([1, 2, 3], [[1, 3], [2]])
+
+    assert plan.len() == 3
+    assert plan.cursors_at(0) == [0, 0, -1]
+    assert plan.cursors_at(1) == [1, 0, 0]
+    assert plan.cursors_at(2) == [2, 1, 0]
+
+
+def test_data_advance_plan_uses_rust_primary_clock_cursors() -> None:
+    primary = DataContainer(
+        pd.DataFrame(
+            {
+                "open": [1.0, 2.0, 3.0],
+                "high": [1.0, 2.0, 3.0],
+                "low": [1.0, 2.0, 3.0],
+                "close": [1.0, 2.0, 3.0],
+                "volume": [1.0, 1.0, 1.0],
+            },
+            index=pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"], utc=True),
+        )
+    )
+    secondary = DataContainer(
+        pd.DataFrame(
+            {
+                "open": [10.0, 30.0],
+                "high": [10.0, 30.0],
+                "low": [10.0, 30.0],
+                "close": [10.0, 30.0],
+                "volume": [1.0, 1.0],
+            },
+            index=pd.to_datetime(["2026-01-01", "2026-01-03"], utc=True),
+        )
+    )
+
+    plan = _build_data_advance_plan([primary, secondary])
+
+    assert plan.cursors_at(0) == [0, 0]
+    assert plan.cursors_at(1) == [1, 0]
+    assert plan.cursors_at(2) == [2, 1]
+
+
+def test_backtest_engine_uses_rust_plan_for_secondary_data_clock() -> None:
+    primary = pd.DataFrame(
+        {
+            "open": [10.0, 11.0, 12.0],
+            "high": [10.0, 11.0, 12.0],
+            "low": [10.0, 11.0, 12.0],
+            "close": [10.0, 11.0, 12.0],
+            "volume": [1.0, 1.0, 1.0],
+        },
+        index=pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"], utc=True),
+    )
+    secondary = pd.DataFrame(
+        {
+            "open": [100.0, 130.0],
+            "high": [100.0, 130.0],
+            "low": [100.0, 130.0],
+            "close": [100.0, 130.0],
+            "volume": [1.0, 1.0],
+        },
+        index=pd.to_datetime(["2026-01-01", "2026-01-03"], utc=True),
+    )
+
+    class MultiDataStrategy(Strategy):
+        def __init__(self) -> None:
+            self.rows: list[tuple[float, float]] = []
+
+        def next(self) -> None:
+            self.rows.append((self.data.close[0], self.datas[1].close[0]))
+
+    cerebro = Cerebro(match_mode="exact")
+    cerebro.adddata(primary)
+    cerebro.adddata(secondary)
+    cerebro.addstrategy(MultiDataStrategy)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.rows == [(10.0, 100.0), (11.0, 100.0), (12.0, 130.0)]
+
+
+def test_shared_bar_buffer_reuses_data_container_arrays() -> None:
+    data = DataContainer(
+        pd.DataFrame(
+            {
+                "open": [1.0, 2.0],
+                "high": [1.0, 2.0],
+                "low": [1.0, 2.0],
+                "close": [3.0, 4.0],
+                "volume": [5.0, 6.0],
+            },
+            index=pd.to_datetime(["2026-01-01", "2026-01-02"], utc=True),
+        )
+    )
+    buffer = data.shared_bar_buffer()
+
+    data._advance(1)
+
+    assert buffer.arrays["close"] is data.get_array("close")
+    assert buffer.cursor == 1
+    assert buffer.value("close") == 4.0
+    assert buffer.value("close", ago=1) == 3.0
 
 
 def test_line_series_previous_value_before_start_is_nan() -> None:

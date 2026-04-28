@@ -112,6 +112,47 @@ struct RustBacktestEngine {
     inner: BacktestEngine,
 }
 
+#[pyclass]
+struct RustPrimaryClockPlan {
+    cursors: Vec<Vec<isize>>,
+}
+
+#[pymethods]
+impl RustPrimaryClockPlan {
+    #[new]
+    fn new(primary_timestamps: Vec<i64>, secondary_timestamps: Vec<Vec<i64>>) -> Self {
+        let mut secondary_cursors = vec![0usize; secondary_timestamps.len()];
+        let mut cursors = Vec::with_capacity(primary_timestamps.len());
+
+        for (primary_cursor, primary_ts) in primary_timestamps.into_iter().enumerate() {
+            let mut row = Vec::with_capacity(secondary_timestamps.len() + 1);
+            row.push(primary_cursor as isize);
+            for (feed_idx, timestamps) in secondary_timestamps.iter().enumerate() {
+                while secondary_cursors[feed_idx] < timestamps.len()
+                    && timestamps[secondary_cursors[feed_idx]] <= primary_ts
+                {
+                    secondary_cursors[feed_idx] += 1;
+                }
+                row.push(secondary_cursors[feed_idx] as isize - 1);
+            }
+            cursors.push(row);
+        }
+
+        Self { cursors }
+    }
+
+    fn len(&self) -> usize {
+        self.cursors.len()
+    }
+
+    fn cursors_at(&self, primary_cursor: usize) -> Vec<isize> {
+        self.cursors
+            .get(primary_cursor)
+            .cloned()
+            .unwrap_or_default()
+    }
+}
+
 #[pymethods]
 impl RustBacktestEngine {
     #[new]
@@ -391,5 +432,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tradelearn_rust_version, m)?)?;
     m.add_function(wrap_pyfunction!(match_order_fill, m)?)?;
     m.add_class::<RustBacktestEngine>()?;
+    m.add_class::<RustPrimaryClockPlan>()?;
     Ok(())
 }
