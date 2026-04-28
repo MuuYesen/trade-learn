@@ -91,7 +91,7 @@ uv run pytest --doctest-modules tradelearn/  # docstring 示例
 
 ```bash
 # backtesting.py 对齐与 bars/s 吞吐
-uv run python examples/backtesting/compare_results.py
+uv run python tests/runners/compare_backtesting.py
 
 # Backtrader 8 个迁移策略数值对齐
 uv run python tests/runners/benchmark_bt.py

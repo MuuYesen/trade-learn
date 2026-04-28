@@ -4,6 +4,7 @@ import importlib.util
 import os
 import sys
 import time
+from pathlib import Path
 
 import pandas as pd
 
@@ -23,7 +24,8 @@ def load_original_backtesting():
     sys.path = orig_path
     return bt_orig
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = ROOT / "benchmarks" / "data" / "backtesting"
 
 # 3. Define the Strategy (same code for both)
 def get_strategy_class(BaseClass):
@@ -69,7 +71,7 @@ def get_strategy_class(BaseClass):
 
 # 4. Data Loading
 def load_data(symbol):
-    filepath = os.path.join(BASE_DIR, 'data', f'{symbol}_30m.csv')
+    filepath = DATA_DIR / f'{symbol}_30m.csv'
     df = pd.read_csv(filepath, index_col='timestamp', parse_dates=True)
     df.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
     if symbol == 'BTCUSDT':

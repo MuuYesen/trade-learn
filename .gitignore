@@ -195,7 +195,3 @@ reference/
 # tracked, but new ad-hoc probes should stay local unless promoted explicitly.
 scratch/*.py
 scratch_doc.txt
-
-# Local benchmark drafts used during optimization sessions.
-examples/backtesting/grid_search_compare.py
-examples/backtesting/unified_benchmark.py

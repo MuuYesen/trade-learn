@@ -7,10 +7,14 @@ Venta: EMA 9 cruza por debajo de EMA 21
 Trailing Stop: Ajustado al 3% por debajo del máximo alcanzado en largo
 """
 
-import pandas as pd
-import numpy as np
-from backtesting import Backtest, Strategy
 import os
+from pathlib import Path
+
+import pandas as pd
+from backtesting import Backtest, Strategy
+
+ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = ROOT / "benchmarks" / "data" / "backtesting"
 
 
 class EMA_Cross_Strategy(Strategy):
@@ -68,7 +72,7 @@ class EMA_Cross_Strategy(Strategy):
 
 def load_data(symbol):
     """Carga datos históricos y escala si es necesario"""
-    filepath = f'./data/{symbol}_30m.csv'
+    filepath = DATA_DIR / f'{symbol}_30m.csv'
     df = pd.read_csv(filepath, index_col='timestamp', parse_dates=True)
     df.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
     

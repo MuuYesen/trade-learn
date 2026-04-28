@@ -1,8 +1,17 @@
-import sys
 import os
+import sys
 import time
+from importlib import reload
+from pathlib import Path
+
 import pandas as pd
-import numpy as np
+
+import tradelearn.compat.backtesting as tl_bt
+from tradelearn.backtest.core.brokers.rust import RustBroker
+from tradelearn.backtest.core.data import DataContainer
+from tradelearn.backtest.core.engine import run_backtest
+from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
+
 
 # 1. Load Original backtesting.py
 def load_original_backtesting():
@@ -10,7 +19,6 @@ def load_original_backtesting():
     orig_path = sys.path[:]
     sys.path = [p for p in sys.path if p != current_dir and p != '']
     import backtesting as bt_orig
-    from importlib import reload
     reload(bt_orig)
     sys.path = orig_path
     return bt_orig
@@ -32,8 +40,6 @@ def get_bt_strategy(BaseClass):
                 self.position.close()
     return EMA_Cross_Strategy
 
-# 3. Strategy Definition for Tradelearn Core (High Performance)
-from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
 class EMA_Cross_Core(CoreStrategy):
     params = dict(ema_fast=9, ema_slow=21)
     
@@ -54,8 +60,12 @@ class EMA_Cross_Core(CoreStrategy):
             self.close()
 
 # 4. Data Loading
+ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = ROOT / "benchmarks" / "data" / "backtesting"
+
+
 def load_data(symbol):
-    filepath = f'./data/{symbol}_30m.csv'
+    filepath = DATA_DIR / f'{symbol}_30m.csv'
     df = pd.read_csv(filepath, index_col='timestamp', parse_dates=True)
     df.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
     return df
@@ -76,7 +86,6 @@ def run_test():
     print(f"Time: {t_orig:.4f}s")
 
     # --- 2. Tradelearn Facade (Compatibility) ---
-    import tradelearn.compat.backtesting as tl_bt
     strat_facade = get_bt_strategy(tl_bt.Strategy)
     print("\nRunning Tradelearn Facade (Compatibility)...")
     start = time.time()
@@ -86,10 +95,6 @@ def run_test():
     print(f"Time: {t_facade:.4f}s")
 
     # --- 3. Tradelearn Core (High Performance) ---
-    from tradelearn.backtest.core.engine import run_backtest
-    from tradelearn.backtest.core.brokers.rust import RustBroker
-    from tradelearn.backtest.core.data import DataContainer
-    
     print("\nRunning Tradelearn Core (High Performance)...")
     # Mocking a cerebro-like setup for raw engine call
     class MockCerebro:

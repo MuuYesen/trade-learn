@@ -28,8 +28,10 @@ This repository is organized around a small shared event-driven core, facade-spe
 
 ## Examples And Documentation
 
-- `examples/backtrader/`: Backtrader facade examples.
-- `examples/backtesting/`: backtesting.py facade examples and comparison scripts.
+- `examples/backtrader/`: Backtrader facade strategy examples.
+- `examples/backtesting/`: backtesting.py facade strategy examples.
+- `tests/runners/`: executable benchmark/audit runners, including backtesting.py and Backtrader parity scripts.
+- `benchmarks/data/`: datasets used by benchmark and parity runners.
 - `docs/`: public architecture, compatibility, progress, and runbook documents.
 - `docs/internal/`: internal design notes.
 - `docs/release/`: release evaluation notes.
