@@ -15,7 +15,7 @@
 - bar loop / event loop
 - broker-neutral models
 - core strategy base
-- Rust broker wrapper
+- Rust broker wrapper (`broker.py`)
 - line primitives
 - shared bar buffer
 - indicator cache plumbing
@@ -83,13 +83,14 @@ backtesting.py 迁移层,维护 backtesting.py 专属语义:
 - Bars 契约
 - provider adapter
 - parquet cache / fingerprint / TTL / offline mode
+- K 线重采样工具 (`resampler.py`)
 
 ### `tradelearn/factor/`, `tradelearn/metrics/`, `tradelearn/report/`, `tradelearn/ml/`
 
 研究分析层:
 
 - `factor/`: 因子分析、Alpha101/Alpha191
-- `metrics/`: returns/risk/factor/trade 指标
+- `metrics/`: returns/risk/factor/trade 指标,以及回测 analyzer 复用的 `MetricsEngine`
 - `report/`: HTML/Excel/Bokeh/pygwalker 报告
 - `ml/`: MLStrategy、FeatureStore、ModelRegistry、CausalSelector
 

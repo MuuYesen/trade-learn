@@ -40,7 +40,7 @@ from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
 
 def __getattr__(name):
     if name == "SimBroker":
-        from tradelearn.backtest.core.brokers.rust import RustBroker
+        from tradelearn.backtest.core.broker import RustBroker
 
         return RustBroker
     if name == "Analyzer":

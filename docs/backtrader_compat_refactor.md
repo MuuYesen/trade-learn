@@ -17,12 +17,14 @@
 tradelearn/
 ├── backtest/
 │   └── core/          # 纯净的微内核 (Microkernel)
-│       ├── brokers/   # 核心撮合引擎 (如 RustBroker)
-│       ├── metrics.py # 向量化指标计算引擎
-│       ├── resampler.py # K 线重采样工具
+│       ├── broker.py  # 核心撮合引擎 (如 RustBroker)
 │       ├── engine.py
 │       ├── strategy.py
 │       └── models.py
+├── data/
+│   └── resampler.py   # K 线重采样工具
+├── metrics/
+│   └── engine.py      # analyzer 复用的向量化指标计算引擎
 └── compat/
     ├── backtrader/    # Backtrader 兼容门面 (Facade)
     │   ├── analyzers/ # 分析器 (Sharpe, Drawdown 等)

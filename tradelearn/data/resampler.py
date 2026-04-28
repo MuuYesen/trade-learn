@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pandas as pd
 
-from .models import TimeFrame
+_MICROSECONDS = 1
+_SECONDS = 2
+_MINUTES = 3
+_DAYS = 4
+_WEEKS = 5
+_MONTHS = 6
+_YEARS = 7
 
 
 def resample_frame(
@@ -39,19 +43,19 @@ def resample_frame(
 def _get_pandas_rule(timeframe: int, compression: int) -> str:
     """Convert TimeFrame constant to pandas frequency string."""
     base = ""
-    if timeframe == TimeFrame.MicroSeconds:
+    if timeframe == _MICROSECONDS:
         base = "us"
-    elif timeframe == TimeFrame.Seconds:
+    elif timeframe == _SECONDS:
         base = "s"
-    elif timeframe == TimeFrame.Minutes:
+    elif timeframe == _MINUTES:
         base = "min"
-    elif timeframe == TimeFrame.Days:
+    elif timeframe == _DAYS:
         base = "D"
-    elif timeframe == TimeFrame.Weeks:
+    elif timeframe == _WEEKS:
         base = "W"
-    elif timeframe == TimeFrame.Months:
+    elif timeframe == _MONTHS:
         base = "ME"  # Modern pandas uses ME for Month End
-    elif timeframe == TimeFrame.Years:
+    elif timeframe == _YEARS:
         base = "YE"
     else:
         raise ValueError(f"Unsupported timeframe: {timeframe}")

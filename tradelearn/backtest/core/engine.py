@@ -81,7 +81,7 @@ def run_backtest(cerebro: Any) -> List[Any]:
     # ---------------------------------------------------------
     # Rust Engine Initialization
     # ---------------------------------------------------------
-    from .brokers.rust import RustBroker
+    from .broker import RustBroker
     if isinstance(cerebro.broker, RustBroker):
         from tradelearn._rust import RustBacktestEngine
         data = cerebro.datas[0]

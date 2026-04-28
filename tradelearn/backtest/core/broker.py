@@ -142,7 +142,14 @@ class RustBroker(BaseBroker):
 
     def flush_order_buffer(self) -> None:
         """Submit buffered orders to Rust and update Python order refs."""
-        for provisional_ref, side_str, ot_str, actual_size, limit_price, stop_price in self.drain_order_buffer():
+        for (
+            provisional_ref,
+            side_str,
+            ot_str,
+            actual_size,
+            limit_price,
+            stop_price,
+        ) in self.drain_order_buffer():
             order_id = self._engine.submit_order(
                 side_str,
                 ot_str,

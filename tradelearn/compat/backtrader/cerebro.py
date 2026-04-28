@@ -35,7 +35,7 @@ class Cerebro:
             raise ValueError("mode must be one of 'backtest', 'paper', or 'live'")
         self.mode = mode
         self.kwargs = kwargs
-        from tradelearn.backtest.core.brokers.rust import RustBroker
+        from tradelearn.backtest.core.broker import RustBroker
         self.broker = RustBroker(match_mode=match_mode)
         self.broker._slippage_model = slippage or FixedSlippage()
         self.broker._commission_model = commission or FixedCommission()

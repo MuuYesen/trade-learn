@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from tradelearn import _rust
-from tradelearn.backtest.core.brokers.rust import RustBroker
+from tradelearn.backtest.core.broker import RustBroker
 from tradelearn.backtest.core.data import DataContainer, RollingBarBuffer
 from tradelearn.backtest.core.engine import _build_bar_advancers, _build_data_advance_plan
 from tradelearn.backtest.core.models import Order
