@@ -433,6 +433,7 @@
 - [x] P1 批量 fill/order sync:Rust fills 已随 step snapshot 返回,Python broker 改为 `_process_rust_fills_batch()` 统一同步 `Order.executed`、pending size、position、notify_order/notify_trade,通知顺序保持不变;高成交策略预期 `1.2x-2x`;提交 `32dce8f`
 - [x] P1/P2 前置热路径修补:backtesting facade `_setup()` 改为只绑定数据代理,避免 `init()` 重复执行 3 次;`self.data` 改回普通实例属性,并将 advancer 静态发现从 `hasattr()` 改为 callable 检查,避免动态 proxy 误触发;对指标预计算型策略收益更明显,本轮脚本对齐保持不变;提交 `e7dc15c`
 - [x] P1 Rust callback 快路径拆分:Rust `run_bar_loop` 使用专用 `on_rust_bar` callback,移除每 bar 的 Python fallback 分支判断与 flush/drain 分流;profile 中代表性 5 万 bar 策略 `run_bar_loop/on_bar` 约 `0.230/0.211s -> 0.222/0.204s`,脚本对齐保持不变;提交 `d012dad`
+- [x] P1 Rust callback 空事件协议:Rust `run_bar_loop` 接受 Python callback 返回 `None` 表示无新订单,避免无订单 bar 传空 payload;Python 侧只有 drain 到订单时才返回 list;本轮 `benchmark_bt.py` 多数策略小幅正收益且全部 EXACT,`compare_results.py` 仍保持 Return/# Trades 对齐;提交 `d6a1333`
 - [ ] P1 完整 Rust BarRunner:将多数据推进、订单队列、撮合、mark-to-market 与 callback 边界统一进 `BarRunner` struct,Python 策略 API 不变;目标 vs 当前 Python callback loop `>=3x`,vs Backtrader `>=8x`
 - [ ] P2 指标缓存框架:回测侧统一接入 `pandas-ta-classic` / TDX / TradingView 指标批量预计算;QMT 实盘侧只能 rolling window 增量重算,不做全量预计算;指标密集策略预期 `1.5x-3x`
 - [ ] P3 共享 bar buffer / Line 访问优化:降低 `self.data.close[0]`、`self.data.close[-1]`、`indicator[-1]` Python 对象开销;需与 QMT rolling buffer 兼容,预期 `1.2x-2x`
