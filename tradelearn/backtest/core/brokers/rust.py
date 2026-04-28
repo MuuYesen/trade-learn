@@ -195,9 +195,8 @@ class RustBroker(BaseBroker):
     def process_fills(self, strategy: Strategy, i: int) -> None:
         """Synchronize filled orders back to Python."""
         if self._uses_rust_matching():
-            all_fills = self._engine.get_fills()
-            if all_fills and len(all_fills) > self._last_fill_idx:
-                new_fills = all_fills[self._last_fill_idx:]
+            new_fills = self._engine.get_new_fills(self._last_fill_idx)
+            if new_fills:
                 for fill in new_fills:
                     order_id, side_str, size, price, comm, _slippage, pnl = fill[:7]
                     matched_order = next((o for o in self._orders if o.ref == order_id), None)
@@ -205,12 +204,12 @@ class RustBroker(BaseBroker):
                         matched_order.status = Order.Completed
                         abs_size = abs(size)
                         matched_order.executed = ExecutedInfo(
-                            price=price, size=abs_size, comm=comm, 
-                            value=abs_size * price * self._mult
+                            price=price, size=abs_size, comm=comm,
+                            value=abs_size * price * self._mult,
                         )
                         self._sync_python_fill_state(strategy, matched_order, size, price, pnl)
                         _notify_order(strategy, matched_order)
-                self._last_fill_idx = len(all_fills)
+                self._last_fill_idx += len(new_fills)
         else:
             # BT Mode: Naive matching in Python
             if not self._pending_orders:
