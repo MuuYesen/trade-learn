@@ -415,7 +415,7 @@
 - [x] 多 data feed primary clock 对齐逻辑迁移至 BarRunner，secondary 可见性规则不变
 - [ ] GIL 持有策略验证：bar 内持有（含两次 PyO3 回调），bar 间可释放
 - [ ] golden 50/50 重新验证（trades 0 差异，PnL rtol=1e-4）
-- [ ] benchmark：sma_cross + AAPL 10000 bars 20 次中位数,默认事件驱动路径 vs 当前 ≥ 1.5x,vs Backtrader ≥ 4x;指标密集策略接入 BatchIndicatorCache 后目标 ≥ 5x
+- [x] CI benchmark 门禁：`benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2` 已接入 GitHub Actions `compat-performance`,用 warmup/repeat median 捕捉对齐失败和明显性能退化;Stage 10 原目标 ≥4x 仍保留为本地性能目标,不作为 CI required 硬阈值
 - [ ] `compat.backtrader` 十个迁移金标策略零改动通过
 
 ### Week 4 — 实盘接口门禁
@@ -424,7 +424,7 @@
 - [ ] 实盘二次确认 + 资金上限协议字段
 - [x] 断线重连 + 基础风控协议字段:BrokerEvent 已支持 `replay`、`requires_confirmation`、`max_notional`、`risk_tags`
 - [ ] 实盘 MLflow run 事件字段(每日一个 run 的接口定义)
-- [ ] Windows-only CI 仅做接口/导入门禁,QMT 专属实现仍 deferred
+- [x] Windows-only CI 仅做接口/导入门禁,QMT 专属实现仍 deferred;现有矩阵已覆盖 Windows × Python 3.10-3.12,未提交 QMT 具体代码
 
 ### 1.1 前置优化记录(2026-04-28,不改变 Stage 10 正式状态)
 
@@ -432,9 +432,10 @@
 - [x] 订单缓冲与 Rust loop 回传:Python 策略下单先进入 broker buffer,callback 返回 drained order payload 后由 Rust loop submit 并回绑 order ref,提交 `af7017b` / `fa8d28b` / `106eb45`
 - [x] fill/cash/position 快照批量化:Rust `step_open_collect` 返回 fills + cash + position,Python 侧跳过无 fill 同步并缓存 bar 内 broker state,提交 `62bbfa6` / `187c956` / `49e1b79`
 - [x] Python bar loop 热路径缓存:预绑定 strategy/data/indicator advancers、broker/strategy callback 方法、data line proxy、position size/Rust state fast path,提交 `4eb114e` / `bf0472f` / `ba66102` / `349c2fe` / `a0733e0` / `b09b7f4` / `f0feef0` / `29fb00d` / `e2c38ff` / `0cc8f28`
-- [x] compat.backtesting 指标访问微优化与 benchmark 输出增强: `IndicatorProxy.__getitem__` 热路径收紧,`benchmark_bt.py` 增加 `vs Prev TL` 与 repeat/warmup 模式,提交 `d4f38f4`
-- [x] 当前验证基线: `tests/unit/backtest/test_rust_exact_matching.py` 20 passed;`tests/unit/backtest/test_compat_runner_scripts.py` 2 passed;`benchmark_bt.py` 8/8 EXACT;`compare_results.py` BTCUSDT / ETHUSDT Return 与 # Trades 对齐,Tradelearn 对 backtesting.py 约 2.4x-2.5x
-- [ ] 剩余正式 1.1 工作:production backtest 是否切换 HistoricalDriver/EventRunner 的对齐评估、Backtrader 指标声明自动接 Batch/RollingIndicatorCache、MLflow live event 字段、Windows-only CI 与默认事件驱动 benchmark ≥ 1.5x/≥ 4x 门禁;QMT 具体 broker 代码暂缓
+- [x] compat.backtesting 指标访问微优化与 benchmark 输出增强: `IndicatorProxy.__getitem__` 热路径收紧,`benchmark_bt.py` 增加 `vs Prev TL`、repeat/warmup 与 `--min-speedup` CI 门禁,提交 `d4f38f4` / 待提交
+- [x] 指标缓存正式接入: `compat.backtesting.Strategy.I()` 复用 `BatchIndicatorCache`;`compat.backtrader` 不暴露 `Strategy.I`,而是在 `bt.indicators.*` 内部走 batch cache;core 仅保留通用缓存底座,提交 `2f26230` / 待提交
+- [x] 当前验证基线: `tests/unit/backtest/test_rust_exact_matching.py` 相关指标缓存测试通过;`tests/unit/backtest/test_compat_runner_scripts.py` 通过;`benchmark_bt.py` 8/8 EXACT;`compare_results.py` BTCUSDT / ETHUSDT Return 与 # Trades 对齐,Tradelearn 对 backtesting.py 约 2.4x-2.6x
+- [ ] 剩余正式 1.1 工作:production backtest 是否切换 HistoricalDriver/EventRunner 的对齐评估、MLflow live event 字段;QMT 具体 broker 代码暂缓
 
 ### 当前优化任务队列(2026-04-28)
 

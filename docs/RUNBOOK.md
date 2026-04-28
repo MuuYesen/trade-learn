@@ -87,6 +87,27 @@ uv run pytest tests/golden/                  # 金标对照
 uv run pytest --doctest-modules tradelearn/  # docstring 示例
 ```
 
+### Backtrader / backtesting 对齐与性能门禁
+
+```bash
+# backtesting.py 对齐与 bars/s 吞吐
+uv run python examples/backtesting/compare_results.py
+
+# Backtrader 8 个迁移策略数值对齐
+uv run python tests/runners/benchmark_bt.py
+
+# CI 使用的稳定性能口径: warmup + repeat median,低于阈值或非 EXACT 会失败
+uv run python tests/runners/benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2
+```
+
+说明:
+
+- `benchmark_bt.py` 默认单次结果用于 smoke test,会输出 `vs Prev TL`。
+- CI 口径使用 `--warmup 1 --repeat 3`,避免 0.1s 级别单次噪声误判。
+- `--min-speedup` 是退化门槛,不是发布宣传性能目标;当前设置为保守的 `1.2x`。
+- Backtrader 策略不提供 `Strategy.I`;指标缓存接在 `bt.indicators.*` 内部。
+- backtesting.py 策略继续使用 `Strategy.I(...)`,内部复用 `BatchIndicatorCache`。
+
 ### Lint / 格式化
 
 ```bash

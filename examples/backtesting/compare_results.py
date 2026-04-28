@@ -1,12 +1,15 @@
-import sys
-import os
-import time
-import pandas as pd
-import numpy as np
-
 # 1. Load the original backtesting.py
 # We need to bypass the local shim 'backtesting.py'
 import importlib.util
+import os
+import sys
+import time
+
+import pandas as pd
+
+import tradelearn.compat.backtesting as tl_bt
+
+
 def load_original_backtesting():
     # Remove current directory from path
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -20,8 +23,7 @@ def load_original_backtesting():
     sys.path = orig_path
     return bt_orig
 
-# 2. Load Tradelearn facade
-import tradelearn.compat.backtesting as tl_bt
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 3. Define the Strategy (same code for both)
 def get_strategy_class(BaseClass):
@@ -67,7 +69,7 @@ def get_strategy_class(BaseClass):
 
 # 4. Data Loading
 def load_data(symbol):
-    filepath = f'./data/{symbol}_30m.csv'
+    filepath = os.path.join(BASE_DIR, 'data', f'{symbol}_30m.csv')
     df = pd.read_csv(filepath, index_col='timestamp', parse_dates=True)
     df.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
     if symbol == 'BTCUSDT':
@@ -89,18 +91,30 @@ def run_comparison(symbol):
     bt_orig = load_original_backtesting()
     orig_strat_cls = get_strategy_class(bt_orig.Strategy)
     
-    print(f"Running Original backtesting.py...")
+    print("Running Original backtesting.py...")
     start_time = time.time()
-    bt = bt_orig.Backtest(data, orig_strat_cls, cash=initial_cash, commission=0.0008, exclusive_orders=True)
+    bt = bt_orig.Backtest(
+        data,
+        orig_strat_cls,
+        cash=initial_cash,
+        commission=0.0008,
+        exclusive_orders=True,
+    )
     stats_orig = bt.run()
     orig_duration = time.time() - start_time
     
     # Run Tradelearn
     tl_strat_cls = get_strategy_class(tl_bt.Strategy)
     
-    print(f"Running Tradelearn Facade...")
+    print("Running Tradelearn Facade...")
     start_time = time.time()
-    bt_tl = tl_bt.Backtest(data, tl_strat_cls, cash=initial_cash, commission=0.0008, exclusive_orders=True)
+    bt_tl = tl_bt.Backtest(
+        data,
+        tl_strat_cls,
+        cash=initial_cash,
+        commission=0.0008,
+        exclusive_orders=True,
+    )
     stats_tl = bt_tl.run()
     tl_duration = time.time() - start_time
     
@@ -128,8 +142,14 @@ def run_comparison(symbol):
     orig_bars_per_sec = bar_count / orig_duration if orig_duration else 0.0
     tl_bars_per_sec = bar_count / tl_duration if tl_duration else 0.0
     bars_per_sec_speedup = tl_bars_per_sec / orig_bars_per_sec if orig_bars_per_sec else 0.0
-    print(f"{'Duration [s]':<20} | {orig_duration:>12.4f} | {tl_duration:>12.4f} | {orig_duration/tl_duration:>10.2f}x")
-    print(f"{'Bars/s':<20} | {orig_bars_per_sec:>12,.0f} | {tl_bars_per_sec:>12,.0f} | {bars_per_sec_speedup:>10.2f}x")
+    print(
+        f"{'Duration [s]':<20} | {orig_duration:>12.4f} | "
+        f"{tl_duration:>12.4f} | {orig_duration/tl_duration:>10.2f}x"
+    )
+    print(
+        f"{'Bars/s':<20} | {orig_bars_per_sec:>12,.0f} | "
+        f"{tl_bars_per_sec:>12,.0f} | {bars_per_sec_speedup:>10.2f}x"
+    )
     print("="*50)
 
 if __name__ == '__main__':
