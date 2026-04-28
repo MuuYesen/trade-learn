@@ -67,7 +67,7 @@ def run_strategy_in_process(engine_type, mod_name, cls_name, queue):
         
         dataframe = pd.read_parquet(DATA_PATH)
         if engine_type == "Tradelearn":
-            from tradelearn.backtest.datafeed import DataFeed
+            from tradelearn.compat.backtrader import DataFeed
             data = DataFeed(dataframe)
         else:
             class PandasData(bt.feeds.PandasData):

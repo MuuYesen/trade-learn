@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from tradelearn.backtest import DataFeed
+from .datafeed import DataFeed
 
 
 class PandasData(DataFeed):

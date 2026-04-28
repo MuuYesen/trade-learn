@@ -4,11 +4,12 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import numpy as np
 
-from tradelearn.backtest.base import BaseBroker, _notify_order
-from tradelearn.backtest.models import Order, Position, ExecutedInfo
+from tradelearn.backtest.core.models import (
+    BaseBroker, _notify_order, Order, Position, ExecutedInfo
+)
 
 if TYPE_CHECKING:
-    from tradelearn.backtest.strategy import Strategy
+    from tradelearn.backtest.core.strategy import Strategy
 
 class CommInfo:
     """Helper to simulate Backtrader's commission info."""

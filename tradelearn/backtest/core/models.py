@@ -126,16 +126,36 @@ class Order:
 @dataclass
 class Trade:
     Created, Open, Closed = range(3)
-    ref: int
-    data: Any
-    size: float
-    price: float
-    value: float
-    commission: float
-    pnl: float
-    pnlcomm: float
-    isopen: bool
-    isclosed: bool
-    status: int
-    dtopen: Any
+    ref: int = 0
+    data: Any = None
+    size: float = 0.0
+    price: float = 0.0
+    value: float = 0.0
+    commission: float = 0.0
+    pnl: float = 0.0
+    pnlcomm: float = 0.0
+    isopen: bool = False
+    isclosed: bool = False
+    status: int = Created
+    dtopen: Any = None
     dtclose: Any | None = None
+
+class BaseBroker:
+    def __init__(self, **kwargs): pass
+    def setcash(self, cash: float): pass
+    def setcommission(self, commission: float): pass
+    def getcash(self) -> float: return 0.0
+    def getvalue(self) -> float: return 0.0
+    def get_cash(self) -> float: return self.getcash()
+    def get_value(self) -> float: return self.getvalue()
+
+class BaseSizer: pass
+
+class BaseAnalyzer:
+    def __init__(self, **kwargs): self.strategy = None
+    def on_order(self, order: Order): pass
+    def on_trade(self, trade: Any): pass
+    def stop(self): pass
+
+def _notify_order(strategy: Any, order: Order) -> None:
+    strategy.notify_order(order)

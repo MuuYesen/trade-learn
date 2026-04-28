@@ -77,7 +77,7 @@ class MetaSimple(type):
         instance = cls.__new__(cls, *args, **other_kwargs)
         instance.p = instance.params = Params(**final_p)
         
-        from tradelearn.backtest.base import _CURRENT_DATA
+        from .base import _G
         data = None
         new_args = []
         for a in args:
@@ -87,7 +87,8 @@ class MetaSimple(type):
             else:
                 new_args.append(a)
         
-        instance.data = data if data is not None else other_kwargs.get('data', _CURRENT_DATA)
+        instance.data = data if data is not None else other_kwargs.get('data', _G.current_data)
+        instance.data = data if data is not None else other_kwargs.get('data', _G.current_data)
         instance.l = instance.lines = Params(**{line: None for line in instance.lines_def})
         
         sig = inspect.signature(cls.__init__)
@@ -101,9 +102,8 @@ class MetaSimple(type):
         else:
             instance.__init__(*args, **other_kwargs)
         
-        from tradelearn.backtest.base import _CURRENT_STRATEGY
-        if _CURRENT_STRATEGY:
-            _CURRENT_STRATEGY._register_indicator(instance)
+        if _G.current_strategy is not None:
+            _G.current_strategy._register_indicator(instance)
             
         return instance
 
@@ -231,7 +231,7 @@ class RSI(Indicator):
         rsi = 100.0 - (100.0 / (1.0 + rs))
         base = _base_p(self.data)
         rsi.iloc[:base + self.p.period] = np.nan
-        self.lines.rsi = _wrap(self.data, rsi.fillna(100.0), min_period=base + self.p.period)
+        self.lines.rsi = _wrap(self.data, rsi.fillna(100.0), min_period=base + self.p.period - 1)
 
 class RSI_SMA(RSI):
     def __init__(self, *args, **kwargs):
@@ -258,7 +258,7 @@ class ATR(Indicator):
         tr.iloc[0] = np.nan
         atr = bt_wilder(tr, self.p.period)
         base = _base_p(self.data)
-        self.lines.atr = _wrap(self.data, atr, min_period=base + self.p.period + 1)
+        self.lines.atr = _wrap(self.data, atr, min_period=base + self.p.period)
 class TrueRange(Indicator):
     lines = ('tr',)
     def __init__(self, *args, **kwargs):
@@ -329,7 +329,7 @@ class Lowest(Indicator):
         s = _series(self.data)
         res = s.rolling(self.p.period).min()
         base = _base_p(self.data)
-        self.lines.lowest = _wrap(self.data, res, min_period=base + self.p.period)
+        self.lines.lowest = _wrap(self.data, res, min_period=base + self.p.period - 1)
 
 class Highest(Indicator):
     lines = ('highest',)
@@ -338,7 +338,7 @@ class Highest(Indicator):
         s = _series(self.data)
         res = s.rolling(self.p.period).max()
         base = _base_p(self.data)
-        self.lines.highest = _wrap(self.data, res, min_period=base + self.p.period)
+        self.lines.highest = _wrap(self.data, res, min_period=base + self.p.period - 1)
 
 class DonchianChannels(Indicator):
     lines = ('upper', 'lower', 'middle')

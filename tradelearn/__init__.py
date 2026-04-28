@@ -24,33 +24,33 @@ def __getattr__(name: str) -> Any:
         from tradelearn.compat.backtrader import indicators
         return indicators
     if name == "analyzers":
-        from tradelearn.backtest import engine
-        return engine
+        from tradelearn.backtest import analyzers
+        return analyzers
     if name == "Cerebro":
-        from tradelearn.backtest.engine import Cerebro
+        from tradelearn.compat.backtrader import Cerebro
         return Cerebro
     if name == "Strategy":
-        from tradelearn.backtest.engine import Strategy
+        from tradelearn.compat.backtrader import Strategy
         return Strategy
-    if name == "Analyzer":
-        from tradelearn.backtest.engine import Analyzer
-        return Analyzer
+    if name == "DataFeed":
+        from tradelearn.compat.backtrader import DataFeed
+        return DataFeed
     if name == "Sizer":
-        from tradelearn.backtest.engine import Sizer
+        from tradelearn.compat.backtrader import Sizer
         return Sizer
-    if name == "TimeFrame":
-        from tradelearn.backtest.engine import TimeFrame
-        return TimeFrame
     if name == "FixedSize":
-        from tradelearn.backtest.engine import FixedSize
+        from tradelearn.compat.backtrader import FixedSize
         return FixedSize
     if name == "PercentSizer":
-        from tradelearn.backtest.engine import PercentSizer
+        from tradelearn.compat.backtrader import PercentSizer
         return PercentSizer
     if name == "AllInSizer":
-        from tradelearn.backtest.engine import AllInSizer
+        from tradelearn.compat.backtrader import AllInSizer
         return AllInSizer
-    if name == "DataFeed":
-        from tradelearn.backtest.engine import DataFeed
-        return DataFeed
+    if name == "TimeFrame":
+        from tradelearn.backtest.core.models import TimeFrame
+        return TimeFrame
+    if name == "Analyzer":
+        from tradelearn.backtest import Analyzer
+        return Analyzer
     raise AttributeError(f"module 'tradelearn' has no attribute {name!r}")

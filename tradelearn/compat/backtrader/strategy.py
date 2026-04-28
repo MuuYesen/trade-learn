@@ -5,25 +5,35 @@ The core backtest API already follows backtrader's line convention:
 module exposes that implementation under ``tradelearn.compat.backtrader``.
 """
 
-from tradelearn.backtest import (
-    DataFeed,
+from tradelearn.backtest.core.models import (
     ExecutedInfo,
-    LineSeries,
     Order,
-    Params,
     Position,
-    Strategy as _BaseStrategy,
     Trade,
+    Params as CoreParams
 )
-from tradelearn.backtest.base import set_current_data, set_current_strategy
+from .base import set_current_data, set_current_strategy, LineRoot, Params, LineSeries, _G
+from .datafeed import DataFeed
+from tradelearn.backtest.core.strategy import Strategy as _BaseStrategy
 
-class Strategy(_BaseStrategy):
+class Strategy(_BaseStrategy, LineRoot):
     """Backtrader-compatible Strategy that maintains data context."""
     def __init__(self, *args, **kwargs):
-        # Set context for indicators created during __init__
+        # 1. Sync datas from global context if not already set (for BT facade)
+        if not getattr(self, 'datas', None) and _G.current_datas:
+            self.datas = _G.current_datas
+            self.data = self.datas[0] if self.datas else None
+            for i, d in enumerate(self.datas):
+                setattr(self, f'data{i}', d)
+
+        # 2. Set context for indicators created during __init__
         if self.datas:
             set_current_data(self.datas[0])
-        super().__init__(*args, **kwargs)
+        
+        # 3. Call base inits
+        # Note: _BaseStrategy.__init__ handles internal dicts
+        # LineRoot handled by metaclass already, but we ensure order
+        _BaseStrategy.__init__(self, *args, **kwargs)
         
     @property
     def datetime(self):
@@ -80,7 +90,6 @@ class Strategy(_BaseStrategy):
 class Sizer:
     """Base class for strategy sizing logic."""
     def __init__(self, *args, **kwargs):
-        from tradelearn.backtest.base import Params
         cls_params = getattr(self.__class__, 'params', [])
         self.params = self.p = Params(cls_params, **kwargs)
         self.strategy = None
@@ -106,8 +115,6 @@ class CommInfoBase:
     params = ()
     def __init__(self, *args, **kwargs):
         pass
-
-
 
 
 __all__ = [

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Dict
-from tradelearn.backtest.base import BaseAnalyzer
+from tradelearn.backtest.core.models import BaseAnalyzer
 
 class Analyzer(BaseAnalyzer):
     """Base analyzer class attached through Cerebro.addanalyzer."""

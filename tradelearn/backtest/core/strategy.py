@@ -5,16 +5,16 @@ from tradelearn.backtest.core.models import Order, Position
 class Strategy:
     """Minimalist strategy base class for core execution."""
     def __init__(self, *args, **kwargs) -> None:
-        self._sizers: Dict[Any, Any] = {}
-        self._sizer: Any = None # Primary/default sizer
-        self._positions: Dict[Any, Any] = {}
-        self._pending_size: Dict[Any, float] = {}
-        self.datas: List[Any] = []
-        self.data: Any = None
-        self.broker: Any = None
-        self.analyzers: Dict[str, Any] = {}
-        self._indicators: List[Any] = []
-        self._manual_min_period = 0
+        if not hasattr(self, '_sizers'): self._sizers = {}
+        if not hasattr(self, '_sizer'): self._sizer = None 
+        if not hasattr(self, '_positions'): self._positions = {}
+        if not hasattr(self, '_pending_size'): self._pending_size = {}
+        if not hasattr(self, 'datas'): self.datas = []
+        if not hasattr(self, 'data'): self.data = None
+        if not hasattr(self, 'broker'): self.broker = None
+        if not hasattr(self, 'analyzers'): self.analyzers = {}
+        if not hasattr(self, '_indicators'): self._indicators = []
+        if not hasattr(self, '_manual_min_period'): self._manual_min_period = 0
 
     def start(self): pass
     def prenext(self): pass
@@ -31,6 +31,8 @@ class Strategy:
 
     def getposition(self, data: Any = None) -> Position:
         data = data or self.data
+        if self.broker and hasattr(self.broker, 'getposition'):
+            return self.broker.getposition(data)
         if data not in self._positions:
             self._positions[data] = Position()
         return self._positions[data]
@@ -54,7 +56,6 @@ class Strategy:
         data = data or self.data
         if size is None: size = self.getsizing(data, isbuy=True)
         actual_size = float(abs(size))
-        print(f"DEBUG: CoreStrategy.buy size={actual_size}")
         self._pending_size[data] = self._pending_size.get(data, 0.0) + actual_size
         return self.broker._submit(self, data, Order.Buy, actual_size, price, exectype, **kwargs)
 
@@ -62,7 +63,6 @@ class Strategy:
         data = data or self.data
         if size is None: size = self.getsizing(data, isbuy=False)
         actual_size = float(abs(size))
-        print(f"DEBUG: CoreStrategy.sell size={actual_size}")
         self._pending_size[data] = self._pending_size.get(data, 0.0) - actual_size
         return self.broker._submit(self, data, Order.Sell, actual_size, price, exectype, **kwargs)
 
@@ -71,7 +71,6 @@ class Strategy:
         pos = self.getposition(data)
         pending = self._pending_size.get(data, 0.0)
         effective_size = pos.size + pending
-        print(f"DEBUG: CoreStrategy.close pos={pos.size}, pending={pending}")
         if effective_size > 0:
             return self.sell(data=data, size=size or abs(effective_size), **kwargs)
         elif effective_size < 0:
@@ -88,7 +87,6 @@ class Strategy:
         old_price = pos.price
         
         # Avoid double-update if strategy.getposition returns the same object as broker.getposition
-        # (which is the case in the Backtrader compatibility facade)
         broker_pos = getattr(self.broker, 'getposition', lambda d: None)(data)
         if pos is not broker_pos:
             pos.update(signed_size, price)
@@ -98,14 +96,16 @@ class Strategy:
         # Simple Trade tracking for notification
         if old_size != 0 and (old_size * new_size <= 0):
             # Trade closed or flipped
-            from tradelearn.backtest.models import Trade
+            from tradelearn.backtest.core.models import Trade
             trade = Trade(data=data, size=old_size, price=old_price, status=Trade.Closed)
-            # In a real engine we would calculate PnL correctly here.
-            # For now we just notify so benchmark can capture it.
             trade.pnl = (price - old_price) * old_size * getattr(self.broker, '_mult', 1.0)
             trade.pnlcomm = trade.pnl # Simplified
             trade.isclosed = True
             self.notify_trade(trade)
+
+    def _register_indicator(self, indicator: Any):
+        if indicator not in self._indicators:
+            self._indicators.append(indicator)
 
     def __len__(self) -> int:
         if self.data is not None:

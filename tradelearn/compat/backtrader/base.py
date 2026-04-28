@@ -15,24 +15,14 @@ class _GlobalContext:
 
 _G = _GlobalContext()
 
-_CURRENT_DATA = None
-_CURRENT_DATAS = []
-_CURRENT_STRATEGY = None
-
 def set_current_data(data: Any) -> None:
-    global _CURRENT_DATA
     _G.current_data = data
-    _CURRENT_DATA = data
 
 def set_current_datas(datas: List[Any]) -> None:
-    global _CURRENT_DATAS
     _G.current_datas = datas
-    _CURRENT_DATAS = datas
 
 def set_current_strategy(strategy: Any) -> None:
-    global _CURRENT_STRATEGY
     _G.current_strategy = strategy
-    _CURRENT_STRATEGY = strategy
 
 class MetaParams(type):
     """Metaclass to handle Backtrader-style parameter stripping and lifecycle hooks."""
@@ -81,7 +71,7 @@ class MetaParams(type):
             
         # 5.5 Register Indicator to Strategy
         # 5.5 Register Indicator to Strategy
-        if _G.current_strategy and not isinstance(instance, CoreStrategy):
+        if _G.current_strategy is not None and not isinstance(instance, CoreStrategy):
              if hasattr(_G.current_strategy, '_register_indicator'):
                  _G.current_strategy._register_indicator(instance)
 
@@ -94,7 +84,6 @@ class MetaParams(type):
                 set_current_strategy(instance)
                 if hasattr(instance, 'data'):
                     set_current_data(instance.data)
-                print(f"DEBUG: Strategy {cls.__name__} set context data: {instance.data}")
 
             sig = inspect.signature(cls.__init__)
             params = list(sig.parameters.values())[1:] # Skip 'self'
@@ -109,8 +98,7 @@ class MetaParams(type):
             set_current_strategy(prev_strat)
             set_current_data(prev_data)
             
-        # 7. Register Indicator
-        if prev_strat and not isinstance(instance, prev_strat.__class__):
+        if prev_strat is not None and not isinstance(instance, prev_strat.__class__):
             if hasattr(instance, 'lines') and hasattr(prev_strat, '_register_indicator'):
                 prev_strat._register_indicator(instance)
 
@@ -131,11 +119,21 @@ class LineRoot(metaclass=MetaParams):
             self.lines = Lines(self)
         self.l = self.lines
         
+        # Initialize line placeholders if class defines 'lines'
         line_names = getattr(self.__class__, 'lines', [])
         if isinstance(line_names, (list, tuple)):
             for name in line_names:
                 if not hasattr(self.lines, name):
                     setattr(self.lines, name, None)
+
+        # Initialize core strategy state if this is a strategy
+        if hasattr(self, 'next') and not hasattr(self, '_positions'):
+            self._sizers = {}
+            self._sizer = None
+            self._positions = {}
+            self._pending_size = {}
+            self._indicators = []
+            self._manual_min_period = 0
 
     def _advance(self, i: int) -> None:
         if hasattr(self, 'lines'):
@@ -200,7 +198,10 @@ class LineSeries:
     def __len__(self) -> int:
         return self._cursor + 1
 
-    def __getitem__(self, ago: int) -> Any:
+    def __getitem__(self, ago: Any) -> Any:
+        if not isinstance(ago, (int, slice, np.integer)):
+            # Support indexing by data object (common in multi-data strategies)
+            return self
         try:
             return self._values[self._cursor + ago]
         except IndexError:

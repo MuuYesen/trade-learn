@@ -91,8 +91,14 @@ def run_backtest(cerebro: Any) -> List[Any]:
         if hasattr(ana, 'start'): ana.start()
 
     limit = cerebro.datas[0].buflen()
-    # min_period logic (mostly for BT facade)
-    min_period = int(getattr(strategy, '_min_period', 0))
+    # Calculate min_period from all indicators (mostly for BT facade)
+    min_period = int(getattr(strategy, '_manual_min_period', 0))
+    for ind in indicators + indicators_bt:
+        if hasattr(ind, 'min_period'):
+            m = ind.min_period
+            if callable(m): m = m()
+            min_period = max(min_period, int(m))
+    if min_period == 0: min_period = 1
     
     for i in range(limit):
         # Advance data and indicators
