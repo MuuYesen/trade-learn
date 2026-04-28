@@ -140,45 +140,66 @@ def run_backtest(cerebro: Any) -> List[Any]:
     drain_order_buffer = getattr(broker, 'drain_order_buffer', None) if broker else None
     strategy_next = strategy.next
     
-    def on_bar(i: int, fills: list[Any] | None = None, cash: float | None = None,
-               size: float | None = None, price: float | None = None) -> list[Any]:
-        for advance in bar_advancers:
-            advance(i)
-        
-        # Broker Match
-        if broker:
-            if fills is None:
-                broker_step(i)
-            else:
-                broker._curr_idx = i
-                broker._step_fills_from_collect = fills
-                if cash is not None and size is not None and price is not None:
-                    broker._rust_state_cache = (i, cash, size, price)
-            if fills is None or fills:
-                broker_process_fills(strategy, i)
-            if notify_cashvalue is not None:
-                notify_cashvalue(broker_getcash(), broker_getvalue())
-
-        # Strategy Next
-        if i >= min_period - 1:
-            if begin_order_buffering is not None:
-                begin_order_buffering()
-                strategy_next()
-                if fills is None:
-                    flush_order_buffer()
-                else:
-                    return drain_order_buffer()
-            else:
-                strategy_next()
-        return []
-
     use_rust_bar_loop = (
         isinstance(broker, RustBroker)
         and getattr(broker, "_engine", None) is not None
         and hasattr(broker._engine, "run_bar_loop")
     )
+    min_start = min_period - 1
+
+    def on_bar(i: int) -> list[Any]:
+        for advance in bar_advancers:
+            advance(i)
+        
+        # Broker Match
+        if broker:
+            broker_step(i)
+            broker_process_fills(strategy, i)
+            if notify_cashvalue is not None:
+                notify_cashvalue(broker_getcash(), broker_getvalue())
+
+        # Strategy Next
+        if i >= min_start:
+            if begin_order_buffering is not None:
+                begin_order_buffering()
+                strategy_next()
+                flush_order_buffer()
+            else:
+                strategy_next()
+        return []
+
     if use_rust_bar_loop:
-        broker._engine.run_bar_loop(broker, on_bar, 0, limit)
+        if notify_cashvalue is None:
+            def on_rust_bar(i: int, fills: list[Any], cash: float, size: float, price: float) -> list[Any]:
+                for advance in bar_advancers:
+                    advance(i)
+                broker._curr_idx = i
+                broker._step_fills_from_collect = fills
+                broker._rust_state_cache = (i, cash, size, price)
+                if fills:
+                    broker_process_fills(strategy, i)
+                if i >= min_start:
+                    begin_order_buffering()
+                    strategy_next()
+                    return drain_order_buffer()
+                return []
+        else:
+            def on_rust_bar(i: int, fills: list[Any], cash: float, size: float, price: float) -> list[Any]:
+                for advance in bar_advancers:
+                    advance(i)
+                broker._curr_idx = i
+                broker._step_fills_from_collect = fills
+                broker._rust_state_cache = (i, cash, size, price)
+                if fills:
+                    broker_process_fills(strategy, i)
+                notify_cashvalue(broker_getcash(), broker_getvalue())
+                if i >= min_start:
+                    begin_order_buffering()
+                    strategy_next()
+                    return drain_order_buffer()
+                return []
+
+        broker._engine.run_bar_loop(broker, on_rust_bar, 0, limit)
     else:
         for i in range(limit):
             on_bar(i)
