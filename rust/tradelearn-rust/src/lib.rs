@@ -182,6 +182,23 @@ impl RustBacktestEngine {
         self.map_fills(fills)
     }
 
+    fn step_open_collect(
+        &mut self,
+        cursor: usize,
+        fill_start_idx: usize,
+    ) -> (
+        Vec<(u64, String, f64, f64, f64, f64, f64, i64)>,
+        f64,
+        f64,
+        f64,
+    ) {
+        self.inner.step_open(cursor);
+        let fills = self.get_new_fills(fill_start_idx);
+        let cash = self.inner.get_cash();
+        let (size, price) = self.inner.get_position();
+        (fills, cash, size, price)
+    }
+
     #[pyo3(signature = (side, order_type, size, limit_price=None, stop_price=None))]
     fn submit_order(
         &mut self,

@@ -55,6 +55,7 @@ class RustBroker(BaseBroker):
         self._order_count = 0
         self._last_fill_idx = 0
         self._rust_state_cache: tuple[int, float, float, float] | None = None
+        self._step_fills_from_collect: list[Any] | None = None
         # For 'bt' mode, we maintain state in Python
         self._pos = Position(size=0.0, price=0.0)
         self._active_cash = cash
@@ -204,14 +205,24 @@ class RustBroker(BaseBroker):
     def step(self, i: int) -> None:
         self._curr_idx = i
         self._rust_state_cache = None
+        self._step_fills_from_collect = None
         if self._uses_rust_matching():
-            self._engine.step_open(i)
-            self._rust_state_cache = None
+            if hasattr(self._engine, "step_open_collect"):
+                fills, cash, size, price = self._engine.step_open_collect(i, self._last_fill_idx)
+                self._step_fills_from_collect = fills
+                self._rust_state_cache = (self._curr_idx, cash, size, price)
+            else:
+                self._engine.step_open(i)
+                self._rust_state_cache = None
 
     def process_fills(self, strategy: Strategy, i: int) -> None:
         """Synchronize filled orders back to Python."""
         if self._uses_rust_matching():
-            new_fills = self._engine.get_new_fills(self._last_fill_idx)
+            if self._step_fills_from_collect is None:
+                new_fills = self._engine.get_new_fills(self._last_fill_idx)
+            else:
+                new_fills = self._step_fills_from_collect
+                self._step_fills_from_collect = []
             if new_fills:
                 for fill in new_fills:
                     order_id, side_str, size, price, comm, _slippage, pnl = fill[:7]

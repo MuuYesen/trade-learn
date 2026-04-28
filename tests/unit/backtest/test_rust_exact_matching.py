@@ -167,6 +167,43 @@ def test_rust_broker_caches_cash_and_position_within_bar() -> None:
     assert engine.position_calls == 1
 
 
+def test_rust_broker_uses_combined_step_snapshot_when_available() -> None:
+    class FakeEngine:
+        def __init__(self) -> None:
+            self.collect_calls = 0
+
+        def step_open_collect(self, cursor: int, fill_start_idx: int):
+            self.collect_calls += 1
+            assert cursor == 0
+            assert fill_start_idx == 0
+            return [], 100.0, 2.0, 10.0
+
+        def step_open(self, cursor: int) -> None:
+            raise AssertionError("step_open should be covered by step_open_collect")
+
+        def get_new_fills(self, start_idx: int):
+            raise AssertionError("fills should come from step_open_collect")
+
+        def get_cash(self) -> float:
+            raise AssertionError("cash should come from step_open_collect")
+
+        def get_position(self) -> tuple[float, float]:
+            raise AssertionError("position should come from step_open_collect")
+
+    engine = FakeEngine()
+    broker = RustBroker(match_mode="exact")
+    broker._engine = engine
+    broker._close_prices = [12.0]
+
+    broker.step(0)
+
+    assert broker.getcash() == 100.0
+    assert broker.getposition().size == 2.0
+    assert broker.getposition().price == 10.0
+    assert broker.getvalue() == 124.0
+    assert engine.collect_calls == 1
+
+
 def test_smart_matching_prefers_stop_loss_when_exit_orders_are_ambiguous() -> None:
     data = pd.DataFrame(
         {
