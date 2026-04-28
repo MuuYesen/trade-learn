@@ -61,5 +61,5 @@ jobs:
           python-version: "3.12"
       - run: uv sync --group oracle --extra dev
       - run: uv run pytest tests/unit/backtest/test_compat_runner_scripts.py -q
-      - run: uv run python tests/runners/compare_backtesting.py
-      - run: uv run python tests/runners/benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2
+      - run: uv run python benchmarks/runners/compare_backtesting.py
+      - run: uv run python benchmarks/runners/benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2

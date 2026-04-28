@@ -49,8 +49,8 @@
 ```bash
 uv run pytest tests/unit/backtest/test_compat_runner_scripts.py -q
 uv run pytest tests/unit/examples/test_examples_layout.py -q
-uv run python tests/runners/compare_backtesting.py
-uv run python tests/runners/benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2
+uv run python benchmarks/runners/compare_backtesting.py
+uv run python benchmarks/runners/benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2
 ```
 
 ## 最近关键提交

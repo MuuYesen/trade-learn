@@ -6,13 +6,15 @@ from contextlib import contextmanager
 from typing import Any
 
 import pandas as pd
+
 import tradelearn.compat.backtrader as bt
-from examples import QuickstartSmaCross
-from tradelearn.backtest.analyzers import MLflowAnalyzer
+from examples.backtrader import QuickstartSmaCross
+from scripts.examples.ml_strategy import prepare_ml_data as build_alpha101_features
+from scripts.examples.ml_strategy import run_example as run_ml_example
+from tradelearn.compat.backtrader.analyzers import MLflowAnalyzer
 from tradelearn.core.config import TradelearnConfig
 from tradelearn.lab import build_lab_plan
-from tests.runners.ml_strategy import prepare_ml_data as build_alpha101_features
-from tests.runners.ml_strategy import run_example as run_ml_example
+
 
 def run_quickstart() -> dict[str, Any]:
     """Run the quickstart strategy and return a compact result summary."""
@@ -37,9 +39,36 @@ def run_quickstart() -> dict[str, Any]:
 
 def _sample_bars() -> pd.DataFrame:
     close = [
-        10.0, 10.3, 10.1, 10.8, 11.4, 10.7, 9.9, 9.4, 10.2, 11.1,
-        12.0, 11.2, 10.4, 9.8, 10.5, 11.5, 12.6, 11.7, 10.8, 10.0,
-        10.9, 12.0, 13.1, 12.2, 11.1, 10.3, 11.3, 12.5, 13.8, 12.6,
+        10.0,
+        10.3,
+        10.1,
+        10.8,
+        11.4,
+        10.7,
+        9.9,
+        9.4,
+        10.2,
+        11.1,
+        12.0,
+        11.2,
+        10.4,
+        9.8,
+        10.5,
+        11.5,
+        12.6,
+        11.7,
+        10.8,
+        10.0,
+        10.9,
+        12.0,
+        13.1,
+        12.2,
+        11.1,
+        10.3,
+        11.3,
+        12.5,
+        13.8,
+        12.6,
     ]
     return pd.DataFrame(
         {

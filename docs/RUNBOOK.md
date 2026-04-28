@@ -91,13 +91,13 @@ uv run pytest --doctest-modules tradelearn/  # docstring 示例
 
 ```bash
 # backtesting.py 对齐与 bars/s 吞吐
-uv run python tests/runners/compare_backtesting.py
+uv run python benchmarks/runners/compare_backtesting.py
 
 # Backtrader 8 个迁移策略数值对齐
-uv run python tests/runners/benchmark_bt.py
+uv run python benchmarks/runners/benchmark_bt.py
 
 # CI 使用的稳定性能口径: warmup + repeat median,低于阈值或非 EXACT 会失败
-uv run python tests/runners/benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2
+uv run python benchmarks/runners/benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2
 ```
 
 说明:

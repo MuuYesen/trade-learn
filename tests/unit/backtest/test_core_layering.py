@@ -89,3 +89,12 @@ def test_rust_core_is_split_by_runtime_responsibility() -> None:
 
     assert actual_modules == expected_modules
     assert not (rust_src / "core.rs").exists()
+
+
+def test_runnable_tools_are_not_kept_under_tests() -> None:
+    root = Path(__file__).parents[3]
+
+    assert not (root / "tests" / "runners").exists()
+    assert (root / "benchmarks" / "runners" / "benchmark_bt.py").exists()
+    assert (root / "benchmarks" / "runners" / "compare_backtesting.py").exists()
+    assert (root / "scripts" / "examples" / "ml_strategy.py").exists()

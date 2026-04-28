@@ -114,7 +114,7 @@ EventRunner.on_bar() / on_broker_event()
 ```python
 # 核心用户 API
 from tradelearn.backtest import Cerebro, Strategy, Analyzer
-from tradelearn.backtest.analyzers import MLflowAnalyzer
+from tradelearn.compat.backtrader.analyzers import MLflowAnalyzer
 from tradelearn.data import Query
 from tradelearn import ta                         # ta.sma, ta.rsi
 from tradelearn.indicators import tdx, tv          # 或直接 ta.tdx / ta.tv

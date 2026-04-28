@@ -1,23 +1,23 @@
 """
 Generic Runner for verifying Backtrader strategy compatibility.
-Usage: PYTHONPATH=. python tests/runners/compat_test.py <strategy_name>
-Example: PYTHONPATH=. python tests/runners/compat_test.py TurtleStrategy
+Usage: PYTHONPATH=. python scripts/examples/compat_test.py <strategy_name>
+Example: PYTHONPATH=. python scripts/examples/compat_test.py TurtleStrategy
 """
 
 import sys
+
 import pandas as pd
+
 import tradelearn.compat.backtrader as bt
-from examples import (
-    SmaCross, 
-    Alpha101GBMStrategy, 
-    RandomForestRotation, 
-    QuickstartSmaCross, 
-    MigratedSmaCross,
-    Turtle,
-    EnhancedRSI,
+from examples.backtrader import (
     BetterMA,
+    EnhancedRSI,
     MacdTharp,
-    OrderExecutionStrategy
+    MigratedSmaCross,
+    OrderExecutionStrategy,
+    QuickstartSmaCross,
+    SmaCross,
+    Turtle,
 )
 
 # Map of strategy names to classes (focused on Backtrader compatibility)
@@ -25,13 +25,13 @@ STRATEGIES = {
     "SmaCross": SmaCross,
     "QuickstartSmaCross": QuickstartSmaCross,
     "MigratedSmaCross": MigratedSmaCross,
-
     "Turtle": Turtle,
     "EnhancedRSI": EnhancedRSI,
     "BetterMA": BetterMA,
     "MacdTharp": MacdTharp,
     "OrderExecutionStrategy": OrderExecutionStrategy,
 }
+
 
 def run_compat_test(strategy_name: str):
     if strategy_name not in STRATEGIES:
@@ -40,16 +40,16 @@ def run_compat_test(strategy_name: str):
         return
 
     print(f"--- Running Compatibility Test: {strategy_name} ---")
-    
+
     # 1. Setup Cerebro
     cerebro = bt.Cerebro()
-    
+
     # 2. Add Data
     try:
         df = pd.read_parquet("tests/data/AAPL.parquet")
         data = bt.feeds.PandasData(dataname=df, name="AAPL")
         cerebro.adddata(data)
-        
+
         # Some strategies (like EnhancedRSI) might expect a second data feed
         if strategy_name == "EnhancedRSI":
             df2 = pd.read_parquet("tests/data/GOOG.parquet")
@@ -61,18 +61,19 @@ def run_compat_test(strategy_name: str):
 
     # 3. Add Strategy
     cerebro.addstrategy(STRATEGIES[strategy_name])
-    
+
     # 4. Configure Broker
     cerebro.broker.setcash(100000.0)
-    
+
     # 5. Run
     print("Starting Backtest...")
     cerebro.run()
-    
+
     # 6. Result
     final_value = cerebro.broker.getvalue()
     print(f"Final Portfolio Value: {final_value:.2f}")
     print("--- Test Completed Successfully ---\n")
+
 
 if __name__ == "__main__":
     if len(sys.argv) >= 2:
@@ -88,6 +89,5 @@ if __name__ == "__main__":
                 success_count += 1
             except Exception as e:
                 print(f"FAILED: {name} - Error: {e}\n")
-        
-        print(f"Full Sweep Completed: {success_count}/{len(STRATEGIES)} strategies passed.")
 
+        print(f"Full Sweep Completed: {success_count}/{len(STRATEGIES)} strategies passed.")

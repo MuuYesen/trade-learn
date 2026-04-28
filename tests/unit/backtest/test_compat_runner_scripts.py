@@ -4,14 +4,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tests.runners.benchmark_bt import _benchmark_passed
+from benchmarks.runners.benchmark_bt import _benchmark_passed
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_backtrader_benchmark_runner_completes() -> None:
     result = subprocess.run(
-        [sys.executable, "tests/runners/benchmark_bt.py"],
+        [sys.executable, "benchmarks/runners/benchmark_bt.py"],
         cwd=ROOT,
         check=False,
         capture_output=True,
@@ -53,7 +53,7 @@ def test_backtrader_benchmark_gate_enforces_exact_and_min_speedup() -> None:
 
 def test_backtesting_compare_results_runner_completes() -> None:
     result = subprocess.run(
-        [sys.executable, "tests/runners/compare_backtesting.py"],
+        [sys.executable, "benchmarks/runners/compare_backtesting.py"],
         cwd=ROOT,
         check=False,
         capture_output=True,

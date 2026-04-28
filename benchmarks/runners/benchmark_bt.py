@@ -61,36 +61,41 @@ def run_strategy_in_process(
         import io
         import time
         import types
+
         if engine_type == "Tradelearn":
             import tradelearn.compat.backtrader as bt
         else:
             import backtrader as bt
-            sys.modules['tradelearn'] = types.ModuleType("tradelearn")
-            sys.modules['tradelearn.compat'] = types.ModuleType("tradelearn.compat")
-            sys.modules['tradelearn.compat.backtrader'] = bt
-        
+
+            sys.modules["tradelearn"] = types.ModuleType("tradelearn")
+            sys.modules["tradelearn.compat"] = types.ModuleType("tradelearn.compat")
+            sys.modules["tradelearn.compat.backtrader"] = bt
+
         module = importlib.import_module(f"examples.backtrader.{mod_name}")
         importlib.reload(module)
         strategy_cls = getattr(module, cls_name)
-        
+
         # Inject logging into the strategy class
         def notify_trade(self, trade):
             if trade.isclosed:
-                self.audit_log.append({
-                    "pnl": trade.pnl,
-                    "pnlcomm": trade.pnlcomm,
-                    "price": trade.price,
-                    "size": trade.size,
-                    "dt": self.data.datetime.date(0).isoformat()
-                })
-        
+                self.audit_log.append(
+                    {
+                        "pnl": trade.pnl,
+                        "pnlcomm": trade.pnlcomm,
+                        "price": trade.price,
+                        "size": trade.size,
+                        "dt": self.data.datetime.date(0).isoformat(),
+                    }
+                )
+
         strategy_cls.notify_trade = notify_trade
         strategy_cls.audit_log = []
-        
+
         dataframe = pd.read_parquet(DATA_PATH)
         if engine_type == "Tradelearn":
             from tradelearn.compat.backtrader import DataFeed
         else:
+
             class PandasData(bt.feeds.PandasData):
                 params = (
                     ("datetime", None),
@@ -101,7 +106,7 @@ def run_strategy_in_process(
                     ("volume", "volume"),
                     ("openinterest", None),
                 )
-        
+
         repeats = max(1, int(repeats))
         warmup = max(0, int(warmup))
         suppress_run_output = warmup > 0 or repeats > 1
@@ -136,19 +141,21 @@ def run_strategy_in_process(
                 trades = list(strats[0].audit_log)
 
         elapsed_ms = statistics.median(timings)
-        
-        queue.put({
-            "status": "success",
-            "final_value": final_value,
-            "elapsed_ms": elapsed_ms,
-            "trades": trades,
-            "timings_ms": timings,
-        })
+
+        queue.put(
+            {
+                "status": "success",
+                "final_value": final_value,
+                "elapsed_ms": elapsed_ms,
+                "trades": trades,
+                "timings_ms": timings,
+            }
+        )
     except Exception as e:
         import traceback
-        queue.put({
-            "status": "error", "error": str(e), "traceback": traceback.format_exc()
-        })
+
+        queue.put({"status": "error", "error": str(e), "traceback": traceback.format_exc()})
+
 
 def run_benchmark(
     match_mode="smart",
@@ -156,20 +163,20 @@ def run_benchmark(
     warmup: int = 0,
     min_speedup: float = 0.0,
 ) -> bool:
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     timing_label = "median" if repeats > 1 else "single run"
     print(
         f"ULTIMATE NUMERICAL AUDIT: Tradelearn ({match_mode}) vs Backtrader "
         f"[{timing_label}, repeats={repeats}, warmup={warmup}]"
     )
-    print(f"{'='*80}")
-    
+    print(f"{'=' * 80}")
+
     final_results = {}
 
     for mod_name in TARGET_STRATEGIES:
         cls_name = STRATEGY_CLASSES[mod_name]
         print(f"\nAudit {cls_name} ...")
-        
+
         results = {}
         for engine in ["Tradelearn", "Backtrader"]:
             queue = Queue()
@@ -187,13 +194,13 @@ def run_benchmark(
             else:
                 print(f"  [{engine}] FAILED: {res['error']}")
                 results[engine] = None
-        
+
         tl, bt_res = results.get("Tradelearn"), results.get("Backtrader")
         if tl and bt_res:
             diff = tl["final_value"] - bt_res["final_value"]
             status = "✅ EXACT" if abs(diff) < EXACT_TOLERANCE else f"❌ DIFF: {diff:.4f}"
             print(f"  Result: {tl['final_value']:.2f} vs {bt_res['final_value']:.2f} | {status}")
-            
+
             if abs(diff) >= EXACT_TOLERANCE:
                 print("  [DIVERGENCE DETECTED]")
                 # Compare trades to find the first split
@@ -214,10 +221,10 @@ def run_benchmark(
                         break
                 if len(t1) != len(t2):
                     print(f"  Trade count mismatch: TL={len(t1)}, BT={len(t2)}")
-        
+
         final_results[cls_name] = results
 
-    print(f"\n\n{'='*120}")
+    print(f"\n\n{'=' * 120}")
     comparable_to_previous = repeats == 1 and warmup == 0
     prev_header = "vs Prev TL" if comparable_to_previous else "vs Prev TL*"
     print(
@@ -225,7 +232,7 @@ def run_benchmark(
         f"{'TL Time':<10} | {'BT Time':<10} | {'Speedup':<10} | "
         f"{prev_header:<11} | {'Status':<10}"
     )
-    print(f"{'-'*136}")
+    print(f"{'-' * 136}")
     for cls_name, res in final_results.items():
         tl, bt_res = res.get("Tradelearn"), res.get("Backtrader")
         if tl and bt_res:
@@ -249,7 +256,7 @@ def run_benchmark(
                 f"{t_bt:>7.1f}ms | {speedup:>8.1f}x | "
                 f"{improvement_text:>11} | {status:<10}"
             )
-    print(f"{'='*136}\n")
+    print(f"{'=' * 136}\n")
     if not comparable_to_previous:
         print(
             "* Warm/repeated runs are not directly comparable with the saved single-run "
