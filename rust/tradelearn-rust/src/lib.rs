@@ -199,6 +199,36 @@ impl RustBacktestEngine {
         (fills, cash, size, price)
     }
 
+    fn run_bar_loop(
+        &mut self,
+        py: Python<'_>,
+        broker: Py<PyAny>,
+        on_bar: Py<PyAny>,
+        start: usize,
+        end: usize,
+    ) -> PyResult<()> {
+        let stop = end.min(self.inner.total_bars());
+        for cursor in start..stop {
+            let fill_records = self.inner.step_open(cursor);
+            let fills = self.map_fills(fill_records);
+            let cash = self.inner.get_cash();
+            let (size, price) = self.inner.get_position();
+            let drained = on_bar.call1(py, (cursor, fills, cash, size, price))?;
+            let orders: Vec<(u64, String, String, f64, Option<f64>, Option<f64>)> =
+                drained.extract(py)?;
+
+            for (provisional_ref, side, order_type, order_size, limit_price, stop_price) in orders {
+                let side = parse_order_side(&side)?;
+                let order_type = parse_order_type(&order_type)?;
+                let order_id =
+                    self.inner
+                        .submit_order(side, order_type, order_size, limit_price, stop_price);
+                broker.call_method1(py, "bind_rust_order_ref", (provisional_ref, order_id))?;
+            }
+        }
+        Ok(())
+    }
+
     #[pyo3(signature = (side, order_type, size, limit_price=None, stop_price=None))]
     fn submit_order(
         &mut self,
@@ -306,6 +336,28 @@ impl RustBacktestEngine {
                 )
             })
             .collect()
+    }
+}
+
+fn parse_order_side(side: &str) -> PyResult<OrderSide> {
+    match side {
+        "buy" => Ok(OrderSide::Buy),
+        "sell" => Ok(OrderSide::Sell),
+        other => Err(PyValueError::new_err(format!(
+            "unsupported order side: {other}"
+        ))),
+    }
+}
+
+fn parse_order_type(order_type: &str) -> PyResult<OrderType> {
+    match order_type {
+        "market" => Ok(OrderType::Market),
+        "limit" => Ok(OrderType::Limit),
+        "stop" => Ok(OrderType::Stop),
+        "stop_limit" => Ok(OrderType::StopLimit),
+        other => Err(PyValueError::new_err(format!(
+            "unsupported order type: {other}"
+        ))),
     }
 }
 

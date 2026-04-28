@@ -286,6 +286,51 @@ def test_backtest_engine_buffers_orders_while_strategy_next_runs() -> None:
     assert strategy.position.size == 1.0
 
 
+def test_rust_bar_loop_submits_drained_orders_after_python_callback() -> None:
+    engine = _rust.RustBacktestEngine(
+        [1, 2],
+        [10.0, 11.0],
+        [10.0, 11.0],
+        [10.0, 11.0],
+        [10.0, 11.0],
+        [1000.0, 1000.0],
+        100.0,
+        0.0,
+        False,
+        False,
+        False,
+        0.0,
+        0.0,
+        False,
+        False,
+        False,
+    )
+
+    class BrokerRefSink:
+        def __init__(self) -> None:
+            self.bound: list[tuple[int, int]] = []
+
+        def bind_rust_order_ref(self, provisional_ref: int, rust_ref: int) -> None:
+            self.bound.append((provisional_ref, rust_ref))
+
+    broker = BrokerRefSink()
+    seen: list[tuple[int, list]] = []
+
+    def on_bar(cursor, fills, cash, size, price):
+        seen.append((cursor, fills))
+        if cursor == 0:
+            return [(99, "buy", "market", 1.0, None, None)]
+        return []
+
+    engine.run_bar_loop(broker, on_bar, 0, 2)
+
+    assert broker.bound == [(99, 1)]
+    assert seen[0] == (0, [])
+    assert seen[1][0] == 1
+    assert seen[1][1][0][:5] == (1, "buy", 1.0, 11.0, 0.0)
+    assert engine.get_position() == (1.0, 11.0)
+
+
 def test_smart_matching_prefers_stop_loss_when_exit_orders_are_ambiguous() -> None:
     data = pd.DataFrame(
         {
