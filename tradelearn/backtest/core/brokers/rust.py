@@ -307,18 +307,7 @@ class RustBroker(BaseBroker):
                 new_fills = self._step_fills_from_collect
                 self._step_fills_from_collect = []
             if new_fills:
-                for fill in new_fills:
-                    order_id, side_str, size, price, comm, _slippage, pnl = fill[:7]
-                    matched_order = self._orders_by_ref.get(order_id)
-                    if matched_order:
-                        matched_order.status = Order.Completed
-                        abs_size = abs(size)
-                        matched_order.executed = ExecutedInfo(
-                            price=price, size=abs_size, comm=comm,
-                            value=abs_size * price * self._mult,
-                        )
-                        self._sync_python_fill_state(strategy, matched_order, size, price, pnl)
-                        _notify_order(strategy, matched_order)
+                self._process_rust_fills_batch(strategy, new_fills)
                 self._last_fill_idx += len(new_fills)
         else:
             # BT Mode: Naive matching in Python
@@ -412,3 +401,45 @@ class RustBroker(BaseBroker):
             trade.pnlcomm = pnl
             trade.isclosed = True
             strategy.notify_trade(trade)
+
+    def _process_rust_fills_batch(self, strategy: Strategy, fills: list[Any]) -> None:
+        """Synchronize a batch of Rust fills while preserving notification order."""
+        orders_by_ref_get = self._orders_by_ref.get
+        pending_size = strategy._pending_size
+        pos = self._pos
+        notify_order = strategy.notify_order
+        notify_trade = strategy.notify_trade
+        mult = self._mult
+
+        for fill in fills:
+            order_id, _side_str, signed_size, price, comm, _slippage, pnl = fill[:7]
+            order = orders_by_ref_get(order_id)
+            if order is None:
+                continue
+
+            order.status = Order.Completed
+            abs_size = abs(signed_size)
+            order.executed = ExecutedInfo(
+                price=price,
+                size=abs_size,
+                comm=comm,
+                value=abs_size * price * mult,
+            )
+
+            data = order.data
+            pending = pending_size.get(data, 0.0) - signed_size
+            pending_size[data] = 0.0 if abs(pending) < 1e-9 else pending
+
+            old_size = pos.size
+            old_price = pos.price
+            pos.update(signed_size, price)
+            new_size = pos.size
+
+            if old_size != 0 and (old_size * new_size <= 0):
+                trade = Trade(data=data, size=old_size, price=old_price, status=Trade.Closed)
+                trade.pnl = pnl
+                trade.pnlcomm = pnl
+                trade.isclosed = True
+                notify_trade(trade)
+
+            notify_order(order)

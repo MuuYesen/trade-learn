@@ -275,6 +275,51 @@ def test_rust_broker_can_bind_order_refs_in_batch() -> None:
     assert broker._orders_by_ref[12] is second
 
 
+def test_rust_broker_processes_rust_fills_with_batch_sync() -> None:
+    data = object()
+
+    class FakeEngine:
+        def get_new_fills(self, start_idx: int):
+            assert start_idx == 0
+            return [
+                (1, "buy", 1.0, 10.0, 0.0, 0.0, 0.0),
+                (2, "sell", -1.0, 11.0, 0.0, 0.0, 1.0),
+            ]
+
+    class FakeStrategy:
+        def __init__(self) -> None:
+            self._pending_size = {data: 0.0}
+            self.orders = []
+            self.trades = []
+
+        def notify_order(self, order) -> None:
+            self.orders.append((order.ref, order.status, order.executed.price))
+
+        def notify_trade(self, trade) -> None:
+            self.trades.append((trade.size, trade.price, trade.pnl))
+
+    broker = RustBroker(match_mode="exact")
+    broker._engine = FakeEngine()
+    first = Order(ref=1, data=data, ordtype=Order.Buy, size=1.0)
+    second = Order(ref=2, data=data, ordtype=Order.Sell, size=1.0)
+    broker._orders_by_ref = {1: first, 2: second}
+
+    def fail_old_sync(*args, **kwargs):
+        raise AssertionError("process_fills should use the batch Rust fill sync path")
+
+    broker._sync_python_fill_state = fail_old_sync
+    strategy = FakeStrategy()
+
+    broker.process_fills(strategy, 1)
+
+    assert strategy.orders == [
+        (1, Order.Completed, 10.0),
+        (2, Order.Completed, 11.0),
+    ]
+    assert strategy.trades == [(1.0, 10.0, 1.0)]
+    assert broker._last_fill_idx == 2
+
+
 def test_backtest_engine_buffers_orders_while_strategy_next_runs() -> None:
     data = pd.DataFrame(
         {
