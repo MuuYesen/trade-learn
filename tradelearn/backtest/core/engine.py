@@ -63,7 +63,8 @@ def run_backtest(cerebro: Any) -> List[Any]:
             float(cerebro.broker.commission_ratio),
             False, False, False, 
             0.0, 0.0, False, False, False, 
-            float(cerebro.broker._mult), 1.0
+            float(cerebro.broker._mult), 1.0,
+            cerebro.broker.match_mode == "smart",
         )
         cerebro.broker._engine = rust_engine
         cerebro.broker._open_prices = opens

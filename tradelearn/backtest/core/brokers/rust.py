@@ -9,6 +9,7 @@ from tradelearn.backtest.core.models import (
     ExecutedInfo,
     Order,
     Position,
+    Trade,
     _notify_order,
 )
 
@@ -26,14 +27,21 @@ class CommInfo:
 class RustBroker(BaseBroker):
     """Proxy for the high-performance Rust backtesting engine."""
 
+    _RUST_MATCH_MODES = {"exact", "smart"}
+
     def __init__(
         self,
         cash: float = 100000.0,
         commission: float = 0.0,
         mult: float = 1.0,
-        match_mode: str = 'bt',
+        match_mode: str = 'exact',
     ):
         super().__init__()
+        if match_mode not in self._RUST_MATCH_MODES:
+            raise ValueError(
+                f"Unsupported match_mode={match_mode!r}; expected one of "
+                f"{sorted(self._RUST_MATCH_MODES)}"
+            )
         self._cash = cash
         self.commission_ratio = commission
         self._mult = mult
@@ -50,6 +58,9 @@ class RustBroker(BaseBroker):
         self._active_cash = cash
         self._comminfo: Any = None
 
+    def _uses_rust_matching(self) -> bool:
+        return self.match_mode in self._RUST_MATCH_MODES and self._engine is not None
+
     def set_comminfo(self, comminfo: Any) -> None:
         self._comminfo = comminfo
         if hasattr(comminfo, 'p') and hasattr(comminfo.p, 'mult'):
@@ -58,12 +69,12 @@ class RustBroker(BaseBroker):
             self.commission_ratio = comminfo.p.commission
 
     def getcash(self) -> float:
-        if self.match_mode == 'smart' and self._engine:
+        if self._uses_rust_matching():
             return self._engine.get_cash()
         return self._active_cash
 
     def getvalue(self) -> float:
-        if self.match_mode == 'smart' and self._engine:
+        if self._uses_rust_matching():
             val = self.getcash()
             size, price = self._engine.get_position()
             if size != 0 and self._close_prices is not None:
@@ -80,7 +91,7 @@ class RustBroker(BaseBroker):
         return val
 
     def getposition(self, data: Any = None) -> Position:
-        if self.match_mode == 'smart' and self._engine:
+        if self._uses_rust_matching():
             size, price = self._engine.get_position()
             return Position(size=size, price=price)
         return self._pos
@@ -118,7 +129,7 @@ class RustBroker(BaseBroker):
         order.status = Order.Submitted
         self._orders.append(order)
         
-        if self.match_mode == 'smart' and self._engine:
+        if self._uses_rust_matching():
             side_str = "buy" if is_buy else "sell"
             otypes = {
                 Order.Market: "market",
@@ -177,18 +188,18 @@ class RustBroker(BaseBroker):
 
     def step(self, i: int) -> None:
         self._curr_idx = i
-        if self.match_mode == 'smart' and self._engine:
+        if self._uses_rust_matching():
             self._engine.step_open(i)
             self._engine.step_close(i)
 
     def process_fills(self, strategy: Strategy, i: int) -> None:
         """Synchronize filled orders back to Python."""
-        if self.match_mode == 'smart' and self._engine:
+        if self._uses_rust_matching():
             all_fills = self._engine.get_fills()
             if all_fills and len(all_fills) > self._last_fill_idx:
                 new_fills = all_fills[self._last_fill_idx:]
                 for fill in new_fills:
-                    order_id, side_str, size, price, comm = fill[:5]
+                    order_id, side_str, size, price, comm, _slippage, pnl = fill[:7]
                     matched_order = next((o for o in self._orders if o.ref == order_id), None)
                     if matched_order:
                         matched_order.status = Order.Completed
@@ -197,7 +208,7 @@ class RustBroker(BaseBroker):
                             price=price, size=abs_size, comm=comm, 
                             value=abs_size * price * self._mult
                         )
-                        strategy._on_fill(matched_order.data, size, price)
+                        self._sync_python_fill_state(strategy, matched_order, size, price, pnl)
                         _notify_order(strategy, matched_order)
                 self._last_fill_idx = len(all_fills)
         else:
@@ -266,3 +277,29 @@ class RustBroker(BaseBroker):
                 else:
                     remaining.append(order)
             self._pending_orders = remaining
+
+    def _sync_python_fill_state(
+        self,
+        strategy: Strategy,
+        order: Order,
+        signed_size: float,
+        price: float,
+        pnl: float,
+    ) -> None:
+        """Maintain Python-side fill notifications while Rust owns cash/position state."""
+        data = order.data
+        strategy._pending_size[data] = strategy._pending_size.get(data, 0.0) - signed_size
+        if abs(strategy._pending_size[data]) < 1e-9:
+            strategy._pending_size[data] = 0.0
+
+        old_size = self._pos.size
+        old_price = self._pos.price
+        self._pos.update(signed_size, price)
+        new_size = self._pos.size
+
+        if old_size != 0 and (old_size * new_size <= 0):
+            trade = Trade(data=data, size=old_size, price=old_price, status=Trade.Closed)
+            trade.pnl = pnl
+            trade.pnlcomm = pnl
+            trade.isclosed = True
+            strategy.notify_trade(trade)

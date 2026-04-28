@@ -372,6 +372,21 @@ wheels = [
 ]
 
 [[package]]
+name = "backtesting"
+version = "0.6.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "bokeh" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pandas" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/db/cc/a3bf58f45e1a58c28681fe1f173cdf748bd91e7cde60e3dcc29c8e9aa194/backtesting-0.6.5.tar.gz", hash = "sha256:738a1dee28fc53df2eda35ea2f2d1a1c37ddba01df14223fc9e87d80a1efbc2e", size = 194025 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b3/b6/cf57538b968c5caa60ee626ec8be1c31e420067d2a4cf710d81605356f8c/backtesting-0.6.5-py3-none-any.whl", hash = "sha256:8ac2fa500c8fd83dc783b72957b600653a72687986fe3ca86d6ef6c8b8d74363", size = 192105 },
+]
+
+[[package]]
 name = "backtrader"
 version = "1.9.78.123"
 source = { registry = "https://pypi.org/simple" }
@@ -5914,6 +5929,7 @@ lab = [
 
 [package.dev-dependencies]
 oracle = [
+    { name = "backtesting" },
     { name = "backtrader" },
     { name = "opentdx", marker = "python_full_version >= '3.12'" },
     { name = "tvdatafeed" },
@@ -5958,6 +5974,7 @@ provides-extras = ["lab", "dev", "docs"]
 
 [package.metadata.requires-dev]
 oracle = [
+    { name = "backtesting", specifier = ">=0.6.5" },
     { name = "backtrader" },
     { name = "opentdx", marker = "python_full_version >= '3.12'" },
     { name = "tvdatafeed", git = "https://github.com/rongardF/tvdatafeed.git" },

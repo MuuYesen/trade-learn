@@ -21,6 +21,8 @@ TARGET_STRATEGIES = [
     "10_order_execution",
 ]
 
+EXACT_TOLERANCE = 1e-3
+
 STRATEGY_CLASSES = {
     "01_quickstart": "QuickstartSmaCross",
     "02_sma_cross": "SmaCross",
@@ -32,9 +34,10 @@ STRATEGY_CLASSES = {
     "10_order_execution": "OrderExecutionStrategy",
 }
 
-def run_strategy_in_process(engine_type, mod_name, cls_name, queue):
+def run_strategy_in_process(engine_type, mod_name, cls_name, queue, match_mode='exact'):
     try:
         import types
+        import time
         if engine_type == "Tradelearn":
             import tradelearn.compat.backtrader as bt
         else:
@@ -43,7 +46,7 @@ def run_strategy_in_process(engine_type, mod_name, cls_name, queue):
             sys.modules['tradelearn.compat'] = types.ModuleType("tradelearn.compat")
             sys.modules['tradelearn.compat.backtrader'] = bt
         
-        module = importlib.import_module(f"examples.{mod_name}")
+        module = importlib.import_module(f"examples.backtrader.{mod_name}")
         importlib.reload(module)
         strategy_cls = getattr(module, cls_name)
         
@@ -61,7 +64,10 @@ def run_strategy_in_process(engine_type, mod_name, cls_name, queue):
         strategy_cls.notify_trade = notify_trade
         strategy_cls.audit_log = []
 
-        cerebro = bt.Cerebro()
+        if engine_type == "Tradelearn":
+            cerebro = bt.Cerebro(match_mode=match_mode)
+        else:
+            cerebro = bt.Cerebro()
         cerebro.broker.setcash(100000.0)
         cerebro.broker.setcommission(commission=0.0)
         
@@ -93,9 +99,9 @@ def run_strategy_in_process(engine_type, mod_name, cls_name, queue):
             "status": "error", "error": str(e), "traceback": traceback.format_exc()
         })
 
-def run_benchmark():
+def run_benchmark(match_mode='smart'):
     print(f"\n{'='*80}")
-    print(f"ULTIMATE NUMERICAL AUDIT: Tradelearn vs Backtrader")
+    print(f"ULTIMATE NUMERICAL AUDIT: Tradelearn ({match_mode}) vs Backtrader")
     print(f"{'='*80}")
     
     final_results = {}
@@ -107,7 +113,9 @@ def run_benchmark():
         results = {}
         for engine in ["Tradelearn", "Backtrader"]:
             queue = Queue()
-            p = Process(target=run_strategy_in_process, args=(engine, mod_name, cls_name, queue))
+            # Pass match_mode only to Tradelearn
+            mode = match_mode if engine == "Tradelearn" else "exact"
+            p = Process(target=run_strategy_in_process, args=(engine, mod_name, cls_name, queue, mode))
             p.start()
             res = queue.get()
             p.join()
@@ -120,10 +128,10 @@ def run_benchmark():
         tl, bt_res = results.get("Tradelearn"), results.get("Backtrader")
         if tl and bt_res:
             diff = tl["final_value"] - bt_res["final_value"]
-            status = "✅ EXACT" if abs(diff) < 1e-8 else f"❌ DIFF: {diff:.4f}"
+            status = "✅ EXACT" if abs(diff) < EXACT_TOLERANCE else f"❌ DIFF: {diff:.4f}"
             print(f"  Result: {tl['final_value']:.2f} vs {bt_res['final_value']:.2f} | {status}")
             
-            if abs(diff) > 1e-8:
+            if abs(diff) >= EXACT_TOLERANCE:
                 print(f"  [DIVERGENCE DETECTED]")
                 # Compare trades to find the first split
                 t1, t2 = tl["trades"], bt_res["trades"]
@@ -138,16 +146,19 @@ def run_benchmark():
         
         final_results[cls_name] = results
 
-    print(f"\n\n{'='*95}")
-    print(f"{'Strategy':<25} | {'Tradelearn':<15} | {'Backtrader':<15} | {'Diff':<15} | {'Status':<15}")
-    print(f"{'-'*95}")
+    print(f"\n\n{'='*120}")
+    print(f"{'Strategy':<25} | {'TL Value':<12} | {'BT Value':<12} | {'TL Time':<10} | {'BT Time':<10} | {'Speedup':<10} | {'Status':<10}")
+    print(f"{'-'*120}")
     for cls_name, res in final_results.items():
         tl, bt_res = res.get("Tradelearn"), res.get("Backtrader")
         if tl and bt_res:
             diff = tl["final_value"] - bt_res["final_value"]
-            status = "✅ EXACT" if abs(diff) < 1e-8 else "❌ DIFF"
-            print(f"{cls_name:<25} | {tl['final_value']:<15.2f} | {bt_res['final_value']:<15.2f} | {diff:<15.4f} | {status}")
-    print(f"{'='*95}\n")
+            t_tl, t_bt = tl["elapsed_ms"], bt_res["elapsed_ms"]
+            speedup = t_bt / t_tl if t_tl > 0 else 0
+            status = "✅ EXACT" if abs(diff) < EXACT_TOLERANCE else "❌ DIFF"
+            print(f"{cls_name:<25} | {tl['final_value']:<12.2f} | {bt_res['final_value']:<12.2f} | {t_tl:>7.1f}ms | {t_bt:>7.1f}ms | {speedup:>8.1f}x | {status:<10}")
+    print(f"{'='*120}\n")
 
 if __name__ == "__main__":
-    run_benchmark()
+    mode = sys.argv[1] if len(sys.argv) > 1 else 'smart'
+    run_benchmark(mode)

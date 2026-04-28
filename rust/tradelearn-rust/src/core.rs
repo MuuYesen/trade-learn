@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 pub type Timestamp = i64;
 pub type OrderId = u64;
@@ -145,6 +145,7 @@ pub enum CommissionModel {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ExecutionOptions {
     pub trade_on_close: bool,
+    pub smart_matching: bool,
     pub cheat_on_close: bool,
     pub cheat_on_open: bool,
     pub slip_perc: f64,
@@ -495,6 +496,107 @@ pub fn match_order(
     Some(fill_from_raw_price(order, raw_price, bar, options))
 }
 
+pub fn match_order_smart(
+    order: &OrderEvent,
+    bar: &BarEvent,
+    options: &ExecutionOptions,
+) -> Option<FillEvent> {
+    let raw_price = smart_match_price(order, bar, options)?.1;
+    Some(fill_from_raw_price(order, raw_price, bar, options))
+}
+
+fn smart_match_price(
+    order: &OrderEvent,
+    bar: &BarEvent,
+    options: &ExecutionOptions,
+) -> Option<(f64, f64)> {
+    if options.trade_on_close {
+        if order.order_type == OrderType::Market {
+            return Some((3.0, bar.close));
+        }
+    }
+
+    let path = if bar.close >= bar.open {
+        [bar.open, bar.low, bar.high, bar.close]
+    } else {
+        [bar.open, bar.high, bar.low, bar.close]
+    };
+
+    if order.order_type == OrderType::Market {
+        return Some((0.0, path[0]));
+    }
+
+    let mut stop_limit_armed = false;
+    for (segment_idx, pair) in path.windows(2).enumerate() {
+        let start = pair[0];
+        let end = pair[1];
+        match order.order_type {
+            OrderType::Limit => {
+                let limit = order.limit_price?;
+                if let Some(price) = limit_cross_price(order.side, limit, start, end) {
+                    return Some((smart_segment_rank(segment_idx, start, end, price), price));
+                }
+            }
+            OrderType::Stop => {
+                let stop = order.stop_price?;
+                if let Some(price) = stop_cross_price(order.side, stop, start, end) {
+                    return Some((smart_segment_rank(segment_idx, start, end, price), price));
+                }
+            }
+            OrderType::StopLimit => {
+                let stop = order.stop_price?;
+                let limit = order.limit_price?;
+                if !stop_limit_armed && stop_cross_price(order.side, stop, start, end).is_some() {
+                    stop_limit_armed = true;
+                }
+                if stop_limit_armed {
+                    if let Some(price) = limit_cross_price(order.side, limit, start, end) {
+                        return Some((smart_segment_rank(segment_idx, start, end, price), price));
+                    }
+                }
+            }
+            OrderType::Market => unreachable!(),
+        }
+    }
+    None
+}
+
+fn limit_cross_price(side: OrderSide, limit: f64, start: f64, end: f64) -> Option<f64> {
+    match side {
+        OrderSide::Buy if start <= limit => Some(start),
+        OrderSide::Buy if segment_contains(start, end, limit) => Some(limit),
+        OrderSide::Sell if start >= limit => Some(start),
+        OrderSide::Sell if segment_contains(start, end, limit) => Some(limit),
+        _ => None,
+    }
+}
+
+fn stop_cross_price(side: OrderSide, stop: f64, start: f64, end: f64) -> Option<f64> {
+    match side {
+        OrderSide::Buy if start >= stop => Some(start),
+        OrderSide::Buy if segment_contains(start, end, stop) => Some(stop),
+        OrderSide::Sell if start <= stop => Some(start),
+        OrderSide::Sell if segment_contains(start, end, stop) => Some(stop),
+        _ => None,
+    }
+}
+
+fn segment_contains(start: f64, end: f64, price: f64) -> bool {
+    let low = start.min(end);
+    let high = start.max(end);
+    low <= price && price <= high
+}
+
+fn smart_segment_rank(segment_idx: usize, start: f64, end: f64, price: f64) -> f64 {
+    let span = (end - start).abs();
+    let ratio = if span < f64::EPSILON {
+        0.0
+    } else {
+        (price - start).abs() / span
+    };
+    segment_idx as f64 + ratio
+}
+
 fn calculate_commission(price: f64, size: f64, commission: CommissionModel, mult: f64) -> f64 {
     match commission {
         CommissionModel::Fixed(model) => model.amount,
@@ -512,6 +614,23 @@ fn signed_order_size(order: &OrderEvent) -> f64 {
         OrderSide::Buy => order.size.abs(),
         OrderSide::Sell => -order.size.abs(),
     }
+}
+
+fn smart_order_priority(order: &OrderEvent) -> u8 {
+    match order.order_type {
+        OrderType::Stop => 0,
+        OrderType::StopLimit => 1,
+        OrderType::Market => 2,
+        OrderType::Limit => 3,
+    }
+}
+
+fn is_exit_fill(old_size: f64, fill_size: f64) -> bool {
+    old_size.abs() > 1e-9 && old_size.signum() != fill_size.signum()
+}
+
+fn is_exit_order_for_position(old_size: f64, order: &OrderEvent) -> bool {
+    old_size.abs() > 1e-9 && old_size.signum() != signed_order_size(order).signum()
 }
 
 impl Portfolio {
@@ -763,6 +882,7 @@ impl BacktestEngine {
         slip_out: bool,
         mult: f64,
         margin: f64,
+        smart_matching: bool,
     ) -> Self {
         let total_bars = timestamps.len();
         Self {
@@ -776,6 +896,7 @@ impl BacktestEngine {
             portfolio: Portfolio::new(cash),
             options: ExecutionOptions {
                 trade_on_close,
+                smart_matching,
                 cheat_on_close,
                 cheat_on_open,
                 slip_perc,
@@ -858,8 +979,16 @@ impl BacktestEngine {
         let mut remaining = Vec::new();
         let current_pending = std::mem::take(&mut self.pending);
 
+        if options.smart_matching {
+            return self.match_all_pending_smart(bar, options, current_pending);
+        }
+
         for order in current_pending {
-            if let Some(fill_event) = match_order(&order, bar, options) {
+            if let Some(fill_event) = if options.smart_matching {
+                match_order_smart(&order, bar, options)
+            } else {
+                match_order(&order, bar, options)
+            } {
                 let position = self.portfolio.position(&order.symbol);
                 let old_size = position.map(|p| p.size).unwrap_or(0.0);
                 let old_price = position.map(|p| p.avg_price).unwrap_or(0.0);
@@ -890,6 +1019,95 @@ impl BacktestEngine {
             }
         }
         self.pending = remaining;
+        fills
+    }
+
+    fn match_all_pending_smart(
+        &mut self,
+        bar: &BarEvent,
+        options: &ExecutionOptions,
+        current_pending: Vec<OrderEvent>,
+    ) -> Vec<FillRecord> {
+        let mut fills = Vec::new();
+        let mut candidates = Vec::new();
+
+        for (idx, order) in current_pending.iter().enumerate() {
+            if let Some((rank, raw_price)) = smart_match_price(order, bar, options) {
+                let fill_event = fill_from_raw_price(order, raw_price, bar, options);
+                candidates.push((rank, smart_order_priority(order), idx, fill_event));
+            }
+        }
+        candidates.sort_by(|a, b| {
+            a.0.partial_cmp(&b.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.1.cmp(&b.1))
+                .then(a.2.cmp(&b.2))
+        });
+
+        let mut filled = HashSet::new();
+        let mut canceled = HashSet::new();
+        for (_, _, idx, fill_event) in candidates {
+            if filled.contains(&idx) || canceled.contains(&idx) {
+                continue;
+            }
+            let order = &current_pending[idx];
+            let position = self.portfolio.position(&order.symbol);
+            let old_size = position.map(|p| p.size).unwrap_or(0.0);
+            let old_price = position.map(|p| p.avg_price).unwrap_or(0.0);
+            let was_exit = is_exit_fill(old_size, fill_event.size);
+            let pnl = realized_pnl(
+                old_size,
+                old_price,
+                fill_event.size,
+                fill_event.price,
+                options.mult,
+            );
+
+            self.portfolio.apply_fill(&fill_event, options.mult);
+            let new_size = self
+                .portfolio
+                .position(&order.symbol)
+                .map(|p| p.size)
+                .unwrap_or(0.0);
+
+            let record = FillRecord {
+                order_id: fill_event.order_id,
+                ts: fill_event.ts,
+                side: order.side,
+                size: fill_event.size,
+                price: fill_event.price,
+                commission: fill_event.commission,
+                slippage: fill_event.slippage,
+                pnl,
+            };
+            self.results.fills.push(record.clone());
+            fills.push(record);
+            filled.insert(idx);
+
+            if was_exit && new_size.abs() < 1e-9 {
+                for (other_idx, other) in current_pending.iter().enumerate() {
+                    if other_idx != idx
+                        && other.symbol == order.symbol
+                        && other.side == order.side
+                        && is_exit_order_for_position(old_size, other)
+                    {
+                        canceled.insert(other_idx);
+                    }
+                }
+            }
+        }
+
+        self.pending = current_pending
+            .into_iter()
+            .enumerate()
+            .filter_map(|(idx, order)| {
+                if filled.contains(&idx) || canceled.contains(&idx) {
+                    None
+                } else {
+                    Some(order)
+                }
+            })
+            .collect();
         fills
     }
 

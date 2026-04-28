@@ -1,6 +1,7 @@
 use _rust::core::{
-    match_order, BarEvent, CommissionModel, ExecutionOptions, FixedCommission, FixedSlippage,
-    OrderEvent, OrderSide, OrderType, PercentCommission, PercentSlippage, SlippageModel,
+    match_order, match_order_smart, BarEvent, CommissionModel, ExecutionOptions, FixedCommission,
+    FixedSlippage, OrderEvent, OrderSide, OrderType, PercentCommission, PercentSlippage,
+    SlippageModel,
 };
 
 fn assert_close(actual: f64, expected: f64) {
@@ -38,8 +39,18 @@ fn order(order_type: OrderType, side: OrderSide) -> OrderEvent {
 fn options() -> ExecutionOptions {
     ExecutionOptions {
         trade_on_close: false,
+        smart_matching: false,
+        cheat_on_close: false,
+        cheat_on_open: false,
+        slip_perc: 0.0,
+        slip_fixed: 0.0,
+        slip_match: true,
+        slip_limit: true,
+        slip_out: false,
         slippage: SlippageModel::Fixed(FixedSlippage { amount: 0.0 }),
         commission: CommissionModel::Fixed(FixedCommission { amount: 0.0 }),
+        mult: 1.0,
+        margin: 1.0,
     }
 }
 
@@ -151,4 +162,30 @@ fn fill_precision_is_frozen_after_slippage_before_commission() {
     assert_eq!(fill.price, 10.000001);
     assert_eq!(fill.slippage, 0.000001);
     assert_eq!(fill.commission, 0.033333);
+}
+
+#[test]
+fn smart_matching_follows_bullish_open_low_high_close_path() {
+    let mut buy_limit = order(OrderType::Limit, OrderSide::Buy);
+    buy_limit.limit_price = Some(9.0);
+    let mut sell_limit = order(OrderType::Limit, OrderSide::Sell);
+    sell_limit.limit_price = Some(11.0);
+    let mut sell_stop = order(OrderType::Stop, OrderSide::Sell);
+    sell_stop.stop_price = Some(8.5);
+    let mut buy_stop = order(OrderType::Stop, OrderSide::Buy);
+    buy_stop.stop_price = Some(11.5);
+
+    let buy_limit_fill =
+        match_order_smart(&buy_limit, &bar(), &options()).expect("buy limit fills on low leg");
+    let sell_limit_fill =
+        match_order_smart(&sell_limit, &bar(), &options()).expect("sell limit fills on high leg");
+    let sell_stop_fill =
+        match_order_smart(&sell_stop, &bar(), &options()).expect("sell stop fills on low leg");
+    let buy_stop_fill =
+        match_order_smart(&buy_stop, &bar(), &options()).expect("buy stop fills on high leg");
+
+    assert_eq!(buy_limit_fill.price, 9.0);
+    assert_eq!(sell_limit_fill.price, 11.0);
+    assert_eq!(sell_stop_fill.price, 8.5);
+    assert_eq!(buy_stop_fill.price, 11.5);
 }

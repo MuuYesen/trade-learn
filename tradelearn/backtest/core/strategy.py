@@ -17,6 +17,7 @@ class Strategy:
         if not hasattr(self, '_manual_min_period'): self._manual_min_period = 0
 
     def start(self): pass
+    def init(self): pass
     def prenext(self): pass
     def next(self): pass
     def stop(self): pass

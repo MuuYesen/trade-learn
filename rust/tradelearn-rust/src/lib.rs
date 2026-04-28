@@ -88,6 +88,7 @@ fn match_order_fill(
     };
     let options = ExecutionOptions {
         trade_on_close,
+        smart_matching: false,
         cheat_on_close: false,
         cheat_on_open: false,
         slip_perc: 0.0,
@@ -114,7 +115,7 @@ struct RustBacktestEngine {
 #[pymethods]
 impl RustBacktestEngine {
     #[new]
-    #[pyo3(signature = (timestamps, opens, highs, lows, closes, volumes, cash, commission_ratio, trade_on_close, cheat_on_close, cheat_on_open, slip_perc, slip_fixed, slip_match, slip_limit, slip_out, mult=1.0, margin=1.0))]
+    #[pyo3(signature = (timestamps, opens, highs, lows, closes, volumes, cash, commission_ratio, trade_on_close, cheat_on_close, cheat_on_open, slip_perc, slip_fixed, slip_match, slip_limit, slip_out, mult=1.0, margin=1.0, smart_matching=false))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         timestamps: Vec<i64>,
@@ -135,6 +136,7 @@ impl RustBacktestEngine {
         slip_out: bool,
         mult: f64,
         margin: f64,
+        smart_matching: bool,
     ) -> Self {
         Self {
             inner: BacktestEngine::new(
@@ -156,6 +158,7 @@ impl RustBacktestEngine {
                 slip_out,
                 mult,
                 margin,
+                smart_matching,
             ),
         }
     }
