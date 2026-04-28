@@ -404,6 +404,41 @@ def test_rust_bar_loop_submits_drained_orders_after_python_callback() -> None:
     assert engine.get_position() == (1.0, 11.0)
 
 
+def test_rust_bar_loop_allows_none_when_callback_has_no_orders() -> None:
+    engine = _rust.RustBacktestEngine(
+        [1, 2],
+        [10.0, 11.0],
+        [10.0, 11.0],
+        [10.0, 11.0],
+        [10.0, 11.0],
+        [1000.0, 1000.0],
+        100.0,
+        0.0,
+        False,
+        False,
+        False,
+        0.0,
+        0.0,
+        False,
+        False,
+        False,
+    )
+
+    class BrokerRefSink:
+        def bind_rust_order_refs(self, bindings: list[tuple[int, int]]) -> None:
+            raise AssertionError("no order refs should be bound when callbacks return None")
+
+    seen: list[int] = []
+
+    def on_bar(cursor, fills, cash, size, price):
+        seen.append(cursor)
+        return None
+
+    engine.run_bar_loop(BrokerRefSink(), on_bar, 0, 2)
+
+    assert seen == [0, 1]
+
+
 def test_backtest_engine_does_not_advance_data_twice_from_strategy_attrs() -> None:
     class CountingDataFeed:
         def __init__(self) -> None:

@@ -209,6 +209,9 @@ impl RustBacktestEngine {
             let cash = self.inner.get_cash();
             let (size, price) = self.inner.get_position();
             let drained = on_bar.call1(py, (cursor, fills, cash, size, price))?;
+            if drained.is_none(py) {
+                continue;
+            }
             let orders: Vec<(u64, String, String, f64, Option<f64>, Option<f64>)> =
                 drained.extract(py)?;
             let mut bindings: Vec<(u64, u64)> = Vec::with_capacity(orders.len());

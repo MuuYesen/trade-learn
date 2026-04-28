@@ -170,7 +170,7 @@ def run_backtest(cerebro: Any) -> List[Any]:
 
     if use_rust_bar_loop:
         if notify_cashvalue is None:
-            def on_rust_bar(i: int, fills: list[Any], cash: float, size: float, price: float) -> list[Any]:
+            def on_rust_bar(i: int, fills: list[Any], cash: float, size: float, price: float) -> list[Any] | None:
                 for advance in bar_advancers:
                     advance(i)
                 broker._curr_idx = i
@@ -181,10 +181,11 @@ def run_backtest(cerebro: Any) -> List[Any]:
                 if i >= min_start:
                     begin_order_buffering()
                     strategy_next()
-                    return drain_order_buffer()
-                return []
+                    orders = drain_order_buffer()
+                    return orders if orders else None
+                return None
         else:
-            def on_rust_bar(i: int, fills: list[Any], cash: float, size: float, price: float) -> list[Any]:
+            def on_rust_bar(i: int, fills: list[Any], cash: float, size: float, price: float) -> list[Any] | None:
                 for advance in bar_advancers:
                     advance(i)
                 broker._curr_idx = i
@@ -196,8 +197,9 @@ def run_backtest(cerebro: Any) -> List[Any]:
                 if i >= min_start:
                     begin_order_buffering()
                     strategy_next()
-                    return drain_order_buffer()
-                return []
+                    orders = drain_order_buffer()
+                    return orders if orders else None
+                return None
 
         broker._engine.run_bar_loop(broker, on_rust_bar, 0, limit)
     else:
