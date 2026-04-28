@@ -60,15 +60,15 @@ def __getattr__(name):
 
         return DataFeed
     if name == "FixedSize":
-        from tradelearn.compat.backtrader.sizer import FixedSize
+        from tradelearn.compat.backtrader.sizers import FixedSize
 
         return FixedSize
     if name == "PercentSizer":
-        from tradelearn.compat.backtrader.sizer import PercentSizer
+        from tradelearn.compat.backtrader.sizers import PercentSizer
 
         return PercentSizer
     if name == "AllInSizer":
-        from tradelearn.compat.backtrader.sizer import AllInSizer
+        from tradelearn.compat.backtrader.sizers import AllInSizer
 
         return AllInSizer
     if name == "analyzers":

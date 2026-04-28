@@ -9,7 +9,7 @@ from tradelearn.backtest.models import ExecutedInfo, Order, Position, Trade
 from tradelearn.backtest.strategy import Strategy as _BaseStrategy
 from tradelearn.compat.backtrader.base import _G, LineRoot, LineSeries, Params, set_current_data
 from tradelearn.compat.backtrader.datafeed import DataFeed
-from tradelearn.compat.backtrader.sizer import Sizer
+from tradelearn.compat.backtrader.sizers import Sizer
 
 
 class Strategy(_BaseStrategy, LineRoot):

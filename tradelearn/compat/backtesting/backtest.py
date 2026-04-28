@@ -33,7 +33,7 @@ class Backtest:
         self.datas = [DataFeed(data)]
         self.strats = [(strategy, (), {})]
         self.match_mode = match_mode
-        from tradelearn.compat.backtrader.sizer import FixedSize
+        from tradelearn.compat.backtrader.sizers import FixedSize
         self._sizer_spec = (FixedSize, {})
         self.broker = RustBroker(cash=cash, commission=commission, match_mode=match_mode)
         self.analyzers = {}

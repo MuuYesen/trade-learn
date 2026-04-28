@@ -5,7 +5,7 @@ from typing import Any
 from tradelearn.backtest.models import FixedCommission, FixedSlippage
 from tradelearn.compat.backtrader.datafeed import DataFeed
 from tradelearn.compat.backtrader.observers import ObserverCollection, Value
-from tradelearn.compat.backtrader.sizer import FixedSize
+from tradelearn.compat.backtrader.sizers import FixedSize
 from tradelearn.compat.backtrader.strategy import Strategy
 
 from .analyzer import Analyzer

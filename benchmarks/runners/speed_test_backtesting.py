@@ -132,7 +132,7 @@ def run_test():
             self.strats = [(strategy_cls, (), {})]
             self.broker = RustBroker(cash=100000)
             self.match_mode = "smart"
-            from tradelearn.compat.backtrader.sizer import FixedSize
+            from tradelearn.compat.backtrader.sizers import FixedSize
 
             self._sizer_spec = (FixedSize, {})
             self.analyzers = {}
