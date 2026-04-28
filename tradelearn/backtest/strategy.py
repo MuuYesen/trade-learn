@@ -15,8 +15,9 @@ class Strategy(LineRoot):
     def _setup(self) -> None:
         from tradelearn.backtest.base import set_current_strategy, _CURRENT_DATA, _CURRENT_DATAS
         set_current_strategy(self)
-        self._min_period = getattr(self.__class__, "min_period", 0)
-        self._sizer: Any = None
+        self._manual_min_period = getattr(self.__class__, "min_period", 0)
+        self._sizers: Dict[Any, Any] = {}
+        self._sizer: Any = None # Primary/default sizer
         self._positions: Dict[Any, Any] = {}
         # Track pending (submitted but not yet filled) size per data feed.
         # Mirrors Backtrader's behavior: position reflects pending orders immediately
@@ -26,7 +27,6 @@ class Strategy(LineRoot):
         self.broker: Any = None
         self.analyzers: Any = None
         self._indicators: List[Any] = []
-        self._min_period: int = 0
 
     def _register_indicator(self, indicator: Any) -> None:
         if indicator not in self._indicators:
@@ -44,12 +44,33 @@ class Strategy(LineRoot):
         return self.getposition()
 
     def addminperiod(self, period: int) -> None:
-        self._min_period = max(self._min_period, period)
+        self._manual_min_period = max(self._manual_min_period, period)
 
-    def setsizer(self, sizer: Any) -> Any:
-        self._sizer = sizer
+    @property
+    def _min_period(self) -> int:
+        """Returns the aggregate minimum period from all indicators and lines."""
+        m = self._manual_min_period
+        # Scan registered indicators
+        for ind in self._indicators:
+            m = max(m, getattr(ind, 'min_period', 0))
+        
+        # Scan attributes for delayed lines or other series
+        # Use __dict__ to avoid infinite recursion with __getattr__
+        for attr, val in self.__dict__.items():
+            if attr.startswith('_'): continue
+            if hasattr(val, 'min_period'):
+                m = max(m, val.min_period)
+        return m
+
+    def setsizer(self, sizer: Any, name: Any = None) -> Any:
+        if name is None:
+            self._sizer = sizer
+        else:
+            # Map name/data to sizer
+            self._sizers[name] = sizer
+            
         if hasattr(self, 'broker') and self.broker:
-            self._sizer._set(self, self.broker)
+            sizer._set(self, self.broker)
         return sizer
 
     def start(self): pass
@@ -62,8 +83,11 @@ class Strategy(LineRoot):
     def notify_cashvalue(self, cash: float, value: float): pass
     
     def getsizing(self, data=None, isbuy=True) -> float:
-        if self._sizer is None: return 1.0
-        return self._sizer.getsizing(data, isbuy)
+        data = data or self.datas[0]
+        # Try specific sizer first, then default sizer
+        sizer = self._sizers.get(data, self._sizer)
+        if sizer is None: return 1.0
+        return sizer.getsizing(data, isbuy)
 
     def buy(self, data=None, size=None, price=None, exectype=None, **kwargs):
         from tradelearn.backtest.models import Order

@@ -3,12 +3,13 @@ import time
 import importlib
 import pandas as pd
 from pathlib import Path
+from multiprocessing import Process, Queue
+import numpy as np
 
 # Setup paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_PATH = PROJECT_ROOT / "tests" / "data" / "AAPL.parquet"
 
-# Strategies to benchmark
 TARGET_STRATEGIES = [
     "01_quickstart",
     "02_sma_cross",
@@ -19,11 +20,6 @@ TARGET_STRATEGIES = [
     "09_macd_settings",
     "10_order_execution",
 ]
-
-def get_strategy_class(module_name: str, class_name: str):
-    module = importlib.import_module(f"examples.{module_name}")
-    importlib.reload(module)  # Ensure it picks up the current sys.modules mock
-    return getattr(module, class_name)
 
 STRATEGY_CLASSES = {
     "01_quickstart": "QuickstartSmaCross",
@@ -36,125 +32,122 @@ STRATEGY_CLASSES = {
     "10_order_execution": "OrderExecutionStrategy",
 }
 
-def load_data(bt_module):
-    dataframe = pd.read_parquet(DATA_PATH)
-    if hasattr(bt_module, 'feeds'):
-
-        return bt_module.feeds.PandasData(dataname=dataframe)
-    else:
-        # tradelearn compat 
-        return dataframe
-
-def run_benchmark(engine_name: str, bt_module):
-    print(f"\n{'='*40}")
-    print(f"Running Benchmark with {engine_name.upper()}")
-    print(f"{'='*40}")
-    
-    results = {}
-    
-    for mod_name in TARGET_STRATEGIES:
-        cls_name = STRATEGY_CLASSES[mod_name]
-        try:
-            strategy_cls = get_strategy_class(mod_name, cls_name)
-            print(f"[{cls_name}] MRO: {[c.__name__ for c in strategy_cls.mro()]}")
-            
-            # Setup Cerebro
-            cerebro = bt_module.Cerebro()
-            cerebro.broker.setcash(100000.0)
-            
-            data = load_data(bt_module)
-            cerebro.adddata(data)
-            cerebro.addstrategy(strategy_cls)
-            
-            start_time = time.perf_counter()
-            strats = cerebro.run()
-            end_time = time.perf_counter()
-            
-            strategy = strats[0]
-            final_value = cerebro.broker.getvalue()
-            final_cash = cerebro.broker.getcash()
-            # Get position for first data
-            pos = strategy.getposition(strategy.datas[0])
-            print(f"[{cls_name}] Final Cash: {final_cash:.2f} | Pos: {pos.size} @ {pos.price:.2f}")
-            elapsed_ms = (end_time - start_time) * 1000
-            
-            results[cls_name] = {
-                "Time (ms)": elapsed_ms,
-                "Final Value": final_value
-            }
-            print(f"[{cls_name}] Value: {final_value:.2f} | Time: {elapsed_ms:.2f} ms")
-            
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            print(f"[{cls_name}] FAILED: {e}")
-            results[cls_name] = {"Time (ms)": None, "Final Value": None}
-
-            
-    return results
-
-def main():
+def run_strategy_in_process(engine_type, mod_name, cls_name, queue):
     try:
-        import backtrader as real_bt
-        has_real_bt = True
-    except ImportError:
-        has_real_bt = False
+        import types
+        if engine_type == "Tradelearn":
+            import tradelearn.compat.backtrader as bt
+        else:
+            import backtrader as bt
+            sys.modules['tradelearn'] = types.ModuleType("tradelearn")
+            sys.modules['tradelearn.compat'] = types.ModuleType("tradelearn.compat")
+            sys.modules['tradelearn.compat.backtrader'] = bt
+        
+        module = importlib.import_module(f"examples.{mod_name}")
+        importlib.reload(module)
+        strategy_cls = getattr(module, cls_name)
+        
+        # Inject logging into the strategy class
+        def notify_trade(self, trade):
+            if trade.isclosed:
+                self.audit_log.append({
+                    "pnl": trade.pnl,
+                    "pnlcomm": trade.pnlcomm,
+                    "price": trade.price,
+                    "size": trade.size,
+                    "dt": self.data.datetime.date(0).isoformat()
+                })
+        
+        strategy_cls.notify_trade = notify_trade
+        strategy_cls.audit_log = []
 
-    if not has_real_bt:
-        print("Error: The original 'backtrader' package is not installed.")
-        print("Please run: pip install backtrader")
-        return
+        cerebro = bt.Cerebro()
+        cerebro.broker.setcash(100000.0)
+        cerebro.broker.setcommission(commission=0.0)
+        
+        dataframe = pd.read_parquet(DATA_PATH)
+        if engine_type == "Tradelearn":
+            from tradelearn.backtest.datafeed import DataFeed
+            data = DataFeed(dataframe)
+        else:
+            class PandasData(bt.feeds.PandasData):
+                params = (('datetime', None), ('open', 'open'), ('high', 'high'), ('low', 'low'), ('close', 'close'), ('volume', 'volume'), ('openinterest', None))
+            data = PandasData(dataname=dataframe)
+        
+        cerebro.adddata(data)
+        cerebro.addstrategy(strategy_cls)
+        
+        start_time = time.perf_counter()
+        strats = cerebro.run()
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        
+        queue.put({
+            "status": "success",
+            "final_value": cerebro.broker.getvalue(),
+            "elapsed_ms": elapsed_ms,
+            "trades": strats[0].audit_log
+        })
+    except Exception as e:
+        import traceback
+        queue.put({
+            "status": "error", "error": str(e), "traceback": traceback.format_exc()
+        })
 
-    import tradelearn.compat.backtrader as tl_bt
-
-    # 1. Run with Tradelearn Compat
-    tl_results = run_benchmark("Tradelearn", tl_bt)
-
-    # 2. Run with Real Backtrader
-    # Mock the import so strategies load real backtrader
-    original_attrs = {k: getattr(tl_bt, k) for k in dir(tl_bt)}
+def run_benchmark():
+    print(f"\n{'='*80}")
+    print(f"ULTIMATE NUMERICAL AUDIT: Tradelearn vs Backtrader")
+    print(f"{'='*80}")
     
-    # Overwrite tl_bt attributes with real_bt attributes
-    for k in dir(real_bt):
-        if not k.startswith("__"):
-            setattr(tl_bt, k, getattr(real_bt, k))
-            
-    real_results = run_benchmark("Original Backtrader", real_bt)
-    
-    # Restore mock
-    for k in dir(tl_bt):
-        if not k.startswith("__"):
-            delattr(tl_bt, k)
-    for k, v in original_attrs.items():
-        setattr(tl_bt, k, v)
+    final_results = {}
 
-
-    # 3. Compare Results
-    print(f"\n{'='*40}")
-    print("BENCHMARK COMPARISON")
-    print(f"{'='*40}")
-    
     for mod_name in TARGET_STRATEGIES:
         cls_name = STRATEGY_CLASSES[mod_name]
-        tl_res = tl_results.get(cls_name)
-        real_res = real_results.get(cls_name)
+        print(f"\nAudit {cls_name} ...")
         
-        if tl_res and real_res and tl_res["Final Value"] is not None and real_res["Final Value"] is not None:
-            tl_time = tl_res["Time (ms)"]
-            real_time = real_res["Time (ms)"]
-            speedup = real_time / tl_time if tl_time > 0 else 0
+        results = {}
+        for engine in ["Tradelearn", "Backtrader"]:
+            queue = Queue()
+            p = Process(target=run_strategy_in_process, args=(engine, mod_name, cls_name, queue))
+            p.start()
+            res = queue.get()
+            p.join()
+            if res["status"] == "success":
+                results[engine] = res
+            else:
+                print(f"  [{engine}] FAILED: {res['error']}")
+                results[engine] = None
+        
+        tl, bt_res = results.get("Tradelearn"), results.get("Backtrader")
+        if tl and bt_res:
+            diff = tl["final_value"] - bt_res["final_value"]
+            status = "✅ EXACT" if abs(diff) < 1e-8 else f"❌ DIFF: {diff:.4f}"
+            print(f"  Result: {tl['final_value']:.2f} vs {bt_res['final_value']:.2f} | {status}")
             
-            val_diff = tl_res["Final Value"] - real_res["Final Value"]
-            match_status = "✅ EXACT MATCH" if abs(val_diff) < 0.01 else f"❌ DIFF: {val_diff:.2f}"
-            
-            print(f"--- {cls_name} ---")
-            print(f"  Tradelearn: {tl_res['Final Value']:.2f} ({tl_res['Time (ms)']:.2f} ms)")
-            print(f"  Backtrader: {real_res['Final Value']:.2f} ({real_res['Time (ms)']:.2f} ms)")
-            print(f"  Value Match: {match_status}")
-            print(f"  Speedup: Tradelearn is {speedup:.2f}x faster")
-        else:
-            print(f"--- {cls_name} ---")
-            print("  Could not compare due to execution failure.")
+            if abs(diff) > 1e-8:
+                print(f"  [DIVERGENCE DETECTED]")
+                # Compare trades to find the first split
+                t1, t2 = tl["trades"], bt_res["trades"]
+                for i in range(min(len(t1), len(t2))):
+                    if abs(t1[i]["pnl"] - t2[i]["pnl"]) > 1e-6 or abs(t1[i]["size"] - t2[i]["size"]) > 1e-6:
+                        print(f"  First trade split at {t1[i]['dt']}:")
+                        print(f"    TL: PnL={t1[i]['pnl']:.4f}, Size={t1[i]['size']:.4f}, Price={t1[i]['price']:.4f}")
+                        print(f"    BT: PnL={t2[i]['pnl']:.4f}, Size={t2[i]['size']:.4f}, Price={t2[i]['price']:.4f}")
+                        break
+                if len(t1) != len(t2):
+                    print(f"  Trade count mismatch: TL={len(t1)}, BT={len(t2)}")
+        
+        final_results[cls_name] = results
+
+    print(f"\n\n{'='*95}")
+    print(f"{'Strategy':<25} | {'Tradelearn':<15} | {'Backtrader':<15} | {'Diff':<15} | {'Status':<15}")
+    print(f"{'-'*95}")
+    for cls_name, res in final_results.items():
+        tl, bt_res = res.get("Tradelearn"), res.get("Backtrader")
+        if tl and bt_res:
+            diff = tl["final_value"] - bt_res["final_value"]
+            status = "✅ EXACT" if abs(diff) < 1e-8 else "❌ DIFF"
+            print(f"{cls_name:<25} | {tl['final_value']:<15.2f} | {bt_res['final_value']:<15.2f} | {diff:<15.4f} | {status}")
+    print(f"{'='*95}\n")
 
 if __name__ == "__main__":
-    main()
+    run_benchmark()

@@ -8,7 +8,7 @@ from tradelearn.backtest.analyzer import Analyzer
 
 class Cerebro:
     """Main orchestrator for backtesting."""
-    def __init__(self, match_mode: str = 'bt') -> None:
+    def __init__(self, match_mode: str = 'exact') -> None:
         self.datas: List[DataFeed] = []
         self.strats: List[Tuple[Type[Strategy], tuple, dict]] = []
         self.match_mode = match_mode
@@ -16,6 +16,20 @@ class Cerebro:
         self.broker = RustBroker(match_mode=match_mode)
         self._sizer_spec = (FixedSize, {})
         self.analyzers: Dict[str, Tuple[Type[Analyzer], dict]] = {}
+
+    def setcash(self, cash: float) -> None:
+        self.broker._cash = self.broker._active_cash = cash
+
+    def setcommission(self, commission: float = 0.0, margin: float = 0.0, mult: float = 1.0, 
+                      comminfo: Any = None, name: str | None = None) -> None:
+        """Set commission parameters or a custom CommInfo object."""
+        if comminfo:
+            # Handle custom CommInfo object/class
+            self.broker.set_comminfo(comminfo)
+        else:
+            self.broker.commission_ratio = commission
+            self.broker._mult = mult
+            # For margin support in future if needed
 
     def adddata(self, data: Any, name: str | None = None) -> None:
         if hasattr(data, 'columns') and hasattr(data, 'index'):

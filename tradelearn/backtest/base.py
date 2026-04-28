@@ -165,6 +165,7 @@ class LineSeries:
         self._values = np.asarray(values, dtype=np.float64)
         self._cursor = 0
         self._is_datetime = False
+        self.min_period = 0
 
     def _advance(self, cursor: int) -> None:
         self._cursor = cursor
@@ -211,6 +212,7 @@ class LineSeries:
     def _math_op(self, other, op):
         v1 = self._values
         target = other.lines[0] if hasattr(other, "lines") else other
+        res = None
         if hasattr(target, "_values"):
             v2 = target._values
             if v1.shape != v2.shape:
@@ -219,9 +221,14 @@ class LineSeries:
                 v1_ext[:len(v1)] = v1
                 v2_ext = np.full(max_len, np.nan)
                 v2_ext[:len(v2)] = v2
-                return LineSeries(op(v1_ext, v2_ext))
-            return LineSeries(op(v1, v2))
-        return LineSeries(op(v1, target))
+                res = LineSeries(op(v1_ext, v2_ext))
+            else:
+                res = LineSeries(op(v1, v2))
+            res.min_period = max(getattr(self, "min_period", 0), getattr(target, "min_period", 0))
+        else:
+            res = LineSeries(op(v1, target))
+            res.min_period = getattr(self, "min_period", 0)
+        return res
 
 class DelayedLine(LineSeries):
     """A line series shifted by 'ago' periods."""
@@ -231,6 +238,7 @@ class DelayedLine(LineSeries):
         shifted = pd.Series(source._values).shift(-ago).values
         super().__init__(shifted)
         self._is_datetime = source._is_datetime
+        self.min_period = source.min_period + abs(ago)
 
 class IndicatorLine(LineSeries):
     """Compatibility stub."""

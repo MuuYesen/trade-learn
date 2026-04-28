@@ -74,13 +74,18 @@ def run_backtest(cerebro: Cerebro) -> List[Strategy]:
     indicators = strategy._indicators
     
     limit = cerebro.datas[0].buflen()
-    min_period = strategy._min_period
-    print(f"DEBUG: Strategy {strategy.__class__.__name__} min_period: {min_period}")
-    
+    # Capture min_period as a static integer to avoid property fluctuations during loop
+    min_period = int(strategy._min_period)
     for i in range(limit):
         # 1. Advance all lines
         for d in cerebro.datas: d._advance(i)
         for ind in indicators: ind._advance(i)
+        
+        # Advance any other LineSeries attributes (like smadir, delayed lines)
+        for attr, val in strategy.__dict__.items():
+            if attr.startswith('_'): continue
+            if hasattr(val, '_advance'):
+                val._advance(i)
         
         # 2. Broker Match
         if cerebro.broker:
@@ -89,7 +94,7 @@ def run_backtest(cerebro: Cerebro) -> List[Strategy]:
             strategy.notify_cashvalue(cerebro.broker.getcash(), cerebro.broker.getvalue())
 
         # 3. Strategy Next
-        if i >= min_period:
+        if i >= min_period - 1:
             strategy.next()
     
     return [strategy]

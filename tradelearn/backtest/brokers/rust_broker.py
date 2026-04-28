@@ -36,6 +36,14 @@ class RustBroker(BaseBroker):
         # For 'bt' mode, we maintain state in Python
         self._pos = Position(size=0.0, price=0.0)
         self._active_cash = cash
+        self._comminfo: Any = None
+
+    def set_comminfo(self, comminfo: Any) -> None:
+        self._comminfo = comminfo
+        if hasattr(comminfo, 'p') and hasattr(comminfo.p, 'mult'):
+            self._mult = comminfo.p.mult
+        if hasattr(comminfo, 'p') and hasattr(comminfo.p, 'commission'):
+            self.commission_ratio = comminfo.p.commission
 
     def getcash(self) -> float:
         if self.match_mode == 'smart' and self._engine:
@@ -177,7 +185,13 @@ class RustBroker(BaseBroker):
                 if executed:
                     order.status = Order.Completed
                     abs_size = abs(order.size)
-                    comm = abs_size * exec_price * self.commission_ratio
+                    
+                    if self._comminfo:
+                        # Use custom commission logic if available
+                        comm = self._comminfo.getcommission(abs_size, exec_price, False)
+                    else:
+                        comm = abs_size * exec_price * self.commission_ratio * self._mult
+                        
                     order.executed = ExecutedInfo(
                         price=exec_price, size=abs_size, comm=comm,
                         value=abs_size * exec_price * self._mult
