@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -602,6 +603,20 @@ def test_rust_primary_clock_plan_aligns_secondary_latest_at_or_before() -> None:
     plan = _rust.RustPrimaryClockPlan([1, 2, 3], [[1, 3], [2]])
 
     assert plan.len() == 3
+    assert plan.cursors_at(0) == [0, 0, -1]
+    assert plan.cursors_at(1) == [1, 0, 0]
+    assert plan.cursors_at(2) == [2, 1, 0]
+
+
+def test_rust_primary_clock_plan_accepts_numpy_timestamp_arrays() -> None:
+    plan = _rust.RustPrimaryClockPlan(
+        np.array([1, 2, 3], dtype=np.int64),
+        [
+            np.array([1, 3], dtype=np.int64),
+            np.array([2], dtype=np.int64),
+        ],
+    )
+
     assert plan.cursors_at(0) == [0, 0, -1]
     assert plan.cursors_at(1) == [1, 0, 0]
     assert plan.cursors_at(2) == [2, 1, 0]

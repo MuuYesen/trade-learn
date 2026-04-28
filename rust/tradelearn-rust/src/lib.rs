@@ -1,3 +1,4 @@
+use numpy::PyReadonlyArray1;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -152,13 +153,33 @@ fn build_primary_clock_cursors(
     cursors
 }
 
+fn extract_i64_vec(obj: &Bound<'_, PyAny>) -> PyResult<Vec<i64>> {
+    if let Ok(array) = obj.extract::<PyReadonlyArray1<i64>>() {
+        return Ok(array.as_array().iter().copied().collect());
+    }
+    obj.extract::<Vec<i64>>()
+}
+
+fn extract_i64_matrix(obj: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<i64>>> {
+    let mut rows = Vec::new();
+    for item in obj.try_iter()? {
+        rows.push(extract_i64_vec(&item?)?);
+    }
+    Ok(rows)
+}
+
 #[pymethods]
 impl RustPrimaryClockPlan {
     #[new]
-    fn new(primary_timestamps: Vec<i64>, secondary_timestamps: Vec<Vec<i64>>) -> Self {
-        Self {
-            cursors: build_primary_clock_cursors(primary_timestamps, secondary_timestamps),
-        }
+    fn new(
+        primary_timestamps: &Bound<'_, PyAny>,
+        secondary_timestamps: &Bound<'_, PyAny>,
+    ) -> PyResult<Self> {
+        let primary = extract_i64_vec(primary_timestamps)?;
+        let secondary = extract_i64_matrix(secondary_timestamps)?;
+        Ok(Self {
+            cursors: build_primary_clock_cursors(primary, secondary),
+        })
     }
 
     fn len(&self) -> usize {
@@ -176,10 +197,15 @@ impl RustPrimaryClockPlan {
 #[pymethods]
 impl RustBarRunner {
     #[new]
-    fn new(primary_timestamps: Vec<i64>, secondary_timestamps: Vec<Vec<i64>>) -> Self {
-        Self {
-            cursors: build_primary_clock_cursors(primary_timestamps, secondary_timestamps),
-        }
+    fn new(
+        primary_timestamps: &Bound<'_, PyAny>,
+        secondary_timestamps: &Bound<'_, PyAny>,
+    ) -> PyResult<Self> {
+        let primary = extract_i64_vec(primary_timestamps)?;
+        let secondary = extract_i64_matrix(secondary_timestamps)?;
+        Ok(Self {
+            cursors: build_primary_clock_cursors(primary, secondary),
+        })
     }
 
     fn len(&self) -> usize {

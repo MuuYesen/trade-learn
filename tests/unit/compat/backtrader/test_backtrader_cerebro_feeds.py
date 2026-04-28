@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 import tradelearn.compat.backtrader as bt
+from tradelearn.backtest import engine
 from tradelearn.compat.backtrader import Analyzer
 
 
@@ -56,6 +58,31 @@ def test_backtrader_cerebro_runs_pandasdata_feed_and_analyzer() -> None:
     assert strategy.stats.fills[["size", "price"]].to_dict("records") == [
         {"size": 1.0, "price": 11.0}
     ]
+
+
+def test_non_streaming_analyzer_does_not_build_bar_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class NoopStrategy(bt.Strategy):
+        def next(self) -> None:
+            pass
+
+    class SummaryAnalyzer(Analyzer):
+        metric_key = "returns"
+
+    def fail_current_bar(data):
+        raise AssertionError("bar snapshots should be lazy for non-streaming analyzers")
+
+    monkeypatch.setattr(engine, "_current_bar", fail_current_bar)
+
+    cerebro = bt.Cerebro()
+    cerebro.adddata(bt.feeds.PandasData(dataname=bars(), name="daily"))
+    cerebro.addstrategy(NoopStrategy)
+    cerebro.addanalyzer(SummaryAnalyzer, name="summary")
+
+    [strategy] = cerebro.run()
+
+    assert "summary" in strategy.analyzer_results
 
 
 def test_pandasdata_accepts_backtrader_style_column_mapping() -> None:
