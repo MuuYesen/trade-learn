@@ -8,7 +8,7 @@ from tradelearn.backtest.core.brokers.rust import RustBroker
 from tradelearn.backtest.core.models import Order
 from tradelearn.compat.backtrader.base import LineSeries
 from tradelearn.compat.backtrader import Cerebro, Strategy
-from tradelearn.compat.backtesting.strategy import PositionProxy
+from tradelearn.compat.backtesting.strategy import IndicatorProxy, PositionProxy
 
 
 def _match(
@@ -394,6 +394,22 @@ def test_backtesting_position_proxy_uses_broker_size_fast_path() -> None:
     assert bool(position) is True
     assert position.size == 2.0
     assert strategy.broker.size_calls == 2
+
+
+def test_backtesting_indicator_proxy_relative_indexing() -> None:
+    class Feed:
+        _cursor = 2
+
+    indicator = IndicatorProxy([10.0, 20.0, 30.0], Feed())
+
+    assert indicator[-1] == 30.0
+    assert indicator[-2] == 20.0
+    assert indicator[0] == 10.0
+
+    Feed._cursor = 0
+    assert indicator[-1] == 10.0
+    with pytest.raises(IndexError):
+        indicator[-2]
 
 
 def test_smart_matching_prefers_stop_loss_when_exit_orders_are_ambiguous() -> None:

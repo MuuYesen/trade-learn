@@ -132,6 +132,13 @@ class IndicatorProxy:
 
     def __getitem__(self, key: int | slice) -> Any:
         cursor = self._feed._cursor
+        if key == -1:
+            return self._data[cursor]
+        if key == -2:
+            idx = cursor - 1
+            if idx < 0:
+                raise IndexError("Index out of bounds")
+            return self._data[idx]
         if isinstance(key, int):
             if key < 0:
                 # Relative indexing from CURRENT cursor
