@@ -67,12 +67,24 @@ def run_backtest(cerebro: Cerebro) -> List[Strategy]:
     
     strategy.broker = cerebro.broker
     
-    # 2. Initialize Sizer
+    # 2. Initialize Sizer & Analyzers
     sizer_cls, sizer_kwargs = cerebro._sizer_spec
     strategy.setsizer(sizer_cls(**sizer_kwargs))
     # Indicators are now self-registered via LineRoot._base_init
     indicators = strategy._indicators
     
+    # Initialize Analyzers from Cerebro
+    strategy.analyzers = {}
+    for name, (ana_cls, ana_kwargs) in cerebro.analyzers.items():
+        ana_inst = ana_cls(**ana_kwargs)
+        ana_inst.strategy = strategy
+        strategy.analyzers[name] = ana_inst
+    
+    # 3. Lifecycle Start
+    strategy.start()
+    for ana in strategy.analyzers.values():
+        if hasattr(ana, 'start'): ana.start()
+
     limit = cerebro.datas[0].buflen()
     # Capture min_period as a static integer to avoid property fluctuations during loop
     min_period = int(strategy._min_period)
@@ -97,4 +109,9 @@ def run_backtest(cerebro: Cerebro) -> List[Strategy]:
         if i >= min_period - 1:
             strategy.next()
     
+    # 4. Lifecycle Stop
+    strategy.stop()
+    for ana in strategy.analyzers.values():
+        if hasattr(ana, 'stop'): ana.stop()
+
     return [strategy]

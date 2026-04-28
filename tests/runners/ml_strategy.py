@@ -46,7 +46,7 @@ def run_example():
     Alpha101GBMStrategy.features = tuple(features)
     
     # 4. Run Backtest
-    cerebro = Cerebro(trade_on_close=True)
+    cerebro = Cerebro()
     cerebro.adddata(data, name="GOOG")
     cerebro.addstrategy(Alpha101GBMStrategy, threshold=0.001, size=10, training_data=data)
     
@@ -59,9 +59,9 @@ def main():
         print("Demo data not found. Run 'python scripts/generate_demo_data.py' first.")
         return
 
-    if result.stats:
-        print("\nML Backtest Summary:")
-        print(result.stats.summary)
+    print("\nML Backtest Summary:")
+    print(f"Final Value: {result.broker.getvalue():.2f}")
+    print(f"Total Return: {(result.broker.getvalue() / 100000.0 - 1) * 100:.2f}%")
 
 if __name__ == "__main__":
     main()

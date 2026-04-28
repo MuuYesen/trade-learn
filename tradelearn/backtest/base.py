@@ -30,13 +30,17 @@ import inspect
 class MetaParams(type):
     """Metaclass to handle Backtrader-style parameter stripping and lifecycle hooks."""
     def __call__(cls, *args, **kwargs):
-        # 1. Separate params from other kwargs
-        p_defaults = getattr(cls, 'params', [])
+        # 1. Collect all params from MRO (inheritance support)
         p_names = []
-        if isinstance(p_defaults, dict):
-            p_names = list(p_defaults.keys())
-        elif isinstance(p_defaults, (list, tuple)):
-            p_names = [x[0] for x in p_defaults if isinstance(x, (list, tuple))]
+        all_p_defaults = []
+        for base_cls in cls.mro():
+            p_defaults = getattr(base_cls, 'params', [])
+            if isinstance(p_defaults, dict):
+                p_names.extend(p_defaults.keys())
+                all_p_defaults.extend(p_defaults.items())
+            elif isinstance(p_defaults, (list, tuple)):
+                p_names.extend([x[0] for x in p_defaults if isinstance(x, (list, tuple))])
+                all_p_defaults.extend(p_defaults)
 
         p_kwargs = {}
         other_kwargs = {}
@@ -107,9 +111,11 @@ class LineRoot(metaclass=MetaParams):
         pass
 
     def _base_init(self, **kwargs):
-        # Initialize params: merge class defaults with instance kwargs
-        cls_params = getattr(self.__class__, 'params', [])
-        self.params = self.p = Params(cls_params, **kwargs)
+        # Initialize params: merge all MRO defaults with instance kwargs
+        all_cls_params = []
+        for base_cls in self.__class__.mro():
+            all_cls_params.extend(getattr(base_cls, 'params', []))
+        self.params = self.p = Params(all_cls_params, **kwargs)
 
         # Always create instance-level Lines container to shadow class-level tuple
         if not hasattr(self, 'lines') or not isinstance(self.lines, Lines):
