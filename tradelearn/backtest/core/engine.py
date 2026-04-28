@@ -47,14 +47,17 @@ def _build_bar_advancers(
 
 
 def _build_data_advance_plan(datas: list[Any]) -> Any | None:
-    """Build a Rust primary-clock cursor plan for multi-data runs."""
+    """Build a Rust primary-clock cursor runner for multi-data runs."""
     if len(datas) <= 1:
         return None
     try:
-        from tradelearn._rust import RustPrimaryClockPlan
+        from tradelearn._rust import RustBarRunner
     except (ImportError, AttributeError):
-        return None
-    return RustPrimaryClockPlan(
+        try:
+            from tradelearn._rust import RustPrimaryClockPlan as RustBarRunner
+        except (ImportError, AttributeError):
+            return None
+    return RustBarRunner(
         [int(ts) for ts in datas[0]._datetime],
         [[int(ts) for ts in data._datetime] for data in datas[1:]],
     )
@@ -231,7 +234,65 @@ def run_backtest(cerebro: Any) -> List[Any]:
                 strategy_next()
         return []
 
-    if use_rust_bar_loop:
+    use_multi_data_rust_runner = (
+        use_rust_bar_loop
+        and data_advance_plan is not None
+        and hasattr(data_advance_plan, "run")
+    )
+
+    if use_multi_data_rust_runner:
+        if notify_cashvalue is None:
+            def on_rust_bar_multi(
+                i: int,
+                data_cursors: list[int],
+                fills: list[Any],
+                cash: float,
+                size: float,
+                price: float,
+            ) -> list[Any] | None:
+                for data, cursor in zip(cerebro.datas, data_cursors, strict=False):
+                    data._advance(cursor)
+                for advance in bar_advancers:
+                    advance(i)
+                broker._curr_idx = i
+                broker._step_fills_from_collect = fills
+                broker._rust_state_cache = (i, cash, size, price)
+                if fills:
+                    broker_process_fills(strategy, i)
+                if i >= min_start:
+                    begin_order_buffering()
+                    strategy_next()
+                    orders = drain_order_buffer()
+                    return orders if orders else None
+                return None
+        else:
+            def on_rust_bar_multi(
+                i: int,
+                data_cursors: list[int],
+                fills: list[Any],
+                cash: float,
+                size: float,
+                price: float,
+            ) -> list[Any] | None:
+                for data, cursor in zip(cerebro.datas, data_cursors, strict=False):
+                    data._advance(cursor)
+                for advance in bar_advancers:
+                    advance(i)
+                broker._curr_idx = i
+                broker._step_fills_from_collect = fills
+                broker._rust_state_cache = (i, cash, size, price)
+                if fills:
+                    broker_process_fills(strategy, i)
+                notify_cashvalue(broker_getcash(), broker_getvalue())
+                if i >= min_start:
+                    begin_order_buffering()
+                    strategy_next()
+                    orders = drain_order_buffer()
+                    return orders if orders else None
+                return None
+
+        data_advance_plan.run(broker._engine, broker, on_rust_bar_multi, 0, limit)
+    elif use_rust_bar_loop:
         if notify_cashvalue is None:
             def on_rust_bar(i: int, fills: list[Any], cash: float, size: float, price: float) -> list[Any] | None:
                 strategy_pre_next(i)

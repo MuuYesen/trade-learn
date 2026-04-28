@@ -12,6 +12,7 @@ from tradelearn.backtest.core.models import (
     Trade,
     _notify_order,
 )
+from tradelearn.core import BrokerEventPump
 
 if TYPE_CHECKING:
     from tradelearn.backtest.core.strategy import Strategy
@@ -61,6 +62,7 @@ class RustBroker(BaseBroker):
         self._step_fills_from_collect: list[Any] | None = None
         self._buffer_order_submissions = False
         self._order_submit_buffer: list[OrderPayload] = []
+        self._proxy_events: list[Any] = []
         # For 'bt' mode, we maintain state in Python
         self._pos = Position(size=0.0, price=0.0)
         self._active_cash = cash
@@ -110,6 +112,14 @@ class RustBroker(BaseBroker):
             _, _cash, size, _price = self._get_rust_state()
             return size
         return self._pos.size
+
+    def drain_proxy_events(self) -> list[Any]:
+        events = self._proxy_events
+        self._proxy_events = []
+        return events
+
+    def event_pump(self) -> BrokerEventPump:
+        return BrokerEventPump(self.drain_proxy_events)
 
     def _get_rust_state(self) -> tuple[int, float, float, float]:
         """Return cached Rust cash/position for the current bar."""

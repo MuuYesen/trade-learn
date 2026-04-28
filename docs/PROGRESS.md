@@ -384,14 +384,14 @@
 
 ## 阶段 10 — 1.1(QMT 实盘 + Rust 驱动事件循环)
 
-**状态**:🟡 进行中(2026-04-28 已前置回填部分 Rust 驱动 bar loop 与 Python/Rust 热路径优化;`strategy._pre_next()`、Rust primary-clock 多数据游标计划、共享 bar buffer 与通用 BrokerEventPump 已开始落地;QMT 具体实现暂缓且不提交;完整 BarRunner 与正式 1.1 验收仍未闭合)
+**状态**:🟡 进行中(2026-04-28 已前置回填部分 Rust 驱动 bar loop 与 Python/Rust 热路径优化;`strategy._pre_next()`、Rust `BarRunner` 多数据 primary-clock cursor、共享 bar buffer 读路径、通用 BrokerEventPump 与三命名空间指标缓存接口已落地;QMT 具体实现暂缓且不提交;正式 1.1 性能门禁仍未闭合)
 **目标交付**:`1.1`——实盘可用(Windows + QMT)+ Rust bar 循环性能升级
 **时间**:4 周（QMT 3 周 + Rust 事件循环 1 周，可并行）
 
 ### Week 1–3 — QMT 实盘
 
 - [ ] `brokers/qmt.py` 适配器(quant-qmt-proxy HTTP API):暂缓具体代码实现;保留 `tradelearn.core.contracts.Broker` 协议作为扩展接口,本轮删除已提交的 QMT 代码文件
-- [ ] 🟡 Broker Protocol 全实现:核心 Protocol 已存在;本轮新增通用 `BrokerEventPump` 用于后续任意 proxy 的 fill/cancel/reject 轮询与派发,QMT 专属 broker 暂缓
+- [ ] 🟡 Broker Protocol 全实现:核心 Protocol 已存在;通用 `BrokerEventPump` 与 `RustBroker.event_pump()` 已用于后续任意 proxy 的 fill/cancel/reject 轮询与派发,QMT 专属 broker 暂缓
 - [ ] 三种模式:`backtest` / `paper` / `live`
 - [ ] 实盘二次确认 + 资金上限
 - [ ] 断线重连 + 基础风控
@@ -403,10 +403,10 @@
 > 规格见 `docs/internal/event-loop.md § 1.1 Rust 驱动事件循环`
 
 - [x] `strategy._pre_next()` 钩子：Strategy 基类新增统一指标推进入口,engine 已从直接散落 advance 改为调用 hook;提交待生成
-- [ ] 🟡 `BarRunner` Rust struct + PyO3 绑定：本轮新增 `RustPrimaryClockPlan` PyO3 绑定,先把 primary/secondary cursor 计划迁到 Rust;完整 struct 仍未闭合
-- [x] 共享 bar buffer 验证：`DataContainer.shared_bar_buffer()` 已返回零拷贝 OHLCV array view,测试确认与 line/data array 共享底层数组
-- [ ] `Cerebro.run()` 内循环委托给 `BarRunner.run(strategy_ptr)`，退出 Python for 循环
-- [ ] 🟡 多 data feed primary clock 对齐逻辑迁移至 BarRunner，secondary 可见性规则不变:本轮 Python engine 已使用 Rust `RustPrimaryClockPlan` 计算 cursor,完整 BarRunner 仍待继续下沉
+- [x] `BarRunner` Rust struct + PyO3 绑定：新增 `RustBarRunner`,统一生成 primary/secondary latest-at-or-before cursor,并可驱动 Rust engine bar loop + Python callback
+- [x] 共享 bar buffer 验证：`DataContainer.shared_bar_buffer()` 已返回零拷贝 OHLCV array view,Backtrader DataFeed OHLCV line 已直接读取共享 buffer
+- [ ] 🟡 `Cerebro.run()` 内循环委托给 `BarRunner.run(strategy_ptr)`，退出 Python for 循环:单数据已走 Rust `run_bar_loop`,多数据已走 `RustBarRunner.run`;用户 Python `strategy.next()` callback 仍按事件型定位保留
+- [x] 多 data feed primary clock 对齐逻辑迁移至 BarRunner，secondary 可见性规则不变
 - [ ] GIL 持有策略验证：bar 内持有（含两次 PyO3 回调），bar 间可释放
 - [ ] golden 50/50 重新验证（trades 0 差异，PnL rtol=1e-4）
 - [ ] benchmark：sma_cross + AAPL 10000 bars 20 次中位数，vs 1.0 ≥ 3x，vs Backtrader ≥ 8x
@@ -438,10 +438,10 @@
 - [x] P2 指标缓存框架第一步:backtesting `Strategy.I()` 增加批量指标结果缓存,同一 callable/输入/参数只预计算一次;cache key 改为持有 callable 本身,避免短生命周期 lambda id 复用导致指标串线;`ta.*` 公共入口修回 `tradelearn.indicators`,`ta.tdx/tdx30` 懒加载避免缺 MyTT 时阻塞 pandas-ta-classic 通用指标;提交 `f156b58`
 - [x] P2/P3 批量推进:恢复 `tradelearn.query.tec.MyTT` 兼容入口使 `ta.tdx.*` 测试可执行,补 `IndicatorProxy.current()/previous()` 显式快路径供后续生成策略/工具直接绕过通用 `__getitem__`;`test_tdx.py` 11 passed,本轮总验证 47 passed 且两个 runner 对齐;提交 `dfc283f`
 - [x] P2/P4 批量推进:新增 `ta.tv` 命名空间 bootstrap,覆盖 `sma/rsi/macd` 的批量入口并保留 `BACKEND="pynecore"`;将 bar advancer 构建抽为 `_build_bar_advancers()` 静态 plan helper,为多 data/多周期推进计划继续拆分;本轮相关验证 50 passed 且两个 runner 对齐;提交 `6d13d30`
-- [ ] P1 完整 Rust BarRunner:将多数据推进、订单队列、撮合、mark-to-market 与 callback 边界统一进 `BarRunner` struct,Python 策略 API 不变;目标 vs 当前 Python callback loop `>=3x`,vs Backtrader `>=8x`
-- [ ] P2 指标缓存框架:回测侧统一接入 `pandas-ta-classic` / TDX / TradingView 指标批量预计算;QMT 实盘侧只能 rolling window 增量重算,不做全量预计算;指标密集策略预期 `1.5x-3x`
-- [ ] P3 共享 bar buffer / Line 访问优化:降低 `self.data.close[0]`、`self.data.close[-1]`、`indicator[-1]` Python 对象开销;需与 QMT rolling buffer 兼容,预期 `1.2x-2x`
-- [ ] P4 多数据/多周期推进计划:预编译 primary/secondary data advance plan,减少多标的多周期下每 bar 动态循环;单数据收益有限,多数据预期 `1.3x-2x`
+- [x] P1 完整 Rust BarRunner 第一阶段:新增 `RustBarRunner` struct + PyO3 `run()`,多数据 cursor 推进、订单 drain/submit/bind 与撮合/mark-to-market 同处 Rust 外层 loop;Python 策略 API 不变
+- [x] P2 指标缓存框架第一阶段:新增 `IndicatorCache`,回测侧可统一预计算 `pandas-ta-classic` / TDX / TradingView 批量指标并返回 cursor-aware line;QMT 实盘侧仍保留 rolling window 方向
+- [x] P3 共享 bar buffer / Line 访问优化第一阶段:DataFeed OHLCV line 直接从共享 buffer 读取当前/上一根,降低 `self.data.close[0]`、`self.data.close[-1]` 的数组代理开销
+- [x] P4 多数据/多周期推进计划第一阶段:primary/secondary data advance plan 已由 `RustBarRunner` 预编译并执行,减少多数据下每 bar Python cursor 搜索
 
 ---
 

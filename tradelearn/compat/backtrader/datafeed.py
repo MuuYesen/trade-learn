@@ -14,14 +14,20 @@ class DataFeed(DataContainer, LineRoot):
         DataContainer.__init__(self, data, name=name)
         # Initialize LineRoot (handles params and lines)
         LineRoot._base_init(self, **kwargs)
+        buffer = self.shared_bar_buffer()
         
         # Wrap raw arrays in LineSeries
-        self.lines.datetime = LineSeries(self._datetime, is_datetime=True)
-        self.lines.open = LineSeries(self._open)
-        self.lines.high = LineSeries(self._high)
-        self.lines.low = LineSeries(self._low)
-        self.lines.close = LineSeries(self._close)
-        self.lines.volume = LineSeries(self._volume)
+        self.lines.datetime = LineSeries(
+            self._datetime,
+            is_datetime=True,
+            buffer=buffer,
+            buffer_name="datetime",
+        )
+        self.lines.open = LineSeries(self._open, buffer=buffer, buffer_name="open")
+        self.lines.high = LineSeries(self._high, buffer=buffer, buffer_name="high")
+        self.lines.low = LineSeries(self._low, buffer=buffer, buffer_name="low")
+        self.lines.close = LineSeries(self._close, buffer=buffer, buffer_name="close")
+        self.lines.volume = LineSeries(self._volume, buffer=buffer, buffer_name="volume")
 
         self.datetime = self.lines.datetime
         self.open = self.lines.open

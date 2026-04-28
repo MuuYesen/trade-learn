@@ -171,10 +171,18 @@ class Lines:
     def __len__(self): return len(self._lines)
 
 class LineSeries:
-    def __init__(self, values: Any, is_datetime: bool = False) -> None:
+    def __init__(
+        self,
+        values: Any,
+        is_datetime: bool = False,
+        buffer: Any | None = None,
+        buffer_name: str | None = None,
+    ) -> None:
         self._values = np.asarray(values, dtype=np.float64)
         self._cursor = 0
         self._is_datetime = is_datetime
+        self._buffer = buffer
+        self._buffer_name = buffer_name
         self.min_period = 0
 
     def datetime(self, ago: int = 0) -> Any:
@@ -197,23 +205,33 @@ class LineSeries:
         self._cursor = cursor
 
     def __len__(self) -> int:
+        if self._buffer is not None:
+            return self._buffer.cursor + 1
         return self._cursor + 1
 
     def __getitem__(self, ago: Any) -> Any:
         if ago == 0:
-            return self._format_value(self._values[self._cursor])
+            return self._format_value(self._current_value(0))
         if ago == -1:
-            idx = self._cursor - 1
-            return self._format_value(self._values[idx]) if idx >= 0 else np.nan
+            return self._format_value(self._current_value(1))
         if not isinstance(ago, (int, slice, np.integer)):
             # Support indexing by data object (common in multi-data strategies)
             return self
         if isinstance(ago, slice):
             return self._values[ago]
-        idx = self._cursor + int(ago)
+        cursor = self._buffer.cursor if self._buffer is not None else self._cursor
+        idx = cursor + int(ago)
         if idx < 0 or idx >= len(self._values):
             return np.nan
         return self._format_value(self._values[idx])
+
+    def _current_value(self, ago: int) -> Any:
+        if self._buffer is not None and self._buffer_name is not None:
+            return self._buffer.value(self._buffer_name, ago=ago)
+        idx = self._cursor - ago
+        if idx < 0 or idx >= len(self._values):
+            return np.nan
+        return self._values[idx]
 
     def _format_value(self, value: Any) -> Any:
         if not self._is_datetime:

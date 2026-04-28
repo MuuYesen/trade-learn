@@ -606,6 +606,43 @@ def test_rust_primary_clock_plan_aligns_secondary_latest_at_or_before() -> None:
     assert plan.cursors_at(2) == [2, 1, 0]
 
 
+def test_rust_bar_runner_drives_multi_data_cursor_batches() -> None:
+    engine = _rust.RustBacktestEngine(
+        [1, 2, 3],
+        [10.0, 11.0, 12.0],
+        [10.0, 11.0, 12.0],
+        [10.0, 11.0, 12.0],
+        [10.0, 11.0, 12.0],
+        [1000.0, 1000.0, 1000.0],
+        100.0,
+        0.0,
+        False,
+        False,
+        False,
+        0.0,
+        0.0,
+        False,
+        False,
+        False,
+    )
+    runner = _rust.RustBarRunner([1, 2, 3], [[1, 3], [2]])
+    seen: list[tuple[int, list[int]]] = []
+
+    class BrokerRefSink:
+        def bind_rust_order_refs(self, bindings: list[tuple[int, int]]) -> None:
+            raise AssertionError("no bindings expected")
+
+    def on_bar(cursor, data_cursors, fills, cash, size, price):
+        seen.append((cursor, data_cursors))
+        return None
+
+    runner.run(engine, BrokerRefSink(), on_bar, 0, 3)
+
+    assert runner.len() == 3
+    assert runner.cursors_at(2) == [2, 1, 0]
+    assert seen == [(0, [0, 0, -1]), (1, [1, 0, 0]), (2, [2, 1, 0])]
+
+
 def test_data_advance_plan_uses_rust_primary_clock_cursors() -> None:
     primary = DataContainer(
         pd.DataFrame(
@@ -699,6 +736,27 @@ def test_shared_bar_buffer_reuses_data_container_arrays() -> None:
     assert buffer.cursor == 1
     assert buffer.value("close") == 4.0
     assert buffer.value("close", ago=1) == 3.0
+
+
+def test_backtrader_datafeed_lines_read_shared_bar_buffer_without_copy() -> None:
+    frame = pd.DataFrame(
+        {
+            "open": [1.0, 2.0],
+            "high": [1.0, 2.0],
+            "low": [1.0, 2.0],
+            "close": [3.0, 4.0],
+            "volume": [5.0, 6.0],
+        },
+        index=pd.to_datetime(["2026-01-01", "2026-01-02"], utc=True),
+    )
+    feed = DataFeed(frame)
+
+    feed._advance(1)
+
+    assert feed.close._buffer is feed.shared_bar_buffer()
+    assert feed.close[0] == 4.0
+    assert feed.close[-1] == 3.0
+    assert feed.datetime[0] == pd.Timestamp("2026-01-02", tz="UTC")
 
 
 def test_line_series_previous_value_before_start_is_nan() -> None:

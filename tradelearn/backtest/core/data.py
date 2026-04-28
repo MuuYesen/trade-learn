@@ -58,6 +58,7 @@ class DataContainer:
         
         # Store all columns in a dict for flexible access
         self._arrays: dict[str, np.ndarray] = {
+            "datetime": self._datetime,
             "open": self._open,
             "high": self._high,
             "low": self._low,

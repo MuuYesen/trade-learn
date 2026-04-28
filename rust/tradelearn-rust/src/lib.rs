@@ -117,28 +117,42 @@ struct RustPrimaryClockPlan {
     cursors: Vec<Vec<isize>>,
 }
 
+#[pyclass]
+struct RustBarRunner {
+    cursors: Vec<Vec<isize>>,
+}
+
+fn build_primary_clock_cursors(
+    primary_timestamps: Vec<i64>,
+    secondary_timestamps: Vec<Vec<i64>>,
+) -> Vec<Vec<isize>> {
+    let mut secondary_cursors = vec![0usize; secondary_timestamps.len()];
+    let mut cursors = Vec::with_capacity(primary_timestamps.len());
+
+    for (primary_cursor, primary_ts) in primary_timestamps.into_iter().enumerate() {
+        let mut row = Vec::with_capacity(secondary_timestamps.len() + 1);
+        row.push(primary_cursor as isize);
+        for (feed_idx, timestamps) in secondary_timestamps.iter().enumerate() {
+            while secondary_cursors[feed_idx] < timestamps.len()
+                && timestamps[secondary_cursors[feed_idx]] <= primary_ts
+            {
+                secondary_cursors[feed_idx] += 1;
+            }
+            row.push(secondary_cursors[feed_idx] as isize - 1);
+        }
+        cursors.push(row);
+    }
+
+    cursors
+}
+
 #[pymethods]
 impl RustPrimaryClockPlan {
     #[new]
     fn new(primary_timestamps: Vec<i64>, secondary_timestamps: Vec<Vec<i64>>) -> Self {
-        let mut secondary_cursors = vec![0usize; secondary_timestamps.len()];
-        let mut cursors = Vec::with_capacity(primary_timestamps.len());
-
-        for (primary_cursor, primary_ts) in primary_timestamps.into_iter().enumerate() {
-            let mut row = Vec::with_capacity(secondary_timestamps.len() + 1);
-            row.push(primary_cursor as isize);
-            for (feed_idx, timestamps) in secondary_timestamps.iter().enumerate() {
-                while secondary_cursors[feed_idx] < timestamps.len()
-                    && timestamps[secondary_cursors[feed_idx]] <= primary_ts
-                {
-                    secondary_cursors[feed_idx] += 1;
-                }
-                row.push(secondary_cursors[feed_idx] as isize - 1);
-            }
-            cursors.push(row);
+        Self {
+            cursors: build_primary_clock_cursors(primary_timestamps, secondary_timestamps),
         }
-
-        Self { cursors }
     }
 
     fn len(&self) -> usize {
@@ -150,6 +164,70 @@ impl RustPrimaryClockPlan {
             .get(primary_cursor)
             .cloned()
             .unwrap_or_default()
+    }
+}
+
+#[pymethods]
+impl RustBarRunner {
+    #[new]
+    fn new(primary_timestamps: Vec<i64>, secondary_timestamps: Vec<Vec<i64>>) -> Self {
+        Self {
+            cursors: build_primary_clock_cursors(primary_timestamps, secondary_timestamps),
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.cursors.len()
+    }
+
+    fn cursors_at(&self, primary_cursor: usize) -> Vec<isize> {
+        self.cursors
+            .get(primary_cursor)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn run(
+        &self,
+        py: Python<'_>,
+        mut engine: PyRefMut<'_, RustBacktestEngine>,
+        broker: Py<PyAny>,
+        on_bar: Py<PyAny>,
+        start: usize,
+        end: usize,
+    ) -> PyResult<()> {
+        let stop = end.min(engine.inner.total_bars()).min(self.cursors.len());
+        for cursor in start..stop {
+            let fill_records = engine.inner.step_open(cursor);
+            let fills = engine.map_fills(fill_records);
+            let cash = engine.inner.get_cash();
+            let (size, price) = engine.inner.get_position();
+            let data_cursors = self.cursors[cursor].clone();
+            let drained = on_bar.call1(py, (cursor, data_cursors, fills, cash, size, price))?;
+            if drained.is_none(py) {
+                continue;
+            }
+            let orders: Vec<(u64, String, String, f64, Option<f64>, Option<f64>)> =
+                drained.extract(py)?;
+            let mut bindings: Vec<(u64, u64)> = Vec::with_capacity(orders.len());
+
+            for (provisional_ref, side, order_type, order_size, limit_price, stop_price) in orders {
+                let side = parse_order_side(&side)?;
+                let order_type = parse_order_type(&order_type)?;
+                let order_id = engine.inner.submit_order(
+                    side,
+                    order_type,
+                    order_size,
+                    limit_price,
+                    stop_price,
+                );
+                bindings.push((provisional_ref, order_id));
+            }
+            if !bindings.is_empty() {
+                broker.call_method1(py, "bind_rust_order_refs", (bindings,))?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -432,6 +510,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tradelearn_rust_version, m)?)?;
     m.add_function(wrap_pyfunction!(match_order_fill, m)?)?;
     m.add_class::<RustBacktestEngine>()?;
+    m.add_class::<RustBarRunner>()?;
     m.add_class::<RustPrimaryClockPlan>()?;
     Ok(())
 }
