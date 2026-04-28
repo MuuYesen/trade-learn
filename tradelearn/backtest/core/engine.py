@@ -2,6 +2,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from typing import Any, List
+from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
 
 # These are still needed for Backtrader compatibility
 from tradelearn.compat.backtrader.base import (
@@ -116,6 +117,9 @@ def run_backtest(cerebro: Any) -> List[Any]:
         if hasattr(val, '_advance'):
             strategy_attr_advancers.append(val._advance)
             seen_advancer_ids.add(id(val))
+    notify_cashvalue = None
+    if type(strategy).notify_cashvalue is not CoreStrategy.notify_cashvalue:
+        notify_cashvalue = strategy.notify_cashvalue
     
     def on_bar(i: int, fills: list[Any] | None = None, cash: float | None = None,
                size: float | None = None, price: float | None = None) -> list[Any]:
@@ -143,7 +147,8 @@ def run_backtest(cerebro: Any) -> List[Any]:
                 if cash is not None and size is not None and price is not None:
                     cerebro.broker._rust_state_cache = (i, cash, size, price)
             cerebro.broker.process_fills(strategy, i)
-            strategy.notify_cashvalue(cerebro.broker.getcash(), cerebro.broker.getvalue())
+            if notify_cashvalue is not None:
+                notify_cashvalue(cerebro.broker.getcash(), cerebro.broker.getvalue())
 
         # Strategy Next
         if i >= min_period - 1:

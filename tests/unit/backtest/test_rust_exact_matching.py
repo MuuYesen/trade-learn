@@ -430,6 +430,46 @@ def test_backtesting_data_proxy_reuses_line_proxy_after_cursor_starts() -> None:
     assert first is second
 
 
+def test_cashvalue_notification_only_runs_when_strategy_overrides_hook() -> None:
+    data = pd.DataFrame(
+        {
+            "open": [10.0, 11.0, 12.0],
+            "high": [10.0, 11.0, 12.0],
+            "low": [10.0, 11.0, 12.0],
+            "close": [10.0, 11.0, 12.0],
+            "volume": [1000.0, 1000.0, 1000.0],
+        },
+        index=pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"], utc=True),
+    )
+
+    class NoCashHook(Strategy):
+        def next(self) -> None:
+            pass
+
+    class CashHook(Strategy):
+        def __init__(self) -> None:
+            self.cash_values: list[tuple[float, float]] = []
+
+        def notify_cashvalue(self, cash: float, value: float) -> None:
+            self.cash_values.append((cash, value))
+
+        def next(self) -> None:
+            pass
+
+    no_hook = Cerebro(match_mode="exact")
+    no_hook.adddata(data)
+    no_hook.addstrategy(NoCashHook)
+    [no_hook_strategy] = no_hook.run()
+
+    with_hook = Cerebro(match_mode="exact")
+    with_hook.adddata(data)
+    with_hook.addstrategy(CashHook)
+    [with_hook_strategy] = with_hook.run()
+
+    assert "cash_values" not in no_hook_strategy.__dict__
+    assert len(with_hook_strategy.cash_values) == 3
+
+
 def test_smart_matching_prefers_stop_loss_when_exit_orders_are_ambiguous() -> None:
     data = pd.DataFrame(
         {
