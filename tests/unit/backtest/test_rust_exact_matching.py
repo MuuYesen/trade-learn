@@ -136,6 +136,37 @@ def test_bt_match_mode_is_not_supported() -> None:
         RustBroker(match_mode="bt")
 
 
+def test_rust_broker_caches_cash_and_position_within_bar() -> None:
+    class FakeEngine:
+        def __init__(self) -> None:
+            self.cash_calls = 0
+            self.position_calls = 0
+
+        def get_cash(self) -> float:
+            self.cash_calls += 1
+            return 100.0
+
+        def get_position(self) -> tuple[float, float]:
+            self.position_calls += 1
+            return 2.0, 10.0
+
+    engine = FakeEngine()
+    broker = RustBroker(match_mode="exact")
+    broker._engine = engine
+    broker._close_prices = [12.0]
+    broker._curr_idx = 0
+
+    assert broker.getcash() == 100.0
+    assert broker.getcash() == 100.0
+    assert broker.getposition().size == 2.0
+    assert broker.getposition().price == 10.0
+    assert broker.getvalue() == 124.0
+    assert broker.getvalue() == 124.0
+
+    assert engine.cash_calls == 1
+    assert engine.position_calls == 1
+
+
 def test_smart_matching_prefers_stop_loss_when_exit_orders_are_ambiguous() -> None:
     data = pd.DataFrame(
         {

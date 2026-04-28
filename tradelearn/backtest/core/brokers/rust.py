@@ -54,6 +54,7 @@ class RustBroker(BaseBroker):
         self._pending_orders: list[Order] = []
         self._order_count = 0
         self._last_fill_idx = 0
+        self._rust_state_cache: tuple[int, float, float, float] | None = None
         # For 'bt' mode, we maintain state in Python
         self._pos = Position(size=0.0, price=0.0)
         self._active_cash = cash
@@ -71,13 +72,14 @@ class RustBroker(BaseBroker):
 
     def getcash(self) -> float:
         if self._uses_rust_matching():
-            return self._engine.get_cash()
+            _, cash, _, _ = self._get_rust_state()
+            return cash
         return self._active_cash
 
     def getvalue(self) -> float:
         if self._uses_rust_matching():
-            val = self.getcash()
-            size, price = self._engine.get_position()
+            _, cash, size, _price = self._get_rust_state()
+            val = cash
             if size != 0 and self._close_prices is not None:
                 current_price = self._close_prices[self._curr_idx]
                 val += size * current_price * self._mult
@@ -93,9 +95,18 @@ class RustBroker(BaseBroker):
 
     def getposition(self, data: Any = None) -> Position:
         if self._uses_rust_matching():
-            size, price = self._engine.get_position()
+            _, _cash, size, price = self._get_rust_state()
             return Position(size=size, price=price)
         return self._pos
+
+    def _get_rust_state(self) -> tuple[int, float, float, float]:
+        """Return cached Rust cash/position for the current bar."""
+        if self._rust_state_cache is not None and self._rust_state_cache[0] == self._curr_idx:
+            return self._rust_state_cache
+        cash = self._engine.get_cash()
+        size, price = self._engine.get_position()
+        self._rust_state_cache = (self._curr_idx, cash, size, price)
+        return self._rust_state_cache
 
     def get_mult(self, data: Any = None) -> float:
         return self._mult
@@ -192,8 +203,10 @@ class RustBroker(BaseBroker):
 
     def step(self, i: int) -> None:
         self._curr_idx = i
+        self._rust_state_cache = None
         if self._uses_rust_matching():
             self._engine.step_open(i)
+            self._rust_state_cache = None
 
     def process_fills(self, strategy: Strategy, i: int) -> None:
         """Synchronize filled orders back to Python."""
