@@ -1,11 +1,15 @@
 """Rust-backed broker proxy for high-performance backtesting."""
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
-import numpy as np
+
+from typing import TYPE_CHECKING, Any
 
 from tradelearn.backtest.core.models import (
-    BaseBroker, _notify_order, Order, Position, ExecutedInfo
+    BaseBroker,
+    ExecutedInfo,
+    Order,
+    Position,
+    _notify_order,
 )
 
 if TYPE_CHECKING:
@@ -21,7 +25,14 @@ class CommInfo:
 
 class RustBroker(BaseBroker):
     """Proxy for the high-performance Rust backtesting engine."""
-    def __init__(self, cash: float = 100000.0, commission: float = 0.0, mult: float = 1.0, match_mode: str = 'bt'):
+
+    def __init__(
+        self,
+        cash: float = 100000.0,
+        commission: float = 0.0,
+        mult: float = 1.0,
+        match_mode: str = 'bt',
+    ):
         super().__init__()
         self._cash = cash
         self.commission_ratio = commission
@@ -30,8 +41,8 @@ class RustBroker(BaseBroker):
         self._engine = None # Initialized in engine.py
         self._close_prices = None
         self._curr_idx = 0
-        self._orders: List[Order] = []
-        self._pending_orders: List[Order] = []
+        self._orders: list[Order] = []
+        self._pending_orders: list[Order] = []
         self._order_count = 0
         self._last_fill_idx = 0
         # For 'bt' mode, we maintain state in Python
@@ -80,8 +91,16 @@ class RustBroker(BaseBroker):
     def getcommissioninfo(self, data: Any) -> CommInfo:
         return CommInfo(self.commission_ratio)
 
-    def _submit(self, owner: Strategy, data: Any, side: int, size: float, 
-                price: Optional[float] = None, exectype: Any = None, **kwargs) -> Order:
+    def _submit(
+        self,
+        owner: Strategy,
+        data: Any,
+        side: int,
+        size: float,
+        price: float | None = None,
+        exectype: Any = None,
+        **kwargs,
+    ) -> Order:
         """Core submission entry point called by Strategy.buy/sell."""
         self._order_count += 1
         is_buy = (side == Order.Buy)
@@ -93,18 +112,38 @@ class RustBroker(BaseBroker):
             ordtype=side,
             size=actual_size,
             price=price,
+            pricelimit=kwargs.get("pricelimit"),
             exectype=exectype or Order.Market
         )
         order.status = Order.Submitted
         self._orders.append(order)
         
         if self.match_mode == 'smart' and self._engine:
-            # signature: submit_order(self, /, side, order_type, size, limit_price=None, stop_price=None)
             side_str = "buy" if is_buy else "sell"
-            otypes = {Order.Market: "market", Order.Limit: "limit", Order.Stop: "stop", Order.StopLimit: "stoplimit"}
+            otypes = {
+                Order.Market: "market",
+                Order.Limit: "limit",
+                Order.Stop: "stop",
+                Order.StopLimit: "stop_limit",
+            }
             ot_str = otypes.get(order.exectype, "market")
+            limit_price = None
+            stop_price = None
+            if order.exectype == Order.Limit:
+                limit_price = price
+            elif order.exectype == Order.Stop:
+                stop_price = price
+            elif order.exectype == Order.StopLimit:
+                stop_price = price
+                limit_price = order.pricelimit
             # Rust returns the assigned order_id
-            order_id = self._engine.submit_order(side_str, ot_str, actual_size)
+            order_id = self._engine.submit_order(
+                side_str,
+                ot_str,
+                actual_size,
+                limit_price,
+                stop_price,
+            )
             order.ref = order_id
             order.status = Order.Accepted
         else:
@@ -114,12 +153,26 @@ class RustBroker(BaseBroker):
             
         return order
 
-    def buy(self, owner: Strategy, data: Any, size: float, price: Optional[float] = None, 
-            exectype: Any = None, **kwargs) -> Order:
+    def buy(
+        self,
+        owner: Strategy,
+        data: Any,
+        size: float,
+        price: float | None = None,
+        exectype: Any = None,
+        **kwargs,
+    ) -> Order:
         return self._submit(owner, data, Order.Buy, size, price, exectype, **kwargs)
 
-    def sell(self, owner: Strategy, data: Any, size: float, price: Optional[float] = None, 
-             exectype: Any = None, **kwargs) -> Order:
+    def sell(
+        self,
+        owner: Strategy,
+        data: Any,
+        size: float,
+        price: float | None = None,
+        exectype: Any = None,
+        **kwargs,
+    ) -> Order:
         return self._submit(owner, data, Order.Sell, size, price, exectype, **kwargs)
 
     def step(self, i: int) -> None:
@@ -149,8 +202,11 @@ class RustBroker(BaseBroker):
                 self._last_fill_idx = len(all_fills)
         else:
             # BT Mode: Naive matching in Python
-            if not self._pending_orders: return
-            o, h, l, c = self._open_prices[i], self._high_prices[i], self._low_prices[i], self._close_prices[i]
+            if not self._pending_orders:
+                return
+            o = self._open_prices[i]
+            h = self._high_prices[i]
+            low = self._low_prices[i]
             remaining = []
             for order in self._pending_orders:
                 executed = False
@@ -164,7 +220,7 @@ class RustBroker(BaseBroker):
                     is_buy = order.isbuy()
                     limit_price = order.price
                     if is_buy:
-                        if l <= limit_price:
+                        if low <= limit_price:
                             executed = True
                             exec_price = min(o, limit_price)
                     else: # Sell
@@ -179,7 +235,7 @@ class RustBroker(BaseBroker):
                             executed = True
                             exec_price = max(o, stop_price)
                     else: # Sell
-                        if l <= stop_price:
+                        if low <= stop_price:
                             executed = True
                             exec_price = min(o, stop_price)
 
@@ -200,8 +256,10 @@ class RustBroker(BaseBroker):
                     signed_size = order.size if order.isbuy() else -order.size
                     # self._pos.update(signed_size, exec_price) - Strategy._on_fill will do this
                     self._active_cash -= comm
-                    if order.isbuy(): self._active_cash -= abs_size * exec_price
-                    else: self._active_cash += abs_size * exec_price
+                    if order.isbuy():
+                        self._active_cash -= abs_size * exec_price
+                    else:
+                        self._active_cash += abs_size * exec_price
                     
                     strategy._on_fill(order.data, signed_size, exec_price)
                     _notify_order(strategy, order)

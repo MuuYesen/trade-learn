@@ -1,5 +1,5 @@
-use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
 
 pub mod core;
 use crate::core::*;
@@ -208,7 +208,9 @@ impl RustBacktestEngine {
                 )));
             }
         };
-        Ok(self.inner.submit_order(side, order_type, size, limit_price, stop_price))
+        Ok(self
+            .inner
+            .submit_order(side, order_type, size, limit_price, stop_price))
     }
 
     fn get_position(&self) -> (f64, f64) {
@@ -246,7 +248,16 @@ impl RustBacktestEngine {
                     OrderSide::Buy => "buy".to_string(),
                     OrderSide::Sell => "sell".to_string(),
                 };
-                (f.order_id, side_str, f.size, f.price, f.commission, f.slippage, f.pnl, f.ts)
+                (
+                    f.order_id,
+                    side_str,
+                    f.size,
+                    f.price,
+                    f.commission,
+                    f.slippage,
+                    f.pnl,
+                    f.ts,
+                )
             })
             .collect()
     }
@@ -263,7 +274,16 @@ impl RustBacktestEngine {
                     OrderSide::Buy => "buy".to_string(),
                     OrderSide::Sell => "sell".to_string(),
                 };
-                (f.order_id, side_str, f.size, f.price, f.commission, f.slippage, f.pnl, f.ts)
+                (
+                    f.order_id,
+                    side_str,
+                    f.size,
+                    f.price,
+                    f.commission,
+                    f.slippage,
+                    f.pnl,
+                    f.ts,
+                )
             })
             .collect()
     }
@@ -278,7 +298,15 @@ impl RustBacktestEngine {
                     OrderSide::Buy => "buy".to_string(),
                     OrderSide::Sell => "sell".to_string(),
                 };
-                (f.order_id, side_str, f.size, f.price, f.commission, f.slippage, f.pnl)
+                (
+                    f.order_id,
+                    side_str,
+                    f.size,
+                    f.price,
+                    f.commission,
+                    f.slippage,
+                    f.pnl,
+                )
             })
             .collect()
     }

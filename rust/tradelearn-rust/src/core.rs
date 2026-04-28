@@ -343,16 +343,32 @@ pub fn match_order_at_price(
         OrderType::Market => Some(price),
         OrderType::Limit => {
             if order.side == OrderSide::Buy {
-                if price <= order.limit_price? { Some(price) } else { None }
+                if price <= order.limit_price? {
+                    Some(price)
+                } else {
+                    None
+                }
             } else {
-                if price >= order.limit_price? { Some(price) } else { None }
+                if price >= order.limit_price? {
+                    Some(price)
+                } else {
+                    None
+                }
             }
         }
         OrderType::Stop => {
             if order.side == OrderSide::Buy {
-                if price >= order.stop_price? { Some(price) } else { None }
+                if price >= order.stop_price? {
+                    Some(price)
+                } else {
+                    None
+                }
             } else {
-                if price <= order.stop_price? { Some(price) } else { None }
+                if price <= order.stop_price? {
+                    Some(price)
+                } else {
+                    None
+                }
             }
         }
         OrderType::StopLimit => {
@@ -361,9 +377,17 @@ pub fn match_order_at_price(
             let stop = order.stop_price?;
             let limit = order.limit_price?;
             if order.side == OrderSide::Buy {
-                if price >= stop && price <= limit { Some(price) } else { None }
+                if price >= stop && price <= limit {
+                    Some(price)
+                } else {
+                    None
+                }
             } else {
-                if price <= stop && price >= limit { Some(price) } else { None }
+                if price <= stop && price >= limit {
+                    Some(price)
+                } else {
+                    None
+                }
             }
         }
     }?;
@@ -378,11 +402,50 @@ pub fn match_order_at_price(
             fill_price,
             size,
             options.commission,
-            options.mult
+            options.mult,
         )),
         slippage: 0.0,
         ts: bar.ts,
     })
+}
+
+fn apply_slippage(price: f64, side: OrderSide, model: SlippageModel) -> (f64, f64) {
+    let adjusted = match model {
+        SlippageModel::Fixed(model) => match side {
+            OrderSide::Buy => price + model.amount,
+            OrderSide::Sell => price - model.amount,
+        },
+        SlippageModel::Percent(model) => match side {
+            OrderSide::Buy => price * (1.0 + model.ratio),
+            OrderSide::Sell => price * (1.0 - model.ratio),
+        },
+    };
+    let rounded = round_precision(adjusted);
+    (rounded, round_precision(rounded - price))
+}
+
+fn fill_from_raw_price(
+    order: &OrderEvent,
+    raw_price: f64,
+    bar: &BarEvent,
+    options: &ExecutionOptions,
+) -> FillEvent {
+    let size = round_precision(signed_order_size(order));
+    let (fill_price, slippage) = apply_slippage(raw_price, order.side, options.slippage);
+    FillEvent {
+        order_id: order.order_id,
+        symbol: order.symbol.clone(),
+        size,
+        price: fill_price,
+        commission: round_precision(calculate_commission(
+            fill_price,
+            size,
+            options.commission,
+            options.mult,
+        )),
+        slippage,
+        ts: bar.ts,
+    }
 }
 
 pub fn match_order(
@@ -390,22 +453,46 @@ pub fn match_order(
     bar: &BarEvent,
     options: &ExecutionOptions,
 ) -> Option<FillEvent> {
-    // Re-implement simplified matching for single-call compatibility (like in lib.rs)
-    // Uses the same path assumption as the main engine loop.
-    let hp = bar.high - bar.open;
-    let lp = bar.open - bar.low;
-    let path = if hp < lp {
-        [bar.open, bar.high, bar.low, bar.close]
+    let execution_price = if options.trade_on_close {
+        bar.close
     } else {
-        [bar.open, bar.low, bar.high, bar.close]
+        bar.open
     };
 
-    for &price in &path {
-        if let Some(fill) = match_order_at_price(order, price, bar, options) {
-            return Some(fill);
+    let raw_price = match order.order_type {
+        OrderType::Market => Some(execution_price),
+        OrderType::Limit => {
+            let limit = order.limit_price?;
+            match order.side {
+                OrderSide::Buy if bar.low <= limit => Some(execution_price.min(limit)),
+                OrderSide::Sell if bar.high >= limit => Some(execution_price.max(limit)),
+                _ => None,
+            }
         }
-    }
-    None
+        OrderType::Stop => {
+            let stop = order.stop_price?;
+            match order.side {
+                OrderSide::Buy if bar.high >= stop => Some(execution_price),
+                OrderSide::Sell if bar.low <= stop => Some(execution_price),
+                _ => None,
+            }
+        }
+        OrderType::StopLimit => {
+            let stop = order.stop_price?;
+            let limit = order.limit_price?;
+            match order.side {
+                OrderSide::Buy if bar.high >= stop && bar.low <= limit => {
+                    Some(execution_price.min(limit))
+                }
+                OrderSide::Sell if bar.low <= stop && bar.high >= limit => {
+                    Some(execution_price.max(limit))
+                }
+                _ => None,
+            }
+        }
+    }?;
+
+    Some(fill_from_raw_price(order, raw_price, bar, options))
 }
 
 fn calculate_commission(price: f64, size: f64, commission: CommissionModel, mult: f64) -> f64 {
@@ -762,55 +849,47 @@ impl BacktestEngine {
         self.match_all_pending_internal(bar, &options)
     }
 
-    fn match_all_pending_internal(&mut self, bar: &BarEvent, options: &ExecutionOptions) -> Vec<FillRecord> {
+    fn match_all_pending_internal(
+        &mut self,
+        bar: &BarEvent,
+        options: &ExecutionOptions,
+    ) -> Vec<FillRecord> {
         let mut fills = Vec::new();
-        
-        // Backtrader-style Price Path Assumption
-        let hp = bar.high - bar.open;
-        let lp = bar.open - bar.low;
-        let path = if hp < lp {
-            [bar.open, bar.high, bar.low, bar.close]
-        } else {
-            [bar.open, bar.low, bar.high, bar.close]
-        };
+        let mut remaining = Vec::new();
+        let current_pending = std::mem::take(&mut self.pending);
 
-        for &price in &path {
-            let mut remaining = Vec::new();
-            let current_pending = std::mem::take(&mut self.pending);
-            
-            for order in current_pending {
-                if let Some(fill_event) = match_order_at_price(&order, price, bar, options) {
-                    let position = self.portfolio.position(&order.symbol);
-                    let old_size = position.map(|p| p.size).unwrap_or(0.0);
-                    let old_price = position.map(|p| p.avg_price).unwrap_or(0.0);
-                    let pnl = realized_pnl(
-                        old_size,
-                        old_price,
-                        fill_event.size,
-                        fill_event.price,
-                        options.mult,
-                    );
+        for order in current_pending {
+            if let Some(fill_event) = match_order(&order, bar, options) {
+                let position = self.portfolio.position(&order.symbol);
+                let old_size = position.map(|p| p.size).unwrap_or(0.0);
+                let old_price = position.map(|p| p.avg_price).unwrap_or(0.0);
+                let pnl = realized_pnl(
+                    old_size,
+                    old_price,
+                    fill_event.size,
+                    fill_event.price,
+                    options.mult,
+                );
 
-                    self.portfolio.apply_fill(&fill_event, options.mult);
+                self.portfolio.apply_fill(&fill_event, options.mult);
 
-                    let record = FillRecord {
-                        order_id: fill_event.order_id,
-                        ts: fill_event.ts,
-                        side: order.side,
-                        size: fill_event.size,
-                        price: fill_event.price,
-                        commission: fill_event.commission,
-                        slippage: fill_event.slippage,
-                        pnl,
-                    };
-                    self.results.fills.push(record.clone());
-                    fills.push(record);
-                } else {
-                    remaining.push(order);
-                }
+                let record = FillRecord {
+                    order_id: fill_event.order_id,
+                    ts: fill_event.ts,
+                    side: order.side,
+                    size: fill_event.size,
+                    price: fill_event.price,
+                    commission: fill_event.commission,
+                    slippage: fill_event.slippage,
+                    pnl,
+                };
+                self.results.fills.push(record.clone());
+                fills.push(record);
+            } else {
+                remaining.push(order);
             }
-            self.pending = remaining;
         }
+        self.pending = remaining;
         fills
     }
 
@@ -865,4 +944,3 @@ fn realized_pnl(old_size: f64, old_price: f64, fill_size: f64, fill_price: f64, 
     let closing_size = old_size.abs().min(fill_size.abs());
     (fill_price - old_price) * closing_size * old_size.signum() * mult
 }
-
