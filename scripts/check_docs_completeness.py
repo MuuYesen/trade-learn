@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-REQUIRED_RELEASE_PAGES = ("README.md", "VISION.md", "RUNBOOK.md")
+REQUIRED_RELEASE_PAGES = ("README.md", "PROJECT.md", "RUNBOOK.md")
 REQUIRED_INTERNAL_NAV = (
     "internal/event-loop.md",
     "internal/matching-design.md",

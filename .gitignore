@@ -1,5 +1,11 @@
 ### Python template
 .DS_Store
+.pypirc
+.vscode/
+.rust_env/
+/out.txt
+/scratch.py
+/test_quick.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

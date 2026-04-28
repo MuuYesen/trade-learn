@@ -21,7 +21,7 @@ def test_docs_completeness_requires_release_pages_and_design_notes() -> None:
     assert report.missing_release_pages == ()
     assert report.missing_internal_nav == ()
     assert "README.md" in report.nav_paths
-    assert "VISION.md" in report.nav_paths
+    assert "PROJECT.md" in report.nav_paths
     assert "RUNBOOK.md" in report.nav_paths
     assert "internal/event-loop.md" in report.nav_paths
     assert "internal/matching-design.md" in report.nav_paths
