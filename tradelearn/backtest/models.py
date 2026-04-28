@@ -10,21 +10,38 @@ import pandas as pd
 class Params:
     """Simple parameter storage object."""
 
-    def __init__(self, defaults: Any, **kwargs):
+    def __init__(self, defaults: Any = (), **kwargs):
+        self._keys: list[str] = []
         if isinstance(defaults, dict):
             for name, val in defaults.items():
+                if name not in self._keys:
+                    self._keys.append(name)
                 setattr(self, name, val)
         elif isinstance(defaults, (list, tuple)):
             for name, val in defaults:
                 if isinstance(name, (list, tuple)):  # tuple of (name, val)
+                    if name[0] not in self._keys:
+                        self._keys.append(name[0])
                     setattr(self, name[0], name[1])
                 else:
+                    if name not in self._keys:
+                        self._keys.append(name)
                     setattr(self, name, val)
         for name, val in kwargs.items():
+            if name not in self._keys:
+                self._keys.append(name)
             setattr(self, name, val)
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        if not name.startswith("_") and hasattr(self, "_keys") and name not in self._keys:
+            self._keys.append(name)
+        super().__setattr__(name, value)
+
+    def __getitem__(self, index: int) -> Any:
+        return getattr(self, self._keys[index])
+
     def asdict(self) -> dict[str, Any]:
-        return dict(self.__dict__)
+        return {key: getattr(self, key) for key in self._keys}
 
 
 @dataclass

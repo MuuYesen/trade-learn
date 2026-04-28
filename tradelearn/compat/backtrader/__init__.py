@@ -8,7 +8,7 @@ from tradelearn.compat.backtrader.analyzer import Analyzer
 from tradelearn.compat.backtrader.cerebro import Cerebro
 from tradelearn.compat.backtrader.grid import GridSearchResult, grid_search
 from tradelearn.compat.backtrader.indicators import Indicator
-from tradelearn.compat.backtrader.sizers import AllInSizer, FixedSize, PercentSizer
+from tradelearn.compat.backtrader.sizers import AllInSizer, FixedSize, PercentSizer, Sizer
 from tradelearn.compat.backtrader.strategy import (
     CommInfoBase,
     DataFeed,
@@ -17,7 +17,6 @@ from tradelearn.compat.backtrader.strategy import (
     Order,
     Params,
     Position,
-    Sizer,
     Strategy,
     Trade,
 )

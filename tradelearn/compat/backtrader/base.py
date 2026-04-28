@@ -26,9 +26,11 @@ __all__ = [
     "Params",
     "_G",
     "_notify_order",
+    "collect_param_defaults",
     "set_current_data",
     "set_current_datas",
     "set_current_strategy",
+    "split_param_kwargs",
 ]
 
 
@@ -50,26 +52,41 @@ def set_current_datas(datas: list[Any]) -> None:
 def set_current_strategy(strategy: Any) -> None:
     _G.current_strategy = strategy
 
+
+def collect_param_defaults(cls: type) -> tuple[list[str], list[tuple[str, Any]]]:
+    names: list[str] = []
+    defaults: list[tuple[str, Any]] = []
+    for base_cls in reversed(cls.mro()):
+        param_defaults = getattr(base_cls, "params", [])
+        if isinstance(param_defaults, dict):
+            names.extend(param_defaults.keys())
+            defaults.extend(param_defaults.items())
+        elif isinstance(param_defaults, (list, tuple)):
+            for item in param_defaults:
+                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                    names.append(item[0])
+                    defaults.append((item[0], item[1]))
+    return names, defaults
+
+
+def split_param_kwargs(cls: type, kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    param_names, _defaults = collect_param_defaults(cls)
+    param_name_set = set(param_names)
+    param_kwargs = {}
+    other_kwargs = {}
+    for key, value in kwargs.items():
+        if key in param_name_set:
+            param_kwargs[key] = value
+        else:
+            other_kwargs[key] = value
+    return param_kwargs, other_kwargs
+
+
 class MetaParams(type):
     """Metaclass to handle Backtrader-style parameter stripping and lifecycle hooks."""
     def __call__(cls, *args, **kwargs):
         # 1. Collect all params from MRO
-        p_names = []
-        all_p_defaults = []
-        for base_cls in cls.mro():
-            p_defaults = getattr(base_cls, 'params', [])
-            if isinstance(p_defaults, dict):
-                p_names.extend(p_defaults.keys())
-                all_p_defaults.extend(p_defaults.items())
-            elif isinstance(p_defaults, (list, tuple)):
-                p_names.extend([x[0] for x in p_defaults if isinstance(x, (list, tuple))])
-                all_p_defaults.extend(p_defaults)
-
-        p_kwargs = {}
-        other_kwargs = {}
-        for k, v in kwargs.items():
-            if k in p_names: p_kwargs[k] = v
-            else: other_kwargs[k] = v
+        p_kwargs, other_kwargs = split_param_kwargs(cls, kwargs)
 
         # 2. Instantiate
         instance = cls.__new__(cls)
@@ -133,11 +150,7 @@ class MetaParams(type):
 class LineRoot(metaclass=MetaParams):
     """Base class for anything that has lines (DataFeeds, Indicators)."""
     def _base_init(self, **kwargs):
-        all_cls_params = []
-        for base_cls in self.__class__.mro():
-            p = getattr(base_cls, 'params', [])
-            if isinstance(p, (list, tuple)): all_cls_params.extend(p)
-            elif isinstance(p, dict): all_cls_params.extend(p.items())
+        _param_names, all_cls_params = collect_param_defaults(self.__class__)
             
         self.params = self.p = Params(all_cls_params, **kwargs)
 

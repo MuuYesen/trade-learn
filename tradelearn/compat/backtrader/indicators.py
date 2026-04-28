@@ -6,23 +6,11 @@ import numpy as np
 import pandas as pd
 
 from tradelearn.backtest.indicator_cache import BatchIndicatorCache
-
-
-class Params:
-    def __init__(self, **kwargs):
-        self._keys = []
-        for k, v in kwargs.items():
-            if k not in self._keys: self._keys.append(k)
-            setattr(self, k, v)
-    
-    def __setattr__(self, name, value):
-        if not name.startswith('_') and name not in getattr(self, '_keys', []):
-            if hasattr(self, '_keys'):
-                self._keys.append(name)
-        super().__setattr__(name, value)
-
-    def __getitem__(self, i): 
-        return getattr(self, self._keys[i])
+from tradelearn.compat.backtrader.base import (
+    Params,
+    collect_param_defaults,
+    split_param_kwargs,
+)
 
 def bt_ema(series, period):
     if len(series) < period: return pd.Series([np.nan]*len(series))
@@ -60,26 +48,11 @@ def bt_wilder(series, period):
 
 class MetaSimple(type):
     def __call__(cls, *args, **kwargs):
-        p_defs = getattr(cls, 'params', ())
-        p_names = []
-        p_defaults = {}
-        if isinstance(p_defs, (list, tuple)):
-            for p in p_defs:
-                if isinstance(p, (list, tuple)):
-                    p_names.append(p[0])
-                    p_defaults[p[0]] = p[1]
-        
-        p_kwargs = {}
-        other_kwargs = {}
-        for k, v in kwargs.items():
-            if k in p_names: p_kwargs[k] = v
-            else: other_kwargs[k] = v
-            
-        final_p = p_defaults.copy()
-        final_p.update(p_kwargs)
+        _param_names, p_defaults = collect_param_defaults(cls)
+        p_kwargs, other_kwargs = split_param_kwargs(cls, kwargs)
         
         instance = cls.__new__(cls, *args, **other_kwargs)
-        instance.p = instance.params = Params(**final_p)
+        instance.p = instance.params = Params(p_defaults, **p_kwargs)
         
         from .base import _G
         data = None
@@ -92,8 +65,7 @@ class MetaSimple(type):
                 new_args.append(a)
         
         instance.data = data if data is not None else other_kwargs.get('data', _G.current_data)
-        instance.data = data if data is not None else other_kwargs.get('data', _G.current_data)
-        instance.l = instance.lines = Params(**{line: None for line in instance.lines_def})
+        instance.l = instance.lines = Params({line: None for line in instance.lines_def})
         
         sig = inspect.signature(cls.__init__)
         init_params = list(sig.parameters.values())
