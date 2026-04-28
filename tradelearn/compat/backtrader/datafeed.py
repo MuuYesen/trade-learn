@@ -29,6 +29,6 @@ class DataFeed(DataContainer, LineRoot):
         return self._cursor + 1
 
     def _advance(self, cursor: int) -> None:
-        DataContainer._advance(self, cursor)
+        self._cursor = cursor
         for line in self._lines_list:
-            line._advance(cursor)
+            line._cursor = cursor
