@@ -3,7 +3,7 @@ import logging
 import math
 import os
 from typing import Any, Dict
-from tradelearn.backtest.analyzer import Analyzer
+from ..analyzer import Analyzer
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_MLFLOW_URI = "https://mlflow.leafquant.com"

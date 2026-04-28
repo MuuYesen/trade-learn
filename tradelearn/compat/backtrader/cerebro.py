@@ -4,7 +4,7 @@ from typing import Any, List, Dict, Type, Tuple
 from tradelearn.compat.backtrader.strategy import Strategy
 from tradelearn.compat.backtrader.datafeed import DataFeed
 from tradelearn.compat.backtrader.sizer import FixedSize
-from tradelearn.backtest.analyzer import Analyzer
+from .analyzer import Analyzer
 
 class Cerebro:
     """Main orchestrator for backtesting (Backtrader facade)."""

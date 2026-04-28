@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Dict
-from tradelearn.backtest.analyzer import Analyzer
+from ..analyzer import Analyzer
 
 class Drawdown(Analyzer):
     """Calculates drawdowns (current, max, etc.)"""

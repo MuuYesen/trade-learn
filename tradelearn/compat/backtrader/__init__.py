@@ -1,6 +1,6 @@
 """Backtrader-compatible facade backed by tradelearn's backtest engine."""
 
-from tradelearn.compat.backtrader import feeds, indicators
+from tradelearn.compat.backtrader import feeds, indicators, analyzers
 from tradelearn.compat.backtrader.indicators import Indicator
 from tradelearn.compat.backtrader.cerebro import Cerebro
 from tradelearn.compat.backtrader.strategy import (
@@ -31,6 +31,7 @@ def date2num(dt):
 
 # Aliases for Backtrader compatibility
 ind = indicators
+az = analyzers
 
 __all__ = [
     "Cerebro",
@@ -48,6 +49,8 @@ __all__ = [
     "feeds",
     "indicators",
     "ind",
+    "analyzers",
+    "az",
     "num2date",
     "date2num",
 ]
