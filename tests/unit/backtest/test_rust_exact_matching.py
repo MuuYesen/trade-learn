@@ -8,7 +8,9 @@ from tradelearn.backtest.core.brokers.rust import RustBroker
 from tradelearn.backtest.core.models import Order
 from tradelearn.compat.backtrader.base import LineSeries
 from tradelearn.compat.backtrader import Cerebro, Strategy
+from tradelearn.compat.backtesting.backtest import Backtest
 from tradelearn.compat.backtesting.strategy import BacktestingDataProxy, IndicatorProxy, PositionProxy
+from tradelearn.compat.backtesting.strategy import Strategy as BacktestingStrategy
 
 
 def _match(
@@ -576,6 +578,35 @@ def test_backtesting_data_proxy_caches_extra_line_proxy_after_cursor_starts() ->
 
     feed.arrays["factor"] = [7.0, 8.0, 9.0]
     assert proxy.Factor is not first
+
+
+def test_backtesting_strategy_init_runs_once() -> None:
+    data = pd.DataFrame(
+        {
+            "Open": [10.0, 11.0, 12.0],
+            "High": [10.0, 11.0, 12.0],
+            "Low": [10.0, 11.0, 12.0],
+            "Close": [10.0, 11.0, 12.0],
+            "Volume": [1000.0, 1000.0, 1000.0],
+        },
+        index=pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"], utc=True),
+    )
+
+    class InitCountingStrategy(BacktestingStrategy):
+        init_calls = 0
+
+        def init(self) -> None:
+            type(self).init_calls += 1
+            assert isinstance(self.data, BacktestingDataProxy)
+
+        def next(self) -> None:
+            pass
+
+    InitCountingStrategy.init_calls = 0
+
+    Backtest(data, InitCountingStrategy, cash=1000.0).run()
+
+    assert InitCountingStrategy.init_calls == 1
 
 
 def test_cashvalue_notification_only_runs_when_strategy_overrides_hook() -> None:

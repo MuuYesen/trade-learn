@@ -122,8 +122,9 @@ def run_backtest(cerebro: Any) -> List[Any]:
             continue
         if id(val) in seen_advancer_ids:
             continue
-        if hasattr(val, '_advance'):
-            bar_advancers.append(val._advance)
+        advance = getattr(val, '_advance', None)
+        if callable(advance):
+            bar_advancers.append(advance)
             seen_advancer_ids.add(id(val))
     bar_advancers = tuple(bar_advancers)
     notify_cashvalue = None

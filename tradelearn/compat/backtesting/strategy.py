@@ -121,19 +121,10 @@ class Strategy(CoreStrategy):
             self._trades.append(trade)
 
     def _setup(self):
-        """Called by engine before init()."""
-        self._bt_data = BacktestingDataProxy(self.datas[0])
-        if hasattr(self, 'init'):
-            self.init()
-
-    @property
-    def data(self) -> Any:
-        res = self._bt_data if self._bt_data is not None else self.__dict__.get('data')
-        return res
-
-    @data.setter
-    def data(self, value: Any):
-        self.__dict__['data'] = value
+        """Bind backtesting.py compatibility proxies before init()."""
+        if self._bt_data is None:
+            self._bt_data = BacktestingDataProxy(self.datas[0])
+            self.data = self._bt_data
 
     @property
     def position(self) -> Any:
