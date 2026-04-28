@@ -104,7 +104,8 @@ def run_backtest(cerebro: Any) -> List[Any]:
             min_period = max(min_period, int(m))
     if min_period == 0: min_period = 1
     
-    for i in range(limit):
+    def on_bar(i: int, fills: list[Any] | None = None, cash: float | None = None,
+               size: float | None = None, price: float | None = None) -> list[Any]:
         # Advance data and indicators
         for d in cerebro.datas: d._advance(i)
         for ind in indicators: ind._advance(i)
@@ -123,7 +124,13 @@ def run_backtest(cerebro: Any) -> List[Any]:
         
         # Broker Match
         if cerebro.broker:
-            cerebro.broker.step(i)
+            if fills is None:
+                cerebro.broker.step(i)
+            else:
+                cerebro.broker._curr_idx = i
+                cerebro.broker._step_fills_from_collect = fills
+                if cash is not None and size is not None and price is not None:
+                    cerebro.broker._rust_state_cache = (i, cash, size, price)
             cerebro.broker.process_fills(strategy, i)
             strategy.notify_cashvalue(cerebro.broker.getcash(), cerebro.broker.getvalue())
 
@@ -132,9 +139,24 @@ def run_backtest(cerebro: Any) -> List[Any]:
             if hasattr(cerebro.broker, 'begin_order_buffering'):
                 cerebro.broker.begin_order_buffering()
                 strategy.next()
-                cerebro.broker.flush_order_buffer()
+                if fills is None:
+                    cerebro.broker.flush_order_buffer()
+                else:
+                    return cerebro.broker.drain_order_buffer()
             else:
                 strategy.next()
+        return []
+
+    use_rust_bar_loop = (
+        isinstance(cerebro.broker, RustBroker)
+        and getattr(cerebro.broker, "_engine", None) is not None
+        and hasattr(cerebro.broker._engine, "run_bar_loop")
+    )
+    if use_rust_bar_loop:
+        cerebro.broker._engine.run_bar_loop(cerebro.broker, on_bar, 0, limit)
+    else:
+        for i in range(limit):
+            on_bar(i)
     
     # 4. Lifecycle Stop
     strategy.stop()
