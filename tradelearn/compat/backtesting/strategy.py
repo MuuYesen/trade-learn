@@ -34,10 +34,16 @@ class PositionProxy:
         self._strategy = strategy
 
     def __bool__(self) -> bool:
+        broker = self._strategy.broker
+        if hasattr(broker, "get_position_size"):
+            return broker.get_position_size() != 0
         return self.size != 0
 
     @property
     def size(self) -> float:
+        broker = self._strategy.broker
+        if hasattr(broker, "get_position_size"):
+            return broker.get_position_size()
         return self._strategy.getposition().size
 
     def close(self):

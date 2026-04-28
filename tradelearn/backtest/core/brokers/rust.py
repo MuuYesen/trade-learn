@@ -102,6 +102,12 @@ class RustBroker(BaseBroker):
             return Position(size=size, price=price)
         return self._pos
 
+    def get_position_size(self) -> float:
+        if self._uses_rust_matching():
+            _, _cash, size, _price = self._get_rust_state()
+            return size
+        return self._pos.size
+
     def _get_rust_state(self) -> tuple[int, float, float, float]:
         """Return cached Rust cash/position for the current bar."""
         if self._rust_state_cache is not None and self._rust_state_cache[0] == self._curr_idx:

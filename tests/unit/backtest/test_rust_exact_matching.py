@@ -8,6 +8,7 @@ from tradelearn.backtest.core.brokers.rust import RustBroker
 from tradelearn.backtest.core.models import Order
 from tradelearn.compat.backtrader.base import LineSeries
 from tradelearn.compat.backtrader import Cerebro, Strategy
+from tradelearn.compat.backtesting.strategy import PositionProxy
 
 
 def _match(
@@ -369,6 +370,30 @@ def test_line_series_previous_value_before_start_is_nan() -> None:
 
     assert pd.isna(line[-1])
     assert line[0] == 1.0
+
+
+def test_backtesting_position_proxy_uses_broker_size_fast_path() -> None:
+    class FakeBroker:
+        def __init__(self) -> None:
+            self.size_calls = 0
+
+        def get_position_size(self) -> float:
+            self.size_calls += 1
+            return 2.0
+
+        def getposition(self):
+            raise AssertionError("PositionProxy should use get_position_size")
+
+    class FakeStrategy:
+        def __init__(self) -> None:
+            self.broker = FakeBroker()
+
+    strategy = FakeStrategy()
+    position = PositionProxy(strategy)
+
+    assert bool(position) is True
+    assert position.size == 2.0
+    assert strategy.broker.size_calls == 2
 
 
 def test_smart_matching_prefers_stop_loss_when_exit_orders_are_ambiguous() -> None:
