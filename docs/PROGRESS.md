@@ -464,20 +464,20 @@
 
 ### 性能优化收益记录(2026-04-28/29)
 
-> 口径说明:以下比例来自本地 `compare_results.py`、`benchmark_bt.py`、profile 或单项 runner 观测;0.1s 级别单次 benchmark 波动较大,稳定门禁以 `benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2` 为准。所有阶段均要求 `benchmark_bt.py` 保持 8/8 EXACT,`compare_results.py` 保持 Return 与 # Trades 对齐。
+> 口径说明:以下只记录已实际观测到的提升;未做独立 A/B 的批次不写预期比例,只记录“未单独量化”。0.1s 级别单次 benchmark 波动较大,稳定门禁以 `benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2` 为准。所有阶段均要求 `benchmark_bt.py` 保持 8/8 EXACT,`compare_results.py` 保持 Return 与 # Trades 对齐。
 
-| 批次 | 主要方法 | 观测/预期提升 | 验证口径 |
+| 批次 | 主要方法 | 实测提升 | 验证口径 |
 |---|---|---:|---|
-| P0 低风险热路径 | `get_new_fills(start_idx)`、无 fill 跳过同步、bar 内 cash/position/value 缓存、advancer 静态绑定、data/indicator/position proxy 缓存 | 预期 `1.2x-2x`;实际 profile 函数调用约 `120万 -> 104万`,position fast path 约 `47ms -> 15ms` | `benchmark_bt.py` 8/8 EXACT;`compare_results.py` Return/# Trades 对齐 |
-| P1 Rust callback loop | Rust 外层 bar loop、订单缓冲/drain、`step_open_collect` 批量返回 fills/cash/position、空事件 `None` 协议 | 单项 profile 约 `0.230s -> 0.222s` / `0.211s -> 0.204s`,约 `+3%-4%`;无订单 bar 小幅收益 | `benchmark_bt.py` 8/8 EXACT |
-| P1 批量 order/fill sync | 批量绑定 order refs、批量同步 Rust fills 到 Python order/position/trade notify | 高频下单预期 `1.05x-1.2x`;高成交策略预期 `1.2x-2x` | 回归测试 + `benchmark_bt.py` EXACT |
+| P0 低风险热路径 | `get_new_fills(start_idx)`、无 fill 跳过同步、bar 内 cash/position/value 缓存、advancer 静态绑定、data/indicator/position proxy 缓存 | profile 函数调用约 `120万 -> 104万`(约少 `13%`);position fast path 约 `47ms -> 15ms`(约少 `68%`) | `benchmark_bt.py` 8/8 EXACT;`compare_results.py` Return/# Trades 对齐 |
+| P1 Rust callback loop | Rust 外层 bar loop、订单缓冲/drain、`step_open_collect` 批量返回 fills/cash/position、空事件 `None` 协议 | 单项 profile 约 `0.230s -> 0.222s` / `0.211s -> 0.204s`,约 `+3%-4%` | `benchmark_bt.py` 8/8 EXACT |
+| P1 批量 order/fill sync | 批量绑定 order refs、批量同步 Rust fills 到 Python order/position/trade notify | 未单独量化;作为 Rust callback loop 批次的一部分验证 | 回归测试 + `benchmark_bt.py` EXACT |
 | P3 backtesting 固定 Line proxy | OHLCV 初始化固定 `IndicatorProxy`,避免 `self.data.Close` 每 bar property 分支 | 代表性 5 万 bar profile `0.241s -> 0.220s`,约 `+8.7%`;benchmark 多数策略 `+3%-11%` | `compare_results.py` 与 `benchmark_bt.py` |
-| P2 指标缓存 | `compat.backtesting.Strategy.I()` 接 `BatchIndicatorCache`;Backtrader `bt.indicators.*` 内部接 batch cache;支持 pandas-ta-classic / TDX / TradingView 多输出 | 指标密集策略预期 `1.5x-3x`;简单策略收益有限;保持 core 不暴露 facade API | 指标缓存单测、`benchmark_bt.py` EXACT |
-| P3 共享 bar buffer | DataFeed OHLCV line 从共享 buffer 读取当前/上一根 | 预期 `1.2x-2x`;实际主要降低 `self.data.close[0]` / `[-1]` 代理开销 | 多数据/LineSeries 语义测试 |
-| P4 多数据 BarRunner | Rust 预编译 primary/secondary latest-at-or-before cursor 计划 | 多数据场景减少 Python cursor 搜索;单数据收益有限 | multi-data 对齐测试 |
-| P5/P6 EventRunner + rolling buffer | 单事件 EventRunner、Historical/Paper/Live driver、RollingBarBuffer | 主要是实盘兼容架构收益,不是当前默认回测速度收益 | fake paper/live 单测;QMT 具体代码不提交 |
-| CI 性能门禁 | `benchmark_bt.py --warmup 1 --repeat 3 --min-speedup 1.2` 接 GitHub Actions | 防止明显退化;本地 warm/repeat 中位数约 `4.4x-18.8x` vs Backtrader | `compat-performance` job |
-| 最后一批微优化 | `LineSeries.__getitem__` 数值 hot path 直读;Backtrader `_series()` 复用 pandas Series 缓存 | 低风险局部优化,预期约 `3%-8%`;本地 `compare_results.py` 仍约 `2.56x/2.59x`,warm/repeat 约 `4.5x-18.8x` | `58b8871`,LineSeries 语义测试 + CI gate |
+| P2 指标缓存 | `compat.backtesting.Strategy.I()` 接 `BatchIndicatorCache`;Backtrader `bt.indicators.*` 内部接 batch cache;支持 pandas-ta-classic / TDX / TradingView 多输出 | 未单独量化;接入后 `benchmark_bt.py` 保持 8/8 EXACT,`compare_results.py` 仍约 `2.4x-2.6x` | 指标缓存单测、`benchmark_bt.py` EXACT |
+| P3 共享 bar buffer | DataFeed OHLCV line 从共享 buffer 读取当前/上一根 | 未单独量化;接入后 line 当前/上一根读取语义保持一致 | 多数据/LineSeries 语义测试 |
+| P4 多数据 BarRunner | Rust 预编译 primary/secondary latest-at-or-before cursor 计划 | 未单独量化;收益只面向多数据 cursor 搜索,单数据 benchmark 不体现 | multi-data 对齐测试 |
+| P5/P6 EventRunner + rolling buffer | 单事件 EventRunner、Historical/Paper/Live driver、RollingBarBuffer | 不作为速度优化计入;这是实盘兼容架构收益 | fake paper/live 单测;QMT 具体代码不提交 |
+| CI 性能门禁 | `benchmark_bt.py --warmup 1 --repeat 3 --min-speedup 1.2` 接 GitHub Actions | 不是速度优化;本地门禁运行时 warm/repeat 中位数约 `4.4x-18.8x` vs Backtrader | `compat-performance` job |
+| 最后一批微优化 | `LineSeries.__getitem__` 数值 hot path 直读;Backtrader `_series()` 复用 pandas Series 缓存 | 未单独 A/B 量化;提交后 `compare_results.py` 仍约 `2.56x/2.59x`,warm/repeat 约 `4.5x-18.8x` | `58b8871`,LineSeries 语义测试 + CI gate |
 - [x] P8 live/paper dry-run 第三阶段:不提交 QMT 具体文件,`Cerebro(mode="paper"|"live")` 已自动走 EventRunner driver;BrokerEvent 已支持 status/partial/replay 与风控/二次确认字段;MLflow live event 字段仍待补
 
 ---
