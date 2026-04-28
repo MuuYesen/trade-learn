@@ -1,20 +1,13 @@
 # Tradelearn 架构重构总结 (微内核 + 门面模式)
 
-## [2026-04-28] 第四阶段：微内核架构重构与 100% 完美数值对齐 (当前版本)
+## [2026-04-28] 第五阶段：backtesting.py 兼容门面实现与策略迁移
+在这一阶段，我们不仅完成了 Backtrader 的深度对齐，还扩展了门面层，实现了对 `backtesting.py` 语法的原生支持：
 
-### 1. 架构升级：微内核 (Microkernel) + 门面 (Facade)
-在这一阶段，我们完成了 Tradelearn 历史上最彻底的一次架构清理，将引擎演进为解耦的“双层结构”：
-
-- **核心内核 (`tradelearn/backtest/core/`)**: 
-    - 剥离了所有特定 API 的逻辑。
-    - **[engine.py](file:///Users/muyesen/.config/superpowers/worktrees/trade-learn-release/v2/tradelearn/backtest/core/engine.py)**: 统一的极简执行循环，支持任意符合 `Strategy` 接口的对象。
-    - **[strategy.py](file:///Users/muyesen/.config/superpowers/worktrees/trade-learn-release/v2/tradelearn/backtest/core/strategy.py)**: 实现幂等初始化，防止子类覆盖内核状态。
-    - **[models.py](file:///Users/muyesen/.config/superpowers/worktrees/trade-learn-release/v2/tradelearn/backtest/core/models.py)**: 纯粹的领域模型（Order, Position, Trade）。
-
-- **兼容门面 (`tradelearn/compat/backtrader/`)**:
-    - 承载了 Backtrader 的所有“魔法”逻辑（元类、延迟加载、全局上下文）。
-    - **[base.py](file:///Users/muyesen/.config/superpowers/worktrees/trade-learn-release/v2/tradelearn/compat/backtrader/base.py)**: 处理 `LineRoot` 和 `MetaParams` 的复杂逻辑。
-    - **[indicators.py](file:///Users/muyesen/.config/superpowers/worktrees/trade-learn-release/v2/tradelearn/compat/backtrader/indicators.py)**: 向量化指标层，与内核无缝对接。
+- **实现 Backtesting 门面 (`tradelearn/compat/backtesting/`)**:
+    - **[backtest.py](file:///Users/muyesen/.config/superpowers/worktrees/trade-learn-release/v2/tradelearn/compat/backtesting/backtest.py)**: 实现 `Backtest` 运行器，支持 `backtesting.py` 风格的参数传递和统计输出。
+    - **[strategy.py](file:///Users/muyesen/.config/superpowers/worktrees/trade-learn-release/v2/tradelearn/compat/backtesting/strategy.py)**: 实现 `Strategy` 基类，通过 `IndicatorProxy` 完美复刻 `[-1]`、`[-2]` 的相对索引逻辑，并防止前瞻偏差。
+- **策略示例迁移 (`examples/backtesting/`)**:
+    - 成功将原版 `backtesting.py` 的 EMA Cross 和 MACD 策略迁移至 Tradelearn，实现了 100% 语法兼容运行。
 
 ### 总结后的目标结构：
 ```text
@@ -28,13 +21,18 @@ tradelearn/
 │       ├── strategy.py
 │       └── models.py
 └── compat/
-    └── backtrader/    # Backtrader 兼容门面 (Facade)
-        ├── analyzers/ # 分析器 (Sharpe, Drawdown 等)
-        ├── grid.py    # 参数网格搜索工具
-        ├── cerebro.py
-        ├── strategy.py
-        └── indicators.py
+    ├── backtrader/    # Backtrader 兼容门面 (Facade)
+    │   ├── analyzers/ # 分析器 (Sharpe, Drawdown 等)
+    │   ├── grid.py    # 参数网格搜索工具
+    │   ├── cerebro.py
+    │   ├── strategy.py
+    │   └── indicators.py
+    └── backtesting/   # backtesting.py 兼容门面 (Facade) [NEW]
+        ├── backtest.py
+        └── strategy.py
 ```
+
+## [2026-04-28] 第四阶段：微内核架构重构与 100% 完美数值对齐
 
 ### 2. 关键技术突破
 - **全局上下文统一管理**: 通过 `_G (GlobalContext)` 解决了复杂的初始化链中上下文丢失的问题，确保指标、数据和策略在任何深度都能正确自动绑定。
