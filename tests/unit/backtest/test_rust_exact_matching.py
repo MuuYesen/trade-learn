@@ -231,6 +231,37 @@ def test_rust_broker_can_buffer_order_submissions_for_rust_driven_callbacks() ->
     assert engine.submissions == [("buy", "limit", 2.0, 9.5, None)]
 
 
+def test_backtest_engine_buffers_orders_while_strategy_next_runs() -> None:
+    data = pd.DataFrame(
+        {
+            "open": [10.0, 11.0],
+            "high": [10.0, 11.0],
+            "low": [10.0, 11.0],
+            "close": [10.0, 11.0],
+            "volume": [1000.0, 1000.0],
+        },
+        index=pd.to_datetime(["2026-01-01", "2026-01-02"], utc=True),
+    )
+
+    class BufferAwareStrategy(Strategy):
+        def __init__(self) -> None:
+            self.saw_buffering = False
+
+        def next(self) -> None:
+            if not self.saw_buffering:
+                self.saw_buffering = self.broker._buffer_order_submissions
+                self.buy(size=1)
+
+    cerebro = Cerebro(match_mode="exact")
+    cerebro.adddata(data)
+    cerebro.addstrategy(BufferAwareStrategy)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.saw_buffering is True
+    assert strategy.position.size == 1.0
+
+
 def test_smart_matching_prefers_stop_loss_when_exit_orders_are_ambiguous() -> None:
     data = pd.DataFrame(
         {

@@ -129,7 +129,12 @@ def run_backtest(cerebro: Any) -> List[Any]:
 
         # Strategy Next
         if i >= min_period - 1:
-            strategy.next()
+            if hasattr(cerebro.broker, 'begin_order_buffering'):
+                cerebro.broker.begin_order_buffering()
+                strategy.next()
+                cerebro.broker.flush_order_buffer()
+            else:
+                strategy.next()
     
     # 4. Lifecycle Stop
     strategy.stop()
