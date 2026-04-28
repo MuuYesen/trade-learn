@@ -417,6 +417,30 @@ def test_backtesting_position_proxy_refreshes_after_broker_swap() -> None:
     assert position.size == 3.0
 
 
+def test_backtesting_position_proxy_can_use_rust_state_fast_path() -> None:
+    class FakeBroker:
+        def __init__(self) -> None:
+            self.state_calls = 0
+
+        def _get_rust_state(self):
+            self.state_calls += 1
+            return 0, 100.0, 4.0, 10.0
+
+    class FakeStrategy:
+        def __init__(self) -> None:
+            self.broker = FakeBroker()
+
+        def getposition(self):
+            raise AssertionError("PositionProxy should use the Rust state getter")
+
+    strategy = FakeStrategy()
+    position = PositionProxy(strategy)
+
+    assert bool(position) is True
+    assert position.size == 4.0
+    assert strategy.broker.state_calls == 2
+
+
 def test_backtesting_indicator_proxy_relative_indexing() -> None:
     class Feed:
         _cursor = 2

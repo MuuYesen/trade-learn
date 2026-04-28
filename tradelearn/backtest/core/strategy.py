@@ -87,9 +87,6 @@ class Strategy:
         old_size = pos.size
         old_price = pos.price
         
-        # Avoid double-update if strategy.getposition returns the same object as broker.getposition
-        broker_pos = getattr(self.broker, 'getposition', lambda d: None)(data)
-        # if pos is not broker_pos:
         pos.update(signed_size, price)
         
         new_size = pos.size

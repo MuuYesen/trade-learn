@@ -64,7 +64,7 @@ class RustBroker(BaseBroker):
         self._comminfo: Any = None
 
     def _uses_rust_matching(self) -> bool:
-        return self.match_mode in self._RUST_MATCH_MODES and self._engine is not None
+        return self._engine is not None
 
     def set_comminfo(self, comminfo: Any) -> None:
         self._comminfo = comminfo
@@ -74,13 +74,13 @@ class RustBroker(BaseBroker):
             self.commission_ratio = comminfo.p.commission
 
     def getcash(self) -> float:
-        if self._uses_rust_matching():
+        if self._engine is not None:
             _, cash, _, _ = self._get_rust_state()
             return cash
         return self._active_cash
 
     def getvalue(self) -> float:
-        if self._uses_rust_matching():
+        if self._engine is not None:
             _, cash, size, _price = self._get_rust_state()
             val = cash
             if size != 0 and self._close_prices is not None:
@@ -97,13 +97,13 @@ class RustBroker(BaseBroker):
         return val
 
     def getposition(self, data: Any = None) -> Position:
-        if self._uses_rust_matching():
+        if self._engine is not None:
             _, _cash, size, price = self._get_rust_state()
             return Position(size=size, price=price)
         return self._pos
 
     def get_position_size(self) -> float:
-        if self._uses_rust_matching():
+        if self._engine is not None:
             _, _cash, size, _price = self._get_rust_state()
             return size
         return self._pos.size
@@ -243,7 +243,7 @@ class RustBroker(BaseBroker):
         self._orders.append(order)
         self._orders_by_ref[order.ref] = order
         
-        if self._uses_rust_matching():
+        if self._engine is not None:
             side_str = "buy" if is_buy else "sell"
             payload = self._rust_order_payload(order, side_str, actual_size, price)
             if self._buffer_order_submissions:
@@ -284,7 +284,7 @@ class RustBroker(BaseBroker):
         self._curr_idx = i
         self._rust_state_cache = None
         self._step_fills_from_collect = None
-        if self._uses_rust_matching():
+        if self._engine is not None:
             if hasattr(self._engine, "step_open_collect"):
                 fills, cash, size, price = self._engine.step_open_collect(i, self._last_fill_idx)
                 self._step_fills_from_collect = fills
@@ -295,7 +295,7 @@ class RustBroker(BaseBroker):
 
     def process_fills(self, strategy: Strategy, i: int) -> None:
         """Synchronize filled orders back to Python."""
-        if self._uses_rust_matching():
+        if self._engine is not None:
             if self._step_fills_from_collect is None:
                 new_fills = self._engine.get_new_fills(self._last_fill_idx)
             else:

@@ -71,24 +71,35 @@ class PositionProxy:
     def __init__(self, strategy: Strategy):
         self._strategy = strategy
         self._size_getter_broker = None
+        self._rust_state_getter = None
         self._size_getter = None
 
-    def _get_size_getter(self):
-        broker = self._strategy.broker
-        if broker is not self._size_getter_broker:
-            self._size_getter_broker = broker
-            self._size_getter = getattr(broker, "get_position_size", False)
-        return self._size_getter or None
+    def _bind_broker_size_getters(self, broker):
+        self._size_getter_broker = broker
+        self._rust_state_getter = getattr(broker, "_get_rust_state", None)
+        self._size_getter = None if self._rust_state_getter is not None else getattr(broker, "get_position_size", None)
 
     def __bool__(self) -> bool:
-        size_getter = self._get_size_getter()
+        broker = self._strategy.broker
+        if broker is not self._size_getter_broker:
+            self._bind_broker_size_getters(broker)
+        rust_state_getter = self._rust_state_getter
+        if rust_state_getter is not None:
+            return rust_state_getter()[2] != 0
+        size_getter = self._size_getter
         if size_getter is not None:
             return size_getter() != 0
         return self.size != 0
 
     @property
     def size(self) -> float:
-        size_getter = self._get_size_getter()
+        broker = self._strategy.broker
+        if broker is not self._size_getter_broker:
+            self._bind_broker_size_getters(broker)
+        rust_state_getter = self._rust_state_getter
+        if rust_state_getter is not None:
+            return rust_state_getter()[2]
+        size_getter = self._size_getter
         if size_getter is not None:
             return size_getter()
         return self._strategy.getposition().size
