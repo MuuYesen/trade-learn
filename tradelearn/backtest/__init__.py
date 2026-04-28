@@ -22,6 +22,13 @@ from tradelearn.backtest.core.models import (
 )
 from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
 from tradelearn.backtest.core.engine import run_backtest
+from tradelearn.backtest.core.data import RollingBarBuffer, SharedBarBuffer
+from tradelearn.backtest.core.event_runner import EventRunner, EventSnapshot
+from tradelearn.backtest.core.indicator_cache import (
+    BatchIndicatorCache,
+    IndicatorCache,
+    RollingIndicatorCache,
+)
 
 def __getattr__(name):
     if name == "SimBroker":
@@ -54,12 +61,19 @@ __all__ = [
     "CommissionModel",
     "CoreStrategy",
     "ExecutedInfo",
+    "EventRunner",
+    "EventSnapshot",
+    "BatchIndicatorCache",
     "FixedCommission",
     "FixedSlippage",
+    "IndicatorCache",
     "Order",
     "PercentCommission",
     "PercentSlippage",
     "Position",
+    "RollingBarBuffer",
+    "RollingIndicatorCache",
+    "SharedBarBuffer",
     "SimBroker",
     "SlippageModel",
     "Stats",

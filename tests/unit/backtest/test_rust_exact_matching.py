@@ -5,7 +5,7 @@ import pytest
 
 from tradelearn import _rust
 from tradelearn.backtest.core.brokers.rust import RustBroker
-from tradelearn.backtest.core.data import DataContainer
+from tradelearn.backtest.core.data import DataContainer, RollingBarBuffer
 from tradelearn.backtest.core.engine import _build_bar_advancers, _build_data_advance_plan
 from tradelearn.backtest.core.models import Order
 from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
@@ -736,6 +736,46 @@ def test_shared_bar_buffer_reuses_data_container_arrays() -> None:
     assert buffer.cursor == 1
     assert buffer.value("close") == 4.0
     assert buffer.value("close", ago=1) == 3.0
+
+
+def test_rolling_bar_buffer_appends_live_bars_and_keeps_recent_window() -> None:
+    buffer = RollingBarBuffer(capacity=2)
+
+    buffer.append(
+        {
+            "datetime": pd.Timestamp("2026-01-01", tz="UTC"),
+            "open": 1.0,
+            "high": 1.0,
+            "low": 1.0,
+            "close": 1.0,
+            "volume": 10.0,
+        }
+    )
+    buffer.append(
+        {
+            "datetime": pd.Timestamp("2026-01-02", tz="UTC"),
+            "open": 2.0,
+            "high": 2.0,
+            "low": 2.0,
+            "close": 2.0,
+            "volume": 20.0,
+        }
+    )
+    buffer.append(
+        {
+            "datetime": pd.Timestamp("2026-01-03", tz="UTC"),
+            "open": 3.0,
+            "high": 3.0,
+            "low": 3.0,
+            "close": 3.0,
+            "volume": 30.0,
+        }
+    )
+
+    assert buffer.cursor == 1
+    assert buffer.value("close") == 3.0
+    assert buffer.value("close", ago=1) == 2.0
+    assert buffer.arrays["close"].tolist() == [2.0, 3.0]
 
 
 def test_backtrader_datafeed_lines_read_shared_bar_buffer_without_copy() -> None:

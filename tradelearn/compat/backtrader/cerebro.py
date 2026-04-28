@@ -18,6 +18,7 @@ class Cerebro:
         stdstats: bool = True,
         slippage: Any | None = None,
         commission: Any | None = None,
+        mode: str = "backtest",
         **kwargs: Any,
     ) -> None:
         self.datas: List[DataFeed] = []
@@ -27,6 +28,9 @@ class Cerebro:
         self.trade_on_close = bool(trade_on_close)
         self.exactbars = bool(exactbars)
         self.stdstats = bool(stdstats)
+        if mode not in {"backtest", "paper", "live"}:
+            raise ValueError("mode must be one of 'backtest', 'paper', or 'live'")
+        self.mode = mode
         self.kwargs = kwargs
         from tradelearn.backtest.core.brokers.rust import RustBroker
         self.broker = RustBroker(match_mode=match_mode)
