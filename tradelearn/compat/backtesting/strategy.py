@@ -9,27 +9,36 @@ class BacktestingDataProxy:
     """Proxy for data to support backtesting.py style capitalized attributes and indexing."""
     def __init__(self, data_feed: Any):
         self._feed = data_feed
-        self._line_cache: dict[str, IndicatorProxy] = {}
+        self._open_array = data_feed.get_array("open")
+        self._high_array = data_feed.get_array("high")
+        self._low_array = data_feed.get_array("low")
+        self._close_array = data_feed.get_array("close")
+        self._volume_array = data_feed.get_array("volume")
+        self._open_proxy = IndicatorProxy(self._open_array, data_feed)
+        self._high_proxy = IndicatorProxy(self._high_array, data_feed)
+        self._low_proxy = IndicatorProxy(self._low_array, data_feed)
+        self._close_proxy = IndicatorProxy(self._close_array, data_feed)
+        self._volume_proxy = IndicatorProxy(self._volume_array, data_feed)
 
     @property
     def Open(self) -> Any:
-        return self._line_or_array("open")
+        return self._open_array if self._feed._cursor < 0 else self._open_proxy
 
     @property
     def High(self) -> Any:
-        return self._line_or_array("high")
+        return self._high_array if self._feed._cursor < 0 else self._high_proxy
 
     @property
     def Low(self) -> Any:
-        return self._line_or_array("low")
+        return self._low_array if self._feed._cursor < 0 else self._low_proxy
 
     @property
     def Close(self) -> Any:
-        return self._line_or_array("close")
+        return self._close_array if self._feed._cursor < 0 else self._close_proxy
 
     @property
     def Volume(self) -> Any:
-        return self._line_or_array("volume")
+        return self._volume_array if self._feed._cursor < 0 else self._volume_proxy
 
     def __getattr__(self, name: str) -> Any:
         mapping = {
@@ -46,11 +55,7 @@ class BacktestingDataProxy:
         arr = self._feed.get_array(core_name)
         if getattr(self._feed, '_cursor', -1) < 0:
             return arr
-        line = self._line_cache.get(core_name)
-        if line is None:
-            line = IndicatorProxy(arr, self._feed)
-            self._line_cache[core_name] = line
-        return line
+        return IndicatorProxy(arr, self._feed)
 
     def __len__(self) -> int:
         cursor = getattr(self._feed, '_cursor', 0)
@@ -149,7 +154,7 @@ class IndicatorProxy:
     """Proxy for indicators and data to support backtesting.py syntax."""
     def __init__(self, data: np.ndarray, feed: Any):
         # We store as numpy array for speed
-        self._data = np.array(data)
+        self._data = np.asarray(data)
         self._feed = feed
         self._cursor_ptr = None # Cache for feed._cursor reference
 

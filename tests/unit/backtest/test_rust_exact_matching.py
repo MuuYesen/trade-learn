@@ -416,7 +416,13 @@ def test_backtesting_data_proxy_reuses_line_proxy_after_cursor_starts() -> None:
     class Feed:
         def __init__(self) -> None:
             self._cursor = 0
-            self.arrays = {"close": [1.0, 2.0, 3.0]}
+            self.arrays = {
+                "open": [1.0, 2.0, 3.0],
+                "high": [1.0, 2.0, 3.0],
+                "low": [1.0, 2.0, 3.0],
+                "close": [1.0, 2.0, 3.0],
+                "volume": [1.0, 2.0, 3.0],
+            }
 
         def get_array(self, name: str):
             return self.arrays[name]
