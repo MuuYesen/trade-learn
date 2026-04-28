@@ -257,6 +257,24 @@ def test_rust_broker_can_drain_buffer_without_reentering_engine() -> None:
     assert broker._orders_by_ref[77] is order
 
 
+def test_rust_broker_can_bind_order_refs_in_batch() -> None:
+    broker = RustBroker(match_mode="exact")
+    broker._engine = object()
+
+    broker.begin_order_buffering()
+    first = broker.buy(object(), object(), size=1.0)
+    second = broker.sell(object(), object(), size=2.0)
+
+    broker.bind_rust_order_refs([(first.ref, 11), (second.ref, 12)])
+
+    assert first.ref == 11
+    assert second.ref == 12
+    assert 1 not in broker._orders_by_ref
+    assert 2 not in broker._orders_by_ref
+    assert broker._orders_by_ref[11] is first
+    assert broker._orders_by_ref[12] is second
+
+
 def test_backtest_engine_buffers_orders_while_strategy_next_runs() -> None:
     data = pd.DataFrame(
         {
@@ -313,7 +331,10 @@ def test_rust_bar_loop_submits_drained_orders_after_python_callback() -> None:
             self.bound: list[tuple[int, int]] = []
 
         def bind_rust_order_ref(self, provisional_ref: int, rust_ref: int) -> None:
-            self.bound.append((provisional_ref, rust_ref))
+            raise AssertionError("run_bar_loop should batch order ref binding")
+
+        def bind_rust_order_refs(self, bindings: list[tuple[int, int]]) -> None:
+            self.bound.extend(bindings)
 
     broker = BrokerRefSink()
     seen: list[tuple[int, list]] = []
@@ -321,12 +342,15 @@ def test_rust_bar_loop_submits_drained_orders_after_python_callback() -> None:
     def on_bar(cursor, fills, cash, size, price):
         seen.append((cursor, fills))
         if cursor == 0:
-            return [(99, "buy", "market", 1.0, None, None)]
+            return [
+                (99, "buy", "market", 1.0, None, None),
+                (100, "buy", "limit", 1.0, 10.5, None),
+            ]
         return []
 
     engine.run_bar_loop(broker, on_bar, 0, 2)
 
-    assert broker.bound == [(99, 1)]
+    assert broker.bound == [(99, 1), (100, 2)]
     assert seen[0] == (0, [])
     assert seen[1][0] == 1
     assert seen[1][1][0][:5] == (1, "buy", 1.0, 11.0, 0.0)

@@ -152,6 +152,11 @@ class RustBroker(BaseBroker):
         order.ref = rust_ref
         self._orders_by_ref[order.ref] = order
 
+    def bind_rust_order_refs(self, bindings: list[tuple[int, int]]) -> None:
+        """Replace multiple provisional Python order refs with Rust-assigned refs."""
+        for provisional_ref, rust_ref in bindings:
+            self.bind_rust_order_ref(provisional_ref, rust_ref)
+
     def submit_drained_order(
         self,
         provisional_ref: int,

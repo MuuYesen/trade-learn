@@ -186,12 +186,7 @@ impl RustBacktestEngine {
         &mut self,
         cursor: usize,
         _fill_start_idx: usize,
-    ) -> (
-        Vec<(u64, String, f64, f64, f64, f64, f64)>,
-        f64,
-        f64,
-        f64,
-    ) {
+    ) -> (Vec<(u64, String, f64, f64, f64, f64, f64)>, f64, f64, f64) {
         let fill_records = self.inner.step_open(cursor);
         let fills = self.map_fills(fill_records);
         let cash = self.inner.get_cash();
@@ -216,6 +211,7 @@ impl RustBacktestEngine {
             let drained = on_bar.call1(py, (cursor, fills, cash, size, price))?;
             let orders: Vec<(u64, String, String, f64, Option<f64>, Option<f64>)> =
                 drained.extract(py)?;
+            let mut bindings: Vec<(u64, u64)> = Vec::with_capacity(orders.len());
 
             for (provisional_ref, side, order_type, order_size, limit_price, stop_price) in orders {
                 let side = parse_order_side(&side)?;
@@ -223,7 +219,10 @@ impl RustBacktestEngine {
                 let order_id =
                     self.inner
                         .submit_order(side, order_type, order_size, limit_price, stop_price);
-                broker.call_method1(py, "bind_rust_order_ref", (provisional_ref, order_id))?;
+                bindings.push((provisional_ref, order_id));
+            }
+            if !bindings.is_empty() {
+                broker.call_method1(py, "bind_rust_order_refs", (bindings,))?;
             }
         }
         Ok(())
