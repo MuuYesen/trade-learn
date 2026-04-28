@@ -2,32 +2,57 @@ from __future__ import annotations
 
 from typing import Any
 
-from tradelearn.backtest.core.models import Order, Position
+from tradelearn.backtest.models import Order, Position
 
 
 class Strategy:
     """Minimalist strategy base class for core execution."""
+
     def __init__(self, *args, **kwargs) -> None:
-        if not hasattr(self, '_sizers'): self._sizers = {}
-        if not hasattr(self, '_sizer'): self._sizer = None 
-        if not hasattr(self, '_positions'): self._positions = {}
-        if not hasattr(self, '_pending_size'): self._pending_size = {}
-        if not hasattr(self, 'datas'): self.datas = []
-        if not hasattr(self, 'data'): self.data = None
-        if not hasattr(self, 'broker'): self.broker = None
-        if not hasattr(self, 'analyzers'): self.analyzers = {}
-        if not hasattr(self, '_indicators'): self._indicators = []
-        if not hasattr(self, '_manual_min_period'): self._manual_min_period = 0
+        if not hasattr(self, "_sizers"):
+            self._sizers = {}
+        if not hasattr(self, "_sizer"):
+            self._sizer = None
+        if not hasattr(self, "_positions"):
+            self._positions = {}
+        if not hasattr(self, "_pending_size"):
+            self._pending_size = {}
+        if not hasattr(self, "datas"):
+            self.datas = []
+        if not hasattr(self, "data"):
+            self.data = None
+        if not hasattr(self, "broker"):
+            self.broker = None
+        if not hasattr(self, "analyzers"):
+            self.analyzers = {}
+        if not hasattr(self, "_indicators"):
+            self._indicators = []
+        if not hasattr(self, "_manual_min_period"):
+            self._manual_min_period = 0
 
-    def start(self): pass
-    def init(self): pass
-    def prenext(self): pass
-    def next(self): pass
-    def stop(self): pass
+    def start(self):
+        pass
 
-    def notify_order(self, order: Any): pass
-    def notify_trade(self, trade: Any): pass
-    def notify_cashvalue(self, cash: float, value: float): pass
+    def init(self):
+        pass
+
+    def prenext(self):
+        pass
+
+    def next(self):
+        pass
+
+    def stop(self):
+        pass
+
+    def notify_order(self, order: Any):
+        pass
+
+    def notify_trade(self, trade: Any):
+        pass
+
+    def notify_cashvalue(self, cash: float, value: float):
+        pass
 
     def _set_bar_advancers(self, advancers: tuple[Any, ...]) -> None:
         """Install the internal per-bar cursor advance plan."""
@@ -44,7 +69,7 @@ class Strategy:
 
     def getposition(self, data: Any = None) -> Position:
         data = data or self.data
-        if self.broker and hasattr(self.broker, 'getposition'):
+        if self.broker and hasattr(self.broker, "getposition"):
             return self.broker.getposition(data)
         if data not in self._positions:
             self._positions[data] = Position()
@@ -62,19 +87,36 @@ class Strategy:
     def getsizing(self, data: Any = None, isbuy: bool = True) -> float:
         data = data or self.data
         sizer = self._sizers.get(data, self._sizer)
-        if sizer is None: return 1.0
+        if sizer is None:
+            return 1.0
         return sizer.getsizing(data, isbuy)
 
-    def buy(self, data: Any = None, size: float | None = None, price: float | None = None, exectype: int | None = None, **kwargs):
+    def buy(
+        self,
+        data: Any = None,
+        size: float | None = None,
+        price: float | None = None,
+        exectype: int | None = None,
+        **kwargs,
+    ):
         data = data or self.data
-        if size is None: size = self.getsizing(data, isbuy=True)
+        if size is None:
+            size = self.getsizing(data, isbuy=True)
         actual_size = float(abs(size))
         self._pending_size[data] = self._pending_size.get(data, 0.0) + actual_size
         return self.broker._submit(self, data, Order.Buy, actual_size, price, exectype, **kwargs)
 
-    def sell(self, data: Any = None, size: float | None = None, price: float | None = None, exectype: int | None = None, **kwargs):
+    def sell(
+        self,
+        data: Any = None,
+        size: float | None = None,
+        price: float | None = None,
+        exectype: int | None = None,
+        **kwargs,
+    ):
         data = data or self.data
-        if size is None: size = self.getsizing(data, isbuy=False)
+        if size is None:
+            size = self.getsizing(data, isbuy=False)
         actual_size = float(abs(size))
         self._pending_size[data] = self._pending_size.get(data, 0.0) - actual_size
         return self.broker._submit(self, data, Order.Sell, actual_size, price, exectype, **kwargs)
@@ -94,22 +136,23 @@ class Strategy:
         self._pending_size[data] = self._pending_size.get(data, 0.0) - signed_size
         if abs(self._pending_size[data]) < 1e-9:
             self._pending_size[data] = 0.0
-            
+
         pos = self.getposition(data)
         old_size = pos.size
         old_price = pos.price
-        
+
         pos.update(signed_size, price)
-        
+
         new_size = pos.size
-        
+
         # Simple Trade tracking for notification
         if old_size != 0 and (old_size * new_size <= 0):
             # Trade closed or flipped
-            from tradelearn.backtest.core.models import Trade
+            from tradelearn.backtest.models import Trade
+
             trade = Trade(data=data, size=old_size, price=old_price, status=Trade.Closed)
-            trade.pnl = (price - old_price) * old_size * getattr(self.broker, '_mult', 1.0)
-            trade.pnlcomm = trade.pnl # Simplified
+            trade.pnl = (price - old_price) * old_size * getattr(self.broker, "_mult", 1.0)
+            trade.pnlcomm = trade.pnl  # Simplified
             trade.isclosed = True
             self.notify_trade(trade)
 

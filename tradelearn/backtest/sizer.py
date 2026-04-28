@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 from typing import Any
+
 
 class Sizer:
     """Minimalist sizer interface."""
+
     def __init__(self, **kwargs) -> None:
         self.strategy: Any = None
         self.broker: Any = None

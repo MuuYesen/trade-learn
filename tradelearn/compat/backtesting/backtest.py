@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from tradelearn.backtest.core.broker import RustBroker
-from tradelearn.backtest.core.engine import run_backtest
+from tradelearn.backtest.broker import RustBroker
+from tradelearn.backtest.engine import run_backtest
 from tradelearn.compat.backtrader.datafeed import DataFeed
 
 from .strategy import Strategy

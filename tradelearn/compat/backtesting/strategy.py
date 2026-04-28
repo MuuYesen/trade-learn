@@ -4,9 +4,9 @@ from typing import Any, Callable
 
 import numpy as np
 
-from tradelearn.backtest.core.indicator_cache import BatchIndicatorCache
-from tradelearn.backtest.core.models import Order
-from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
+from tradelearn.backtest.indicator_cache import BatchIndicatorCache
+from tradelearn.backtest.models import Order
+from tradelearn.backtest.strategy import Strategy as CoreStrategy
 
 
 class BacktestingDataProxy:

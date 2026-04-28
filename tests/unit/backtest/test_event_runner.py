@@ -6,13 +6,13 @@ from tradelearn.backtest import BatchIndicatorCache, RollingBarBuffer, RollingIn
 from tradelearn.backtest import HistoricalDriver as PublicHistoricalDriver
 from tradelearn.backtest import LiveDriver as PublicLiveDriver
 from tradelearn.backtest import PaperDriver as PublicPaperDriver
-from tradelearn.backtest.core.event_runner import (
+from tradelearn.backtest.event_runner import (
     EventRunner,
     HistoricalDriver,
     LiveDriver,
     PaperDriver,
 )
-from tradelearn.backtest.core.strategy import Strategy
+from tradelearn.backtest.strategy import Strategy
 from tradelearn.compat.backtrader import Cerebro
 from tradelearn.core import BrokerEvent, BrokerEventPump, StreamBar
 

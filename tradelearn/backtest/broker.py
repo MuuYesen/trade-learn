@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from tradelearn.backtest.core.models import (
+from tradelearn.backtest.models import (
     BaseBroker,
     ExecutedInfo,
     Order,
@@ -15,18 +15,21 @@ from tradelearn.backtest.core.models import (
 from tradelearn.core import BrokerEventPump
 
 if TYPE_CHECKING:
-    from tradelearn.backtest.core.strategy import Strategy
+    from tradelearn.backtest.strategy import Strategy
 
 OrderPayload = tuple[int, str, str, float, float | None, float | None]
 _EMPTY_ORDER_BUFFER: tuple[()] = ()
 
+
 class CommInfo:
     """Helper to simulate Backtrader's commission info."""
+
     def __init__(self, ratio: float):
-        self.p = self.params = type('Params', (), {'commission': ratio})()
-    
+        self.p = self.params = type("Params", (), {"commission": ratio})()
+
     def getcommission(self, size: float, price: float) -> float:
         return abs(size) * price * self.p.commission
+
 
 class RustBroker(BaseBroker):
     """Proxy for the high-performance Rust backtesting engine."""
@@ -38,7 +41,7 @@ class RustBroker(BaseBroker):
         cash: float = 100000.0,
         commission: float = 0.0,
         mult: float = 1.0,
-        match_mode: str = 'exact',
+        match_mode: str = "exact",
     ):
         super().__init__()
         if match_mode not in self._RUST_MATCH_MODES:
@@ -50,7 +53,7 @@ class RustBroker(BaseBroker):
         self.commission_ratio = commission
         self._mult = mult
         self.match_mode = match_mode
-        self._engine = None # Initialized in engine.py
+        self._engine = None  # Initialized in engine.py
         self._close_prices = None
         self._curr_idx = 0
         self._orders: list[Order] = []
@@ -73,9 +76,9 @@ class RustBroker(BaseBroker):
 
     def set_comminfo(self, comminfo: Any) -> None:
         self._comminfo = comminfo
-        if hasattr(comminfo, 'p') and hasattr(comminfo.p, 'mult'):
+        if hasattr(comminfo, "p") and hasattr(comminfo.p, "mult"):
             self._mult = comminfo.p.mult
-        if hasattr(comminfo, 'p') and hasattr(comminfo.p, 'commission'):
+        if hasattr(comminfo, "p") and hasattr(comminfo.p, "commission"):
             self.commission_ratio = comminfo.p.commission
 
     def getcash(self) -> float:
@@ -92,7 +95,7 @@ class RustBroker(BaseBroker):
                 current_price = self._close_prices[self._curr_idx]
                 val += size * current_price * self._mult
             return val
-            
+
         # BT mode or fallback
         val = self._active_cash
         if self._pos.size != 0:
@@ -209,12 +212,12 @@ class RustBroker(BaseBroker):
         stop_price: float | None,
     ) -> None:
         order_id = self._engine.submit_order(
-                side_str,
-                ot_str,
-                actual_size,
-                limit_price,
-                stop_price,
-            )
+            side_str,
+            ot_str,
+            actual_size,
+            limit_price,
+            stop_price,
+        )
         self.bind_rust_order_ref(order.ref, order_id)
 
     def _rust_order_payload(
@@ -254,9 +257,9 @@ class RustBroker(BaseBroker):
     ) -> Order:
         """Core submission entry point called by Strategy.buy/sell."""
         self._order_count += 1
-        is_buy = (side == Order.Buy)
+        is_buy = side == Order.Buy
         actual_size = float(size if size is not None else 1.0)
-        
+
         order = Order(
             ref=self._order_count,
             data=data,
@@ -264,12 +267,12 @@ class RustBroker(BaseBroker):
             size=actual_size,
             price=price,
             pricelimit=kwargs.get("pricelimit"),
-            exectype=exectype or Order.Market
+            exectype=exectype or Order.Market,
         )
         order.status = Order.Submitted
         self._orders.append(order)
         self._orders_by_ref[order.ref] = order
-        
+
         if self._engine is not None:
             side_str = "buy" if is_buy else "sell"
             payload = self._rust_order_payload(order, side_str, actual_size, price)
@@ -282,7 +285,7 @@ class RustBroker(BaseBroker):
             # BT Mode: Add to pending
             order.status = Order.Accepted
             self._pending_orders.append(order)
-            
+
         return order
 
     def buy(
@@ -342,7 +345,7 @@ class RustBroker(BaseBroker):
             for order in self._pending_orders:
                 executed = False
                 exec_price = 0.0
-                
+
                 if order.exectype == Order.Market:
                     # Executed at Open of current bar
                     executed = True
@@ -354,7 +357,7 @@ class RustBroker(BaseBroker):
                         if low <= limit_price:
                             executed = True
                             exec_price = min(o, limit_price)
-                    else: # Sell
+                    else:  # Sell
                         if h >= limit_price:
                             executed = True
                             exec_price = max(o, limit_price)
@@ -365,7 +368,7 @@ class RustBroker(BaseBroker):
                         if h >= stop_price:
                             executed = True
                             exec_price = max(o, stop_price)
-                    else: # Sell
+                    else:  # Sell
                         if low <= stop_price:
                             executed = True
                             exec_price = min(o, stop_price)
@@ -373,16 +376,18 @@ class RustBroker(BaseBroker):
                 if executed:
                     order.status = Order.Completed
                     abs_size = abs(order.size)
-                    
+
                     if self._comminfo:
                         # Use custom commission logic if available
                         comm = self._comminfo.getcommission(abs_size, exec_price, False)
                     else:
                         comm = abs_size * exec_price * self.commission_ratio * self._mult
-                        
+
                     order.executed = ExecutedInfo(
-                        price=exec_price, size=abs_size, comm=comm,
-                        value=abs_size * exec_price * self._mult
+                        price=exec_price,
+                        size=abs_size,
+                        comm=comm,
+                        value=abs_size * exec_price * self._mult,
                     )
                     signed_size = order.size if order.isbuy() else -order.size
                     # self._pos.update(signed_size, exec_price) - Strategy._on_fill will do this
@@ -391,7 +396,7 @@ class RustBroker(BaseBroker):
                         self._active_cash -= abs_size * exec_price
                     else:
                         self._active_cash += abs_size * exec_price
-                    
+
                     strategy._on_fill(order.data, signed_size, exec_price)
                     _notify_order(strategy, order)
                 else:

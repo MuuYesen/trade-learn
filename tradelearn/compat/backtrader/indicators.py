@@ -5,7 +5,7 @@ import inspect
 import numpy as np
 import pandas as pd
 
-from tradelearn.backtest.core.indicator_cache import BatchIndicatorCache
+from tradelearn.backtest.indicator_cache import BatchIndicatorCache
 
 
 class Params:

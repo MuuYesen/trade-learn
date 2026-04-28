@@ -37,10 +37,7 @@ class RollingBarBuffer:
     def __init__(self, capacity: int, fields: tuple[str, ...] | None = None) -> None:
         self.capacity = max(1, int(capacity))
         fields = fields or ("datetime", "open", "high", "low", "close", "volume")
-        self.arrays = {
-            name: np.full(self.capacity, np.nan, dtype=np.float64)
-            for name in fields
-        }
+        self.arrays = {name: np.full(self.capacity, np.nan, dtype=np.float64) for name in fields}
         self._cursor = -1
         self._size = 0
 
@@ -90,11 +87,12 @@ class RollingBarBuffer:
 
 class DataContainer:
     """Core data storage for OHLCV and extra columns."""
+
     def __init__(self, data: pd.DataFrame, name: str | None = None) -> None:
         self._name = name
         self._frame = data.copy()
         self._cursor = -1
-        
+
         # Common OHLCV arrays for fast access
         def _get_col(df, names, default_val=0.0):
             for n in names:
@@ -107,16 +105,16 @@ class DataContainer:
             return np.full(len(df), default_val, dtype=np.float64)
 
         if isinstance(data.index, pd.DatetimeIndex):
-            self._datetime = data.index.values.astype('datetime64[s]').view(np.int64)
+            self._datetime = data.index.values.astype("datetime64[s]").view(np.int64)
         else:
             self._datetime = data.index.to_numpy()
-            
+
         self._open = _get_col(data, ["open", "Open"])
         self._high = _get_col(data, ["high", "High"])
         self._low = _get_col(data, ["low", "Low"])
         self._close = _get_col(data, ["close", "Close"])
         self._volume = _get_col(data, ["volume", "Volume"])
-        
+
         # Store all columns in a dict for flexible access
         self._arrays: dict[str, np.ndarray] = {
             "datetime": self._datetime,
@@ -124,9 +122,9 @@ class DataContainer:
             "high": self._high,
             "low": self._low,
             "close": self._close,
-            "volume": self._volume
+            "volume": self._volume,
         }
-        
+
         # Add extra columns
         for col in data.columns:
             if col not in self._arrays:

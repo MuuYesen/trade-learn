@@ -1,19 +1,19 @@
-from tradelearn.backtest.core.data import RollingBarBuffer, SharedBarBuffer
-from tradelearn.backtest.core.engine import run_backtest
-from tradelearn.backtest.core.event_runner import (
+from tradelearn.backtest.data import RollingBarBuffer, SharedBarBuffer
+from tradelearn.backtest.engine import run_backtest
+from tradelearn.backtest.event_runner import (
     EventRunner,
     EventSnapshot,
     HistoricalDriver,
     LiveDriver,
     PaperDriver,
 )
-from tradelearn.backtest.core.indicator_cache import (
+from tradelearn.backtest.indicator_cache import (
     BatchIndicatorCache,
     IndicatorCache,
     RollingIndicatorCache,
 )
-from tradelearn.backtest.core.lines import DelayedLine, IndicatorLine, Lines, LineSeries
-from tradelearn.backtest.core.models import (
+from tradelearn.backtest.lines import DelayedLine, IndicatorLine, Lines, LineSeries
+from tradelearn.backtest.models import (
     BarRangeSlippage,
     BarSnapshot,
     BaseAnalyzer,
@@ -35,12 +35,12 @@ from tradelearn.backtest.core.models import (
     Trade,
     _notify_order,
 )
-from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
+from tradelearn.backtest.strategy import Strategy as CoreStrategy
 
 
 def __getattr__(name):
     if name == "SimBroker":
-        from tradelearn.backtest.core.broker import RustBroker
+        from tradelearn.backtest.broker import RustBroker
 
         return RustBroker
     if name == "Analyzer":
@@ -56,6 +56,7 @@ def __getattr__(name):
 
         return Strategy
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "Analyzer",

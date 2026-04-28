@@ -23,7 +23,7 @@ from tradelearn.backtest import (
     Strategy,
     TieredCommission,
 )
-from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
+from tradelearn.backtest.strategy import Strategy as CoreStrategy
 from tradelearn.metrics import max_drawdown, sharpe
 
 

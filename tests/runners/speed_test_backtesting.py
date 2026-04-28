@@ -7,10 +7,10 @@ from pathlib import Path
 import pandas as pd
 
 import tradelearn.compat.backtesting as tl_bt
-from tradelearn.backtest.core.broker import RustBroker
-from tradelearn.backtest.core.data import DataContainer
-from tradelearn.backtest.core.engine import run_backtest
-from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
+from tradelearn.backtest.broker import RustBroker
+from tradelearn.backtest.data import DataContainer
+from tradelearn.backtest.engine import run_backtest
+from tradelearn.backtest.strategy import Strategy as CoreStrategy
 
 
 # 1. Load Original backtesting.py

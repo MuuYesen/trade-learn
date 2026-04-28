@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any
 
 import numpy as np
 
-from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
+from tradelearn.backtest.strategy import Strategy as CoreStrategy
 
 
 def _build_bar_advancers(
@@ -22,21 +22,21 @@ def _build_bar_advancers(
             bar_advancers.append(data._advance)
         seen_advancer_ids.add(id(data))
     for indicator in indicators:
-        advance = getattr(indicator, '_advance', None)
+        advance = getattr(indicator, "_advance", None)
         if callable(advance) and id(indicator) not in seen_advancer_ids:
             bar_advancers.append(advance)
             seen_advancer_ids.add(id(indicator))
-    strategy_advance = getattr(strategy, '_advance', None)
+    strategy_advance = getattr(strategy, "_advance", None)
     strategy_lines = getattr(strategy, "lines", None)
     strategy_has_lines = strategy_lines is None or len(strategy_lines) > 0
     if strategy_advance is not None and strategy_has_lines:
         bar_advancers.append(strategy_advance)
     for attr, val in strategy.__dict__.items():
-        if attr.startswith('_'):
+        if attr.startswith("_"):
             continue
         if id(val) in seen_advancer_ids:
             continue
-        advance = getattr(val, '_advance', None)
+        advance = getattr(val, "_advance", None)
         if callable(advance):
             bar_advancers.append(advance)
             seen_advancer_ids.add(id(val))
@@ -60,7 +60,7 @@ def _build_data_advance_plan(datas: list[Any]) -> Any | None:
     )
 
 
-def run_backtest(cerebro: Any) -> List[Any]:
+def run_backtest(cerebro: Any) -> list[Any]:
     """Unified backtest engine that runs any strategy inheriting from core.Strategy."""
     strategy_cls, args, kwargs = cerebro.strats[0]
     bind_strategy_context = getattr(cerebro, "_bind_strategy_context", None)
@@ -68,13 +68,14 @@ def run_backtest(cerebro: Any) -> List[Any]:
     strategy = strategy_cls(*args, **kwargs)
     if callable(bind_strategy_context):
         bind_strategy_context(strategy)
-    
+
     # Core attributes
     strategy.datas = cerebro.datas
-    if cerebro.datas: strategy.data = cerebro.datas[0]
+    if cerebro.datas:
+        strategy.data = cerebro.datas[0]
     strategy.broker = cerebro.broker
-    
-    if hasattr(strategy, '_setup'):
+
+    if hasattr(strategy, "_setup"):
         strategy._setup()
 
     # ... (Rust Engine Initialization omitted for brevity but preserved in real file) ...
@@ -82,32 +83,46 @@ def run_backtest(cerebro: Any) -> List[Any]:
     # Rust Engine Initialization
     # ---------------------------------------------------------
     from .broker import RustBroker
+
     if isinstance(cerebro.broker, RustBroker):
         from tradelearn._rust import RustBacktestEngine
+
         data = cerebro.datas[0]
         # Robustly handle both native containers and facade data feeds.
-        if hasattr(data, '_datetime'):
+        if hasattr(data, "_datetime"):
             timestamps = data._datetime
             opens = data._open
             highs = data._high
             lows = data._low
             closes = data._close
             volumes = data._volume
-        else: # BT Legacy / LineSeries fallback
+        else:  # BT Legacy / LineSeries fallback
             timestamps = np.array(data.datetime._values, dtype=np.int64)
             opens = np.array(data.open._values, dtype=np.float64)
             highs = np.array(data.high._values, dtype=np.float64)
             lows = np.array(data.low._values, dtype=np.float64)
             closes = np.array(data.close._values, dtype=np.float64)
             volumes = np.array(data.volume._values, dtype=np.float64)
-        
+
         rust_engine = RustBacktestEngine(
-            timestamps, opens, highs, lows, closes, volumes,
+            timestamps,
+            opens,
+            highs,
+            lows,
+            closes,
+            volumes,
             float(cerebro.broker._cash),
             float(cerebro.broker.commission_ratio),
-            False, False, False, 
-            0.0, 0.0, False, False, False, 
-            float(cerebro.broker._mult), 1.0,
+            False,
+            False,
+            False,
+            0.0,
+            0.0,
+            False,
+            False,
+            False,
+            float(cerebro.broker._mult),
+            1.0,
             cerebro.broker.match_mode == "smart",
         )
         cerebro.broker._engine = rust_engine
@@ -115,38 +130,41 @@ def run_backtest(cerebro: Any) -> List[Any]:
         cerebro.broker._high_prices = highs
         cerebro.broker._low_prices = lows
         cerebro.broker._close_prices = closes
-    
+
     # 2. Initialize Sizer & Analyzers
     sizer_cls, sizer_kwargs = cerebro._sizer_spec
     strategy.setsizer(sizer_cls(**sizer_kwargs))
-    
+
     # Support indicators from both facades
-    indicators = getattr(strategy, '_indicators', [])
-    indicators_bt = getattr(strategy, '_indicators_bt', [])
-    
+    indicators = getattr(strategy, "_indicators", [])
+    indicators_bt = getattr(strategy, "_indicators_bt", [])
+
     strategy.analyzers = {}
     for name, (ana_cls, ana_kwargs) in cerebro.analyzers.items():
         ana_inst = ana_cls(**ana_kwargs)
         ana_inst.strategy = strategy
         strategy.analyzers[name] = ana_inst
-    
+
     # 3. Lifecycle Start
-    if hasattr(strategy, '_setup'):
+    if hasattr(strategy, "_setup"):
         strategy._setup()
     strategy.init()
     strategy.start()
     for ana in strategy.analyzers.values():
-        if hasattr(ana, 'start'): ana.start()
+        if hasattr(ana, "start"):
+            ana.start()
 
     limit = cerebro.datas[0].buflen()
     # Calculate min_period from all indicators (mostly for BT facade)
-    min_period = int(getattr(strategy, '_manual_min_period', 0))
+    min_period = int(getattr(strategy, "_manual_min_period", 0))
     for ind in indicators + indicators_bt:
-        if hasattr(ind, 'min_period'):
+        if hasattr(ind, "min_period"):
             m = ind.min_period
-            if callable(m): m = m()
+            if callable(m):
+                m = m()
             min_period = max(min_period, int(m))
-    if min_period == 0: min_period = 1
+    if min_period == 0:
+        min_period = 1
 
     data_advance_plan = _build_data_advance_plan(cerebro.datas)
     bar_advancers = _build_bar_advancers(
@@ -157,9 +175,11 @@ def run_backtest(cerebro: Any) -> List[Any]:
     )
 
     if data_advance_plan is None:
+
         def advance_datas(i: int) -> None:
             return None
     else:
+
         def advance_datas(i: int) -> None:
             for data, cursor in zip(cerebro.datas, data_advance_plan.cursors_at(i), strict=False):
                 if cursor >= 0:
@@ -171,13 +191,16 @@ def run_backtest(cerebro: Any) -> List[Any]:
         if data_advance_plan is None:
             strategy._set_bar_advancers(bar_advancers)
         else:
+
             def advance_bar(i: int) -> None:
                 advance_datas(i)
                 for advance in bar_advancers:
                     advance(i)
+
             strategy._set_bar_advancers((advance_bar,))
         strategy_pre_next = strategy._pre_next
     else:
+
         def strategy_pre_next(cursor: int) -> None:
             advance_datas(cursor)
             for advance in bar_advancers:
@@ -191,11 +214,11 @@ def run_backtest(cerebro: Any) -> List[Any]:
     broker_process_fills = broker.process_fills if broker else None
     broker_getcash = broker.getcash if broker else None
     broker_getvalue = broker.getvalue if broker else None
-    begin_order_buffering = getattr(broker, 'begin_order_buffering', None) if broker else None
-    flush_order_buffer = getattr(broker, 'flush_order_buffer', None) if broker else None
-    drain_order_buffer = getattr(broker, 'drain_order_buffer', None) if broker else None
+    begin_order_buffering = getattr(broker, "begin_order_buffering", None) if broker else None
+    flush_order_buffer = getattr(broker, "flush_order_buffer", None) if broker else None
+    drain_order_buffer = getattr(broker, "drain_order_buffer", None) if broker else None
     strategy_next = strategy.next
-    
+
     use_rust_bar_loop = (
         isinstance(broker, RustBroker)
         and getattr(broker, "_engine", None) is not None
@@ -205,7 +228,7 @@ def run_backtest(cerebro: Any) -> List[Any]:
 
     def on_bar(i: int) -> list[Any]:
         strategy_pre_next(i)
-        
+
         # Broker Match
         if broker:
             broker_step(i)
@@ -224,13 +247,12 @@ def run_backtest(cerebro: Any) -> List[Any]:
         return []
 
     use_multi_data_rust_runner = (
-        use_rust_bar_loop
-        and data_advance_plan is not None
-        and hasattr(data_advance_plan, "run")
+        use_rust_bar_loop and data_advance_plan is not None and hasattr(data_advance_plan, "run")
     )
 
     if use_multi_data_rust_runner:
         if notify_cashvalue is None:
+
             def on_rust_bar_multi(
                 i: int,
                 data_cursors: list[int],
@@ -255,6 +277,7 @@ def run_backtest(cerebro: Any) -> List[Any]:
                     return orders if orders else None
                 return None
         else:
+
             def on_rust_bar_multi(
                 i: int,
                 data_cursors: list[int],
@@ -283,7 +306,10 @@ def run_backtest(cerebro: Any) -> List[Any]:
         data_advance_plan.run(broker._engine, broker, on_rust_bar_multi, 0, limit)
     elif use_rust_bar_loop:
         if notify_cashvalue is None:
-            def on_rust_bar(i: int, fills: list[Any], cash: float, size: float, price: float) -> list[Any] | None:
+
+            def on_rust_bar(
+                i: int, fills: list[Any], cash: float, size: float, price: float
+            ) -> list[Any] | None:
                 strategy_pre_next(i)
                 broker._curr_idx = i
                 broker._step_fills_from_collect = fills
@@ -297,7 +323,10 @@ def run_backtest(cerebro: Any) -> List[Any]:
                     return orders if orders else None
                 return None
         else:
-            def on_rust_bar(i: int, fills: list[Any], cash: float, size: float, price: float) -> list[Any] | None:
+
+            def on_rust_bar(
+                i: int, fills: list[Any], cash: float, size: float, price: float
+            ) -> list[Any] | None:
                 strategy_pre_next(i)
                 broker._curr_idx = i
                 broker._step_fills_from_collect = fills
@@ -316,10 +345,11 @@ def run_backtest(cerebro: Any) -> List[Any]:
     else:
         for i in range(limit):
             on_bar(i)
-    
+
     # 4. Lifecycle Stop
     strategy.stop()
     for ana in strategy.analyzers.values():
-        if hasattr(ana, 'stop'): ana.stop()
+        if hasattr(ana, "stop"):
+            ana.stop()
 
     return [strategy]

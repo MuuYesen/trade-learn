@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tradelearn.backtest.core.broker import RustBroker
+from tradelearn.backtest.broker import RustBroker
 from tradelearn.core import BrokerEvent, BrokerEventPump
 
 

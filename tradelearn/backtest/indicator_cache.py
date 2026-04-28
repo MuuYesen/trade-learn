@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from tradelearn.backtest.core.lines import LineSeries
+from tradelearn.backtest.lines import LineSeries
 
 
 class IndicatorBundle:
@@ -195,14 +195,13 @@ class RollingIndicatorCache:
     def append_bar(self, bar: dict[str, Any]) -> None:
         self._bars.append(dict(bar))
         if len(self._bars) > self.window:
-            self._bars = self._bars[-self.window:]
+            self._bars = self._bars[-self.window :]
         frame = pd.DataFrame(self._bars)
         for name, func, args, kwargs in self._registrations:
             key = self._key(name, args, kwargs)
             proxy = self._cache[key]
             resolved_args = tuple(
-                frame[arg] if isinstance(arg, str) and arg in frame else arg
-                for arg in args
+                frame[arg] if isinstance(arg, str) and arg in frame else arg for arg in args
             )
             result = func(*resolved_args, **kwargs)
             value = self._last_value(result)

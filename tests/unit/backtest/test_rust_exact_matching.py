@@ -4,11 +4,11 @@ import pandas as pd
 import pytest
 
 from tradelearn import _rust
-from tradelearn.backtest.core.broker import RustBroker
-from tradelearn.backtest.core.data import DataContainer, RollingBarBuffer
-from tradelearn.backtest.core.engine import _build_bar_advancers, _build_data_advance_plan
-from tradelearn.backtest.core.models import Order
-from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
+from tradelearn.backtest.broker import RustBroker
+from tradelearn.backtest.data import DataContainer, RollingBarBuffer
+from tradelearn.backtest.engine import _build_bar_advancers, _build_data_advance_plan
+from tradelearn.backtest.models import Order
+from tradelearn.backtest.strategy import Strategy as CoreStrategy
 from tradelearn.compat.backtesting.backtest import Backtest
 from tradelearn.compat.backtesting.strategy import (
     BacktestingDataProxy,
@@ -18,7 +18,7 @@ from tradelearn.compat.backtesting.strategy import (
 from tradelearn.compat.backtesting.strategy import Strategy as BacktestingStrategy
 from tradelearn.compat.backtrader import Cerebro, DataFeed, Strategy
 from tradelearn.compat.backtrader import indicators as btind
-from tradelearn.backtest.core.lines import LineSeries
+from tradelearn.backtest.lines import LineSeries
 
 
 def _match(

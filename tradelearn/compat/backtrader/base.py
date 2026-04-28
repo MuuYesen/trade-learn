@@ -3,9 +3,9 @@ from __future__ import annotations
 import inspect
 from typing import Any
 
-from tradelearn.backtest.core.lines import DelayedLine, IndicatorLine, Lines, LineSeries
-from tradelearn.backtest.core.models import Order, Params
-from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
+from tradelearn.backtest.lines import DelayedLine, IndicatorLine, Lines, LineSeries
+from tradelearn.backtest.models import Order, Params
+from tradelearn.backtest.strategy import Strategy as CoreStrategy
 
 __all__ = [
     "BaseAnalyzer",

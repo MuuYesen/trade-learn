@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from tradelearn import ta
-from tradelearn.backtest.core.indicator_cache import (
+from tradelearn.backtest.indicator_cache import (
     BatchIndicatorCache,
     IndicatorCache,
     RollingIndicatorCache,

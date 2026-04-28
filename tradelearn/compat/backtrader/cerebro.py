@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tradelearn.backtest.core.models import FixedCommission, FixedSlippage
+from tradelearn.backtest.models import FixedCommission, FixedSlippage
 from tradelearn.compat.backtrader.datafeed import DataFeed
 from tradelearn.compat.backtrader.sizer import FixedSize
 from tradelearn.compat.backtrader.strategy import Strategy
@@ -35,7 +35,7 @@ class Cerebro:
             raise ValueError("mode must be one of 'backtest', 'paper', or 'live'")
         self.mode = mode
         self.kwargs = kwargs
-        from tradelearn.backtest.core.broker import RustBroker
+        from tradelearn.backtest.broker import RustBroker
         self.broker = RustBroker(match_mode=match_mode)
         self.broker._slippage_model = slippage or FixedSlippage()
         self.broker._commission_model = commission or FixedCommission()
@@ -72,7 +72,7 @@ class Cerebro:
         if self.mode != "backtest":
             return self._run_event_mode()
         # Main execution logic orchestrated here
-        from tradelearn.backtest.core.engine import run_backtest
+        from tradelearn.backtest.engine import run_backtest
         self._prepare_strategy_context()
         try:
             return run_backtest(self)
@@ -111,7 +111,7 @@ class Cerebro:
         set_current_datas([])
 
     def _run_event_mode(self) -> list[Strategy]:
-        from tradelearn.backtest.core.event_runner import EventRunner, LiveDriver, PaperDriver
+        from tradelearn.backtest.event_runner import EventRunner, LiveDriver, PaperDriver
         from tradelearn.core import BrokerEventPump
 
         self._prepare_strategy_context()

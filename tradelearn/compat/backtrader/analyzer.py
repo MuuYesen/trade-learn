@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tradelearn.backtest.core.models import BaseAnalyzer, Stats
+from tradelearn.backtest.models import BaseAnalyzer, Stats
 
 from .base import MetaParams
 
