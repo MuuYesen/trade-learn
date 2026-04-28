@@ -22,6 +22,7 @@ def test_backtrader_benchmark_runner_completes() -> None:
     assert "❌ DIFF" not in result.stdout
     assert "QuickstartSmaCross" in result.stdout
     assert "OrderExecutionStrategy" in result.stdout
+    assert "vs Prev TL" in result.stdout
 
 
 def test_backtesting_compare_results_runner_completes() -> None:

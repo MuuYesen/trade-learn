@@ -190,28 +190,29 @@ class IndicatorProxy:
 
     def __getitem__(self, key: int | slice) -> Any:
         cursor = self._feed._cursor
+        data = self._data
         if key == -1:
-            return self._data[cursor]
+            return data[cursor]
         if key == -2:
             idx = cursor - 1
             if idx < 0:
                 raise IndexError("Index out of bounds")
-            return self._data[idx]
+            return data[idx]
         if isinstance(key, int):
             if key < 0:
                 # Relative indexing from CURRENT cursor
                 idx = cursor + 1 + key
                 if idx < 0: raise IndexError("Index out of bounds")
-                return self._data[idx]
+                return data[idx]
             else:
-                return self._data[key]
+                return data[key]
         elif isinstance(key, slice):
             # Handle slices up to cursor
             start = key.start if key.start is not None else 0
             stop = key.stop if key.stop is not None else cursor + 1
             if stop > cursor + 1: stop = cursor + 1
-            return self._data[start:stop:key.step]
-        return self._data[key]
+            return data[start:stop:key.step]
+        return data[key]
 
     def __len__(self) -> int:
         return self._feed._cursor + 1

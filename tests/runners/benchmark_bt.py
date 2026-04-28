@@ -1,6 +1,8 @@
 import sys
 import time
 import importlib
+import argparse
+import statistics
 import pandas as pd
 from pathlib import Path
 from multiprocessing import Process, Queue
@@ -34,10 +36,23 @@ STRATEGY_CLASSES = {
     "10_order_execution": "OrderExecutionStrategy",
 }
 
-def run_strategy_in_process(engine_type, mod_name, cls_name, queue, match_mode='exact'):
+PREVIOUS_TL_MS = {
+    "QuickstartSmaCross": 6.4,
+    "SmaCross": 5.6,
+    "MigratedSmaCross": 6.5,
+    "Turtle": 9.6,
+    "EnhancedRSI": 8.1,
+    "BetterMA": 5.3,
+    "MacdTharp": 7.0,
+    "OrderExecutionStrategy": 7.4,
+}
+
+def run_strategy_in_process(engine_type, mod_name, cls_name, queue, match_mode='exact', repeats=1, warmup=0):
     try:
         import types
         import time
+        import io
+        import contextlib
         if engine_type == "Tradelearn":
             import tradelearn.compat.backtrader as bt
         else:
@@ -63,35 +78,55 @@ def run_strategy_in_process(engine_type, mod_name, cls_name, queue, match_mode='
         
         strategy_cls.notify_trade = notify_trade
         strategy_cls.audit_log = []
-
-        if engine_type == "Tradelearn":
-            cerebro = bt.Cerebro(match_mode=match_mode)
-        else:
-            cerebro = bt.Cerebro()
-        cerebro.broker.setcash(100000.0)
-        cerebro.broker.setcommission(commission=0.0)
         
         dataframe = pd.read_parquet(DATA_PATH)
         if engine_type == "Tradelearn":
             from tradelearn.compat.backtrader import DataFeed
-            data = DataFeed(dataframe)
         else:
             class PandasData(bt.feeds.PandasData):
                 params = (('datetime', None), ('open', 'open'), ('high', 'high'), ('low', 'low'), ('close', 'close'), ('volume', 'volume'), ('openinterest', None))
-            data = PandasData(dataname=dataframe)
         
-        cerebro.adddata(data)
-        cerebro.addstrategy(strategy_cls)
-        
-        start_time = time.perf_counter()
-        strats = cerebro.run()
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        repeats = max(1, int(repeats))
+        warmup = max(0, int(warmup))
+        suppress_run_output = warmup > 0 or repeats > 1
+        timings = []
+        final_value = None
+        trades = None
+        for run_idx in range(warmup + repeats):
+            if engine_type == "Tradelearn":
+                cerebro = bt.Cerebro(match_mode=match_mode)
+            else:
+                cerebro = bt.Cerebro()
+            cerebro.broker.setcash(100000.0)
+            cerebro.broker.setcommission(commission=0.0)
+            if engine_type == "Tradelearn":
+                data = DataFeed(dataframe)
+            else:
+                data = PandasData(dataname=dataframe)
+            cerebro.adddata(data)
+            cerebro.addstrategy(strategy_cls)
+            strategy_cls.audit_log = []
+
+            start_time = time.perf_counter()
+            if suppress_run_output:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    strats = cerebro.run()
+            else:
+                strats = cerebro.run()
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            if run_idx >= warmup:
+                timings.append(elapsed_ms)
+                final_value = cerebro.broker.getvalue()
+                trades = list(strats[0].audit_log)
+
+        elapsed_ms = statistics.median(timings)
         
         queue.put({
             "status": "success",
-            "final_value": cerebro.broker.getvalue(),
+            "final_value": final_value,
             "elapsed_ms": elapsed_ms,
-            "trades": strats[0].audit_log
+            "trades": trades,
+            "timings_ms": timings,
         })
     except Exception as e:
         import traceback
@@ -99,9 +134,10 @@ def run_strategy_in_process(engine_type, mod_name, cls_name, queue, match_mode='
             "status": "error", "error": str(e), "traceback": traceback.format_exc()
         })
 
-def run_benchmark(match_mode='smart'):
+def run_benchmark(match_mode='smart', repeats: int = 1, warmup: int = 0):
     print(f"\n{'='*80}")
-    print(f"ULTIMATE NUMERICAL AUDIT: Tradelearn ({match_mode}) vs Backtrader")
+    timing_label = "median" if repeats > 1 else "single run"
+    print(f"ULTIMATE NUMERICAL AUDIT: Tradelearn ({match_mode}) vs Backtrader [{timing_label}, repeats={repeats}, warmup={warmup}]")
     print(f"{'='*80}")
     
     final_results = {}
@@ -115,7 +151,7 @@ def run_benchmark(match_mode='smart'):
             queue = Queue()
             # Pass match_mode only to Tradelearn
             mode = match_mode if engine == "Tradelearn" else "exact"
-            p = Process(target=run_strategy_in_process, args=(engine, mod_name, cls_name, queue, mode))
+            p = Process(target=run_strategy_in_process, args=(engine, mod_name, cls_name, queue, mode, repeats, warmup))
             p.start()
             res = queue.get()
             p.join()
@@ -147,18 +183,32 @@ def run_benchmark(match_mode='smart'):
         final_results[cls_name] = results
 
     print(f"\n\n{'='*120}")
-    print(f"{'Strategy':<25} | {'TL Value':<12} | {'BT Value':<12} | {'TL Time':<10} | {'BT Time':<10} | {'Speedup':<10} | {'Status':<10}")
-    print(f"{'-'*120}")
+    comparable_to_previous = repeats == 1 and warmup == 0
+    prev_header = "vs Prev TL" if comparable_to_previous else "vs Prev TL*"
+    print(f"{'Strategy':<25} | {'TL Value':<12} | {'BT Value':<12} | {'TL Time':<10} | {'BT Time':<10} | {'Speedup':<10} | {prev_header:<11} | {'Status':<10}")
+    print(f"{'-'*136}")
     for cls_name, res in final_results.items():
         tl, bt_res = res.get("Tradelearn"), res.get("Backtrader")
         if tl and bt_res:
             diff = tl["final_value"] - bt_res["final_value"]
             t_tl, t_bt = tl["elapsed_ms"], bt_res["elapsed_ms"]
             speedup = t_bt / t_tl if t_tl > 0 else 0
+            prev_tl = PREVIOUS_TL_MS.get(cls_name)
+            if comparable_to_previous and prev_tl:
+                improvement = (prev_tl - t_tl) / prev_tl * 100
+                improvement_text = f"{improvement:+6.1f}%"
+            else:
+                improvement_text = "warm run"
             status = "✅ EXACT" if abs(diff) < EXACT_TOLERANCE else "❌ DIFF"
-            print(f"{cls_name:<25} | {tl['final_value']:<12.2f} | {bt_res['final_value']:<12.2f} | {t_tl:>7.1f}ms | {t_bt:>7.1f}ms | {speedup:>8.1f}x | {status:<10}")
-    print(f"{'='*120}\n")
+            print(f"{cls_name:<25} | {tl['final_value']:<12.2f} | {bt_res['final_value']:<12.2f} | {t_tl:>7.1f}ms | {t_bt:>7.1f}ms | {speedup:>8.1f}x | {improvement_text:>11} | {status:<10}")
+    print(f"{'='*136}\n")
+    if not comparable_to_previous:
+        print("* Warm/repeated runs are not directly comparable with the saved single-run previous TL baseline.\n")
 
 if __name__ == "__main__":
-    mode = sys.argv[1] if len(sys.argv) > 1 else 'smart'
-    run_benchmark(mode)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("mode", nargs="?", default="smart")
+    parser.add_argument("--repeat", type=int, default=1)
+    parser.add_argument("--warmup", type=int, default=0)
+    args = parser.parse_args()
+    run_benchmark(args.mode, repeats=args.repeat, warmup=args.warmup)
