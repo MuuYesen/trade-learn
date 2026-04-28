@@ -431,7 +431,7 @@
 - [x] P0.6 benchmark 可读性:保留现有 benchmark,新增 `vs Prev TL`、repeat/warmup 与 warm run 提示;已提交 `d4f38f4`;后续不再优先推进 benchmark 基线更新
 - [x] P1 批量 bind order refs:Rust loop submit drained orders 后收集 `(provisional_ref, order_id)` 并一次性调用 Python `bind_rust_order_refs`;已补 `RustBroker.bind_rust_order_refs` 与回归测试,预期对高频下单策略 `1.05x-1.2x`;提交 `1c4b58c`
 - [x] P1 批量 fill/order sync:Rust fills 已随 step snapshot 返回,Python broker 改为 `_process_rust_fills_batch()` 统一同步 `Order.executed`、pending size、position、notify_order/notify_trade,通知顺序保持不变;高成交策略预期 `1.2x-2x`;提交 `32dce8f`
-- [x] P1/P2 前置热路径修补:backtesting facade `_setup()` 改为只绑定数据代理,避免 `init()` 重复执行 3 次;`self.data` 改回普通实例属性,并将 advancer 静态发现从 `hasattr()` 改为 callable 检查,避免动态 proxy 误触发;对指标预计算型策略收益更明显,本轮脚本对齐保持不变;提交 `7e3fe59`
+- [x] P1/P2 前置热路径修补:backtesting facade `_setup()` 改为只绑定数据代理,避免 `init()` 重复执行 3 次;`self.data` 改回普通实例属性,并将 advancer 静态发现从 `hasattr()` 改为 callable 检查,避免动态 proxy 误触发;对指标预计算型策略收益更明显,本轮脚本对齐保持不变;提交 `e7dc15c`
 - [ ] P1 完整 Rust BarRunner:将多数据推进、订单队列、撮合、mark-to-market 与 callback 边界统一进 `BarRunner` struct,Python 策略 API 不变;目标 vs 当前 Python callback loop `>=3x`,vs Backtrader `>=8x`
 - [ ] P2 指标缓存框架:回测侧统一接入 `pandas-ta-classic` / TDX / TradingView 指标批量预计算;QMT 实盘侧只能 rolling window 增量重算,不做全量预计算;指标密集策略预期 `1.5x-3x`
 - [ ] P3 共享 bar buffer / Line 访问优化:降低 `self.data.close[0]`、`self.data.close[-1]`、`indicator[-1]` Python 对象开销;需与 QMT rolling buffer 兼容,预期 `1.2x-2x`
