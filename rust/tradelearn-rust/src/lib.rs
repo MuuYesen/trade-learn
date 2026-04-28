@@ -185,15 +185,15 @@ impl RustBacktestEngine {
     fn step_open_collect(
         &mut self,
         cursor: usize,
-        fill_start_idx: usize,
+        _fill_start_idx: usize,
     ) -> (
-        Vec<(u64, String, f64, f64, f64, f64, f64, i64)>,
+        Vec<(u64, String, f64, f64, f64, f64, f64)>,
         f64,
         f64,
         f64,
     ) {
-        self.inner.step_open(cursor);
-        let fills = self.get_new_fills(fill_start_idx);
+        let fill_records = self.inner.step_open(cursor);
+        let fills = self.map_fills(fill_records);
         let cash = self.inner.get_cash();
         let (size, price) = self.inner.get_position();
         (fills, cash, size, price)
