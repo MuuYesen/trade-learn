@@ -141,6 +141,9 @@ class Indicator(metaclass=MetaSimple):
         if name == 'p': return self.params
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
+    def __bool__(self):
+        return bool(self.lines[0])
+
     def __getitem__(self, i): return self.lines[0][i]
     def __call__(self, ago=0): return self.lines[0](ago)
     def __len__(self): return len(self.lines[0])
@@ -255,7 +258,7 @@ class ATR(Indicator):
         tr.iloc[0] = np.nan
         atr = bt_wilder(tr, self.p.period)
         base = _base_p(self.data)
-        self.lines.atr = _wrap(self.data, atr, min_period=base + self.p.period)
+        self.lines.atr = _wrap(self.data, atr, min_period=base + self.p.period + 1)
 class TrueRange(Indicator):
     lines = ('tr',)
     def __init__(self, *args, **kwargs):
@@ -285,7 +288,7 @@ class CrossOver(Indicator):
         res[mask & (signs < 0) & (filled_signs >= 0)] = -1.0
         m0 = _base_p(d0)
         m1 = _base_p(d1)
-        self.lines.crossover = _wrap(d0, pd.Series(res), min_period=max(m0, m1, 1))
+        self.lines.crossover = _wrap(d0, pd.Series(res), min_period=max(m0, m1) + 1)
 
 class CrossUp(Indicator):
     lines = ('crossover',)
@@ -301,7 +304,7 @@ class CrossUp(Indicator):
         res = mask & (signs > 0) & (filled_signs <= 0)
         m0 = _base_p(d0)
         m1 = _base_p(d1)
-        self.lines.crossover = _wrap(d0, pd.Series(res.astype(float)), min_period=max(m0, m1, 1))
+        self.lines.crossover = _wrap(d0, pd.Series(res.astype(float)), min_period=max(m0, m1) + 1)
 
 class CrossDown(Indicator):
     lines = ('crossover',)
@@ -317,7 +320,7 @@ class CrossDown(Indicator):
         res = mask & (signs < 0) & (filled_signs >= 0)
         m0 = _base_p(d0)
         m1 = _base_p(d1)
-        self.lines.crossover = _wrap(d0, pd.Series(res.astype(float)), min_period=max(m0, m1, 1))
+        self.lines.crossover = _wrap(d0, pd.Series(res.astype(float)), min_period=max(m0, m1) + 1)
 
 class Lowest(Indicator):
     lines = ('lowest',)

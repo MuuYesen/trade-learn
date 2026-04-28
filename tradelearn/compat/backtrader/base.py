@@ -1,36 +1,43 @@
-"""Base classes and shared state for the TradeLearn backtesting engine."""
-
 from __future__ import annotations
 from typing import Any, List, Optional, Type, Union, TYPE_CHECKING
 import numpy as np
 import pandas as pd
+import inspect
 
-if TYPE_CHECKING:
-    from tradelearn.backtest.engine import Order, Position, Strategy
+from tradelearn.backtest.core.models import Params, Order
 
-# Global context for Backtrader-style implicit data resolution
+# Centralized context to avoid import-time shadowing
+class _GlobalContext:
+    def __init__(self):
+        self.current_data = None
+        self.current_datas = []
+        self.current_strategy = None
+
+_G = _GlobalContext()
+
 _CURRENT_DATA = None
 _CURRENT_DATAS = []
 _CURRENT_STRATEGY = None
 
 def set_current_data(data: Any) -> None:
     global _CURRENT_DATA
+    _G.current_data = data
     _CURRENT_DATA = data
 
 def set_current_datas(datas: List[Any]) -> None:
     global _CURRENT_DATAS
+    _G.current_datas = datas
     _CURRENT_DATAS = datas
 
 def set_current_strategy(strategy: Any) -> None:
     global _CURRENT_STRATEGY
+    _G.current_strategy = strategy
     _CURRENT_STRATEGY = strategy
-
-import inspect
 
 class MetaParams(type):
     """Metaclass to handle Backtrader-style parameter stripping and lifecycle hooks."""
     def __call__(cls, *args, **kwargs):
-        # 1. Collect all params from MRO (inheritance support)
+        # 1. Collect all params from MRO
         p_names = []
         all_p_defaults = []
         for base_cls in cls.mro():
@@ -45,84 +52,85 @@ class MetaParams(type):
         p_kwargs = {}
         other_kwargs = {}
         for k, v in kwargs.items():
-            if k in p_names:
-                p_kwargs[k] = v
-            else:
-                other_kwargs[k] = v
+            if k in p_names: p_kwargs[k] = v
+            else: other_kwargs[k] = v
 
         # 2. Instantiate
         instance = cls.__new__(cls)
 
-        # 3. Base Init (Setup lines, params)
+        # 3. Base Init (Params and Lines)
         if hasattr(instance, '_base_init'):
             instance._base_init(**p_kwargs)
 
-        # 4. Separate datas from args for implicit assignment
+        # 4. Data Assignment
         datas = [arg for arg in args if hasattr(arg, 'lines') or hasattr(arg, '_values')]
+        if not datas and _G.current_data is not None:
+            datas = [_G.current_data]
+            
         if datas:
-            if not hasattr(instance, 'datas'): instance.datas = datas
-            if not hasattr(instance, 'data'): instance.data = datas[0]
+            instance.datas = datas
+            instance.data = datas[0]
             for i, d in enumerate(datas):
                 setattr(instance, f'data{i}', d)
+        else:
+            print(f"DEBUG: {cls.__name__} has NO DATA. _G.current_data={_G.current_data}")
 
-        # 5. Strategy Setup (Specific to Strategy)
+        # 5. Setup Hook (Data and aliasing)
         if hasattr(instance, '_setup'):
             instance._setup()
+            
+        # 5.5 Register Indicator to Strategy
+        # 5.5 Register Indicator to Strategy
+        if _G.current_strategy and not isinstance(instance, CoreStrategy):
+             if hasattr(_G.current_strategy, '_register_indicator'):
+                 _G.current_strategy._register_indicator(instance)
 
-        # 6. User Init - call with appropriate number of positional args
-        # Check signature of cls.__init__
+        # 6. User Init with context management
+        prev_strat = _G.current_strategy
+        prev_data = _G.current_data
+        
         try:
-            # Ensure _CURRENT_STRATEGY is set during user __init__
-            from tradelearn.backtest import base
-            prev_strat = base._CURRENT_STRATEGY
             if not prev_strat and hasattr(instance, 'next'): # Likely a strategy
-                base.set_current_strategy(instance)
+                set_current_strategy(instance)
+                if hasattr(instance, 'data'):
+                    set_current_data(instance.data)
+                print(f"DEBUG: Strategy {cls.__name__} set context data: {instance.data}")
 
             sig = inspect.signature(cls.__init__)
-            params = list(sig.parameters.values())
-            # Skip 'self'
-            params = params[1:]
+            params = list(sig.parameters.values())[1:] # Skip 'self'
             
             has_var_args = any(p.kind == p.VAR_POSITIONAL for p in params)
             if has_var_args:
                 instance.__init__(*args, **other_kwargs)
             else:
                 pos_params = [p for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
-                # Pass as many args as there are positional parameters
                 instance.__init__(*args[:len(pos_params)], **other_kwargs)
-        except (ValueError, TypeError):
-            # Fallback if signature can't be determined
-            instance.__init__(*args, **other_kwargs)
         finally:
-            if 'prev_strat' in locals() and prev_strat:
-                set_current_strategy(prev_strat)
+            set_current_strategy(prev_strat)
+            set_current_data(prev_data)
             
-        # 7. Register with current strategy if this is an indicator
+        # 7. Register Indicator
         if prev_strat and not isinstance(instance, prev_strat.__class__):
-            if cls.__name__ not in ('Strategy', 'DataFeed', 'Cerebro'):
+            if hasattr(instance, 'lines') and hasattr(prev_strat, '_register_indicator'):
                 prev_strat._register_indicator(instance)
 
         return instance
 
 class LineRoot(metaclass=MetaParams):
     """Base class for anything that has lines (DataFeeds, Indicators)."""
-    def __init__(self, *args, **kwargs) -> None:
-        # Metaclass already called _base_init, but we keep this for direct instantiation if any
-        pass
-
     def _base_init(self, **kwargs):
-        # Initialize params: merge all MRO defaults with instance kwargs
         all_cls_params = []
         for base_cls in self.__class__.mro():
-            all_cls_params.extend(getattr(base_cls, 'params', []))
+            p = getattr(base_cls, 'params', [])
+            if isinstance(p, (list, tuple)): all_cls_params.extend(p)
+            elif isinstance(p, dict): all_cls_params.extend(p.items())
+            
         self.params = self.p = Params(all_cls_params, **kwargs)
 
-        # Always create instance-level Lines container to shadow class-level tuple
         if not hasattr(self, 'lines') or not isinstance(self.lines, Lines):
             self.lines = Lines(self)
         self.l = self.lines
         
-        # Initialize line placeholders if class defines 'lines'
         line_names = getattr(self.__class__, 'lines', [])
         if isinstance(line_names, (list, tuple)):
             for name in line_names:
@@ -141,7 +149,6 @@ class LineRoot(metaclass=MetaParams):
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
 class Lines:
-    """Container for line series with ordered access."""
     def __init__(self, owner: Any) -> None:
         self._owner = owner
         self._lines = []
@@ -151,7 +158,6 @@ class Lines:
             super().__setattr__(name, value)
         else:
             self.__dict__[name] = value
-            # Ensure _lines reflects the order defined in the class attribute 'lines'
             cls_lines = getattr(self._owner.__class__, 'lines', [])
             if isinstance(cls_lines, (list, tuple)) and name in cls_lines:
                 idx = list(cls_lines).index(name)
@@ -166,15 +172,33 @@ class Lines:
     def __len__(self): return len(self._lines)
 
 class LineSeries:
-    """A single line of data."""
     def __init__(self, values: Any) -> None:
         self._values = np.asarray(values, dtype=np.float64)
         self._cursor = 0
         self._is_datetime = False
         self.min_period = 0
 
+    def datetime(self, ago: int = 0) -> Any:
+        val = self[ago]
+        if val is None: return None
+        # Tradelearn stores as numeric timestamp (seconds)
+        unit = 's' if abs(val) < 1e11 else 'ms'
+        import pandas as pd
+        return pd.to_datetime(val, unit=unit).to_pydatetime()
+    
+    def date(self, ago: int = 0) -> Any:
+        dt = self.datetime(ago)
+        return dt.date() if dt else None
+
+    def time(self, ago: int = 0) -> Any:
+        dt = self.datetime(ago)
+        return dt.time() if dt else None
+
     def _advance(self, cursor: int) -> None:
         self._cursor = cursor
+
+    def __len__(self) -> int:
+        return self._cursor + 1
 
     def __getitem__(self, ago: int) -> Any:
         try:
@@ -188,32 +212,19 @@ class LineSeries:
     def datetime(self, ago: int = 0) -> Any:
         import pandas as pd
         val = self[ago]
-        if pd.isna(val):
-            return None
+        if pd.isna(val): return None
         return pd.to_datetime(val, unit='s' if val < 1e11 else 'ms')
-
-    def date(self, ago: int = 0) -> Any:
-        dt = self.datetime(ago)
-        return dt.date() if dt else None
-
-    def time(self, ago: int = 0) -> Any:
-        dt = self.datetime(ago)
-        return dt.time() if dt else None
-
-    def __len__(self) -> int: return len(self._values)
 
     def __bool__(self) -> bool:
         val = self[0]
         return bool(val) and not np.isnan(val)
 
-    # Comparisons
     def __lt__(self, other): return self[0] < (other[0] if hasattr(other, "__getitem__") else other)
     def __gt__(self, other): return self[0] > (other[0] if hasattr(other, "__getitem__") else other)
     def __le__(self, other): return self[0] <= (other[0] if hasattr(other, "__getitem__") else other)
     def __ge__(self, other): return self[0] >= (other[0] if hasattr(other, "__getitem__") else other)
     def __eq__(self, other): return self[0] == (other[0] if hasattr(other, "__getitem__") else other)
 
-    # Math
     def __add__(self, other): return self._math_op(other, np.add)
     def __sub__(self, other): return self._math_op(other, np.subtract)
     def __mul__(self, other): return self._math_op(other, np.multiply)
@@ -241,36 +252,26 @@ class LineSeries:
         return res
 
 class DelayedLine(LineSeries):
-    """A line series shifted by 'ago' periods."""
     def __init__(self, source: LineSeries, ago: int) -> None:
         self._source = source
         self._ago = ago
+        import pandas as pd
         shifted = pd.Series(source._values).shift(-ago).values
         super().__init__(shifted)
         self._is_datetime = source._is_datetime
         self.min_period = source.min_period + abs(ago)
 
 class IndicatorLine(LineSeries):
-    """Compatibility stub."""
     def __init__(self, source: LineSeries, shift: int):
+        import pandas as pd
         super().__init__(pd.Series(source._values).shift(-shift).values)
-
-class Params:
-    def __init__(self, defaults: Any, **kwargs):
-        if isinstance(defaults, dict):
-            for name, val in defaults.items(): setattr(self, name, val)
-        elif isinstance(defaults, (list, tuple)):
-            for name, val in defaults: setattr(self, name, val)
-        for name, val in kwargs.items(): setattr(self, name, val)
 
 class BaseBroker:
     def __init__(self, **kwargs): pass
     def setcash(self, cash: float): pass
-    def setcommission(self, commission: float): pass
+    def setcommission(self, commission: float = 0.0, margin: float = 0.0, mult: float = 1.0): pass
     def getcash(self) -> float: return 0.0
     def getvalue(self) -> float: return 0.0
-    
-    # Aliases for Backtrader compatibility
     def get_cash(self) -> float: return self.getcash()
     def get_value(self) -> float: return self.getvalue()
 
@@ -278,8 +279,7 @@ class BaseSizer: pass
 class BaseAnalyzer:
     def __init__(self, **kwargs): self.strategy = None
     def on_order(self, order: Order): pass
-    def on_trade(self, trade: Any): pass
     def stop(self): pass
 
-def _notify_order(strategy: Strategy, order: Order) -> None:
+def _notify_order(strategy: Any, order: Order) -> None:
     strategy.notify_order(order)
