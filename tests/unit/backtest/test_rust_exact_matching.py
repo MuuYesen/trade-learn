@@ -331,6 +331,37 @@ def test_rust_bar_loop_submits_drained_orders_after_python_callback() -> None:
     assert engine.get_position() == (1.0, 11.0)
 
 
+def test_backtest_engine_does_not_advance_data_twice_from_strategy_attrs() -> None:
+    class CountingDataFeed:
+        def __init__(self) -> None:
+            self.advance_calls: list[int] = []
+            self._datetime = [1, 2, 3]
+            self._open = [10.0, 11.0, 12.0]
+            self._high = [10.0, 11.0, 12.0]
+            self._low = [10.0, 11.0, 12.0]
+            self._close = [10.0, 11.0, 12.0]
+            self._volume = [1000.0, 1000.0, 1000.0]
+
+        def _advance(self, cursor: int) -> None:
+            self.advance_calls.append(cursor)
+
+        def buflen(self) -> int:
+            return 3
+
+    class NoopStrategy(Strategy):
+        def next(self) -> None:
+            pass
+
+    data = CountingDataFeed()
+    cerebro = Cerebro(match_mode="exact")
+    cerebro.adddata(data)
+    cerebro.addstrategy(NoopStrategy)
+
+    cerebro.run()
+
+    assert data.advance_calls == [0, 1, 2]
+
+
 def test_smart_matching_prefers_stop_loss_when_exit_orders_are_ambiguous() -> None:
     data = pd.DataFrame(
         {

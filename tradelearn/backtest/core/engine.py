@@ -103,6 +103,19 @@ def run_backtest(cerebro: Any) -> List[Any]:
             if callable(m): m = m()
             min_period = max(min_period, int(m))
     if min_period == 0: min_period = 1
+
+    already_advanced_ids = {id(d) for d in cerebro.datas}
+    already_advanced_ids.update(id(ind) for ind in indicators + indicators_bt)
+    strategy_attr_advancers = []
+    seen_advancer_ids = set(already_advanced_ids)
+    for attr, val in strategy.__dict__.items():
+        if attr.startswith('_'):
+            continue
+        if id(val) in seen_advancer_ids:
+            continue
+        if hasattr(val, '_advance'):
+            strategy_attr_advancers.append(val._advance)
+            seen_advancer_ids.add(id(val))
     
     def on_bar(i: int, fills: list[Any] | None = None, cash: float | None = None,
                size: float | None = None, price: float | None = None) -> list[Any]:
@@ -117,10 +130,8 @@ def run_backtest(cerebro: Any) -> List[Any]:
             strategy._advance(i)
         
         # Advance any other LineSeries attributes (BT specific)
-        for attr, val in strategy.__dict__.items():
-            if attr.startswith('_'): continue
-            if hasattr(val, '_advance'):
-                val._advance(i)
+        for advance in strategy_attr_advancers:
+            advance(i)
         
         # Broker Match
         if cerebro.broker:
@@ -162,5 +173,9 @@ def run_backtest(cerebro: Any) -> List[Any]:
     strategy.stop()
     for ana in strategy.analyzers.values():
         if hasattr(ana, 'stop'): ana.stop()
+
+    set_current_strategy(None)
+    set_current_data(None)
+    set_current_datas([])
 
     return [strategy]
