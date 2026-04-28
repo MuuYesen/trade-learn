@@ -5,6 +5,7 @@ import pytest
 
 from tradelearn import _rust
 from tradelearn.backtest.core.brokers.rust import RustBroker
+from tradelearn.backtest.core.engine import _build_bar_advancers
 from tradelearn.backtest.core.models import Order
 from tradelearn.compat.backtrader.base import LineSeries
 from tradelearn.compat.backtrader import Cerebro, Strategy
@@ -468,6 +469,31 @@ def test_backtest_engine_does_not_advance_data_twice_from_strategy_attrs() -> No
     cerebro.run()
 
     assert data.advance_calls == [0, 1, 2]
+
+
+def test_bar_advance_plan_deduplicates_data_and_indicator_attrs() -> None:
+    class Advancer:
+        def __init__(self) -> None:
+            self.calls: list[int] = []
+
+        def _advance(self, cursor: int) -> None:
+            self.calls.append(cursor)
+
+    class StrategyWithAttrs:
+        def __init__(self, data: Advancer, indicator: Advancer) -> None:
+            self.data = data
+            self.indicator = indicator
+
+    data = Advancer()
+    indicator = Advancer()
+    strategy = StrategyWithAttrs(data, indicator)
+
+    plan = _build_bar_advancers(strategy, [data], [indicator])
+    for advance in plan:
+        advance(3)
+
+    assert data.calls == [3]
+    assert indicator.calls == [3]
 
 
 def test_line_series_previous_value_before_start_is_nan() -> None:

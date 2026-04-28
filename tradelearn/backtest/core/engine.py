@@ -9,6 +9,34 @@ from tradelearn.compat.backtrader.base import (
     set_current_data, set_current_datas, set_current_strategy
 )
 
+
+def _build_bar_advancers(strategy: Any, datas: list[Any], indicators: list[Any]) -> tuple[Any, ...]:
+    """Build a stable per-bar advance plan for data feeds and indicators."""
+    bar_advancers = []
+    seen_advancer_ids = set()
+    for data in datas:
+        bar_advancers.append(data._advance)
+        seen_advancer_ids.add(id(data))
+    for indicator in indicators:
+        advance = getattr(indicator, '_advance', None)
+        if callable(advance) and id(indicator) not in seen_advancer_ids:
+            bar_advancers.append(advance)
+            seen_advancer_ids.add(id(indicator))
+    strategy_advance = getattr(strategy, '_advance', None)
+    if strategy_advance is not None:
+        bar_advancers.append(strategy_advance)
+    for attr, val in strategy.__dict__.items():
+        if attr.startswith('_'):
+            continue
+        if id(val) in seen_advancer_ids:
+            continue
+        advance = getattr(val, '_advance', None)
+        if callable(advance):
+            bar_advancers.append(advance)
+            seen_advancer_ids.add(id(val))
+    return tuple(bar_advancers)
+
+
 def run_backtest(cerebro: Any) -> List[Any]:
     """Unified backtest engine that runs any strategy inheriting from core.Strategy."""
     strategy_cls, args, kwargs = cerebro.strats[0]
@@ -105,28 +133,7 @@ def run_backtest(cerebro: Any) -> List[Any]:
             min_period = max(min_period, int(m))
     if min_period == 0: min_period = 1
 
-    bar_advancers = []
-    seen_advancer_ids = set()
-    for d in cerebro.datas:
-        bar_advancers.append(d._advance)
-        seen_advancer_ids.add(id(d))
-    for ind in indicators + indicators_bt:
-        if hasattr(ind, '_advance') and id(ind) not in seen_advancer_ids:
-            bar_advancers.append(ind._advance)
-            seen_advancer_ids.add(id(ind))
-    strategy_advance = getattr(strategy, '_advance', None)
-    if strategy_advance is not None:
-        bar_advancers.append(strategy_advance)
-    for attr, val in strategy.__dict__.items():
-        if attr.startswith('_'):
-            continue
-        if id(val) in seen_advancer_ids:
-            continue
-        advance = getattr(val, '_advance', None)
-        if callable(advance):
-            bar_advancers.append(advance)
-            seen_advancer_ids.add(id(val))
-    bar_advancers = tuple(bar_advancers)
+    bar_advancers = _build_bar_advancers(strategy, cerebro.datas, indicators + indicators_bt)
     notify_cashvalue = None
     if type(strategy).notify_cashvalue is not CoreStrategy.notify_cashvalue:
         notify_cashvalue = strategy.notify_cashvalue
