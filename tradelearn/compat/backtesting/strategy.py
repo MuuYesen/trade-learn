@@ -9,6 +9,7 @@ class BacktestingDataProxy:
     """Proxy for data to support backtesting.py style capitalized attributes and indexing."""
     def __init__(self, data_feed: Any):
         self._feed = data_feed
+        self._line_cache: dict[str, IndicatorProxy] = {}
 
     def __getattr__(self, name: str) -> Any:
         mapping = {
@@ -22,7 +23,11 @@ class BacktestingDataProxy:
         arr = self._feed.get_array(core_name)
         if getattr(self._feed, '_cursor', -1) < 0:
             return arr
-        return IndicatorProxy(arr, self._feed)
+        line = self._line_cache.get(core_name)
+        if line is None:
+            line = IndicatorProxy(arr, self._feed)
+            self._line_cache[core_name] = line
+        return line
 
     def __len__(self) -> int:
         cursor = getattr(self._feed, '_cursor', 0)
