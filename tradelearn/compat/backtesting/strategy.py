@@ -187,6 +187,15 @@ class IndicatorProxy:
     def __iter__(self):
         return iter(np.asarray(self))
 
+    def current(self) -> Any:
+        return self._data[self._feed._cursor]
+
+    def previous(self) -> Any:
+        idx = self._feed._cursor - 1
+        if idx < 0:
+            raise IndexError("Index out of bounds")
+        return self._data[idx]
+
     def __getitem__(self, key: int | slice) -> Any:
         cursor = self._feed._cursor
         data = self._data

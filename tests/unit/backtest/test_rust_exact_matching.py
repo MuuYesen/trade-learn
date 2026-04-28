@@ -554,13 +554,18 @@ def test_backtesting_indicator_proxy_relative_indexing() -> None:
     indicator = IndicatorProxy([10.0, 20.0, 30.0], Feed())
 
     assert indicator[-1] == 30.0
+    assert indicator.current() == 30.0
     assert indicator[-2] == 20.0
+    assert indicator.previous() == 20.0
     assert indicator[0] == 10.0
 
     Feed._cursor = 0
     assert indicator[-1] == 10.0
+    assert indicator.current() == 10.0
     with pytest.raises(IndexError):
         indicator[-2]
+    with pytest.raises(IndexError):
+        indicator.previous()
 
 
 def test_backtesting_data_proxy_exposes_fixed_line_proxy_before_cursor_starts() -> None:
