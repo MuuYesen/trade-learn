@@ -9,6 +9,42 @@ import pandas as pd
 from tradelearn.compat.backtrader.base import LineSeries
 
 
+class IndicatorBundle:
+    """Named collection of indicator lines returned by multi-output indicators."""
+
+    def __init__(self, lines: dict[str, LineSeries]) -> None:
+        self._lines = dict(lines)
+        self.min_period = max(
+            (getattr(line, "min_period", 0) for line in self._lines.values()),
+            default=0,
+        )
+
+    def __getitem__(self, name: str) -> LineSeries:
+        return self._lines[name]
+
+    def __getattr__(self, name: str) -> LineSeries:
+        try:
+            return self._lines[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+    def __iter__(self):
+        return iter(self._lines.values())
+
+    def keys(self):
+        return self._lines.keys()
+
+    def values(self):
+        return self._lines.values()
+
+    def items(self):
+        return self._lines.items()
+
+    def _advance(self, cursor: int) -> None:
+        for line in self._lines.values():
+            line._advance(cursor)
+
+
 class BatchIndicatorCache:
     """Precompute event-loop indicator arrays and expose cursor-aware proxies."""
 
@@ -48,10 +84,16 @@ class BatchIndicatorCache:
         *args: Any,
         **kwargs: Any,
     ) -> dict[str, LineSeries]:
+        key = self._key(name, args, kwargs)
+        cached = self._cache.get(key)
+        if cached is not None:
+            return {name: cached}
         resolved_args = tuple(self._resolve_arg(arg) for arg in args)
         result = func(*resolved_args, **kwargs)
         if not isinstance(result, pd.DataFrame):
-            return {name: self.precompute(name, func, *args, **kwargs)}
+            proxy = LineSeries(self._to_array(result))
+            self._cache[key] = proxy
+            return {name: proxy}
         lines: dict[str, LineSeries] = {}
         for column in result.columns:
             line_name = str(column)
@@ -72,6 +114,16 @@ class BatchIndicatorCache:
         return None
 
     def _resolve_arg(self, arg: Any) -> Any:
+        line_name = self._line_name(arg)
+        if line_name is not None:
+            if line_name in self._frame.columns:
+                return self._frame[line_name]
+            lower_name = line_name.lower()
+            if lower_name in self._frame.columns:
+                return self._frame[lower_name]
+            title_name = line_name.capitalize()
+            if title_name in self._frame.columns:
+                return self._frame[title_name]
         if isinstance(arg, str) and arg in self._frame.columns:
             return self._frame[arg]
         return arg
@@ -93,6 +145,9 @@ class BatchIndicatorCache:
 
     @staticmethod
     def _value_key(value: Any) -> tuple[str, Any]:
+        line_name = BatchIndicatorCache._line_name(value)
+        if line_name is not None:
+            return ("line", line_name)
         if isinstance(value, str):
             return ("column", value)
         try:
@@ -100,6 +155,13 @@ class BatchIndicatorCache:
         except TypeError:
             return ("id", id(value))
         return ("value", value)
+
+    @staticmethod
+    def _line_name(value: Any) -> str | None:
+        buffer_name = getattr(value, "_buffer_name", None)
+        if isinstance(buffer_name, str):
+            return buffer_name
+        return None
 
 
 class RollingIndicatorCache:
