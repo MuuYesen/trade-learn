@@ -16,6 +16,26 @@
     - **[base.py](file:///Users/muyesen/.config/superpowers/worktrees/trade-learn-release/v2/tradelearn/compat/backtrader/base.py)**: 处理 `LineRoot` 和 `MetaParams` 的复杂逻辑。
     - **[indicators.py](file:///Users/muyesen/.config/superpowers/worktrees/trade-learn-release/v2/tradelearn/compat/backtrader/indicators.py)**: 向量化指标层，与内核无缝对接。
 
+### 总结后的目标结构：
+```text
+tradelearn/
+├── backtest/
+│   └── core/          # 纯净的微内核 (Microkernel)
+│       ├── brokers/   # 核心撮合引擎 (如 RustBroker)
+│       ├── metrics.py # 向量化指标计算引擎
+│       ├── resampler.py # K 线重采样工具
+│       ├── engine.py
+│       ├── strategy.py
+│       └── models.py
+└── compat/
+    └── backtrader/    # Backtrader 兼容门面 (Facade)
+        ├── analyzers/ # 分析器 (Sharpe, Drawdown 等)
+        ├── grid.py    # 参数网格搜索工具
+        ├── cerebro.py
+        ├── strategy.py
+        └── indicators.py
+```
+
 ### 2. 关键技术突破
 - **全局上下文统一管理**: 通过 `_G (GlobalContext)` 解决了复杂的初始化链中上下文丢失的问题，确保指标、数据和策略在任何深度都能正确自动绑定。
 - **真值判断 (Truthiness) 修复**: 解决了由于 `__len__` 导致策略在 K 线开始阶段被 Python 误判为 `False` 的隐蔽 Bug，确保了指标注册的 100% 可靠性。
