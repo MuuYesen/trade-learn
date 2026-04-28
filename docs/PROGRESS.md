@@ -435,6 +435,7 @@
 - [x] P1 Rust callback 快路径拆分:Rust `run_bar_loop` 使用专用 `on_rust_bar` callback,移除每 bar 的 Python fallback 分支判断与 flush/drain 分流;profile 中代表性 5 万 bar 策略 `run_bar_loop/on_bar` 约 `0.230/0.211s -> 0.222/0.204s`,脚本对齐保持不变;提交 `d012dad`
 - [x] P1 Rust callback 空事件协议:Rust `run_bar_loop` 接受 Python callback 返回 `None` 表示无新订单,避免无订单 bar 传空 payload;Python 侧只有 drain 到订单时才返回 list;本轮 `benchmark_bt.py` 多数策略小幅正收益且全部 EXACT,`compare_results.py` 仍保持 Return/# Trades 对齐;提交 `d6a1333`
 - [x] P3 backtesting 固定 Line proxy:OHLCV 改为初始化时固定 `IndicatorProxy`,依赖 `__array__/__iter__` 保持 init 阶段完整数组语义,避免 `self.data.Close` 每 bar property 分支;代表性 5 万 bar profile `0.241s -> 0.220s`,约 `+8.7%`;`benchmark_bt.py` 全部 EXACT 且多数 `+3%-11%`;提交 `14adecd`
+- [x] P2 指标缓存框架第一步:backtesting `Strategy.I()` 增加批量指标结果缓存,同一 callable/输入/参数只预计算一次;cache key 改为持有 callable 本身,避免短生命周期 lambda id 复用导致指标串线;`ta.*` 公共入口修回 `tradelearn.indicators`,`ta.tdx/tdx30` 懒加载避免缺 MyTT 时阻塞 pandas-ta-classic 通用指标;提交 `f156b58`
 - [ ] P1 完整 Rust BarRunner:将多数据推进、订单队列、撮合、mark-to-market 与 callback 边界统一进 `BarRunner` struct,Python 策略 API 不变;目标 vs 当前 Python callback loop `>=3x`,vs Backtrader `>=8x`
 - [ ] P2 指标缓存框架:回测侧统一接入 `pandas-ta-classic` / TDX / TradingView 指标批量预计算;QMT 实盘侧只能 rolling window 增量重算,不做全量预计算;指标密集策略预期 `1.5x-3x`
 - [ ] P3 共享 bar buffer / Line 访问优化:降低 `self.data.close[0]`、`self.data.close[-1]`、`indicator[-1]` Python 对象开销;需与 QMT rolling buffer 兼容,预期 `1.2x-2x`
