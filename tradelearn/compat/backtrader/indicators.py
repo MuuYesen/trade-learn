@@ -227,6 +227,13 @@ def _cached_series(name, data, func, *args, **kwargs):
 def _wrap(data, values, min_period=0):
     from tradelearn.compat.backtrader.strategy import LineSeries
     obj = LineSeries(values.to_numpy())
+    source = data
+    while hasattr(source, "_source"):
+        source = source._source
+    if hasattr(data, "_buffer") and getattr(data._buffer, "_source", None) is not None:
+        source = data._buffer._source
+    if hasattr(source, "_cursor"):
+        obj._cursor_source = source
     obj.min_period = min_period
     return obj
 
@@ -268,10 +275,44 @@ class EMA(Indicator):
 ExponentialMovingAverage = EMA
 MovingAverageExponential = EMA
 
+class WMA(Indicator):
+    lines = ('wma',)
+    params = (('period', 30),)
+    def __init__(self, *args, **kwargs):
+        weights = np.arange(1, self.p.period + 1, dtype=float)
+        res = _cached_series(
+            "bt.wma",
+            self.data,
+            lambda close, period: pd.Series(close).rolling(period).apply(
+                lambda values: float(np.dot(values, weights) / weights.sum()),
+                raw=True,
+            ),
+            _line_arg(self.data),
+            self.p.period,
+        )
+        base = _base_p(self.data)
+        self.lines.wma = _wrap(self.data, res, min_period=base + self.p.period - 1)
+
+WeightedMovingAverage = WMA
+MovingAverageWeighted = WMA
+
 class MACD(Indicator):
     lines = ('macd', 'signal', 'histo')
-    params = (('period_me1', 12), ('period_me2', 26), ('period_signal', 9))
+    params = (
+        ('period_me1', 12),
+        ('period_me2', 26),
+        ('period_signal', 9),
+        ('fast', None),
+        ('slow', None),
+        ('signal', None),
+    )
     def __init__(self, *args, **kwargs):
+        if self.p.fast is not None:
+            self.p.period_me1 = self.p.fast
+        if self.p.slow is not None:
+            self.p.period_me2 = self.p.slow
+        if self.p.signal is not None:
+            self.p.period_signal = self.p.signal
         s = _cached_series("bt.series", self.data, lambda close: pd.Series(close), _line_arg(self.data))
         me1 = bt_ema(s, self.p.period_me1)
         me2 = bt_ema(s, self.p.period_me2)
@@ -336,6 +377,42 @@ class TrueRange(Indicator):
         self.lines.tr = _wrap(self.data, tr, min_period=_base_p(self.data) + 1)
 
 TR = TrueRange
+
+class BollingerBands(Indicator):
+    lines = ('mid', 'top', 'bot')
+    params = (('period', 20), ('devfactor', 2.0))
+    def __init__(self, *args, **kwargs):
+        s = _cached_series("bt.series", self.data, lambda close: pd.Series(close), _line_arg(self.data))
+        mid = s.rolling(self.p.period).mean()
+        std = s.rolling(self.p.period).std()
+        top = mid + std * self.p.devfactor
+        bot = mid - std * self.p.devfactor
+        base = _base_p(self.data)
+        min_period = base + self.p.period - 1
+        self.lines.mid = _wrap(self.data, mid, min_period=min_period)
+        self.lines.top = _wrap(self.data, top, min_period=min_period)
+        self.lines.bot = _wrap(self.data, bot, min_period=min_period)
+
+BBands = BollingerBands
+
+class Stochastic(Indicator):
+    lines = ('percK', 'percD')
+    params = (('period', 14), ('period_dfast', 3), ('period_dslow', 3))
+    def __init__(self, *args, **kwargs):
+        h = _cached_series("bt.high", self.data, lambda high: pd.Series(high), _line_arg(self.data, "high"))
+        l = _cached_series("bt.low", self.data, lambda low: pd.Series(low), _line_arg(self.data, "low"))
+        c = _cached_series("bt.close", self.data, lambda close: pd.Series(close), _line_arg(self.data, "close"))
+        lowest = l.rolling(self.p.period).min()
+        highest = h.rolling(self.p.period).max()
+        perc_k = 100.0 * (c - lowest) / (highest - lowest).replace(0, np.nan)
+        perc_d = perc_k.rolling(self.p.period_dfast).mean()
+        base = _base_p(self.data)
+        self.lines.percK = _wrap(self.data, perc_k, min_period=base + self.p.period - 1)
+        self.lines.percD = _wrap(
+            self.data,
+            perc_d,
+            min_period=base + self.p.period + self.p.period_dfast - 2,
+        )
 
 class CrossOver(Indicator):
     lines = ('crossover',)
@@ -428,3 +505,35 @@ class DonchianChannels(Indicator):
         self.lines.upper = _wrap(self.data, upper, min_period=base + self.p.period + 2)
         self.lines.lower = _wrap(self.data, lower, min_period=base + self.p.period + 2)
         self.lines.middle = _wrap(self.data, (upper + lower) / 2.0, min_period=base + self.p.period + 2)
+
+AverageTrueRange = ATR
+RelativeStrengthIndex = RSI
+SUPPORTED_INDICATOR_ALIASES = (
+    "SMA",
+    "SimpleMovingAverage",
+    "MovingAverageSimple",
+    "EMA",
+    "ExponentialMovingAverage",
+    "MovingAverageExponential",
+    "WMA",
+    "WeightedMovingAverage",
+    "MovingAverageWeighted",
+    "RSI",
+    "RelativeStrengthIndex",
+    "MACD",
+    "BollingerBands",
+    "BBands",
+    "Highest",
+    "Lowest",
+    "ATR",
+    "AverageTrueRange",
+    "TrueRange",
+    "TR",
+    "CrossOver",
+    "CrossUp",
+    "CrossDown",
+    "Stochastic",
+    "DonchianChannels",
+)
+
+__all__ = list(SUPPORTED_INDICATOR_ALIASES) + ["Indicator", "SUPPORTED_INDICATOR_ALIASES"]

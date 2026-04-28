@@ -80,6 +80,123 @@ class Strategy(_BaseStrategy, LineRoot):
         target_value = target * self.broker.getvalue()
         return self.order_target_value(data=data, target=target_value, **kwargs)
 
+    def cancel(self, order):
+        return self.broker.cancel(order)
+
+    def buy_bracket(
+        self,
+        data=None,
+        size=None,
+        price=None,
+        plimit=None,
+        exectype=Order.Limit,
+        valid=None,
+        trailamount=None,
+        trailpercent=None,
+        oargs=None,
+        stopprice=None,
+        stopexec=Order.Stop,
+        stopargs=None,
+        limitprice=None,
+        limitexec=Order.Limit,
+        limitargs=None,
+        **kwargs,
+    ):
+        data = data or self.data
+        oargs = dict(oargs or {})
+        stopargs = dict(stopargs or {})
+        limitargs = dict(limitargs or {})
+        main = self.buy(
+            data=data,
+            size=size,
+            price=price,
+            pricelimit=plimit,
+            exectype=exectype,
+            valid=valid,
+            transmit=False,
+            **kwargs,
+            **oargs,
+        )
+        stop = self.sell(
+            data=data,
+            size=size,
+            price=stopprice,
+            exectype=stopexec,
+            parent=main,
+            transmit=False,
+            trailamount=trailamount,
+            trailpercent=trailpercent,
+            **stopargs,
+        )
+        limit = self.sell(
+            data=data,
+            size=size,
+            price=limitprice,
+            exectype=limitexec,
+            parent=main,
+            oco=stop,
+            transmit=True,
+            **limitargs,
+        )
+        return [main, stop, limit]
+
+    def sell_bracket(
+        self,
+        data=None,
+        size=None,
+        price=None,
+        plimit=None,
+        exectype=Order.Limit,
+        valid=None,
+        trailamount=None,
+        trailpercent=None,
+        oargs=None,
+        stopprice=None,
+        stopexec=Order.Stop,
+        stopargs=None,
+        limitprice=None,
+        limitexec=Order.Limit,
+        limitargs=None,
+        **kwargs,
+    ):
+        data = data or self.data
+        oargs = dict(oargs or {})
+        stopargs = dict(stopargs or {})
+        limitargs = dict(limitargs or {})
+        main = self.sell(
+            data=data,
+            size=size,
+            price=price,
+            pricelimit=plimit,
+            exectype=exectype,
+            valid=valid,
+            transmit=False,
+            **kwargs,
+            **oargs,
+        )
+        stop = self.buy(
+            data=data,
+            size=size,
+            price=stopprice,
+            exectype=stopexec,
+            parent=main,
+            transmit=False,
+            trailamount=trailamount,
+            trailpercent=trailpercent,
+            **stopargs,
+        )
+        limit = self.buy(
+            data=data,
+            size=size,
+            price=limitprice,
+            exectype=limitexec,
+            parent=main,
+            oco=stop,
+            transmit=True,
+            **limitargs,
+        )
+        return [main, stop, limit]
+
 
 
 class Sizer:
@@ -107,9 +224,40 @@ class CommInfoBase:
     """Base class for commission schemes."""
     COMM_PERC = 0
     COMM_CASH = 1
-    params = ()
+    params = (
+        ("commission", 0.0),
+        ("mult", 1.0),
+        ("margin", None),
+        ("commtype", COMM_PERC),
+        ("stocklike", True),
+        ("percabs", True),
+    )
+
     def __init__(self, *args, **kwargs):
-        pass
+        self.params = self.p = Params(self.params, **kwargs)
+
+    def getcommission(self, size, price, *args):
+        if self.p.commtype == self.COMM_CASH:
+            return abs(size) * self.p.commission
+        return abs(size) * price * self.p.commission * self.p.mult
+
+    def get_margin(self, price):
+        return self.p.margin if self.p.margin is not None else price * self.p.mult
+
+    def getsize(self, price, cash):
+        margin = self.get_margin(price)
+        if margin <= 0:
+            return 0
+        return int(cash / margin)
+
+    def getoperationcost(self, size, price):
+        return abs(size) * price * self.p.mult
+
+    def getvaluesize(self, size, price):
+        return size * price * self.p.mult
+
+    def profitandloss(self, size, price, newprice):
+        return size * (newprice - price) * self.p.mult
 
 
 __all__ = [

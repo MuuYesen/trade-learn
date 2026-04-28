@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import logging
 import math
 import os
-from typing import Any, Dict
+from typing import Any
+
 from ..analyzer import Analyzer
 
 LOGGER = logging.getLogger(__name__)
@@ -66,7 +68,9 @@ def _params_payload(strategy: Any) -> dict[str, Any]:
     if broker is not None:
         payload["broker.cash"] = broker.getcash()
         payload["broker.value"] = broker.getvalue()
-        payload["broker.commission"] = getattr(broker, "commission", 0.0)
+        payload["broker.commission"] = getattr(
+            broker, "commission", getattr(broker, "commission_ratio", 0.0)
+        )
     return payload
 
 

@@ -146,11 +146,19 @@ class Strategy:
         new_size = pos.size
 
         # Simple Trade tracking for notification
-        if old_size != 0 and (old_size * new_size <= 0):
+        if old_size == 0 and new_size != 0:
+            from tradelearn.backtest.models import Trade
+
+            trade = Trade(data=data, size=new_size, price=price, status=Trade.Open)
+            trade.pnl = 0.0
+            trade.pnlcomm = 0.0
+            trade.isopen = True
+            self.notify_trade(trade)
+        elif old_size != 0 and (old_size * new_size <= 0):
             # Trade closed or flipped
             from tradelearn.backtest.models import Trade
 
-            trade = Trade(data=data, size=old_size, price=old_price, status=Trade.Closed)
+            trade = Trade(data=data, size=new_size, price=price, status=Trade.Closed)
             trade.pnl = (price - old_price) * old_size * getattr(self.broker, "_mult", 1.0)
             trade.pnlcomm = trade.pnl  # Simplified
             trade.isclosed = True

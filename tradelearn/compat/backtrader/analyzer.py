@@ -4,7 +4,7 @@ from typing import Any
 
 from tradelearn.backtest.models import BaseAnalyzer, Stats
 
-from .base import MetaParams
+from .base import MetaParams, Params
 
 
 class Analyzer(BaseAnalyzer, metaclass=MetaParams):
@@ -12,6 +12,16 @@ class Analyzer(BaseAnalyzer, metaclass=MetaParams):
 
     metric_key = ""  # Subclasses should define this
     is_streaming = False  # Set to True for real-time analyzers
+
+    def _base_init(self, **kwargs: Any) -> None:
+        params = []
+        for base_cls in self.__class__.mro():
+            cls_params = getattr(base_cls, "params", ())
+            if isinstance(cls_params, dict):
+                params.extend(cls_params.items())
+            elif isinstance(cls_params, (list, tuple)):
+                params.extend(cls_params)
+        self.params = self.p = Params(params, **kwargs)
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -60,3 +70,16 @@ class Analyzer(BaseAnalyzer, metaclass=MetaParams):
         ):
             return self.strategy.metrics_engine.results.get(self._instance_id, {})
         return {}
+
+
+class AnalyzerCollection(dict):
+    """Dict with Backtrader-style attribute access."""
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+    def getbyname(self, name: str) -> Any:
+        return self[name]

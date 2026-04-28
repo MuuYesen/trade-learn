@@ -22,9 +22,17 @@ def __getattr__(name: str) -> Any:
         return cli
     if name in ["ind", "indicators"]:
         return importlib.import_module("tradelearn.compat.backtrader.indicators")
+    if name == "feeds":
+        return importlib.import_module("tradelearn.compat.backtrader.feeds")
     if name == "analyzers":
-        from tradelearn.backtest import analyzers
+        from tradelearn.compat.backtrader import analyzers
         return analyzers
+    if name == "observers":
+        from tradelearn.compat.backtrader import observers
+        return observers
+    if name == "sizers":
+        from tradelearn.compat.backtrader import sizers
+        return sizers
     if name == "Cerebro":
         from tradelearn.compat.backtrader import Cerebro
         return Cerebro
@@ -49,7 +57,15 @@ def __getattr__(name: str) -> Any:
     if name == "TimeFrame":
         from tradelearn.backtest.models import TimeFrame
         return TimeFrame
+    if name == "Order":
+        from tradelearn.compat.backtrader import Order
+        return Order
+    if name == "CommInfoBase":
+        from tradelearn.compat.backtrader import CommInfoBase
+        return CommInfoBase
     if name == "Analyzer":
         from tradelearn.backtest import Analyzer
         return Analyzer
+    if name in {"num2date", "date2num"}:
+        return getattr(importlib.import_module("tradelearn.compat.backtrader"), name)
     raise AttributeError(f"module 'tradelearn' has no attribute {name!r}")

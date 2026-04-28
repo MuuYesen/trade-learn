@@ -75,7 +75,8 @@ class LineSeries:
             if not self._is_datetime:
                 if buffer is not None and self._buffer_name is not None:
                     return buffer.value(self._buffer_name, ago=0)
-                cursor = self._cursor
+                source = getattr(self, "_cursor_source", None)
+                cursor = source._cursor if source is not None else self._cursor
                 if cursor < 0 or cursor >= len(values):
                     return np.nan
                 return values[cursor]
@@ -84,7 +85,9 @@ class LineSeries:
             if not self._is_datetime:
                 if buffer is not None and self._buffer_name is not None:
                     return buffer.value(self._buffer_name, ago=1)
-                idx = self._cursor - 1
+                source = getattr(self, "_cursor_source", None)
+                cursor = source._cursor if source is not None else self._cursor
+                idx = cursor - 1
                 if idx < 0 or idx >= len(values):
                     return np.nan
                 return values[idx]
@@ -178,6 +181,9 @@ class LineSeries:
         else:
             res = LineSeries(op(v1, target))
             res.min_period = getattr(self, "min_period", 0)
+        source = getattr(self, "_cursor_source", None)
+        if source is not None:
+            res._cursor_source = source
         return res
 
 
@@ -188,6 +194,9 @@ class DelayedLine(LineSeries):
         shifted = pd.Series(source._values).shift(-ago).values
         super().__init__(shifted)
         self._is_datetime = source._is_datetime
+        cursor_source = getattr(source, "_cursor_source", None)
+        if cursor_source is not None:
+            self._cursor_source = cursor_source
         self.min_period = source.min_period + abs(ago)
 
 

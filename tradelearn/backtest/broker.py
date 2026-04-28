@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 from tradelearn.backtest.models import (
@@ -58,6 +59,7 @@ class RustBroker(BaseBroker):
         self._curr_idx = 0
         self._orders: list[Order] = []
         self._orders_by_ref: dict[int, Order] = {}
+        self._fills: list[dict[str, Any]] = []
         self._pending_orders: list[Order] = []
         self._order_count = 0
         self._last_fill_idx = 0
@@ -66,6 +68,7 @@ class RustBroker(BaseBroker):
         self._buffer_order_submissions = False
         self._order_submit_buffer: list[OrderPayload] = []
         self._proxy_events: list[Any] = []
+        self._trade_on_close = False
         # For 'bt' mode, we maintain state in Python
         self._pos = Position(size=0.0, price=0.0)
         self._active_cash = cash
@@ -73,6 +76,16 @@ class RustBroker(BaseBroker):
 
     def _uses_rust_matching(self) -> bool:
         return self._engine is not None
+
+    def setcash(self, cash: float) -> None:
+        self._cash = float(cash)
+        self._active_cash = float(cash)
+
+    def setcommission(
+        self, commission: float = 0.0, margin: float = 0.0, mult: float = 1.0
+    ) -> None:
+        self.commission_ratio = float(commission)
+        self._mult = float(mult)
 
     def set_comminfo(self, comminfo: Any) -> None:
         self._comminfo = comminfo
@@ -124,6 +137,72 @@ class RustBroker(BaseBroker):
     def event_pump(self) -> BrokerEventPump:
         return BrokerEventPump(self.drain_proxy_events)
 
+    def fills_frame(self):
+        import pandas as pd
+
+        return pd.DataFrame(self._fills)
+
+    def _fill_datetime(self, data: Any) -> Any:
+        import pandas as pd
+
+        timestamps = getattr(data, "_datetime", None)
+        if timestamps is None:
+            return None
+        try:
+            if self._curr_idx >= len(timestamps):
+                return None
+            value = timestamps[self._curr_idx]
+        except (IndexError, TypeError):
+            return None
+        try:
+            return pd.to_datetime(int(value), unit="s")
+        except (TypeError, ValueError, OverflowError):
+            return value
+
+    def _record_fill(self, order: Order, signed_size: float, price: float, comm: float) -> None:
+        self._fills.append(
+            {
+                "datetime": self._fill_datetime(order.data),
+                "ref": order.ref,
+                "data": getattr(order.data, "_name", None),
+                "side": "buy" if order.isbuy() else "sell",
+                "size": signed_size,
+                "price": price,
+                "commission": comm,
+                "value": abs(signed_size) * price * self._mult,
+            }
+        )
+
+    def _notify_order_event(self, owner: Strategy, order: Order) -> None:
+        _notify_order(owner, order)
+        for analyzer in getattr(owner, "analyzers", {}).values():
+            on_order = getattr(analyzer, "on_order", None)
+            if callable(on_order):
+                on_order(order)
+
+    def _notify_fill_event(
+        self, owner: Strategy, order: Order, signed_size: float, price: float, comm: float
+    ) -> None:
+        fill = SimpleNamespace(
+            order=order,
+            ref=order.ref,
+            data=order.data,
+            size=signed_size,
+            price=price,
+            commission=comm,
+        )
+        for analyzer in getattr(owner, "analyzers", {}).values():
+            on_fill = getattr(analyzer, "on_fill", None)
+            if callable(on_fill):
+                on_fill(fill)
+
+    def _notify_trade_event(self, owner: Strategy, trade: Trade) -> None:
+        owner.notify_trade(trade)
+        for analyzer in getattr(owner, "analyzers", {}).values():
+            on_trade = getattr(analyzer, "on_trade", None)
+            if callable(on_trade):
+                on_trade(trade)
+
     def _get_rust_state(self) -> tuple[int, float, float, float]:
         """Return cached Rust cash/position for the current bar."""
         if self._rust_state_cache is not None and self._rust_state_cache[0] == self._curr_idx:
@@ -137,6 +216,8 @@ class RustBroker(BaseBroker):
         return self._mult
 
     def getcommissioninfo(self, data: Any) -> CommInfo:
+        if self._comminfo is not None:
+            return self._comminfo
         return CommInfo(self.commission_ratio)
 
     def begin_order_buffering(self) -> None:
@@ -145,6 +226,7 @@ class RustBroker(BaseBroker):
 
     def flush_order_buffer(self) -> None:
         """Submit buffered orders to Rust and update Python order refs."""
+        submitted = False
         for (
             provisional_ref,
             side_str,
@@ -161,6 +243,14 @@ class RustBroker(BaseBroker):
                 stop_price,
             )
             self.bind_rust_order_ref(provisional_ref, order_id)
+            submitted = True
+        if (
+            submitted
+            and self._trade_on_close
+            and self._engine is not None
+            and hasattr(self._engine, "step_close")
+        ):
+            self._step_fills_from_collect = self._engine.step_close(self._curr_idx)
 
     def drain_order_buffer(self) -> list[OrderPayload] | tuple[()]:
         """Return buffered order payloads without calling back into Rust."""
@@ -232,6 +322,8 @@ class RustBroker(BaseBroker):
             Order.Limit: "limit",
             Order.Stop: "stop",
             Order.StopLimit: "stop_limit",
+            Order.StopTrail: "stop",
+            Order.StopTrailLimit: "stop_limit",
         }
         ot_str = otypes.get(order.exectype, "market")
         limit_price = None
@@ -268,10 +360,18 @@ class RustBroker(BaseBroker):
             price=price,
             pricelimit=kwargs.get("pricelimit"),
             exectype=exectype or Order.Market,
+            valid=kwargs.get("valid"),
+            oco=kwargs.get("oco"),
+            parent=kwargs.get("parent"),
+            transmit=bool(kwargs.get("transmit", True)),
+            trailamount=kwargs.get("trailamount"),
+            trailpercent=kwargs.get("trailpercent"),
+            info=dict(kwargs.get("info", {})),
         )
         order.status = Order.Submitted
         self._orders.append(order)
         self._orders_by_ref[order.ref] = order
+        self._notify_order_event(owner, order)
 
         if self._engine is not None:
             side_str = "buy" if is_buy else "sell"
@@ -285,8 +385,16 @@ class RustBroker(BaseBroker):
             # BT Mode: Add to pending
             order.status = Order.Accepted
             self._pending_orders.append(order)
+        self._notify_order_event(owner, order)
 
         return order
+
+    def cancel(self, order: Order) -> None:
+        """Cancel an order in the Python mirror and pending queue."""
+        if order.status in (Order.Completed, Order.Canceled, Order.Expired):
+            return
+        order.status = Order.Canceled
+        self._pending_orders = [pending for pending in self._pending_orders if pending is not order]
 
     def buy(
         self,
@@ -397,8 +505,10 @@ class RustBroker(BaseBroker):
                     else:
                         self._active_cash += abs_size * exec_price
 
+                    self._record_fill(order, signed_size, exec_price, comm)
                     strategy._on_fill(order.data, signed_size, exec_price)
-                    _notify_order(strategy, order)
+                    self._notify_fill_event(strategy, order, signed_size, exec_price, comm)
+                    self._notify_order_event(strategy, order)
                 else:
                     remaining.append(order)
             self._pending_orders = remaining
@@ -434,8 +544,6 @@ class RustBroker(BaseBroker):
         orders_by_ref_get = self._orders_by_ref.get
         pending_size = strategy._pending_size
         pos = self._pos
-        notify_order = strategy.notify_order
-        notify_trade = strategy.notify_trade
         mult = self._mult
 
         for fill in fills:
@@ -458,15 +566,22 @@ class RustBroker(BaseBroker):
             pending_size[data] = 0.0 if abs(pending) < 1e-9 else pending
 
             old_size = pos.size
-            old_price = pos.price
             pos.update(signed_size, price)
             new_size = pos.size
 
-            if old_size != 0 and (old_size * new_size <= 0):
-                trade = Trade(data=data, size=old_size, price=old_price, status=Trade.Closed)
+            if old_size == 0 and new_size != 0:
+                trade = Trade(data=data, size=new_size, price=price, status=Trade.Open)
+                trade.pnl = 0.0
+                trade.pnlcomm = 0.0
+                trade.isopen = True
+                self._notify_trade_event(strategy, trade)
+            elif old_size != 0 and (old_size * new_size <= 0):
+                trade = Trade(data=data, size=new_size, price=price, status=Trade.Closed)
                 trade.pnl = pnl
                 trade.pnlcomm = pnl
                 trade.isclosed = True
-                notify_trade(trade)
+                self._notify_trade_event(strategy, trade)
 
-            notify_order(order)
+            self._record_fill(order, signed_size, price, comm)
+            self._notify_fill_event(strategy, order, signed_size, price, comm)
+            self._notify_order_event(strategy, order)

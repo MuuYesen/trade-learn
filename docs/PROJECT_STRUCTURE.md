@@ -55,7 +55,10 @@ Backtrader 迁移层,维护 Backtrader 专属语义:
 - `PandasData`
 - Backtrader metaclass/context 行为
 - `params/self.p`
-- Backtrader 风格 indicators / analyzer / sizer
+- Backtrader 风格 indicators / analyzers / observers / sizers
+- Backtrader 风格 orders、bracket/OCO 元数据和 commission schemes
+- `resampledata` / `replaydata` / `optstrategy` / `runstop` 等自动运行入口
+- `plot` 占位入口和 `num2date` / `date2num` datetime helper
 - `notify_order` / `notify_trade` helper
 
 这里可以依赖 `tradelearn/backtest`,但 `tradelearn/backtest` 不允许反向依赖这里。

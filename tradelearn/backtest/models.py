@@ -23,6 +23,9 @@ class Params:
         for name, val in kwargs.items():
             setattr(self, name, val)
 
+    def asdict(self) -> dict[str, Any]:
+        return dict(self.__dict__)
+
 
 @dataclass
 class Position:
@@ -192,8 +195,9 @@ class ExecutedInfo:
 @dataclass
 class Order:
     Created, Submitted, Accepted, Partial, Completed, Canceled, Expired, Margin, Rejected = range(9)
+    Cancelled = Canceled
     Buy, Sell = 1, 2
-    Market, Limit, Stop, StopLimit, Close = range(1, 6)
+    Market, Limit, Stop, StopLimit, Close, StopTrail, StopTrailLimit = range(1, 8)
     DAY, GTC, IOC = "day", "gtc", "ioc"
     ref: int
     data: Any
@@ -206,6 +210,13 @@ class Order:
     status: int = Created
     executed: ExecutedInfo = field(default_factory=ExecutedInfo)
     activation_bar: int = 0
+    valid: Any = None
+    oco: Any = None
+    parent: Any = None
+    transmit: bool = True
+    trailamount: float | None = None
+    trailpercent: float | None = None
+    info: dict[str, Any] = field(default_factory=dict)
 
     def getstatusname(self) -> str:
         return [
@@ -246,6 +257,9 @@ class Trade:
     status: int = Created
     dtopen: Any = None
     dtclose: Any | None = None
+
+    def getstatusname(self) -> str:
+        return ["Created", "Open", "Closed"][self.status]
 
 
 class BaseBroker:

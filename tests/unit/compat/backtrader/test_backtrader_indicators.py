@@ -69,8 +69,7 @@ def test_sma_line_tracks_backtrader_current_bar_index() -> None:
     [strategy] = cerebro.run()
 
     assert math.isnan(strategy.values[0])
-    assert math.isnan(strategy.values[1])
-    assert strategy.values[2:] == [11.0, 12.0, 13.0]
+    assert strategy.values[1:] == [11.0, 12.0, 13.0]
 
 
 def test_multiline_indicators_expose_backtrader_style_lines() -> None:
