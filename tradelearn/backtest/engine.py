@@ -80,6 +80,62 @@ def _fills_frame(broker: Any) -> pd.DataFrame:
     return rows
 
 
+def _positions_frame(strategy: Any, fills: pd.DataFrame, index: pd.Index) -> pd.DataFrame:
+    columns = [
+        "datetime",
+        "data",
+        "size",
+        "avg_price",
+        "mark_price",
+        "value",
+        "unrealized_pnl",
+        "realized_pnl",
+        "margin_used",
+    ]
+    if fills.empty:
+        return pd.DataFrame(columns=columns)
+
+    position_size = 0.0
+    avg_price = 0.0
+    realized_pnl = 0.0
+    rows = []
+    data_name = getattr(getattr(strategy, "data", None), "_name", None)
+    for fill in fills.to_dict("records"):
+        signed_size = float(fill.get("size", 0.0))
+        price = float(fill.get("price", 0.0))
+        previous_size = position_size
+        new_size = position_size + signed_size
+        if previous_size == 0 or previous_size * signed_size > 0:
+            total_abs = abs(previous_size) + abs(signed_size)
+            avg_price = (
+                (abs(previous_size) * avg_price + abs(signed_size) * price) / total_abs
+                if total_abs
+                else 0.0
+            )
+        elif previous_size * new_size <= 0:
+            realized_pnl += (price - avg_price) * previous_size
+            avg_price = price if new_size else 0.0
+        position_size = 0.0 if abs(new_size) < 1e-9 else new_size
+        mark_price = price
+        value = position_size * mark_price
+        rows.append(
+            {
+                "datetime": fill.get("datetime") or (index[-1] if len(index) else None),
+                "data": fill.get("data") or data_name,
+                "size": position_size,
+                "avg_price": avg_price,
+                "mark_price": mark_price,
+                "value": value,
+                "unrealized_pnl": (mark_price - avg_price) * position_size
+                if position_size
+                else 0.0,
+                "realized_pnl": realized_pnl,
+                "margin_used": abs(value),
+            }
+        )
+    return pd.DataFrame(rows, columns=columns)
+
+
 def _build_stats(cerebro: Any, strategy: Any) -> Stats:
     data = strategy.data
     frame = getattr(data, "_frame", None)
@@ -107,6 +163,7 @@ def _build_stats(cerebro: Any, strategy: Any) -> Stats:
     drawdowns = (equity.cummax() - equity) / equity.cummax().replace(0, np.nan)
     fills = _fills_frame(strategy.broker)
     orders = _orders_frame(strategy.broker)
+    positions = _positions_frame(strategy, fills, index)
     summary = {
         "bars": float(len(index)),
         "final_cash": float(strategy.broker.getcash()),
@@ -124,7 +181,7 @@ def _build_stats(cerebro: Any, strategy: Any) -> Stats:
         returns=returns,
         equity=equity,
         trades=pd.DataFrame(),
-        positions=pd.DataFrame(),
+        positions=positions,
         orders=orders,
         summary=summary,
         analyzers={},

@@ -43,61 +43,18 @@ def __getattr__(name):
         from tradelearn.backtest.broker import RustBroker
 
         return RustBroker
-    if name == "Analyzer":
-        from tradelearn.compat.backtrader.analyzer import Analyzer
-
-        return Analyzer
-    if name == "Cerebro":
-        from tradelearn.compat.backtrader.cerebro import Cerebro
-
-        return Cerebro
-    if name == "Strategy":
-        from tradelearn.compat.backtrader.strategy import Strategy
-
-        return Strategy
-    if name == "DataFeed":
-        from tradelearn.compat.backtrader.datafeed import DataFeed
-
-        return DataFeed
-    if name == "FixedSize":
-        from tradelearn.compat.backtrader.sizers import FixedSize
-
-        return FixedSize
-    if name == "PercentSizer":
-        from tradelearn.compat.backtrader.sizers import PercentSizer
-
-        return PercentSizer
-    if name == "AllInSizer":
-        from tradelearn.compat.backtrader.sizers import AllInSizer
-
-        return AllInSizer
-    if name == "analyzers":
-        from tradelearn.compat.backtrader import analyzers
-
-        return analyzers
-    if name == "observers":
-        from tradelearn.compat.backtrader import observers
-
-        return observers
-    if name == "grid_search":
-        from tradelearn.compat.backtrader.grid import grid_search
-
-        return grid_search
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = [
-    "Analyzer",
     "BarRangeSlippage",
     "BarSnapshot",
     "BaseAnalyzer",
     "BaseBroker",
     "BaseSizer",
     "CNAStockCommission",
-    "Cerebro",
     "CommissionModel",
     "CoreStrategy",
-    "DataFeed",
     "ExecutedInfo",
     "EventRunner",
     "EventSnapshot",
@@ -105,8 +62,6 @@ __all__ = [
     "BatchIndicatorCache",
     "FixedCommission",
     "FixedSlippage",
-    "FixedSize",
-    "grid_search",
     "IndicatorCache",
     "DelayedLine",
     "IndicatorLine",
@@ -115,20 +70,15 @@ __all__ = [
     "Order",
     "PercentCommission",
     "PercentSlippage",
-    "PercentSizer",
     "Position",
     "LiveDriver",
     "PaperDriver",
     "RollingBarBuffer",
     "RollingIndicatorCache",
     "SharedBarBuffer",
-    "AllInSizer",
-    "analyzers",
-    "observers",
     "SimBroker",
     "SlippageModel",
     "Stats",
-    "Strategy",
     "TieredCommission",
     "TimeFrame",
     "Trade",

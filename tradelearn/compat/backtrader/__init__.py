@@ -4,6 +4,7 @@ import pandas as pd
 
 from tradelearn.backtest.models import TimeFrame
 from tradelearn.compat.backtrader import analyzers, feeds, indicators, observers, sizers
+from tradelearn.compat.backtrader.analyzer import Analyzer
 from tradelearn.compat.backtrader.cerebro import Cerebro
 from tradelearn.compat.backtrader.grid import GridSearchResult, grid_search
 from tradelearn.compat.backtrader.indicators import Indicator
@@ -57,6 +58,7 @@ __all__ = [
     "FixedSize",
     "PercentSizer",
     "AllInSizer",
+    "Analyzer",
     "feeds",
     "indicators",
     "ind",

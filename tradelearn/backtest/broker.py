@@ -513,32 +513,6 @@ class RustBroker(BaseBroker):
                     remaining.append(order)
             self._pending_orders = remaining
 
-    def _sync_python_fill_state(
-        self,
-        strategy: Strategy,
-        order: Order,
-        signed_size: float,
-        price: float,
-        pnl: float,
-    ) -> None:
-        """Maintain Python-side fill notifications while Rust owns cash/position state."""
-        data = order.data
-        strategy._pending_size[data] = strategy._pending_size.get(data, 0.0) - signed_size
-        if abs(strategy._pending_size[data]) < 1e-9:
-            strategy._pending_size[data] = 0.0
-
-        old_size = self._pos.size
-        old_price = self._pos.price
-        self._pos.update(signed_size, price)
-        new_size = self._pos.size
-
-        if old_size != 0 and (old_size * new_size <= 0):
-            trade = Trade(data=data, size=old_size, price=old_price, status=Trade.Closed)
-            trade.pnl = pnl
-            trade.pnlcomm = pnl
-            trade.isclosed = True
-            strategy.notify_trade(trade)
-
     def _process_rust_fills_batch(self, strategy: Strategy, fills: list[Any]) -> None:
         """Synchronize a batch of Rust fills while preserving notification order."""
         orders_by_ref_get = self._orders_by_ref.get

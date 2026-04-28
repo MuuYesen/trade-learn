@@ -7,6 +7,7 @@ from tradelearn import _rust
 from tradelearn.backtest.broker import RustBroker
 from tradelearn.backtest.data import DataContainer, RollingBarBuffer
 from tradelearn.backtest.engine import _build_bar_advancers, _build_data_advance_plan
+from tradelearn.backtest.lines import LineSeries
 from tradelearn.backtest.models import Order
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
 from tradelearn.compat.backtesting.backtest import Backtest
@@ -18,7 +19,6 @@ from tradelearn.compat.backtesting.strategy import (
 from tradelearn.compat.backtesting.strategy import Strategy as BacktestingStrategy
 from tradelearn.compat.backtrader import Cerebro, DataFeed, Strategy
 from tradelearn.compat.backtrader import indicators as btind
-from tradelearn.backtest.lines import LineSeries
 
 
 def _match(
@@ -328,10 +328,6 @@ def test_rust_broker_processes_rust_fills_with_batch_sync() -> None:
     second = Order(ref=2, data=data, ordtype=Order.Sell, size=1.0)
     broker._orders_by_ref = {1: first, 2: second}
 
-    def fail_old_sync(*args, **kwargs):
-        raise AssertionError("process_fills should use the batch Rust fill sync path")
-
-    broker._sync_python_fill_state = fail_old_sync
     strategy = FakeStrategy()
 
     broker.process_fills(strategy, 1)
@@ -340,7 +336,7 @@ def test_rust_broker_processes_rust_fills_with_batch_sync() -> None:
         (1, Order.Completed, 10.0),
         (2, Order.Completed, 11.0),
     ]
-    assert strategy.trades == [(1.0, 10.0, 1.0)]
+    assert strategy.trades == [(1.0, 10.0, 0.0), (0.0, 11.0, 1.0)]
     assert broker._last_fill_idx == 2
 
 

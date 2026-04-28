@@ -64,7 +64,7 @@ def __getattr__(name: str) -> Any:
         from tradelearn.compat.backtrader import CommInfoBase
         return CommInfoBase
     if name == "Analyzer":
-        from tradelearn.backtest import Analyzer
+        from tradelearn.compat.backtrader import Analyzer
         return Analyzer
     if name in {"num2date", "date2num"}:
         return getattr(importlib.import_module("tradelearn.compat.backtrader"), name)

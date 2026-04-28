@@ -12,8 +12,6 @@ def test_core_layer_does_not_import_compat() -> None:
         for path in core_root.rglob("*.py"):
             if "__pycache__" in path.parts:
                 continue
-            if path == root / "tradelearn" / "backtest" / "__init__.py":
-                continue
             text = path.read_text()
             if "tradelearn.compat" in text or "compat.backtrader" in text:
                 offenders.append(str(path.relative_to(root)))
