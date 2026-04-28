@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from typing import Any
 
 __version__ = "0.1.2.0"
@@ -12,8 +13,7 @@ __all__ = ["__version__", "ta"]
 def __getattr__(name: str) -> Any:
     """Lazily expose public namespace aliases."""
     if name == "ta":
-        from tradelearn import indicators
-        return indicators
+        return importlib.import_module("tradelearn.indicators")
     if name == "lab":
         from tradelearn import lab
         return lab
@@ -21,8 +21,7 @@ def __getattr__(name: str) -> Any:
         from tradelearn import cli
         return cli
     if name in ["ind", "indicators"]:
-        from tradelearn.compat.backtrader import indicators
-        return indicators
+        return importlib.import_module("tradelearn.compat.backtrader.indicators")
     if name == "analyzers":
         from tradelearn.backtest import analyzers
         return analyzers

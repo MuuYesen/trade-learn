@@ -5,13 +5,15 @@ Same-name indicators may differ from future ``ta.tdx`` and ``ta.tv`` namespaces.
 Choose the namespace for the market convention you need.
 """
 
-from tradelearn.indicators import tdx
+from __future__ import annotations
+
+import importlib
+from typing import Any
+
 from tradelearn.indicators.base import FunctionIndicator, Indicator
 from tradelearn.indicators.core.momentum import rsi
 from tradelearn.indicators.core.overlap import bbands, sma
 from tradelearn.indicators.core.trend import macd
-
-tdx30 = tdx
 
 __all__ = [
     "FunctionIndicator",
@@ -23,3 +25,12 @@ __all__ = [
     "tdx",
     "tdx30",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Lazily expose market-specific indicator namespaces."""
+    if name in {"tdx", "tdx30"}:
+        return importlib.import_module("tradelearn.indicators.tdx")
+    if name == "tv":
+        return importlib.import_module("tradelearn.indicators.tv")
+    raise AttributeError(f"module 'tradelearn.indicators' has no attribute {name!r}")

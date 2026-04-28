@@ -666,6 +666,69 @@ def test_backtesting_strategy_init_runs_once() -> None:
     assert InitCountingStrategy.init_calls == 1
 
 
+def test_backtesting_strategy_I_caches_batch_indicator_results() -> None:
+    data = pd.DataFrame(
+        {
+            "Open": [10.0, 11.0, 12.0, 13.0],
+            "High": [10.0, 11.0, 12.0, 13.0],
+            "Low": [10.0, 11.0, 12.0, 13.0],
+            "Close": [10.0, 11.0, 12.0, 13.0],
+            "Volume": [1000.0, 1000.0, 1000.0, 1000.0],
+        },
+        index=pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"], utc=True),
+    )
+    calls = {"count": 0}
+
+    def counted_indicator(close, period: int = 2):
+        calls["count"] += 1
+        return pd.Series(close).rolling(period).mean()
+
+    class CachedIndicatorStrategy(BacktestingStrategy):
+        def init(self) -> None:
+            self.first = self.I(counted_indicator, self.data.Close, period=2)
+            self.second = self.I(counted_indicator, self.data.Close, period=2)
+
+        def next(self) -> None:
+            pass
+
+    Backtest(data, CachedIndicatorStrategy, cash=1000.0).run()
+
+    assert calls["count"] == 1
+
+
+def test_backtesting_strategy_I_does_not_merge_distinct_lambda_indicators() -> None:
+    data = pd.DataFrame(
+        {
+            "Open": [10.0, 11.0, 12.0],
+            "High": [10.0, 11.0, 12.0],
+            "Low": [10.0, 11.0, 12.0],
+            "Close": [10.0, 11.0, 12.0],
+            "Volume": [1000.0, 1000.0, 1000.0],
+        },
+        index=pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"], utc=True),
+    )
+
+    class LambdaIndicatorStrategy(BacktestingStrategy):
+        first_seen = None
+        second_seen = None
+
+        def init(self) -> None:
+            self.first = self.I(lambda: pd.Series([1.0, 1.0, 1.0]))
+            self.second = self.I(lambda: pd.Series([2.0, 2.0, 2.0]))
+
+        def next(self) -> None:
+            type(self).first_seen = self.first[-1]
+            type(self).second_seen = self.second[-1]
+
+    LambdaIndicatorStrategy.first_seen = None
+    LambdaIndicatorStrategy.second_seen = None
+
+    Backtest(data, LambdaIndicatorStrategy, cash=1000.0).run()
+
+    assert LambdaIndicatorStrategy.first_seen == 1.0
+    assert LambdaIndicatorStrategy.second_seen == 2.0
+
+
 def test_cashvalue_notification_only_runs_when_strategy_overrides_hook() -> None:
     data = pd.DataFrame(
         {

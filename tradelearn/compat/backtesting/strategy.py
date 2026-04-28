@@ -97,6 +97,7 @@ class Strategy(CoreStrategy):
         super().__init__(*args, **kwargs)
         self._bt_data = None
         self._bt_position = PositionProxy(self)
+        self._indicator_cache = {}
         self._trades = []
 
     def notify_trade(self, trade: Any):
@@ -117,10 +118,31 @@ class Strategy(CoreStrategy):
         """Indicator wrapper."""
         # backtesting.py indicators are computed ONCE on the full data in init()
         # and then they advance.
+        cache_key = self._indicator_cache_key(func, args, kwargs)
+        cached = self._indicator_cache.get(cache_key)
+        if cached is not None:
+            return cached
         res = func(*args, **kwargs)
         # We need to return something that, when indexed with [-1], 
         # returns the value at the CURRENT cursor.
-        return IndicatorProxy(res, self.datas[0])
+        proxy = IndicatorProxy(res, self.datas[0])
+        self._indicator_cache[cache_key] = proxy
+        return proxy
+
+    def _indicator_cache_key(self, func: Callable, args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[Any, ...]:
+        return (
+            self._cache_value_key(func),
+            tuple(self._cache_value_key(arg) for arg in args),
+            tuple((key, self._cache_value_key(value)) for key, value in sorted(kwargs.items())),
+        )
+
+    @staticmethod
+    def _cache_value_key(value: Any) -> tuple[str, Any]:
+        try:
+            hash(value)
+        except TypeError:
+            return ("id", id(value))
+        return ("value", value)
 
     def buy(self, *, data: Any = None, size: float = 0.9999, limit: float = None, stop: float = None, sl: float = None, tp: float = None):
         # backtesting.py size can be pct (0.0 to 1.0)
