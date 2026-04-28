@@ -200,13 +200,20 @@ class LineSeries:
         return self._cursor + 1
 
     def __getitem__(self, ago: Any) -> Any:
+        if ago == 0:
+            return self._values[self._cursor]
+        if ago == -1:
+            idx = self._cursor - 1
+            return self._values[idx] if idx >= 0 else np.nan
         if not isinstance(ago, (int, slice, np.integer)):
             # Support indexing by data object (common in multi-data strategies)
             return self
-        try:
-            return self._values[self._cursor + ago]
-        except IndexError:
+        if isinstance(ago, slice):
+            return self._values[ago]
+        idx = self._cursor + int(ago)
+        if idx < 0 or idx >= len(self._values):
             return np.nan
+        return self._values[idx]
 
     def __call__(self, ago: int = 0) -> LineSeries:
         return DelayedLine(self, ago)
