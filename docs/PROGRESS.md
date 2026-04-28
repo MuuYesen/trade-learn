@@ -382,35 +382,49 @@
 
 ---
 
-## 阶段 10 — 1.1(QMT 实盘 + Rust 驱动事件循环)
+## 阶段 10 — 1.1(实盘兼容 EventRunner + Rust 驱动事件循环)
 
-**状态**:🟡 进行中(2026-04-28 已前置回填部分 Rust 驱动 bar loop 与 Python/Rust 热路径优化;`strategy._pre_next()`、Rust `BarRunner` 多数据 primary-clock cursor、共享 bar buffer 读路径、通用 BrokerEventPump 与三命名空间指标缓存接口已落地;QMT 具体实现暂缓且不提交;正式 1.1 性能门禁仍未闭合)
-**目标交付**:`1.1`——实盘可用(Windows + QMT)+ Rust bar 循环性能升级
-**时间**:4 周（QMT 3 周 + Rust 事件循环 1 周，可并行）
+**状态**:🟡 进行中(主线已调整为实盘兼容的单事件 `EventRunner`:回测/实盘共用事件顺序;`strategy._pre_next()`、Rust `BarRunner` 多数据 primary-clock cursor、共享 bar buffer 读路径、通用 BrokerEventPump 与三命名空间指标缓存接口已落地;QMT 具体实现暂缓且不提交;正式 1.1 EventRunner/rolling buffer/rolling indicator/cache 门禁仍未闭合)
+**目标交付**:`1.1`——回测与实盘共用单事件核心 + Rust bar 循环性能升级;QMT 只保留扩展接口,具体 broker 代码暂缓
+**时间**:4 周（EventRunner/rolling buffer/indicator cache 为主线;QMT 适配延后）
 
-### Week 1–3 — QMT 实盘
+### Week 1 — 统一事件核心
 
-- [ ] `brokers/qmt.py` 适配器(quant-qmt-proxy HTTP API):暂缓具体代码实现;保留 `tradelearn.core.contracts.Broker` 协议作为扩展接口,本轮删除已提交的 QMT 代码文件
-- [ ] 🟡 Broker Protocol 全实现:核心 Protocol 已存在;通用 `BrokerEventPump` 与 `RustBroker.event_pump()` 已用于后续任意 proxy 的 fill/cancel/reject 轮询与派发,QMT 专属 broker 暂缓
-- [ ] 三种模式:`backtest` / `paper` / `live`
-- [ ] 实盘二次确认 + 资金上限
-- [ ] 断线重连 + 基础风控
-- [ ] 实盘 MLflow run(每日一个)
-- [ ] Windows-only CI
+- [ ] `EventRunner` 单事件核心：定义 `on_bar()` / `on_broker_event()` / `submit_order()` / `snapshot()` 边界,回测和实盘共用
+- [ ] `HistoricalDriver`：历史数据逐 bar 驱动 EventRunner,可复用现有 RustBarRunner cursor plan,不得改变 `next()` 可见顺序
+- [ ] `PaperDriver` / `LiveDriver` 接口：只定义 driver/broker event 边界,暂不提交 QMT 具体文件
+- [ ] `BrokerEventPump` 标准化：补 order status / partial fill / reconnect replay 协议字段,继续支持 fill/cancel/reject
+- [ ] 三种模式入口:`backtest` / `paper` / `live` 的配置对象和模式分发
 
-### Week 4 — Rust 驱动事件循环
+### Week 2 — rolling buffer + 指标双模式
 
-> 规格见 `docs/internal/event-loop.md § 1.1 Rust 驱动事件循环`
+- [ ] `RollingBarBuffer`：在现有 `SharedBarBuffer` 基础上支持 append/overwrite 环形窗口,回测可零拷贝预装,实盘可单根追加
+- [ ] `BatchIndicatorCache`：回测侧全量向量预计算 `pandas-ta-classic` / TDX / TradingView,返回统一 line 接口
+- [ ] `RollingIndicatorCache`：实盘侧 rolling window 重算最近窗口,禁止未来函数;EMA/RSI/MACD 等递推指标需定义 warmup 窗口
+- [ ] Backtrader facade 指标声明接入缓存：用户策略 API 不变,`self.sma[0]` 同时支持 batch/rolling 底层
+- [ ] 多输出指标 line 管理：MACD / BBANDS / KDJ 等 DataFrame 输出拆成稳定命名 line
+
+### Week 3 — Rust 驱动事件循环
+
+> 规格见 `docs/internal/event-loop.md § 1.1 实盘兼容 EventRunner 主线`
 
 - [x] `strategy._pre_next()` 钩子：Strategy 基类新增统一指标推进入口,engine 已从直接散落 advance 改为调用 hook;提交待生成
 - [x] `BarRunner` Rust struct + PyO3 绑定：新增 `RustBarRunner`,统一生成 primary/secondary latest-at-or-before cursor,并可驱动 Rust engine bar loop + Python callback
 - [x] 共享 bar buffer 验证：`DataContainer.shared_bar_buffer()` 已返回零拷贝 OHLCV array view,Backtrader DataFeed OHLCV line 已直接读取共享 buffer
-- [ ] 🟡 `Cerebro.run()` 内循环委托给 `BarRunner.run(strategy_ptr)`，退出 Python for 循环:单数据已走 Rust `run_bar_loop`,多数据已走 `RustBarRunner.run`;用户 Python `strategy.next()` callback 仍按事件型定位保留
+- [ ] 🟡 `Cerebro.run()` 统一委托 `EventRunner`：单数据已走 Rust `run_bar_loop`,多数据已走 `RustBarRunner.run`;下一步收敛到统一 EventRunner 接口
 - [x] 多 data feed primary clock 对齐逻辑迁移至 BarRunner，secondary 可见性规则不变
 - [ ] GIL 持有策略验证：bar 内持有（含两次 PyO3 回调），bar 间可释放
 - [ ] golden 50/50 重新验证（trades 0 差异，PnL rtol=1e-4）
-- [ ] benchmark：sma_cross + AAPL 10000 bars 20 次中位数，vs 1.0 ≥ 3x，vs Backtrader ≥ 8x
+- [ ] benchmark：sma_cross + AAPL 10000 bars 20 次中位数,默认事件驱动路径 vs 当前 ≥ 1.5x,vs Backtrader ≥ 4x;指标密集策略接入 BatchIndicatorCache 后目标 ≥ 5x
 - [ ] `compat.backtrader` 十个迁移金标策略零改动通过
+
+### Week 4 — 实盘接口门禁
+
+- [ ] 模拟 broker event pump dry-run：无 QMT 代码,用 fake live broker 验证 live/paper 生命周期
+- [ ] 实盘二次确认 + 资金上限协议字段
+- [ ] 断线重连 + 基础风控协议字段
+- [ ] 实盘 MLflow run 事件字段(每日一个 run 的接口定义)
+- [ ] Windows-only CI 仅做接口/导入门禁,QMT 专属实现仍 deferred
 
 ### 1.1 前置优化记录(2026-04-28,不改变 Stage 10 正式状态)
 
@@ -420,7 +434,7 @@
 - [x] Python bar loop 热路径缓存:预绑定 strategy/data/indicator advancers、broker/strategy callback 方法、data line proxy、position size/Rust state fast path,提交 `4eb114e` / `bf0472f` / `ba66102` / `349c2fe` / `a0733e0` / `b09b7f4` / `f0feef0` / `29fb00d` / `e2c38ff` / `0cc8f28`
 - [x] compat.backtesting 指标访问微优化与 benchmark 输出增强: `IndicatorProxy.__getitem__` 热路径收紧,`benchmark_bt.py` 增加 `vs Prev TL` 与 repeat/warmup 模式,提交 `d4f38f4`
 - [x] 当前验证基线: `tests/unit/backtest/test_rust_exact_matching.py` 20 passed;`tests/unit/backtest/test_compat_runner_scripts.py` 2 passed;`benchmark_bt.py` 8/8 EXACT;`compare_results.py` BTCUSDT / ETHUSDT Return 与 # Trades 对齐,Tradelearn 对 backtesting.py 约 2.4x-2.5x
-- [ ] 剩余正式 1.1 工作:完整 `BarRunner` struct、批量 bind order refs、批量 fill/order sync、Cerebro paper/live mode、Windows-only CI 与 1.1 benchmark ≥ 3x/≥ 8x 门禁;QMT 具体 broker 代码暂缓
+- [ ] 剩余正式 1.1 工作:统一 `EventRunner` 接口、RollingBarBuffer、Batch/RollingIndicatorCache 自动接入、Cerebro paper/live mode、fake live broker 门禁、Windows-only CI 与默认事件驱动 benchmark ≥ 1.5x/≥ 4x 门禁;QMT 具体 broker 代码暂缓
 
 ### 当前优化任务队列(2026-04-28)
 
@@ -442,6 +456,10 @@
 - [x] P2 指标缓存框架第一阶段:新增 `IndicatorCache`,回测侧可统一预计算 `pandas-ta-classic` / TDX / TradingView 批量指标并返回 cursor-aware line;QMT 实盘侧仍保留 rolling window 方向
 - [x] P3 共享 bar buffer / Line 访问优化第一阶段:DataFeed OHLCV line 直接从共享 buffer 读取当前/上一根,降低 `self.data.close[0]`、`self.data.close[-1]` 的数组代理开销
 - [x] P4 多数据/多周期推进计划第一阶段:primary/secondary data advance plan 已由 `RustBarRunner` 预编译并执行,减少多数据下每 bar Python cursor 搜索
+- [ ] P5 统一 EventRunner 主线:将现有 `engine.py` / `RustBroker` / `RustBarRunner` / `BrokerEventPump` 收敛为单事件核心,回测和实盘共用事件顺序;历史 batch 只能作为 driver 层优化
+- [ ] P6 RollingBarBuffer:共享 buffer 升级为回测预装 + 实盘 append/overwrite 的环形窗口,保持 `line[0]` / `line[-1]` 语义
+- [ ] P7 Batch/RollingIndicatorCache:回测全量向量预计算,实盘 rolling window 重算最近窗口;统一支持 `pandas-ta-classic` / TDX / TradingView,并处理多输出指标 line
+- [ ] P8 live/paper dry-run:不提交 QMT 具体文件,用 fake broker/data driver 验证 `BrokerEventPump`、风控字段、二次确认字段和 MLflow live event 字段
 
 ---
 

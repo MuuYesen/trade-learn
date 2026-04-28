@@ -37,7 +37,7 @@ trade-learn 2.0 系统架构规格。
 | `metrics/` | 指标唯一真源(融合 empyrical) | numpy / pandas / scipy | core |
 | `factor/` | 因子评估(融合 alphalens) | numpy / pandas | core / metrics |
 | `report/` | 策略报告(融合 pyfolio + quantstats) | bokeh / xlsxwriter | core / metrics |
-| `backtest/` | Cerebro + Strategy + Analyzer + Rust 核(1.1 新增 RustBarRunner) | PyO3 / arrow | core / metrics / report |
+| `backtest/` | Cerebro + Strategy + Analyzer + Rust 核(1.1 新增实盘兼容 EventRunner) | PyO3 / arrow | core / metrics / report |
 | `backtest/analyzers/` | Analyzer 体系(含 MLflowAnalyzer) | mlflow | core / metrics / report |
 | `ml/` | MLStrategy + Feature Store + causal | scikit-learn / causallearn | core / backtest |
 | `brokers/` | 实盘 Broker(1.1:QMTBroker) | httpx | core / backtest |
@@ -81,7 +81,31 @@ Rust 侧(backtest-rs/)
 
 - Python ↔ Rust **通过 Apache Arrow zero-copy**
 - Rust 产物:`backtest-rs/` 编译的 `_core.*.so`(由 maturin 安装到 `tradelearn/backtest/`)
-- 策略逻辑(`Strategy.__init__ / next / notify_*`)**留在 Python**,Rust 侧只做撮合/记账
+- 策略逻辑(`Strategy.__init__ / next / notify_*`)**留在 Python**,Rust 侧只做事件推进、撮合/记账、bar buffer 与 broker event 标准化
+
+### 4.1 1.1 EventRunner 边界
+
+Stage 10 起，回测和实盘统一到单事件 `EventRunner` 语义:
+
+```
+HistoricalDriver / LiveDriver / PaperDriver
+      │
+      ▼
+EventRunner.on_bar() / on_broker_event()
+      │
+      ├── RollingBarBuffer / SharedBarBuffer
+      ├── BrokerEventPump
+      ├── BatchIndicatorCache(回测)
+      ├── RollingIndicatorCache(实盘)
+      └── Python Strategy.next()
+```
+
+硬约束:
+
+- 回测和实盘不得分裂成两套策略执行模型。
+- 历史批量优化只能放在 driver 层，不得改变 `next()` 可见顺序。
+- QMT 具体 broker 代码暂缓且不提交，核心只保留 Broker Protocol / BrokerEventPump 扩展点。
+- `pandas-ta-classic`、TDX、TradingView 指标在回测侧优先向量预计算，实盘侧使用 rolling window 重算最近窗口。
 
 ## 5. 命名空间规则
 
@@ -134,7 +158,7 @@ from tradelearn.indicators import ta
 
 | 扩展点 | 协议 | 用途 |
 |---|---|---|
-| Broker | `core.Broker` | 自定义券商/撮合 |
+| Broker | `core.Broker` + `BrokerEventPump` | 自定义券商/撮合/实盘回报轮询 |
 | DataFeed | `core.DataFeed` | 自定义数据源 |
 | Reporter | `core.Reporter` | 自定义报告输出 |
 | FeatureStore | `ml.FeatureStore` | 自定义因子仓库后端 |
