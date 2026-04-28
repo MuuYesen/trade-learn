@@ -563,6 +563,28 @@ def test_backtesting_indicator_proxy_relative_indexing() -> None:
         indicator[-2]
 
 
+def test_backtesting_data_proxy_exposes_fixed_line_proxy_before_cursor_starts() -> None:
+    class Feed:
+        def __init__(self) -> None:
+            self._cursor = -1
+            self.arrays = {
+                "open": [1.0, 2.0, 3.0],
+                "high": [1.0, 2.0, 3.0],
+                "low": [1.0, 2.0, 3.0],
+                "close": [4.0, 5.0, 6.0],
+                "volume": [1.0, 2.0, 3.0],
+            }
+
+        def get_array(self, name: str):
+            return self.arrays[name]
+
+    proxy = BacktestingDataProxy(Feed())
+
+    assert isinstance(proxy.Close, IndicatorProxy)
+    assert proxy.Close is proxy.Close
+    assert pd.Series(proxy.Close).tolist() == [4.0, 5.0, 6.0]
+
+
 def test_backtesting_data_proxy_reuses_line_proxy_after_cursor_starts() -> None:
     class Feed:
         def __init__(self) -> None:

@@ -19,27 +19,12 @@ class BacktestingDataProxy:
         self._low_proxy = IndicatorProxy(self._low_array, data_feed)
         self._close_proxy = IndicatorProxy(self._close_array, data_feed)
         self._volume_proxy = IndicatorProxy(self._volume_array, data_feed)
+        self.Open = self._open_proxy
+        self.High = self._high_proxy
+        self.Low = self._low_proxy
+        self.Close = self._close_proxy
+        self.Volume = self._volume_proxy
         self._extra_line_cache: dict[str, tuple[Any, IndicatorProxy]] = {}
-
-    @property
-    def Open(self) -> Any:
-        return self._open_array if self._feed._cursor < 0 else self._open_proxy
-
-    @property
-    def High(self) -> Any:
-        return self._high_array if self._feed._cursor < 0 else self._high_proxy
-
-    @property
-    def Low(self) -> Any:
-        return self._low_array if self._feed._cursor < 0 else self._low_proxy
-
-    @property
-    def Close(self) -> Any:
-        return self._close_array if self._feed._cursor < 0 else self._close_proxy
-
-    @property
-    def Volume(self) -> Any:
-        return self._volume_array if self._feed._cursor < 0 else self._volume_proxy
 
     def __getattr__(self, name: str) -> Any:
         mapping = {
@@ -54,8 +39,6 @@ class BacktestingDataProxy:
 
     def _line_or_array(self, core_name: str) -> Any:
         arr = self._feed.get_array(core_name)
-        if self._feed._cursor < 0:
-            return arr
         cached = self._extra_line_cache.get(core_name)
         if cached is not None and cached[0] is arr:
             return cached[1]
@@ -179,6 +162,9 @@ class IndicatorProxy:
         if cursor < 0: return self._data
         return self._data[:cursor + 1]
 
+    def __iter__(self):
+        return iter(np.asarray(self))
+
     def __getitem__(self, key: int | slice) -> Any:
         cursor = self._feed._cursor
         data = self._data
@@ -206,4 +192,7 @@ class IndicatorProxy:
         return data[key]
 
     def __len__(self) -> int:
-        return self._feed._cursor + 1
+        cursor = self._feed._cursor
+        if cursor < 0:
+            return len(self._data)
+        return cursor + 1
