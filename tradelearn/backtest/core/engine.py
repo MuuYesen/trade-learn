@@ -146,7 +146,8 @@ def run_backtest(cerebro: Any) -> List[Any]:
                 cerebro.broker._step_fills_from_collect = fills
                 if cash is not None and size is not None and price is not None:
                     cerebro.broker._rust_state_cache = (i, cash, size, price)
-            cerebro.broker.process_fills(strategy, i)
+            if fills is None or fills:
+                cerebro.broker.process_fills(strategy, i)
             if notify_cashvalue is not None:
                 notify_cashvalue(cerebro.broker.getcash(), cerebro.broker.getvalue())
 
