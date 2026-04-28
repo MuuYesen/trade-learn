@@ -9,6 +9,7 @@ from tradelearn.backtest.models import ExecutedInfo, Order, Position, Trade
 from tradelearn.backtest.strategy import Strategy as _BaseStrategy
 from tradelearn.compat.backtrader.base import _G, LineRoot, LineSeries, Params, set_current_data
 from tradelearn.compat.backtrader.datafeed import DataFeed
+from tradelearn.compat.backtrader.sizer import Sizer
 
 
 class Strategy(_BaseStrategy, LineRoot):
@@ -197,27 +198,6 @@ class Strategy(_BaseStrategy, LineRoot):
         )
         return [main, stop, limit]
 
-
-
-class Sizer:
-    """Base class for strategy sizing logic."""
-    def __init__(self, *args, **kwargs):
-        cls_params = getattr(self.__class__, 'params', [])
-        self.params = self.p = Params(cls_params, **kwargs)
-        self.strategy = None
-        self.broker = None
-
-    def _set(self, strategy, broker):
-        self.strategy = strategy
-        self.broker = broker
-
-    def getsizing(self, data, isbuy, **kwargs):
-        comminfo = self.broker.getcommissioninfo(data)
-        cash = self.broker.getcash()
-        return self._getsizing(comminfo, cash, data, isbuy)
-
-    def _getsizing(self, comminfo, cash, data, isbuy):
-        raise NotImplementedError
 
 
 class CommInfoBase:

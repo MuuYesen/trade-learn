@@ -4,7 +4,13 @@ import inspect
 from typing import Any
 
 from tradelearn.backtest.lines import DelayedLine, IndicatorLine, Lines, LineSeries
-from tradelearn.backtest.models import Order, Params
+from tradelearn.backtest.models import (
+    BaseAnalyzer,
+    BaseBroker,
+    BaseSizer,
+    Order,
+    Params,
+)
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
 
 __all__ = [
@@ -165,21 +171,6 @@ class LineRoot(metaclass=MetaParams):
             line = getattr(self.lines, name, None)
             if line is not None: return line
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-
-class BaseBroker:
-    def __init__(self, **kwargs): pass
-    def setcash(self, cash: float): pass
-    def setcommission(self, commission: float = 0.0, margin: float = 0.0, mult: float = 1.0): pass
-    def getcash(self) -> float: return 0.0
-    def getvalue(self) -> float: return 0.0
-    def get_cash(self) -> float: return self.getcash()
-    def get_value(self) -> float: return self.getvalue()
-
-class BaseSizer: pass
-class BaseAnalyzer:
-    def __init__(self, **kwargs): self.strategy = None
-    def on_order(self, order: Order): pass
-    def stop(self): pass
 
 def _notify_order(strategy: Any, order: Order) -> None:
     strategy.notify_order(order)
