@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
+
+import pandas as pd
 
 from tradelearn.backtest.core.data import RollingBarBuffer
 from tradelearn.compat.backtrader.base import LineSeries
@@ -82,3 +85,58 @@ class EventRunner:
         self.strategy.data = self.data
         if hasattr(self.strategy, "_set_bar_advancers"):
             self.strategy._set_bar_advancers(())
+
+
+class HistoricalDriver:
+    """Historical bar source that feeds EventRunner one bar at a time."""
+
+    def __init__(self, runner: EventRunner, bars: pd.DataFrame, symbol: str = "data0") -> None:
+        self.runner = runner
+        self.bars = bars
+        self.symbol = symbol
+
+    def run(self) -> list[EventSnapshot]:
+        return [self.runner.on_bar(bar) for bar in self._iter_bars()]
+
+    def _iter_bars(self) -> Iterable[StreamBar]:
+        for ts, row in self.bars.iterrows():
+            timestamp = pd.Timestamp(ts)
+            if timestamp.tzinfo is None:
+                timestamp = pd.Timestamp(ts, tz="UTC")
+            else:
+                timestamp = timestamp.tz_convert("UTC")
+            yield StreamBar(
+                ts=timestamp,
+                symbol=self.symbol,
+                open=float(row["open"]),
+                high=float(row["high"]),
+                low=float(row["low"]),
+                close=float(row["close"]),
+                volume=float(row["volume"]),
+            )
+
+
+class PaperDriver:
+    """Paper driver facade that reuses the live EventRunner path."""
+
+    def __init__(self, runner: EventRunner, bars: Iterable[StreamBar | dict[str, Any]]) -> None:
+        self.runner = runner
+        self.bars = bars
+
+    def run_once(self) -> list[EventSnapshot]:
+        return [self.runner.on_bar(bar) for bar in self.bars]
+
+
+class LiveDriver:
+    """Live driver facade driven by a user-supplied non-blocking poller."""
+
+    def __init__(
+        self,
+        runner: EventRunner,
+        poller: Callable[[], Iterable[StreamBar | dict[str, Any]]],
+    ) -> None:
+        self.runner = runner
+        self.poller = poller
+
+    def poll_once(self) -> list[EventSnapshot]:
+        return [self.runner.on_bar(bar) for bar in self.poller()]

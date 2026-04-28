@@ -3,7 +3,15 @@ from __future__ import annotations
 import pandas as pd
 
 from tradelearn.backtest import BatchIndicatorCache, RollingBarBuffer, RollingIndicatorCache
-from tradelearn.backtest.core.event_runner import EventRunner
+from tradelearn.backtest import HistoricalDriver as PublicHistoricalDriver
+from tradelearn.backtest import LiveDriver as PublicLiveDriver
+from tradelearn.backtest import PaperDriver as PublicPaperDriver
+from tradelearn.backtest.core.event_runner import (
+    EventRunner,
+    HistoricalDriver,
+    LiveDriver,
+    PaperDriver,
+)
 from tradelearn.backtest.core.strategy import Strategy
 from tradelearn.compat.backtrader import Cerebro
 from tradelearn.core import BrokerEvent, BrokerEventPump, StreamBar
@@ -48,9 +56,70 @@ def test_backtest_namespace_exposes_event_runner_building_blocks() -> None:
     assert BatchIndicatorCache is not None
     assert RollingIndicatorCache is not None
     assert RollingBarBuffer is not None
+    assert PublicHistoricalDriver is HistoricalDriver
+    assert PublicPaperDriver is PaperDriver
+    assert PublicLiveDriver is LiveDriver
 
 
 def test_cerebro_accepts_backtest_paper_live_modes() -> None:
     assert Cerebro(mode="backtest").mode == "backtest"
     assert Cerebro(mode="paper").mode == "paper"
     assert Cerebro(mode="live").mode == "live"
+
+
+def test_historical_driver_replays_bars_through_event_runner() -> None:
+    class RecordingStrategy(Strategy):
+        def __init__(self) -> None:
+            super().__init__()
+            self.closes: list[float] = []
+
+        def next(self) -> None:
+            self.closes.append(self.data.close[0])
+
+    strategy = RecordingStrategy()
+    runner = EventRunner(strategy=strategy, buffer_capacity=4)
+    bars = pd.DataFrame(
+        {
+            "open": [1.0, 2.0],
+            "high": [1.0, 2.0],
+            "low": [1.0, 2.0],
+            "close": [1.5, 2.5],
+            "volume": [10.0, 20.0],
+        },
+        index=pd.to_datetime(["2026-01-01", "2026-01-02"], utc=True),
+    )
+
+    snapshots = HistoricalDriver(runner, bars, symbol="AAPL").run()
+
+    assert [snapshot.cursor for snapshot in snapshots] == [0, 1]
+    assert strategy.closes == [1.5, 2.5]
+
+
+def test_live_and_paper_drivers_share_event_runner_path() -> None:
+    class CountingStrategy(Strategy):
+        def __init__(self) -> None:
+            super().__init__()
+            self.count = 0
+
+        def next(self) -> None:
+            self.count += 1
+
+    bars = [
+        StreamBar(
+            ts=pd.Timestamp("2026-01-01", tz="UTC"),
+            symbol="AAPL",
+            open=1.0,
+            high=1.0,
+            low=1.0,
+            close=1.0,
+            volume=1.0,
+        )
+    ]
+
+    paper_strategy = CountingStrategy()
+    live_strategy = CountingStrategy()
+
+    assert len(PaperDriver(EventRunner(paper_strategy), bars).run_once()) == 1
+    assert len(LiveDriver(EventRunner(live_strategy), lambda: bars).poll_once()) == 1
+    assert paper_strategy.count == 1
+    assert live_strategy.count == 1

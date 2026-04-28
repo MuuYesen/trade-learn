@@ -42,3 +42,29 @@ def test_rust_broker_exposes_proxy_event_pump_for_external_polling() -> None:
     assert broker.drain_proxy_events() == []
     assert fills == [{"order_id": 1}]
     assert rejects == [(2, "risk")]
+
+
+def test_broker_event_pump_dispatches_status_partial_and_replay_events() -> None:
+    events = [
+        {
+            "kind": "status",
+            "order_id": 1,
+            "status": "accepted",
+            "replay": True,
+        },
+        {
+            "kind": "partial",
+            "order_id": 1,
+            "payload": {"size": 10, "filled": 4},
+        },
+    ]
+    statuses: list[tuple[object, str, bool]] = []
+    partials: list[object] = []
+
+    pump = BrokerEventPump(lambda: events)
+    pump.on_status(lambda order_id, status, replay: statuses.append((order_id, status, replay)))
+    pump.on_partial(partials.append)
+
+    assert pump.poll_once() == 2
+    assert statuses == [(1, "accepted", True)]
+    assert partials == [{"size": 10, "filled": 4}]
