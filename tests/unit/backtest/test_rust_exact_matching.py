@@ -231,6 +231,30 @@ def test_rust_broker_can_buffer_order_submissions_for_rust_driven_callbacks() ->
     assert engine.submissions == [("buy", "limit", 2.0, 9.5, None)]
 
 
+def test_rust_broker_can_drain_buffer_without_reentering_engine() -> None:
+    class FakeEngine:
+        def submit_order(self, *args):
+            raise AssertionError("drain_order_buffer must not call the Rust engine")
+
+    broker = RustBroker(match_mode="exact")
+    broker._engine = FakeEngine()
+
+    broker.begin_order_buffering()
+    order = broker.sell(object(), object(), size=3.0, price=8.0, exectype=Order.Stop)
+
+    drained = broker.drain_order_buffer()
+
+    assert drained == [(1, "sell", "stop", 3.0, None, 8.0)]
+    assert order.ref == 1
+    assert broker._orders_by_ref[1] is order
+
+    broker.bind_rust_order_ref(1, 77)
+
+    assert order.ref == 77
+    assert 1 not in broker._orders_by_ref
+    assert broker._orders_by_ref[77] is order
+
+
 def test_backtest_engine_buffers_orders_while_strategy_next_runs() -> None:
     data = pd.DataFrame(
         {

@@ -57,7 +57,7 @@ class RustBroker(BaseBroker):
         self._rust_state_cache: tuple[int, float, float, float] | None = None
         self._step_fills_from_collect: list[Any] | None = None
         self._buffer_order_submissions = False
-        self._order_submit_buffer: list[tuple[Order, str, str, float, float | None, float | None]] = []
+        self._order_submit_buffer: list[tuple[int, str, str, float, float | None, float | None]] = []
         # For 'bt' mode, we maintain state in Python
         self._pos = Position(size=0.0, price=0.0)
         self._active_cash = cash
@@ -123,18 +123,66 @@ class RustBroker(BaseBroker):
 
     def flush_order_buffer(self) -> None:
         """Submit buffered orders to Rust and update Python order refs."""
-        buffered = self._order_submit_buffer
-        self._order_submit_buffer = []
-        self._buffer_order_submissions = False
-        for order, side_str, ot_str, actual_size, limit_price, stop_price in buffered:
-            self._submit_to_rust_engine(
-                order,
+        for provisional_ref, side_str, ot_str, actual_size, limit_price, stop_price in self.drain_order_buffer():
+            order_id = self._engine.submit_order(
                 side_str,
                 ot_str,
                 actual_size,
                 limit_price,
                 stop_price,
             )
+            self.bind_rust_order_ref(provisional_ref, order_id)
+
+    def drain_order_buffer(self) -> list[tuple[int, str, str, float, float | None, float | None]]:
+        """Return buffered order payloads without calling back into Rust."""
+        buffered = self._order_submit_buffer
+        self._order_submit_buffer = []
+        self._buffer_order_submissions = False
+        return buffered
+
+    def bind_rust_order_ref(self, provisional_ref: int, rust_ref: int) -> None:
+        """Replace a provisional Python order ref with the Rust-assigned ref."""
+        order = self._orders_by_ref.pop(provisional_ref)
+        order.ref = rust_ref
+        self._orders_by_ref[order.ref] = order
+
+    def submit_drained_order(
+        self,
+        provisional_ref: int,
+        side_str: str,
+        ot_str: str,
+        actual_size: float,
+        limit_price: float | None,
+        stop_price: float | None,
+    ) -> int:
+        """Submit one drained order payload through Python's engine handle."""
+        order_id = self._engine.submit_order(
+            side_str,
+            ot_str,
+            actual_size,
+            limit_price,
+            stop_price,
+        )
+        self.bind_rust_order_ref(provisional_ref, order_id)
+        return order_id
+
+    def _submit_to_rust_engine(
+        self,
+        order: Order,
+        side_str: str,
+        ot_str: str,
+        actual_size: float,
+        limit_price: float | None,
+        stop_price: float | None,
+    ) -> None:
+        order_id = self._engine.submit_order(
+                side_str,
+                ot_str,
+                actual_size,
+                limit_price,
+                stop_price,
+            )
+        self.bind_rust_order_ref(order.ref, order_id)
 
     def _rust_order_payload(
         self,
@@ -160,26 +208,6 @@ class RustBroker(BaseBroker):
             stop_price = price
             limit_price = order.pricelimit
         return side_str, ot_str, actual_size, limit_price, stop_price
-
-    def _submit_to_rust_engine(
-        self,
-        order: Order,
-        side_str: str,
-        ot_str: str,
-        actual_size: float,
-        limit_price: float | None,
-        stop_price: float | None,
-    ) -> None:
-        order_id = self._engine.submit_order(
-            side_str,
-            ot_str,
-            actual_size,
-            limit_price,
-            stop_price,
-        )
-        self._orders_by_ref.pop(order.ref, None)
-        order.ref = order_id
-        self._orders_by_ref[order.ref] = order
 
     def _submit(
         self,
@@ -213,7 +241,7 @@ class RustBroker(BaseBroker):
             side_str = "buy" if is_buy else "sell"
             payload = self._rust_order_payload(order, side_str, actual_size, price)
             if self._buffer_order_submissions:
-                self._order_submit_buffer.append((order, *payload))
+                self._order_submit_buffer.append((order.ref, *payload))
             else:
                 self._submit_to_rust_engine(order, *payload)
             order.status = Order.Accepted
