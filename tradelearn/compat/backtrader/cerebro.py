@@ -12,7 +12,7 @@ class Cerebro:
         self.datas: List[DataFeed] = []
         self.strats: List[Tuple[Type[Strategy], tuple, dict]] = []
         self.match_mode = match_mode
-        from tradelearn.backtest.brokers.rust_broker import RustBroker
+        from tradelearn.backtest.core.brokers.rust import RustBroker
         self.broker = RustBroker(match_mode=match_mode)
         self._sizer_spec = (FixedSize, {})
         self.analyzers: Dict[str, Tuple[Type[Analyzer], dict]] = {}

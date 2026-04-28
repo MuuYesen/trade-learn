@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from tradelearn.backtest.engine import TimeFrame
+from .models import TimeFrame
 
 
 def resample_frame(

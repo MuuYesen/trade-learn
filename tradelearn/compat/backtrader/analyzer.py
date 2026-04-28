@@ -22,7 +22,7 @@ class Analyzer(BaseAnalyzer, metaclass=MetaParams):
         self._strategy = strat
         if strat is not None:
             # Ensure strategy has a metrics engine
-            from tradelearn.backtest.metrics_engine import MetricsEngine
+            from tradelearn.backtest.core.metrics import MetricsEngine
             if not hasattr(strat, 'metrics_engine'):
                 strat.metrics_engine = MetricsEngine()
             

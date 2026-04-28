@@ -8,8 +8,9 @@ from typing import Any
 
 import pandas as pd
 
-from tradelearn.backtest.analyzers import MLflowAnalyzer
-from tradelearn.backtest.engine import Cerebro, Strategy
+from .analyzers import MLflowAnalyzer
+from .cerebro import Cerebro
+from .strategy import Strategy
 
 
 @dataclass(frozen=True)
