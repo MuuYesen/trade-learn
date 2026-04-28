@@ -136,6 +136,14 @@ def run_backtest(cerebro: Any) -> List[Any]:
     if min_period == 0: min_period = 1
 
     bar_advancers = _build_bar_advancers(strategy, cerebro.datas, indicators + indicators_bt)
+    if hasattr(strategy, "_set_bar_advancers"):
+        strategy._set_bar_advancers(bar_advancers)
+        strategy_pre_next = strategy._pre_next
+    else:
+        def strategy_pre_next(cursor: int) -> None:
+            for advance in bar_advancers:
+                advance(cursor)
+
     notify_cashvalue = None
     if type(strategy).notify_cashvalue is not CoreStrategy.notify_cashvalue:
         notify_cashvalue = strategy.notify_cashvalue
@@ -157,8 +165,7 @@ def run_backtest(cerebro: Any) -> List[Any]:
     min_start = min_period - 1
 
     def on_bar(i: int) -> list[Any]:
-        for advance in bar_advancers:
-            advance(i)
+        strategy_pre_next(i)
         
         # Broker Match
         if broker:
@@ -180,8 +187,7 @@ def run_backtest(cerebro: Any) -> List[Any]:
     if use_rust_bar_loop:
         if notify_cashvalue is None:
             def on_rust_bar(i: int, fills: list[Any], cash: float, size: float, price: float) -> list[Any] | None:
-                for advance in bar_advancers:
-                    advance(i)
+                strategy_pre_next(i)
                 broker._curr_idx = i
                 broker._step_fills_from_collect = fills
                 broker._rust_state_cache = (i, cash, size, price)
@@ -195,8 +201,7 @@ def run_backtest(cerebro: Any) -> List[Any]:
                 return None
         else:
             def on_rust_bar(i: int, fills: list[Any], cash: float, size: float, price: float) -> list[Any] | None:
-                for advance in bar_advancers:
-                    advance(i)
+                strategy_pre_next(i)
                 broker._curr_idx = i
                 broker._step_fills_from_collect = fills
                 broker._rust_state_cache = (i, cash, size, price)

@@ -26,6 +26,15 @@ class Strategy:
     def notify_trade(self, trade: Any): pass
     def notify_cashvalue(self, cash: float, value: float): pass
 
+    def _set_bar_advancers(self, advancers: tuple[Any, ...]) -> None:
+        """Install the internal per-bar cursor advance plan."""
+        self._bar_advancers = advancers
+
+    def _pre_next(self, cursor: int) -> None:
+        """Advance data and indicator cursors before broker/strategy callbacks."""
+        for advance in getattr(self, "_bar_advancers", ()):
+            advance(cursor)
+
     @property
     def position(self) -> Position:
         return self.getposition()

@@ -7,6 +7,7 @@ from tradelearn import _rust
 from tradelearn.backtest.core.brokers.rust import RustBroker
 from tradelearn.backtest.core.engine import _build_bar_advancers
 from tradelearn.backtest.core.models import Order
+from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
 from tradelearn.compat.backtrader.base import LineSeries
 from tradelearn.compat.backtrader import Cerebro, DataFeed, Strategy
 from tradelearn.compat.backtesting.backtest import Backtest
@@ -544,6 +545,55 @@ def test_bar_advance_plan_skips_empty_strategy_line_root() -> None:
 
     assert _build_bar_advancers(strategy, [], []) == ()
     assert strategy.calls == []
+
+
+def test_strategy_pre_next_runs_static_bar_advance_plan() -> None:
+    calls: list[int] = []
+    strategy = CoreStrategy()
+    strategy._set_bar_advancers((calls.append,))
+
+    strategy._pre_next(7)
+
+    assert calls == [7]
+
+
+def test_backtest_engine_calls_strategy_pre_next_hook() -> None:
+    class CountingDataFeed:
+        def __init__(self) -> None:
+            self._datetime = [1, 2]
+            self._open = [10.0, 11.0]
+            self._high = [10.0, 11.0]
+            self._low = [10.0, 11.0]
+            self._close = [10.0, 11.0]
+            self._volume = [1000.0, 1000.0]
+            self.advance_calls: list[int] = []
+
+        def _advance(self, cursor: int) -> None:
+            self.advance_calls.append(cursor)
+
+        def buflen(self) -> int:
+            return 2
+
+    class PreNextStrategy(Strategy):
+        seen: list[int] = []
+
+        def _pre_next(self, cursor: int) -> None:
+            type(self).seen.append(cursor)
+            super()._pre_next(cursor)
+
+        def next(self) -> None:
+            pass
+
+    data = CountingDataFeed()
+    PreNextStrategy.seen = []
+    cerebro = Cerebro(match_mode="exact")
+    cerebro.adddata(data)
+    cerebro.addstrategy(PreNextStrategy)
+
+    cerebro.run()
+
+    assert PreNextStrategy.seen == [0, 1]
+    assert data.advance_calls == [0, 1]
 
 
 def test_line_series_previous_value_before_start_is_nan() -> None:
