@@ -1,10 +1,72 @@
 from tradelearn.backtest.core.models import (
-    Order, Position, Trade, ExecutedInfo, BarSnapshot, Stats, TimeFrame,
-    BaseBroker, BaseSizer, BaseAnalyzer, _notify_order
+    BarRangeSlippage,
+    BarSnapshot,
+    BaseAnalyzer,
+    BaseBroker,
+    BaseSizer,
+    CNAStockCommission,
+    CommissionModel,
+    ExecutedInfo,
+    FixedCommission,
+    FixedSlippage,
+    Order,
+    PercentCommission,
+    PercentSlippage,
+    Position,
+    SlippageModel,
+    Stats,
+    TieredCommission,
+    TimeFrame,
+    Trade,
+    _notify_order,
 )
 from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
 from tradelearn.backtest.core.engine import run_backtest
 
-# Note: We do NOT import compat.backtrader here to avoid circular dependencies
-# during core initialization. Users can access them via 'tradelearn.Cerebro' 
-# or by importing 'tradelearn.compat.backtrader' directly.
+def __getattr__(name):
+    if name == "SimBroker":
+        from tradelearn.backtest.core.brokers.rust import RustBroker
+
+        return RustBroker
+    if name == "Analyzer":
+        from tradelearn.compat.backtrader.analyzer import Analyzer
+
+        return Analyzer
+    if name == "Cerebro":
+        from tradelearn.compat.backtrader.cerebro import Cerebro
+
+        return Cerebro
+    if name == "Strategy":
+        from tradelearn.compat.backtrader.strategy import Strategy
+
+        return Strategy
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+__all__ = [
+    "Analyzer",
+    "BarRangeSlippage",
+    "BarSnapshot",
+    "BaseAnalyzer",
+    "BaseBroker",
+    "BaseSizer",
+    "CNAStockCommission",
+    "Cerebro",
+    "CommissionModel",
+    "CoreStrategy",
+    "ExecutedInfo",
+    "FixedCommission",
+    "FixedSlippage",
+    "Order",
+    "PercentCommission",
+    "PercentSlippage",
+    "Position",
+    "SimBroker",
+    "SlippageModel",
+    "Stats",
+    "Strategy",
+    "TieredCommission",
+    "TimeFrame",
+    "Trade",
+    "_notify_order",
+    "run_backtest",
+]

@@ -16,7 +16,7 @@ class DataFeed(DataContainer, LineRoot):
         LineRoot._base_init(self, **kwargs)
         
         # Wrap raw arrays in LineSeries
-        self.lines.datetime = LineSeries(self._datetime)
+        self.lines.datetime = LineSeries(self._datetime, is_datetime=True)
         self.lines.open = LineSeries(self._open)
         self.lines.high = LineSeries(self._high)
         self.lines.low = LineSeries(self._low)

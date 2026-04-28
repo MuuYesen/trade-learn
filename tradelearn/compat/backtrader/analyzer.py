@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Dict
-from tradelearn.backtest.core.models import BaseAnalyzer
+from tradelearn.backtest.core.models import BaseAnalyzer, Stats
 from .base import MetaParams
 
 class Analyzer(BaseAnalyzer, metaclass=MetaParams):
@@ -33,6 +33,12 @@ class Analyzer(BaseAnalyzer, metaclass=MetaParams):
 
     def on_bar(self, bar: Any) -> None:
         """Deprecated for Post Analyzers. Kept for Streaming Analyzers."""
+        pass
+
+    def on_start(self) -> None:
+        pass
+
+    def on_end(self, stats: Stats) -> None:
         pass
 
     def get_analysis(self) -> Dict[str, Any]:

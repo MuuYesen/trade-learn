@@ -171,10 +171,10 @@ class Lines:
     def __len__(self): return len(self._lines)
 
 class LineSeries:
-    def __init__(self, values: Any) -> None:
+    def __init__(self, values: Any, is_datetime: bool = False) -> None:
         self._values = np.asarray(values, dtype=np.float64)
         self._cursor = 0
-        self._is_datetime = False
+        self._is_datetime = is_datetime
         self.min_period = 0
 
     def datetime(self, ago: int = 0) -> Any:
@@ -201,10 +201,10 @@ class LineSeries:
 
     def __getitem__(self, ago: Any) -> Any:
         if ago == 0:
-            return self._values[self._cursor]
+            return self._format_value(self._values[self._cursor])
         if ago == -1:
             idx = self._cursor - 1
-            return self._values[idx] if idx >= 0 else np.nan
+            return self._format_value(self._values[idx]) if idx >= 0 else np.nan
         if not isinstance(ago, (int, slice, np.integer)):
             # Support indexing by data object (common in multi-data strategies)
             return self
@@ -213,7 +213,14 @@ class LineSeries:
         idx = self._cursor + int(ago)
         if idx < 0 or idx >= len(self._values):
             return np.nan
-        return self._values[idx]
+        return self._format_value(self._values[idx])
+
+    def _format_value(self, value: Any) -> Any:
+        if not self._is_datetime:
+            return value
+        if pd.isna(value):
+            return None
+        return pd.to_datetime(value, unit='s' if abs(value) < 1e11 else 'ms', utc=True)
 
     def __call__(self, ago: int = 0) -> LineSeries:
         return DelayedLine(self, ago)
@@ -222,6 +229,8 @@ class LineSeries:
         import pandas as pd
         val = self[ago]
         if pd.isna(val): return None
+        if self._is_datetime:
+            return pd.to_datetime(val)
         return pd.to_datetime(val, unit='s' if val < 1e11 else 'ms')
 
     def __bool__(self) -> bool:
