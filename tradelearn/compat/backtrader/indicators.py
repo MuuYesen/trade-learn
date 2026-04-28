@@ -1,8 +1,12 @@
 from __future__ import annotations
-import pandas as pd
-import numpy as np
+
 import inspect
-from typing import Any, Optional
+
+import numpy as np
+import pandas as pd
+
+from tradelearn.backtest.core.indicator_cache import BatchIndicatorCache
+
 
 class Params:
     def __init__(self, **kwargs):
@@ -168,6 +172,47 @@ def _series(data, target_len=None):
         res = pd.concat([pd.Series([np.nan]*(target_len-len(res))), res]).reset_index(drop=True)
     return res
 
+def _source_feed(data):
+    if hasattr(data, "_frame"):
+        return data
+    buffer = getattr(data, "_buffer", None)
+    if buffer is not None and hasattr(buffer, "_source"):
+        return buffer._source
+    source = getattr(data, "_source", None)
+    if source is not None:
+        return _source_feed(source)
+    if hasattr(data, "data"):
+        return _source_feed(data.data)
+    return None
+
+def _line_arg(data, name="close"):
+    if hasattr(data, name):
+        return getattr(data, name)
+    if hasattr(data, "lines"):
+        return data.lines[0]
+    return data
+
+def _resolve_indicator_arg(arg):
+    if hasattr(arg, "_values"):
+        return pd.Series(arg._values)
+    if hasattr(arg, "lines"):
+        return pd.Series(arg.lines[0]._values)
+    return arg
+
+def _cached_series(name, data, func, *args, **kwargs):
+    from .base import _G
+
+    resolved_args = tuple(_resolve_indicator_arg(arg) for arg in args)
+    strategy = _G.current_strategy
+    feed = _source_feed(data)
+    if strategy is None or feed is None:
+        return func(*resolved_args, **kwargs)
+    cache = getattr(strategy, "_bt_indicator_batch_cache", None)
+    if cache is None or getattr(cache, "_frame", None) is not feed._frame:
+        cache = BatchIndicatorCache(feed)
+        strategy._bt_indicator_batch_cache = cache
+    return pd.Series(cache.precompute(name, func, *args, **kwargs)._values)
+
 def _wrap(data, values, min_period=0):
     from tradelearn.compat.backtrader.strategy import LineSeries
     obj = LineSeries(values.to_numpy())
@@ -184,8 +229,13 @@ class SMA(Indicator):
     lines = ('sma',)
     params = (('period', 30),)
     def __init__(self, *args, **kwargs):
-        s = _series(self.data)
-        res = s.rolling(self.p.period).mean()
+        res = _cached_series(
+            "bt.sma",
+            self.data,
+            lambda close, period: pd.Series(close).rolling(period).mean(),
+            _line_arg(self.data),
+            self.p.period,
+        )
         self.lines.sma = _wrap(self.data, res, min_period=_base_p(self.data) + self.p.period - 1)
 
 MovingAverageSimple = SMA
@@ -195,8 +245,13 @@ class EMA(Indicator):
     lines = ('ema',)
     params = (('period', 30),)
     def __init__(self, *args, **kwargs):
-        s = _series(self.data)
-        res = bt_ema(s, self.p.period)
+        res = _cached_series(
+            "bt.ema",
+            self.data,
+            lambda close, period: bt_ema(pd.Series(close), period),
+            _line_arg(self.data),
+            self.p.period,
+        )
         self.lines.ema = _wrap(self.data, res, min_period=_base_p(self.data) + self.p.period - 1)
 
 ExponentialMovingAverage = EMA
@@ -206,7 +261,7 @@ class MACD(Indicator):
     lines = ('macd', 'signal', 'histo')
     params = (('period_me1', 12), ('period_me2', 26), ('period_signal', 9))
     def __init__(self, *args, **kwargs):
-        s = _series(self.data)
+        s = _cached_series("bt.series", self.data, lambda close: pd.Series(close), _line_arg(self.data))
         me1 = bt_ema(s, self.p.period_me1)
         me2 = bt_ema(s, self.p.period_me2)
         macd_val = me1 - me2
@@ -221,7 +276,7 @@ class RSI(Indicator):
     lines = ('rsi',)
     params = (('period', 14), ('movav', None))
     def __init__(self, *args, **kwargs):
-        s = _series(self.data)
+        s = _cached_series("bt.series", self.data, lambda close: pd.Series(close), _line_arg(self.data))
         delta = s.diff()
         gain = delta.clip(lower=0.0)
         loss = (-delta.clip(upper=0.0))
@@ -235,7 +290,7 @@ class RSI(Indicator):
 
 class RSI_SMA(RSI):
     def __init__(self, *args, **kwargs):
-        s = _series(self.data)
+        s = _cached_series("bt.series", self.data, lambda close: pd.Series(close), _line_arg(self.data))
         delta = s.diff()
         gain = delta.clip(lower=0.0)
         loss = (-delta.clip(upper=0.0))
@@ -251,9 +306,9 @@ class ATR(Indicator):
     lines = ('atr',)
     params = (('period', 14),)
     def __init__(self, *args, **kwargs):
-        h = _series(getattr(self.data, 'high', self.data))
-        l = _series(getattr(self.data, 'low', self.data))
-        c = _series(getattr(self.data, 'close', self.data))
+        h = _cached_series("bt.high", self.data, lambda high: pd.Series(high), _line_arg(self.data, "high"))
+        l = _cached_series("bt.low", self.data, lambda low: pd.Series(low), _line_arg(self.data, "low"))
+        c = _cached_series("bt.close", self.data, lambda close: pd.Series(close), _line_arg(self.data, "close"))
         tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
         tr.iloc[0] = np.nan
         atr = bt_wilder(tr, self.p.period)
@@ -262,9 +317,9 @@ class ATR(Indicator):
 class TrueRange(Indicator):
     lines = ('tr',)
     def __init__(self, *args, **kwargs):
-        h = _series(getattr(self.data, 'high', self.data))
-        l = _series(getattr(self.data, 'low', self.data))
-        c = _series(getattr(self.data, 'close', self.data))
+        h = _cached_series("bt.high", self.data, lambda high: pd.Series(high), _line_arg(self.data, "high"))
+        l = _cached_series("bt.low", self.data, lambda low: pd.Series(low), _line_arg(self.data, "low"))
+        c = _cached_series("bt.close", self.data, lambda close: pd.Series(close), _line_arg(self.data, "close"))
         tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
         tr.iloc[0] = np.nan
         self.lines.tr = _wrap(self.data, tr, min_period=_base_p(self.data) + 1)
@@ -326,8 +381,13 @@ class Lowest(Indicator):
     lines = ('lowest',)
     params = (('period', 30),)
     def __init__(self, *args, **kwargs):
-        s = _series(self.data)
-        res = s.rolling(self.p.period).min()
+        res = _cached_series(
+            "bt.lowest",
+            self.data,
+            lambda values, period: pd.Series(values).rolling(period).min(),
+            _line_arg(self.data),
+            self.p.period,
+        )
         base = _base_p(self.data)
         self.lines.lowest = _wrap(self.data, res, min_period=base + self.p.period - 1)
 
@@ -335,8 +395,13 @@ class Highest(Indicator):
     lines = ('highest',)
     params = (('period', 30),)
     def __init__(self, *args, **kwargs):
-        s = _series(self.data)
-        res = s.rolling(self.p.period).max()
+        res = _cached_series(
+            "bt.highest",
+            self.data,
+            lambda values, period: pd.Series(values).rolling(period).max(),
+            _line_arg(self.data),
+            self.p.period,
+        )
         base = _base_p(self.data)
         self.lines.highest = _wrap(self.data, res, min_period=base + self.p.period - 1)
 
@@ -344,8 +409,8 @@ class DonchianChannels(Indicator):
     lines = ('upper', 'lower', 'middle')
     params = (('period', 20),)
     def __init__(self, *args, **kwargs):
-        hi = _series(getattr(self.data, 'high', self.data))
-        lo = _series(getattr(self.data, 'low', self.data))
+        hi = _cached_series("bt.high", self.data, lambda high: pd.Series(high), _line_arg(self.data, "high"))
+        lo = _cached_series("bt.low", self.data, lambda low: pd.Series(low), _line_arg(self.data, "low"))
         upper = hi.rolling(self.p.period).max()
         lower = lo.rolling(self.p.period).min()
         base = _base_p(self.data)

@@ -126,6 +126,8 @@ class BatchIndicatorCache:
                 return self._frame[title_name]
         if isinstance(arg, str) and arg in self._frame.columns:
             return self._frame[arg]
+        if hasattr(arg, "_values"):
+            return pd.Series(arg._values)
         return arg
 
     @staticmethod

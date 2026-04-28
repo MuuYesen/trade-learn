@@ -1,9 +1,13 @@
 from __future__ import annotations
-from typing import Any, Callable, List, Dict
+
+from typing import Any, Callable
+
 import numpy as np
-import pandas as pd
-from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
+
+from tradelearn.backtest.core.indicator_cache import BatchIndicatorCache
 from tradelearn.backtest.core.models import Order
+from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
+
 
 class BacktestingDataProxy:
     """Proxy for data to support backtesting.py style capitalized attributes and indexing."""
@@ -98,6 +102,7 @@ class Strategy(CoreStrategy):
         self._bt_data = None
         self._bt_position = PositionProxy(self)
         self._indicator_cache = {}
+        self._batch_indicator_cache = None
         self._trades = []
 
     def notify_trade(self, trade: Any):
@@ -114,7 +119,7 @@ class Strategy(CoreStrategy):
     def position(self) -> Any:
         return self._bt_position
 
-    def I(self, func: Callable, *args, **kwargs) -> Any:
+    def I(self, func: Callable, *args, **kwargs) -> Any:  # noqa: E743
         """Indicator wrapper."""
         # backtesting.py indicators are computed ONCE on the full data in init()
         # and then they advance.
@@ -122,12 +127,23 @@ class Strategy(CoreStrategy):
         cached = self._indicator_cache.get(cache_key)
         if cached is not None:
             return cached
-        res = func(*args, **kwargs)
+        batch_cache = self._get_batch_indicator_cache()
+        indicator_name = getattr(func, "name", None) or getattr(func, "__name__", None)
+        if indicator_name is None:
+            indicator_name = func.__class__.__name__
+        elif indicator_name == "<lambda>":
+            indicator_name = f"{indicator_name}:{id(func)}"
+        line = batch_cache.precompute(indicator_name, getattr(func, "compute", func), *args, **kwargs)
         # We need to return something that, when indexed with [-1], 
         # returns the value at the CURRENT cursor.
-        proxy = IndicatorProxy(res, self.datas[0])
+        proxy = IndicatorProxy(line._values, self.datas[0])
         self._indicator_cache[cache_key] = proxy
         return proxy
+
+    def _get_batch_indicator_cache(self) -> BatchIndicatorCache:
+        if self._batch_indicator_cache is None:
+            self._batch_indicator_cache = BatchIndicatorCache(self.datas[0])
+        return self._batch_indicator_cache
 
     def _indicator_cache_key(self, func: Callable, args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[Any, ...]:
         return (

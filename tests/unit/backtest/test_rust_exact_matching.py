@@ -9,11 +9,16 @@ from tradelearn.backtest.core.data import DataContainer, RollingBarBuffer
 from tradelearn.backtest.core.engine import _build_bar_advancers, _build_data_advance_plan
 from tradelearn.backtest.core.models import Order
 from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
-from tradelearn.compat.backtrader.base import LineSeries
-from tradelearn.compat.backtrader import Cerebro, DataFeed, Strategy
 from tradelearn.compat.backtesting.backtest import Backtest
-from tradelearn.compat.backtesting.strategy import BacktestingDataProxy, IndicatorProxy, PositionProxy
+from tradelearn.compat.backtesting.strategy import (
+    BacktestingDataProxy,
+    IndicatorProxy,
+    PositionProxy,
+)
 from tradelearn.compat.backtesting.strategy import Strategy as BacktestingStrategy
+from tradelearn.compat.backtrader import Cerebro, DataFeed, Strategy
+from tradelearn.compat.backtrader import indicators as btind
+from tradelearn.compat.backtrader.base import LineSeries
 
 
 def _match(
@@ -1018,16 +1023,54 @@ def test_backtesting_strategy_I_caches_batch_indicator_results() -> None:
         return pd.Series(close).rolling(period).mean()
 
     class CachedIndicatorStrategy(BacktestingStrategy):
+        cache_seen = False
+
         def init(self) -> None:
             self.first = self.I(counted_indicator, self.data.Close, period=2)
             self.second = self.I(counted_indicator, self.data.Close, period=2)
 
         def next(self) -> None:
-            pass
+            type(self).cache_seen = self._batch_indicator_cache is not None
 
-    Backtest(data, CachedIndicatorStrategy, cash=1000.0).run()
+    CachedIndicatorStrategy.cache_seen = False
+    bt = Backtest(data, CachedIndicatorStrategy, cash=1000.0)
+    bt.run()
 
     assert calls["count"] == 1
+    assert CachedIndicatorStrategy.cache_seen is True
+
+
+def test_backtrader_indicators_use_strategy_batch_cache_without_strategy_i_api() -> None:
+    data = pd.DataFrame(
+        {
+            "open": [10.0, 11.0, 12.0, 13.0],
+            "high": [10.0, 11.0, 12.0, 13.0],
+            "low": [10.0, 11.0, 12.0, 13.0],
+            "close": [10.0, 11.0, 12.0, 13.0],
+            "volume": [1000.0, 1000.0, 1000.0, 1000.0],
+        },
+        index=pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"], utc=True),
+    )
+
+    class CachedBtIndicatorStrategy(Strategy):
+        cache_seen = False
+
+        def __init__(self) -> None:
+            assert not hasattr(type(self), "I")
+            self.first = btind.SMA(self.data.close, period=2)
+            self.second = btind.SMA(self.data.close, period=2)
+
+        def next(self) -> None:
+            type(self).cache_seen = hasattr(self, "_bt_indicator_batch_cache")
+
+    CachedBtIndicatorStrategy.cache_seen = False
+    cerebro = Cerebro()
+    cerebro.adddata(DataFeed(data))
+    cerebro.addstrategy(CachedBtIndicatorStrategy)
+
+    cerebro.run()
+
+    assert CachedBtIndicatorStrategy.cache_seen is True
 
 
 def test_backtesting_strategy_I_does_not_merge_distinct_lambda_indicators() -> None:
