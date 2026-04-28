@@ -6,11 +6,9 @@ import pandas as pd
 import pytest
 
 import tradelearn
-from tradelearn import ta
 from tradelearn.backtest import (
     Analyzer,
     BarRangeSlippage,
-    BatchIndicatorCache,
     Cerebro,
     CNAStockCommission,
     CommissionModel,
@@ -25,6 +23,7 @@ from tradelearn.backtest import (
     Strategy,
     TieredCommission,
 )
+from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
 from tradelearn.metrics import max_drawdown, sharpe
 
 
@@ -314,63 +313,9 @@ def test_cerebro_aligns_secondary_data_to_primary_clock() -> None:
     ]
 
 
-def test_strategy_i_uses_batch_indicator_cache_for_declared_indicators() -> None:
-    class CachedSmaStrategy(Strategy):
-        def __init__(self) -> None:
-            self.sma = self.I(ta.sma, self.data.close, period=3)
-            self.same_sma = self.I(ta.sma, self.data.close, period=3)
-            self.values: list[float] = []
-            self.previous_values: list[float] = []
-
-        def next(self) -> None:
-            self.values.append(self.sma[0])
-            self.previous_values.append(self.sma[-1])
-
-    cerebro = Cerebro()
-    cerebro.adddata(bars())
-    cerebro.addstrategy(CachedSmaStrategy)
-
-    [strategy] = cerebro.run()
-
-    assert isinstance(strategy._batch_indicator_cache, BatchIndicatorCache)
-    assert strategy.same_sma is strategy.sma
-    assert pd.isna(strategy.values[0])
-    assert pd.isna(strategy.values[1])
-    assert strategy.values[2] == 11.0
-    assert pd.isna(strategy.previous_values[0])
-    assert pd.isna(strategy.previous_values[1])
-    assert pd.isna(strategy.previous_values[2])
-
-
-def test_strategy_i_returns_named_lines_for_multi_output_indicators() -> None:
-    def bands(close: pd.Series) -> pd.DataFrame:
-        return pd.DataFrame(
-            {
-                "fast": close.rolling(2).mean(),
-                "slow": close.rolling(3).mean(),
-            }
-        )
-
-    class CachedBandsStrategy(Strategy):
-        def __init__(self) -> None:
-            self.bands = self.I(bands, self.data.close, name="bands")
-            self.values: list[tuple[float, float]] = []
-
-        def next(self) -> None:
-            self.values.append((self.bands.fast[0], self.bands["slow"][0]))
-
-    cerebro = Cerebro()
-    cerebro.adddata(bars())
-    cerebro.addstrategy(CachedBandsStrategy)
-
-    [strategy] = cerebro.run()
-
-    assert sorted(strategy.bands.keys()) == ["fast", "slow"]
-    assert pd.isna(strategy.values[0][0])
-    assert pd.isna(strategy.values[0][1])
-    assert strategy.values[1][0] == 10.5
-    assert pd.isna(strategy.values[1][1])
-    assert strategy.values[2] == (11.5, 11.0)
+def test_core_and_backtrader_strategy_do_not_expose_backtesting_indicator_api() -> None:
+    assert not hasattr(CoreStrategy(), "I")
+    assert not hasattr(Strategy, "I")
 
 
 def test_strategy_addminperiod_skips_next_until_warmup_finishes() -> None:

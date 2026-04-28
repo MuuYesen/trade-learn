@@ -117,54 +117,6 @@ class Strategy:
         if indicator not in self._indicators:
             self._indicators.append(indicator)
 
-    def I(self, func: Any, *args: Any, name: str | None = None, **kwargs: Any) -> Any:  # noqa: E743
-        """Declare a vectorized indicator and return cursor-aware line proxies."""
-        indicator_name = name or getattr(func, "name", None) or getattr(func, "__name__", None)
-        if indicator_name is None:
-            indicator_name = func.__class__.__name__
-        compute = getattr(func, "compute", func)
-
-        cache = self._get_batch_indicator_cache()
-        if cache is not None:
-            from tradelearn.backtest.core.indicator_cache import IndicatorBundle
-
-            lines = cache.precompute_many(indicator_name, compute, *args, **kwargs)
-            indicator = next(iter(lines.values())) if len(lines) == 1 else IndicatorBundle(lines)
-            self._register_indicator(indicator)
-            return indicator
-
-        result = compute(*args, **kwargs)
-        indicator = self._wrap_indicator_result(result)
-        self._register_indicator(indicator)
-        return indicator
-
-    def _get_batch_indicator_cache(self) -> Any | None:
-        data = self.data or (self.datas[0] if self.datas else None)
-        if data is None or not hasattr(data, "_frame"):
-            return None
-        cache = getattr(self, "_batch_indicator_cache", None)
-        if cache is None or getattr(cache, "_frame", None) is not data._frame:
-            from tradelearn.backtest.core.indicator_cache import BatchIndicatorCache
-
-            cache = BatchIndicatorCache(data)
-            self._batch_indicator_cache = cache
-        return cache
-
-    def _wrap_indicator_result(self, result: Any) -> Any:
-        import numpy as np
-        import pandas as pd
-
-        from tradelearn.backtest.core.indicator_cache import IndicatorBundle
-        from tradelearn.compat.backtrader.base import LineSeries
-
-        if isinstance(result, pd.DataFrame):
-            return IndicatorBundle(
-                {str(column): LineSeries(result[column].to_numpy()) for column in result.columns}
-            )
-        if isinstance(result, pd.Series):
-            return LineSeries(result.to_numpy())
-        return LineSeries(np.asarray(result))
-
     def __len__(self) -> int:
         if self.data is not None:
             return len(self.data)

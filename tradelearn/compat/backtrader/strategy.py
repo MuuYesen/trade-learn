@@ -5,16 +5,11 @@ The core backtest API already follows backtrader's line convention:
 module exposes that implementation under ``tradelearn.compat.backtrader``.
 """
 
-from tradelearn.backtest.core.models import (
-    ExecutedInfo,
-    Order,
-    Position,
-    Trade,
-    Params as CoreParams
-)
-from .base import set_current_data, set_current_strategy, LineRoot, Params, LineSeries, _G
-from .datafeed import DataFeed
+from tradelearn.backtest.core.models import ExecutedInfo, Order, Position, Trade
 from tradelearn.backtest.core.strategy import Strategy as _BaseStrategy
+from tradelearn.compat.backtrader.base import _G, LineRoot, LineSeries, Params, set_current_data
+from tradelearn.compat.backtrader.datafeed import DataFeed
+
 
 class Strategy(_BaseStrategy, LineRoot):
     """Backtrader-compatible Strategy that maintains data context."""
