@@ -11,6 +11,26 @@ class BacktestingDataProxy:
         self._feed = data_feed
         self._line_cache: dict[str, IndicatorProxy] = {}
 
+    @property
+    def Open(self) -> Any:
+        return self._line_or_array("open")
+
+    @property
+    def High(self) -> Any:
+        return self._line_or_array("high")
+
+    @property
+    def Low(self) -> Any:
+        return self._line_or_array("low")
+
+    @property
+    def Close(self) -> Any:
+        return self._line_or_array("close")
+
+    @property
+    def Volume(self) -> Any:
+        return self._line_or_array("volume")
+
     def __getattr__(self, name: str) -> Any:
         mapping = {
             "Open": "open",
@@ -20,6 +40,9 @@ class BacktestingDataProxy:
             "Volume": "volume"
         }
         core_name = mapping.get(name, name.lower())
+        return self._line_or_array(core_name)
+
+    def _line_or_array(self, core_name: str) -> Any:
         arr = self._feed.get_array(core_name)
         if getattr(self._feed, '_cursor', -1) < 0:
             return arr
