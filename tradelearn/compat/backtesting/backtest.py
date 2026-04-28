@@ -28,7 +28,7 @@ class Backtest:
         # Internal state to match run_backtest expectations
         self.datas = [DataFeed(data)]
         self.strats = [(strategy, (), {})]
-        self.match_mode = 'bt' # Default to BT mode for better parity with backtesting.py
+        self.match_mode = 'smart' # Use smart mode for higher performance
         from tradelearn.compat.backtrader.sizer import FixedSize
         self._sizer_spec = (FixedSize, {})
         self.broker = RustBroker(cash=cash, commission=commission)

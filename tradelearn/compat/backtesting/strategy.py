@@ -89,9 +89,11 @@ class Strategy(CoreStrategy):
         data = data or self.datas[0]
         if 0 < size < 1:
             equity = self.broker.getvalue()
-            # Use current price
+            # Use current price adjusted for commission to match original logic
             price = data.get_array('close')[data._cursor]
-            size = (equity * size) / price
+            comm_ratio = getattr(self.broker, 'commission_ratio', 0.0)
+            adjusted_price = price * (1 + comm_ratio)
+            size = int((equity * size) / adjusted_price)
         
         return super().buy(data=data, size=size, price=limit or stop, 
                            exectype=Order.Limit if limit else Order.Stop if stop else Order.Market)
@@ -101,21 +103,23 @@ class Strategy(CoreStrategy):
         if 0 < size < 1:
             equity = self.broker.getvalue()
             price = data.get_array('close')[data._cursor]
-            size = (equity * size) / price
+            comm_ratio = getattr(self.broker, 'commission_ratio', 0.0)
+            # For short, price is effectively lower due to commission
+            adjusted_price = price * (1 - comm_ratio)
+            size = int((equity * size) / adjusted_price)
             
         return super().sell(data=data, size=size, price=limit or stop,
                             exectype=Order.Limit if limit else Order.Stop if stop else Order.Market)
 
 class IndicatorProxy:
-    """Wraps an indicator array to support cursor-based indexing."""
-    def __init__(self, data: Any, feed: Any):
+    """Proxy for indicators and data to support backtesting.py syntax."""
+    def __init__(self, data: np.ndarray, feed: Any):
+        # We store as numpy array for speed
         self._data = np.array(data)
         self._feed = feed
+        self._cursor_ptr = None # Cache for feed._cursor reference
 
     def __array__(self, dtype=None, copy=None) -> np.ndarray:
-        # For pd.Series() and np.array() conversion
-        # During init(), cursor might be -1, return full array
-        # During next(), return only up to cursor
         cursor = self._feed._cursor
         if cursor < 0: return self._data
         return self._data[:cursor + 1]
@@ -124,12 +128,19 @@ class IndicatorProxy:
         cursor = self._feed._cursor
         if isinstance(key, int):
             if key < 0:
-                # [-1] means current cursor
-                return self._data[cursor + 1 + key]
-            return self._data[key]
+                # Relative indexing from CURRENT cursor
+                idx = cursor + 1 + key
+                if idx < 0: raise IndexError("Index out of bounds")
+                return self._data[idx]
+            else:
+                return self._data[key]
         elif isinstance(key, slice):
-            # Handle slices if needed, but usually it's just [-1] or [-2]
-            return self._data[:cursor + 1][key]
+            # Handle slices up to cursor
+            start = key.start if key.start is not None else 0
+            stop = key.stop if key.stop is not None else cursor + 1
+            if stop > cursor + 1: stop = cursor + 1
+            return self._data[start:stop:key.step]
+        return self._data[key]
 
     def __len__(self) -> int:
         return self._feed._cursor + 1
