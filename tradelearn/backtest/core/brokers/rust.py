@@ -198,7 +198,7 @@ class RustBroker(BaseBroker):
                         value=abs_size * exec_price * self._mult
                     )
                     signed_size = order.size if order.isbuy() else -order.size
-                    self._pos.update(signed_size, exec_price)
+                    # self._pos.update(signed_size, exec_price) - Strategy._on_fill will do this
                     self._active_cash -= comm
                     if order.isbuy(): self._active_cash -= abs_size * exec_price
                     else: self._active_cash += abs_size * exec_price

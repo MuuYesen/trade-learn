@@ -11,16 +11,23 @@ class DataContainer:
         self._cursor = -1
         
         # Common OHLCV arrays for fast access
+        def _get_col(df, names, default_val=0.0):
+            for n in names:
+                if n in df.columns: return df[n].to_numpy(dtype=np.float64)
+                if n.lower() in df.columns: return df[n.lower()].to_numpy(dtype=np.float64)
+                if n.capitalize() in df.columns: return df[n.capitalize()].to_numpy(dtype=np.float64)
+            return np.full(len(df), default_val, dtype=np.float64)
+
         if isinstance(data.index, pd.DatetimeIndex):
             self._datetime = data.index.values.astype('datetime64[s]').view(np.int64)
         else:
             self._datetime = data.index.to_numpy()
             
-        self._open = data["open"].to_numpy(dtype=np.float64)
-        self._high = data["high"].to_numpy(dtype=np.float64)
-        self._low = data["low"].to_numpy(dtype=np.float64)
-        self._close = data["close"].to_numpy(dtype=np.float64)
-        self._volume = data["volume"].to_numpy(dtype=np.float64)
+        self._open = _get_col(data, ["open", "Open"])
+        self._high = _get_col(data, ["high", "High"])
+        self._low = _get_col(data, ["low", "Low"])
+        self._close = _get_col(data, ["close", "Close"])
+        self._volume = _get_col(data, ["volume", "Volume"])
         
         # Store all columns in a dict for flexible access
         self._arrays: Dict[str, np.ndarray] = {

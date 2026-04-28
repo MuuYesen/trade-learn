@@ -86,6 +86,8 @@ def run_backtest(cerebro: Any) -> List[Any]:
         strategy.analyzers[name] = ana_inst
     
     # 3. Lifecycle Start
+    if hasattr(strategy, '_setup'):
+        strategy._setup()
     strategy.start()
     for ana in strategy.analyzers.values():
         if hasattr(ana, 'start'): ana.start()

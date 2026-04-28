@@ -5,6 +5,7 @@ import pandas as pd
 import inspect
 
 from tradelearn.backtest.core.models import Params, Order
+from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
 
 # Centralized context to avoid import-time shadowing
 class _GlobalContext:
