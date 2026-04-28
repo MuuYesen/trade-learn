@@ -23,7 +23,9 @@ def _build_bar_advancers(strategy: Any, datas: list[Any], indicators: list[Any])
             bar_advancers.append(advance)
             seen_advancer_ids.add(id(indicator))
     strategy_advance = getattr(strategy, '_advance', None)
-    if strategy_advance is not None:
+    strategy_lines = getattr(strategy, "lines", None)
+    strategy_has_lines = strategy_lines is None or len(strategy_lines) > 0
+    if strategy_advance is not None and strategy_has_lines:
         bar_advancers.append(strategy_advance)
     for attr, val in strategy.__dict__.items():
         if attr.startswith('_'):

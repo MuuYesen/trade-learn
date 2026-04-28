@@ -8,7 +8,7 @@ from tradelearn.backtest.core.brokers.rust import RustBroker
 from tradelearn.backtest.core.engine import _build_bar_advancers
 from tradelearn.backtest.core.models import Order
 from tradelearn.compat.backtrader.base import LineSeries
-from tradelearn.compat.backtrader import Cerebro, Strategy
+from tradelearn.compat.backtrader import Cerebro, DataFeed, Strategy
 from tradelearn.compat.backtesting.backtest import Backtest
 from tradelearn.compat.backtesting.strategy import BacktestingDataProxy, IndicatorProxy, PositionProxy
 from tradelearn.compat.backtesting.strategy import Strategy as BacktestingStrategy
@@ -260,6 +260,20 @@ def test_rust_broker_can_drain_buffer_without_reentering_engine() -> None:
     assert broker._orders_by_ref[77] is order
 
 
+def test_rust_broker_reuses_empty_order_buffer_result() -> None:
+    broker = RustBroker(match_mode="exact")
+    broker._engine = object()
+
+    broker.begin_order_buffering()
+    first = broker.drain_order_buffer()
+    broker.begin_order_buffering()
+    second = broker.drain_order_buffer()
+
+    assert first == ()
+    assert first is second
+    assert broker._order_submit_buffer == []
+
+
 def test_rust_broker_can_bind_order_refs_in_batch() -> None:
     broker = RustBroker(match_mode="exact")
     broker._engine = object()
@@ -471,6 +485,23 @@ def test_backtest_engine_does_not_advance_data_twice_from_strategy_attrs() -> No
     assert data.advance_calls == [0, 1, 2]
 
 
+def test_backtrader_datafeed_binds_ohlcv_lines_as_direct_attrs() -> None:
+    data = pd.DataFrame(
+        {
+            "open": [10.0],
+            "high": [11.0],
+            "low": [9.0],
+            "close": [10.5],
+            "volume": [1000.0],
+        },
+        index=pd.to_datetime(["2026-01-01"], utc=True),
+    )
+    feed = DataFeed(data)
+
+    assert feed.__dict__["close"] is feed.lines.close
+    assert feed.__dict__["open"] is feed.lines.open
+
+
 def test_bar_advance_plan_deduplicates_data_and_indicator_attrs() -> None:
     class Advancer:
         def __init__(self) -> None:
@@ -494,6 +525,25 @@ def test_bar_advance_plan_deduplicates_data_and_indicator_attrs() -> None:
 
     assert data.calls == [3]
     assert indicator.calls == [3]
+
+
+def test_bar_advance_plan_skips_empty_strategy_line_root() -> None:
+    class EmptyLines:
+        def __len__(self) -> int:
+            return 0
+
+    class StrategyWithEmptyLines:
+        def __init__(self) -> None:
+            self.lines = EmptyLines()
+            self.calls: list[int] = []
+
+        def _advance(self, cursor: int) -> None:
+            self.calls.append(cursor)
+
+    strategy = StrategyWithEmptyLines()
+
+    assert _build_bar_advancers(strategy, [], []) == ()
+    assert strategy.calls == []
 
 
 def test_line_series_previous_value_before_start_is_nan() -> None:

@@ -22,6 +22,13 @@ class DataFeed(DataContainer, LineRoot):
         self.lines.low = LineSeries(self._low)
         self.lines.close = LineSeries(self._close)
         self.lines.volume = LineSeries(self._volume)
+
+        self.datetime = self.lines.datetime
+        self.open = self.lines.open
+        self.high = self.lines.high
+        self.low = self.lines.low
+        self.close = self.lines.close
+        self.volume = self.lines.volume
         
         self._lines_list = [self.datetime, self.open, self.high, self.low, self.close, self.volume]
 

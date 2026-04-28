@@ -16,6 +16,9 @@ from tradelearn.backtest.core.models import (
 if TYPE_CHECKING:
     from tradelearn.backtest.core.strategy import Strategy
 
+OrderPayload = tuple[int, str, str, float, float | None, float | None]
+_EMPTY_ORDER_BUFFER: tuple[()] = ()
+
 class CommInfo:
     """Helper to simulate Backtrader's commission info."""
     def __init__(self, ratio: float):
@@ -57,7 +60,7 @@ class RustBroker(BaseBroker):
         self._rust_state_cache: tuple[int, float, float, float] | None = None
         self._step_fills_from_collect: list[Any] | None = None
         self._buffer_order_submissions = False
-        self._order_submit_buffer: list[tuple[int, str, str, float, float | None, float | None]] = []
+        self._order_submit_buffer: list[OrderPayload] = []
         # For 'bt' mode, we maintain state in Python
         self._pos = Position(size=0.0, price=0.0)
         self._active_cash = cash
@@ -139,11 +142,13 @@ class RustBroker(BaseBroker):
             )
             self.bind_rust_order_ref(provisional_ref, order_id)
 
-    def drain_order_buffer(self) -> list[tuple[int, str, str, float, float | None, float | None]]:
+    def drain_order_buffer(self) -> list[OrderPayload] | tuple[()]:
         """Return buffered order payloads without calling back into Rust."""
         buffered = self._order_submit_buffer
-        self._order_submit_buffer = []
         self._buffer_order_submissions = False
+        if not buffered:
+            return _EMPTY_ORDER_BUFFER
+        self._order_submit_buffer = []
         return buffered
 
     def bind_rust_order_ref(self, provisional_ref: int, rust_ref: int) -> None:
