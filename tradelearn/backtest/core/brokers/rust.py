@@ -50,6 +50,7 @@ class RustBroker(BaseBroker):
         self._close_prices = None
         self._curr_idx = 0
         self._orders: list[Order] = []
+        self._orders_by_ref: dict[int, Order] = {}
         self._pending_orders: list[Order] = []
         self._order_count = 0
         self._last_fill_idx = 0
@@ -128,6 +129,7 @@ class RustBroker(BaseBroker):
         )
         order.status = Order.Submitted
         self._orders.append(order)
+        self._orders_by_ref[order.ref] = order
         
         if self._uses_rust_matching():
             side_str = "buy" if is_buy else "sell"
@@ -155,7 +157,9 @@ class RustBroker(BaseBroker):
                 limit_price,
                 stop_price,
             )
+            self._orders_by_ref.pop(order.ref, None)
             order.ref = order_id
+            self._orders_by_ref[order.ref] = order
             order.status = Order.Accepted
         else:
             # BT Mode: Add to pending
@@ -190,7 +194,6 @@ class RustBroker(BaseBroker):
         self._curr_idx = i
         if self._uses_rust_matching():
             self._engine.step_open(i)
-            self._engine.step_close(i)
 
     def process_fills(self, strategy: Strategy, i: int) -> None:
         """Synchronize filled orders back to Python."""
@@ -199,7 +202,7 @@ class RustBroker(BaseBroker):
             if new_fills:
                 for fill in new_fills:
                     order_id, side_str, size, price, comm, _slippage, pnl = fill[:7]
-                    matched_order = next((o for o in self._orders if o.ref == order_id), None)
+                    matched_order = self._orders_by_ref.get(order_id)
                     if matched_order:
                         matched_order.status = Order.Completed
                         abs_size = abs(size)
