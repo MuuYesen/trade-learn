@@ -12,6 +12,7 @@ from tradelearn.backtest.core.indicator_cache import (
     IndicatorCache,
     RollingIndicatorCache,
 )
+from tradelearn.backtest.core.lines import DelayedLine, IndicatorLine, Lines, LineSeries
 from tradelearn.backtest.core.models import (
     BarRangeSlippage,
     BarSnapshot,
@@ -75,6 +76,10 @@ __all__ = [
     "FixedCommission",
     "FixedSlippage",
     "IndicatorCache",
+    "DelayedLine",
+    "IndicatorLine",
+    "Lines",
+    "LineSeries",
     "Order",
     "PercentCommission",
     "PercentSlippage",

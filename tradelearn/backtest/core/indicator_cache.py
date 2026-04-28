@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from tradelearn.compat.backtrader.base import LineSeries
+from tradelearn.backtest.core.lines import LineSeries
 
 
 class IndicatorBundle:

@@ -18,7 +18,7 @@ from tradelearn.compat.backtesting.strategy import (
 from tradelearn.compat.backtesting.strategy import Strategy as BacktestingStrategy
 from tradelearn.compat.backtrader import Cerebro, DataFeed, Strategy
 from tradelearn.compat.backtrader import indicators as btind
-from tradelearn.compat.backtrader.base import LineSeries
+from tradelearn.backtest.core.lines import LineSeries
 
 
 def _match(

@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 
 from tradelearn.backtest.core.data import RollingBarBuffer
-from tradelearn.compat.backtrader.base import LineSeries
+from tradelearn.backtest.core.lines import LineSeries
 from tradelearn.core import BrokerEvent, BrokerEventPump, StreamBar
 
 

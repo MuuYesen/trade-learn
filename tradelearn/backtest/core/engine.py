@@ -1,13 +1,10 @@
 from __future__ import annotations
-import numpy as np
-import pandas as pd
-from typing import Any, List
-from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
 
-# These are still needed for Backtrader compatibility
-from tradelearn.compat.backtrader.base import (
-    set_current_data, set_current_datas, set_current_strategy
-)
+from typing import Any, List
+
+import numpy as np
+
+from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
 
 
 def _build_bar_advancers(
@@ -66,15 +63,11 @@ def _build_data_advance_plan(datas: list[Any]) -> Any | None:
 def run_backtest(cerebro: Any) -> List[Any]:
     """Unified backtest engine that runs any strategy inheriting from core.Strategy."""
     strategy_cls, args, kwargs = cerebro.strats[0]
-    
-    # 1. Initialize Context for Compatibility Facades
-    if cerebro.datas:
-        set_current_data(cerebro.datas[0])
-        set_current_datas(cerebro.datas)
-    
-    set_current_strategy(None)
+    bind_strategy_context = getattr(cerebro, "_bind_strategy_context", None)
+
     strategy = strategy_cls(*args, **kwargs)
-    set_current_strategy(strategy)
+    if callable(bind_strategy_context):
+        bind_strategy_context(strategy)
     
     # Core attributes
     strategy.datas = cerebro.datas
@@ -84,10 +77,6 @@ def run_backtest(cerebro: Any) -> List[Any]:
     if hasattr(strategy, '_setup'):
         strategy._setup()
 
-    # Reset context after init
-    set_current_data(None)
-    set_current_datas([])
-    
     # ... (Rust Engine Initialization omitted for brevity but preserved in real file) ...
     # ---------------------------------------------------------
     # Rust Engine Initialization
@@ -96,7 +85,7 @@ def run_backtest(cerebro: Any) -> List[Any]:
     if isinstance(cerebro.broker, RustBroker):
         from tradelearn._rust import RustBacktestEngine
         data = cerebro.datas[0]
-        # Robustly handle both core.DataContainer and compat.backtrader.DataFeed
+        # Robustly handle both native containers and facade data feeds.
         if hasattr(data, '_datetime'):
             timestamps = data._datetime
             opens = data._open
@@ -332,9 +321,5 @@ def run_backtest(cerebro: Any) -> List[Any]:
     strategy.stop()
     for ana in strategy.analyzers.values():
         if hasattr(ana, 'stop'): ana.stop()
-
-    set_current_strategy(None)
-    set_current_data(None)
-    set_current_datas([])
 
     return [strategy]

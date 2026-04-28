@@ -73,35 +73,75 @@ class Cerebro:
             return self._run_event_mode()
         # Main execution logic orchestrated here
         from tradelearn.backtest.core.engine import run_backtest
-        return run_backtest(self)
+        self._prepare_strategy_context()
+        try:
+            return run_backtest(self)
+        finally:
+            self._reset_strategy_context()
+
+    def _prepare_strategy_context(self) -> None:
+        from tradelearn.compat.backtrader.base import (
+            set_current_data,
+            set_current_datas,
+            set_current_strategy,
+        )
+
+        if self.datas:
+            set_current_data(self.datas[0])
+            set_current_datas(self.datas)
+        else:
+            set_current_data(None)
+            set_current_datas([])
+        set_current_strategy(None)
+
+    def _bind_strategy_context(self, strategy: Any) -> None:
+        from tradelearn.compat.backtrader.base import set_current_strategy
+
+        set_current_strategy(strategy)
+
+    def _reset_strategy_context(self) -> None:
+        from tradelearn.compat.backtrader.base import (
+            set_current_data,
+            set_current_datas,
+            set_current_strategy,
+        )
+
+        set_current_strategy(None)
+        set_current_data(None)
+        set_current_datas([])
 
     def _run_event_mode(self) -> list[Strategy]:
         from tradelearn.backtest.core.event_runner import EventRunner, LiveDriver, PaperDriver
         from tradelearn.core import BrokerEventPump
 
+        self._prepare_strategy_context()
         strategy_cls, args, kwargs = self.strats[0]
-        strategy = strategy_cls(*args, **kwargs)
-        strategy.broker = self.broker
-        sizer_cls, sizer_kwargs = self._sizer_spec
-        strategy.setsizer(sizer_cls(**sizer_kwargs))
-        strategy.start()
+        try:
+            strategy = strategy_cls(*args, **kwargs)
+            self._bind_strategy_context(strategy)
+            strategy.broker = self.broker
+            sizer_cls, sizer_kwargs = self._sizer_spec
+            strategy.setsizer(sizer_cls(**sizer_kwargs))
+            strategy.start()
 
-        pump = self.kwargs.get("broker_event_pump")
-        if pump is None:
-            poller = self.kwargs.get("broker_event_poller", lambda: ())
-            pump = BrokerEventPump(poller)
-        runner = EventRunner(
-            strategy=strategy,
-            broker_event_pump=pump,
-            buffer_capacity=int(self.kwargs.get("buffer_capacity", 512)),
-        )
-        if self.mode == "paper":
-            bars = self.kwargs.get("event_bars", ())
-            PaperDriver(runner, bars).run_once()
-        else:
-            poller = self.kwargs.get("live_poller")
-            if poller is None:
-                raise ValueError("live mode requires live_poller")
-            LiveDriver(runner, poller).poll_once()
-        strategy.stop()
-        return [strategy]
+            pump = self.kwargs.get("broker_event_pump")
+            if pump is None:
+                poller = self.kwargs.get("broker_event_poller", lambda: ())
+                pump = BrokerEventPump(poller)
+            runner = EventRunner(
+                strategy=strategy,
+                broker_event_pump=pump,
+                buffer_capacity=int(self.kwargs.get("buffer_capacity", 512)),
+            )
+            if self.mode == "paper":
+                bars = self.kwargs.get("event_bars", ())
+                PaperDriver(runner, bars).run_once()
+            else:
+                poller = self.kwargs.get("live_poller")
+                if poller is None:
+                    raise ValueError("live mode requires live_poller")
+                LiveDriver(runner, poller).poll_once()
+            strategy.stop()
+            return [strategy]
+        finally:
+            self._reset_strategy_context()
