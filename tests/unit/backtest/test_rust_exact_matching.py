@@ -812,6 +812,19 @@ def test_line_series_previous_value_before_start_is_nan() -> None:
     assert line[0] == 1.0
 
 
+def test_line_series_hot_path_indexing_preserves_relative_semantics() -> None:
+    line = LineSeries([1.0, 2.0, 3.0, 4.0])
+
+    line._advance(2)
+
+    assert line[0] == 3.0
+    assert line[-1] == 2.0
+    assert line[-2] == 1.0
+    assert pd.isna(line[-3])
+    assert line[object()] is line
+    assert line[1:3].tolist() == [2.0, 3.0]
+
+
 def test_backtesting_position_proxy_uses_broker_size_fast_path() -> None:
     class FakeBroker:
         def __init__(self) -> None:

@@ -1,11 +1,14 @@
 from __future__ import annotations
-from typing import Any, List, Optional, Type, Union, TYPE_CHECKING
+
+import inspect
+from typing import Any
+
 import numpy as np
 import pandas as pd
-import inspect
 
-from tradelearn.backtest.core.models import Params, Order
+from tradelearn.backtest.core.models import Order, Params
 from tradelearn.backtest.core.strategy import Strategy as CoreStrategy
+
 
 # Centralized context to avoid import-time shadowing
 class _GlobalContext:
@@ -19,7 +22,7 @@ _G = _GlobalContext()
 def set_current_data(data: Any) -> None:
     _G.current_data = data
 
-def set_current_datas(datas: List[Any]) -> None:
+def set_current_datas(datas: list[Any]) -> None:
     _G.current_datas = datas
 
 def set_current_strategy(strategy: Any) -> None:
@@ -183,6 +186,7 @@ class LineSeries:
         self._is_datetime = is_datetime
         self._buffer = buffer
         self._buffer_name = buffer_name
+        self._series_cache = None
         self.min_period = 0
 
     def datetime(self, ago: int = 0) -> Any:
@@ -205,25 +209,45 @@ class LineSeries:
         self._cursor = cursor
 
     def __len__(self) -> int:
-        if self._buffer is not None:
-            return self._buffer.cursor + 1
+        buffer = self._buffer
+        if buffer is not None:
+            return buffer.cursor + 1
         return self._cursor + 1
 
     def __getitem__(self, ago: Any) -> Any:
+        values = self._values
+        buffer = self._buffer
         if ago == 0:
+            if not self._is_datetime:
+                if buffer is not None and self._buffer_name is not None:
+                    return buffer.value(self._buffer_name, ago=0)
+                cursor = self._cursor
+                if cursor < 0 or cursor >= len(values):
+                    return np.nan
+                return values[cursor]
             return self._format_value(self._current_value(0))
         if ago == -1:
+            if not self._is_datetime:
+                if buffer is not None and self._buffer_name is not None:
+                    return buffer.value(self._buffer_name, ago=1)
+                idx = self._cursor - 1
+                if idx < 0 or idx >= len(values):
+                    return np.nan
+                return values[idx]
             return self._format_value(self._current_value(1))
         if not isinstance(ago, (int, slice, np.integer)):
             # Support indexing by data object (common in multi-data strategies)
             return self
         if isinstance(ago, slice):
-            return self._values[ago]
-        cursor = self._buffer.cursor if self._buffer is not None else self._cursor
+            return values[ago]
+        cursor = buffer.cursor if buffer is not None else self._cursor
         idx = cursor + int(ago)
-        if idx < 0 or idx >= len(self._values):
+        if idx < 0 or idx >= len(values):
             return np.nan
-        return self._format_value(self._values[idx])
+        value = values[idx]
+        if not self._is_datetime:
+            return value
+        return self._format_value(value)
 
     def _current_value(self, ago: int) -> Any:
         if self._buffer is not None and self._buffer_name is not None:

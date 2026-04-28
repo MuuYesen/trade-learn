@@ -161,16 +161,27 @@ class Indicator(metaclass=MetaSimple):
 def _series(data, target_len=None):
     if data is None: return pd.Series()
     if hasattr(data, 'close'): # Backtrader default
-        res = pd.Series(data.close._values)
+        res = _line_series(data.close)
     elif hasattr(data, 'lines'):
-        res = pd.Series(data.lines[0]._values)
+        res = _line_series(data.lines[0])
     elif hasattr(data, '_values'):
-        res = pd.Series(data._values)
+        res = _line_series(data)
     else:
         res = pd.Series(data)
     if target_len and len(res) < target_len:
         res = pd.concat([pd.Series([np.nan]*(target_len-len(res))), res]).reset_index(drop=True)
     return res
+
+def _line_series(line):
+    cached = getattr(line, "_series_cache", None)
+    if cached is not None:
+        return cached
+    series = pd.Series(line._values)
+    try:
+        line._series_cache = series
+    except AttributeError:
+        pass
+    return series
 
 def _source_feed(data):
     if hasattr(data, "_frame"):
@@ -194,9 +205,9 @@ def _line_arg(data, name="close"):
 
 def _resolve_indicator_arg(arg):
     if hasattr(arg, "_values"):
-        return pd.Series(arg._values)
+        return _line_series(arg)
     if hasattr(arg, "lines"):
-        return pd.Series(arg.lines[0]._values)
+        return _line_series(arg.lines[0])
     return arg
 
 def _cached_series(name, data, func, *args, **kwargs):
