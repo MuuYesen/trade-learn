@@ -82,6 +82,7 @@ def load_data(symbol):
 def run_comparison(symbol):
     print(f"\nComparing results for {symbol}...")
     data = load_data(symbol)
+    bar_count = len(data)
     initial_cash = 500000 if symbol == 'BTCUSDT' else 5000
     
     # Load Original backtesting.py
@@ -124,7 +125,11 @@ def run_comparison(symbol):
         print(f"{label:<20} | {v_orig:>12.2f} | {v_tl:>12.2f} | {diff:>10.2f}")
     
     print("-" * 65)
+    orig_bars_per_sec = bar_count / orig_duration if orig_duration else 0.0
+    tl_bars_per_sec = bar_count / tl_duration if tl_duration else 0.0
+    bars_per_sec_speedup = tl_bars_per_sec / orig_bars_per_sec if orig_bars_per_sec else 0.0
     print(f"{'Duration [s]':<20} | {orig_duration:>12.4f} | {tl_duration:>12.4f} | {orig_duration/tl_duration:>10.2f}x")
+    print(f"{'Bars/s':<20} | {orig_bars_per_sec:>12,.0f} | {tl_bars_per_sec:>12,.0f} | {bars_per_sec_speedup:>10.2f}x")
     print("="*50)
 
 if __name__ == '__main__':

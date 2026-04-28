@@ -37,3 +37,4 @@ def test_backtesting_compare_results_runner_completes() -> None:
     assert result.returncode == 0, result.stderr
     assert "RESULTS COMPARISON: BTCUSDT" in result.stdout
     assert "RESULTS COMPARISON: ETHUSDT" in result.stdout
+    assert "Bars/s" in result.stdout
