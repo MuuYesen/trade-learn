@@ -108,10 +108,11 @@ backtesting.py 迁移层,维护 backtesting.py 专属语义:
 
 生产 Rust 执行核:
 
-- K 线撮合
-- portfolio / position / fill/order 语义
-- Rust BarRunner / primary-clock plan
-- PyO3 bindings
+- `types.rs`: Order、Fill、Position、Bar、Portfolio 等公共结构。
+- `matching.rs`: `exact` / `smart` K 线撮合逻辑。
+- `engine.rs`: `RustBacktestEngine`、订单推进、bar loop、portfolio 更新。
+- `runner.rs`: `RustBarRunner` / primary-clock / 多数据推进。
+- `lib.rs`: PyO3 bindings 和对 Python 暴露的稳定 API。
 
 Rust 负责高密度循环和撮合,Python 保留事件驱动策略 API 与生态兼容。
 

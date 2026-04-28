@@ -71,3 +71,20 @@ def test_project_structure_documents_core_boundaries() -> None:
 
     assert "不允许 import `tradelearn.backtest.*`" in text
     assert "回测专属 runtime 不上移到 `tradelearn/core/`" in text
+
+
+def test_rust_core_is_split_by_runtime_responsibility() -> None:
+    root = Path(__file__).parents[3]
+    rust_src = root / "rust" / "tradelearn-rust" / "src"
+    expected_modules = {
+        "engine.rs",
+        "lib.rs",
+        "matching.rs",
+        "runner.rs",
+        "types.rs",
+    }
+
+    actual_modules = {path.name for path in rust_src.glob("*.rs")}
+
+    assert actual_modules == expected_modules
+    assert not (rust_src / "core.rs").exists()

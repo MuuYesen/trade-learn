@@ -1,8 +1,14 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-pub mod core;
-use crate::core::*;
+pub mod engine;
+pub mod matching;
+pub mod runner;
+pub mod types;
+
+use crate::engine::*;
+use crate::matching::*;
+use crate::types::*;
 
 #[pyfunction]
 fn tradelearn_rust_version() -> &'static str {
