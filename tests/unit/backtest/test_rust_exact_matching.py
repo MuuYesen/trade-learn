@@ -396,6 +396,27 @@ def test_backtesting_position_proxy_uses_broker_size_fast_path() -> None:
     assert strategy.broker.size_calls == 2
 
 
+def test_backtesting_position_proxy_refreshes_after_broker_swap() -> None:
+    class FakeBroker:
+        def __init__(self, size: float) -> None:
+            self._size = size
+
+        def get_position_size(self) -> float:
+            return self._size
+
+    class FakeStrategy:
+        def __init__(self) -> None:
+            self.broker = FakeBroker(0.0)
+
+    strategy = FakeStrategy()
+    position = PositionProxy(strategy)
+
+    assert bool(position) is False
+    strategy.broker = FakeBroker(3.0)
+    assert bool(position) is True
+    assert position.size == 3.0
+
+
 def test_backtesting_indicator_proxy_relative_indexing() -> None:
     class Feed:
         _cursor = 2
@@ -434,6 +455,34 @@ def test_backtesting_data_proxy_reuses_line_proxy_after_cursor_starts() -> None:
 
     assert isinstance(first, IndicatorProxy)
     assert first is second
+
+
+def test_backtesting_data_proxy_caches_extra_line_proxy_after_cursor_starts() -> None:
+    class Feed:
+        def __init__(self) -> None:
+            self._cursor = 0
+            self.arrays = {
+                "open": [1.0, 2.0, 3.0],
+                "high": [1.0, 2.0, 3.0],
+                "low": [1.0, 2.0, 3.0],
+                "close": [1.0, 2.0, 3.0],
+                "volume": [1.0, 2.0, 3.0],
+                "factor": [4.0, 5.0, 6.0],
+            }
+
+        def get_array(self, name: str):
+            return self.arrays[name]
+
+    feed = Feed()
+    proxy = BacktestingDataProxy(feed)
+
+    first = proxy.Factor
+    second = proxy.Factor
+    assert isinstance(first, IndicatorProxy)
+    assert first is second
+
+    feed.arrays["factor"] = [7.0, 8.0, 9.0]
+    assert proxy.Factor is not first
 
 
 def test_cashvalue_notification_only_runs_when_strategy_overrides_hook() -> None:

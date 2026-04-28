@@ -105,72 +105,79 @@ def run_backtest(cerebro: Any) -> List[Any]:
             min_period = max(min_period, int(m))
     if min_period == 0: min_period = 1
 
-    already_advanced_ids = {id(d) for d in cerebro.datas}
-    already_advanced_ids.update(id(ind) for ind in indicators + indicators_bt)
-    strategy_attr_advancers = []
-    seen_advancer_ids = set(already_advanced_ids)
+    bar_advancers = []
+    seen_advancer_ids = set()
+    for d in cerebro.datas:
+        bar_advancers.append(d._advance)
+        seen_advancer_ids.add(id(d))
+    for ind in indicators + indicators_bt:
+        if hasattr(ind, '_advance') and id(ind) not in seen_advancer_ids:
+            bar_advancers.append(ind._advance)
+            seen_advancer_ids.add(id(ind))
+    strategy_advance = getattr(strategy, '_advance', None)
+    if strategy_advance is not None:
+        bar_advancers.append(strategy_advance)
     for attr, val in strategy.__dict__.items():
         if attr.startswith('_'):
             continue
         if id(val) in seen_advancer_ids:
             continue
         if hasattr(val, '_advance'):
-            strategy_attr_advancers.append(val._advance)
+            bar_advancers.append(val._advance)
             seen_advancer_ids.add(id(val))
+    bar_advancers = tuple(bar_advancers)
     notify_cashvalue = None
     if type(strategy).notify_cashvalue is not CoreStrategy.notify_cashvalue:
         notify_cashvalue = strategy.notify_cashvalue
+    broker = cerebro.broker
+    broker_step = broker.step if broker else None
+    broker_process_fills = broker.process_fills if broker else None
+    broker_getcash = broker.getcash if broker else None
+    broker_getvalue = broker.getvalue if broker else None
+    begin_order_buffering = getattr(broker, 'begin_order_buffering', None) if broker else None
+    flush_order_buffer = getattr(broker, 'flush_order_buffer', None) if broker else None
+    drain_order_buffer = getattr(broker, 'drain_order_buffer', None) if broker else None
+    strategy_next = strategy.next
     
     def on_bar(i: int, fills: list[Any] | None = None, cash: float | None = None,
                size: float | None = None, price: float | None = None) -> list[Any]:
-        # Advance data and indicators
-        for d in cerebro.datas: d._advance(i)
-        for ind in indicators: ind._advance(i)
-        for ind in indicators_bt:
-            if hasattr(ind, '_advance'): ind._advance(i)
-        
-        # Facade-specific step hook
-        if hasattr(strategy, '_advance'):
-            strategy._advance(i)
-        
-        # Advance any other LineSeries attributes (BT specific)
-        for advance in strategy_attr_advancers:
+        for advance in bar_advancers:
             advance(i)
         
         # Broker Match
-        if cerebro.broker:
+        if broker:
             if fills is None:
-                cerebro.broker.step(i)
+                broker_step(i)
             else:
-                cerebro.broker._curr_idx = i
-                cerebro.broker._step_fills_from_collect = fills
+                broker._curr_idx = i
+                broker._step_fills_from_collect = fills
                 if cash is not None and size is not None and price is not None:
-                    cerebro.broker._rust_state_cache = (i, cash, size, price)
+                    broker._rust_state_cache = (i, cash, size, price)
             if fills is None or fills:
-                cerebro.broker.process_fills(strategy, i)
+                broker_process_fills(strategy, i)
             if notify_cashvalue is not None:
-                notify_cashvalue(cerebro.broker.getcash(), cerebro.broker.getvalue())
+                notify_cashvalue(broker_getcash(), broker_getvalue())
 
         # Strategy Next
         if i >= min_period - 1:
-            if hasattr(cerebro.broker, 'begin_order_buffering'):
-                cerebro.broker.begin_order_buffering()
-                strategy.next()
+            if begin_order_buffering is not None:
+                begin_order_buffering()
+                strategy_next()
                 if fills is None:
-                    cerebro.broker.flush_order_buffer()
+                    flush_order_buffer()
                 else:
-                    return cerebro.broker.drain_order_buffer()
+                    return drain_order_buffer()
             else:
-                strategy.next()
+                strategy_next()
         return []
 
     use_rust_bar_loop = (
-        isinstance(cerebro.broker, RustBroker)
-        and getattr(cerebro.broker, "_engine", None) is not None
-        and hasattr(cerebro.broker._engine, "run_bar_loop")
+        isinstance(broker, RustBroker)
+        and getattr(broker, "_engine", None) is not None
+        and hasattr(broker._engine, "run_bar_loop")
     )
     if use_rust_bar_loop:
-        cerebro.broker._engine.run_bar_loop(cerebro.broker, on_bar, 0, limit)
+        broker._engine.run_bar_loop(broker, on_bar, 0, limit)
     else:
         for i in range(limit):
             on_bar(i)

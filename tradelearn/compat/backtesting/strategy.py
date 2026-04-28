@@ -19,6 +19,7 @@ class BacktestingDataProxy:
         self._low_proxy = IndicatorProxy(self._low_array, data_feed)
         self._close_proxy = IndicatorProxy(self._close_array, data_feed)
         self._volume_proxy = IndicatorProxy(self._volume_array, data_feed)
+        self._extra_line_cache: dict[str, tuple[Any, IndicatorProxy]] = {}
 
     @property
     def Open(self) -> Any:
@@ -53,30 +54,43 @@ class BacktestingDataProxy:
 
     def _line_or_array(self, core_name: str) -> Any:
         arr = self._feed.get_array(core_name)
-        if getattr(self._feed, '_cursor', -1) < 0:
+        if self._feed._cursor < 0:
             return arr
-        return IndicatorProxy(arr, self._feed)
+        cached = self._extra_line_cache.get(core_name)
+        if cached is not None and cached[0] is arr:
+            return cached[1]
+        line = IndicatorProxy(arr, self._feed)
+        self._extra_line_cache[core_name] = (arr, line)
+        return line
 
     def __len__(self) -> int:
-        cursor = getattr(self._feed, '_cursor', 0)
-        return cursor + 1
+        return self._feed._cursor + 1
 
 class PositionProxy:
     """Proxy for strategy.position."""
     def __init__(self, strategy: Strategy):
         self._strategy = strategy
+        self._size_getter_broker = None
+        self._size_getter = None
+
+    def _get_size_getter(self):
+        broker = self._strategy.broker
+        if broker is not self._size_getter_broker:
+            self._size_getter_broker = broker
+            self._size_getter = getattr(broker, "get_position_size", False)
+        return self._size_getter or None
 
     def __bool__(self) -> bool:
-        broker = self._strategy.broker
-        if hasattr(broker, "get_position_size"):
-            return broker.get_position_size() != 0
+        size_getter = self._get_size_getter()
+        if size_getter is not None:
+            return size_getter() != 0
         return self.size != 0
 
     @property
     def size(self) -> float:
-        broker = self._strategy.broker
-        if hasattr(broker, "get_position_size"):
-            return broker.get_position_size()
+        size_getter = self._get_size_getter()
+        if size_getter is not None:
+            return size_getter()
         return self._strategy.getposition().size
 
     def close(self):
