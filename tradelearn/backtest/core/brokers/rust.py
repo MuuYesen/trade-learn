@@ -56,6 +56,8 @@ class RustBroker(BaseBroker):
         self._last_fill_idx = 0
         self._rust_state_cache: tuple[int, float, float, float] | None = None
         self._step_fills_from_collect: list[Any] | None = None
+        self._buffer_order_submissions = False
+        self._order_submit_buffer: list[tuple[Order, str, str, float, float | None, float | None]] = []
         # For 'bt' mode, we maintain state in Python
         self._pos = Position(size=0.0, price=0.0)
         self._active_cash = cash
@@ -115,6 +117,70 @@ class RustBroker(BaseBroker):
     def getcommissioninfo(self, data: Any) -> CommInfo:
         return CommInfo(self.commission_ratio)
 
+    def begin_order_buffering(self) -> None:
+        """Delay Rust order submission until callbacks return."""
+        self._buffer_order_submissions = True
+
+    def flush_order_buffer(self) -> None:
+        """Submit buffered orders to Rust and update Python order refs."""
+        buffered = self._order_submit_buffer
+        self._order_submit_buffer = []
+        self._buffer_order_submissions = False
+        for order, side_str, ot_str, actual_size, limit_price, stop_price in buffered:
+            self._submit_to_rust_engine(
+                order,
+                side_str,
+                ot_str,
+                actual_size,
+                limit_price,
+                stop_price,
+            )
+
+    def _rust_order_payload(
+        self,
+        order: Order,
+        side_str: str,
+        actual_size: float,
+        price: float | None,
+    ) -> tuple[str, str, float, float | None, float | None]:
+        otypes = {
+            Order.Market: "market",
+            Order.Limit: "limit",
+            Order.Stop: "stop",
+            Order.StopLimit: "stop_limit",
+        }
+        ot_str = otypes.get(order.exectype, "market")
+        limit_price = None
+        stop_price = None
+        if order.exectype == Order.Limit:
+            limit_price = price
+        elif order.exectype == Order.Stop:
+            stop_price = price
+        elif order.exectype == Order.StopLimit:
+            stop_price = price
+            limit_price = order.pricelimit
+        return side_str, ot_str, actual_size, limit_price, stop_price
+
+    def _submit_to_rust_engine(
+        self,
+        order: Order,
+        side_str: str,
+        ot_str: str,
+        actual_size: float,
+        limit_price: float | None,
+        stop_price: float | None,
+    ) -> None:
+        order_id = self._engine.submit_order(
+            side_str,
+            ot_str,
+            actual_size,
+            limit_price,
+            stop_price,
+        )
+        self._orders_by_ref.pop(order.ref, None)
+        order.ref = order_id
+        self._orders_by_ref[order.ref] = order
+
     def _submit(
         self,
         owner: Strategy,
@@ -145,33 +211,11 @@ class RustBroker(BaseBroker):
         
         if self._uses_rust_matching():
             side_str = "buy" if is_buy else "sell"
-            otypes = {
-                Order.Market: "market",
-                Order.Limit: "limit",
-                Order.Stop: "stop",
-                Order.StopLimit: "stop_limit",
-            }
-            ot_str = otypes.get(order.exectype, "market")
-            limit_price = None
-            stop_price = None
-            if order.exectype == Order.Limit:
-                limit_price = price
-            elif order.exectype == Order.Stop:
-                stop_price = price
-            elif order.exectype == Order.StopLimit:
-                stop_price = price
-                limit_price = order.pricelimit
-            # Rust returns the assigned order_id
-            order_id = self._engine.submit_order(
-                side_str,
-                ot_str,
-                actual_size,
-                limit_price,
-                stop_price,
-            )
-            self._orders_by_ref.pop(order.ref, None)
-            order.ref = order_id
-            self._orders_by_ref[order.ref] = order
+            payload = self._rust_order_payload(order, side_str, actual_size, price)
+            if self._buffer_order_submissions:
+                self._order_submit_buffer.append((order, *payload))
+            else:
+                self._submit_to_rust_engine(order, *payload)
             order.status = Order.Accepted
         else:
             # BT Mode: Add to pending

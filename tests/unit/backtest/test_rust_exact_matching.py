@@ -204,6 +204,33 @@ def test_rust_broker_uses_combined_step_snapshot_when_available() -> None:
     assert engine.collect_calls == 1
 
 
+def test_rust_broker_can_buffer_order_submissions_for_rust_driven_callbacks() -> None:
+    class FakeEngine:
+        def __init__(self) -> None:
+            self.submissions: list[tuple] = []
+
+        def submit_order(self, *args):
+            self.submissions.append(args)
+            return 42
+
+    engine = FakeEngine()
+    broker = RustBroker(match_mode="exact")
+    broker._engine = engine
+
+    broker.begin_order_buffering()
+    order = broker.buy(object(), object(), size=2.0, price=9.5, exectype=Order.Limit)
+
+    assert order.status == Order.Accepted
+    assert order.ref == 1
+    assert engine.submissions == []
+
+    broker.flush_order_buffer()
+
+    assert order.ref == 42
+    assert broker._orders_by_ref[42] is order
+    assert engine.submissions == [("buy", "limit", 2.0, 9.5, None)]
+
+
 def test_smart_matching_prefers_stop_loss_when_exit_orders_are_ambiguous() -> None:
     data = pd.DataFrame(
         {
