@@ -391,10 +391,10 @@
 ### Week 1 — 统一事件核心
 
 - [x] `EventRunner` 单事件核心：已定义 `on_bar()` / `on_broker_event()` / `snapshot()` 边界,回测和实盘共用语义
-- [x] `HistoricalDriver`：历史数据逐 bar 驱动 EventRunner,可复用现有 RustBarRunner cursor plan,不得改变 `next()` 可见顺序;当前 production `Cerebro.run()` 仍由 `engine.py` 直接驱动回测
+- [x] `HistoricalDriver`：历史数据逐 bar 驱动 EventRunner,可复用现有 RustBarRunner cursor plan,不得改变 `next()` 可见顺序;默认 backtest production 仍保留现有 `engine.py` 以守住对齐
 - [x] `PaperDriver` / `LiveDriver` 接口：已定义 driver/broker event 边界,暂不提交 QMT 具体文件
 - [x] `BrokerEventPump` 标准化：已补 order status / partial fill / reconnect replay 字段,继续支持 fill/cancel/reject
-- [x] 三种模式入口:`Cerebro(mode="backtest"|"paper"|"live")` 已接入配置字段;paper/live driver 仍待实现
+- [x] 三种模式入口:`Cerebro(mode="backtest"|"paper"|"live")` 已接入配置字段;paper/live 已自动走 EventRunner driver
 
 ### Week 2 — rolling buffer + 指标双模式
 
@@ -422,7 +422,7 @@
 
 - [x] 模拟 broker event pump dry-run：无 QMT 代码,用 fake live broker 验证 EventRunner + BrokerEventPump + Strategy 生命周期
 - [ ] 实盘二次确认 + 资金上限协议字段
-- [ ] 断线重连 + 基础风控协议字段
+- [x] 断线重连 + 基础风控协议字段:BrokerEvent 已支持 `replay`、`requires_confirmation`、`max_notional`、`risk_tags`
 - [ ] 实盘 MLflow run 事件字段(每日一个 run 的接口定义)
 - [ ] Windows-only CI 仅做接口/导入门禁,QMT 专属实现仍 deferred
 
@@ -434,7 +434,7 @@
 - [x] Python bar loop 热路径缓存:预绑定 strategy/data/indicator advancers、broker/strategy callback 方法、data line proxy、position size/Rust state fast path,提交 `4eb114e` / `bf0472f` / `ba66102` / `349c2fe` / `a0733e0` / `b09b7f4` / `f0feef0` / `29fb00d` / `e2c38ff` / `0cc8f28`
 - [x] compat.backtesting 指标访问微优化与 benchmark 输出增强: `IndicatorProxy.__getitem__` 热路径收紧,`benchmark_bt.py` 增加 `vs Prev TL` 与 repeat/warmup 模式,提交 `d4f38f4`
 - [x] 当前验证基线: `tests/unit/backtest/test_rust_exact_matching.py` 20 passed;`tests/unit/backtest/test_compat_runner_scripts.py` 2 passed;`benchmark_bt.py` 8/8 EXACT;`compare_results.py` BTCUSDT / ETHUSDT Return 与 # Trades 对齐,Tradelearn 对 backtesting.py 约 2.4x-2.5x
-- [ ] 剩余正式 1.1 工作:production `Cerebro.run()` 自动接 HistoricalDriver/EventRunner、Backtrader 指标声明自动接 Batch/RollingIndicatorCache、风控/二次确认/MLflow live event 字段、Windows-only CI 与默认事件驱动 benchmark ≥ 1.5x/≥ 4x 门禁;QMT 具体 broker 代码暂缓
+- [ ] 剩余正式 1.1 工作:production backtest 是否切换 HistoricalDriver/EventRunner 的对齐评估、Backtrader 指标声明自动接 Batch/RollingIndicatorCache、MLflow live event 字段、Windows-only CI 与默认事件驱动 benchmark ≥ 1.5x/≥ 4x 门禁;QMT 具体 broker 代码暂缓
 
 ### 当前优化任务队列(2026-04-28)
 
@@ -459,7 +459,7 @@
 - [x] P5 统一 EventRunner 主线第二步:新增单事件 `EventRunner`、`EventSnapshot`、`HistoricalDriver`、`PaperDriver`、`LiveDriver`,可用 `BrokerEventPump` + rolling buffer 驱动 fake live/paper bar;public backtest namespace 已暴露
 - [x] P6 RollingBarBuffer 第一阶段:共享 buffer 升级为回测预装 + 实盘 append/overwrite 的环形窗口,保持 `line[0]` / `line[-1]` 语义
 - [x] P7 Batch/RollingIndicatorCache 第一阶段:回测全量向量预计算,实盘 rolling window 重算最近窗口;统一支持 `pandas-ta-classic` / TDX / TradingView,并处理 DataFrame 多输出 line
-- [x] P8 live/paper dry-run 第二阶段:不提交 QMT 具体文件,用 fake broker/data driver 验证 `BrokerEventPump` 与 Strategy 生命周期;BrokerEvent 已支持 status/partial/replay;风控/二次确认/MLflow live event 字段仍待补
+- [x] P8 live/paper dry-run 第三阶段:不提交 QMT 具体文件,`Cerebro(mode="paper"|"live")` 已自动走 EventRunner driver;BrokerEvent 已支持 status/partial/replay 与风控/二次确认字段;MLflow live event 字段仍待补
 
 ---
 

@@ -123,3 +123,36 @@ def test_live_and_paper_drivers_share_event_runner_path() -> None:
     assert len(LiveDriver(EventRunner(live_strategy), lambda: bars).poll_once()) == 1
     assert paper_strategy.count == 1
     assert live_strategy.count == 1
+
+
+def test_cerebro_paper_and_live_modes_run_through_event_runner() -> None:
+    class CountingStrategy(Strategy):
+        def __init__(self) -> None:
+            super().__init__()
+            self.closes: list[float] = []
+
+        def next(self) -> None:
+            self.closes.append(self.data.close[0])
+
+    bars = [
+        StreamBar(
+            ts=pd.Timestamp("2026-01-01", tz="UTC"),
+            symbol="AAPL",
+            open=1.0,
+            high=1.0,
+            low=1.0,
+            close=1.5,
+            volume=1.0,
+        )
+    ]
+
+    paper = Cerebro(mode="paper", event_bars=bars)
+    paper.addstrategy(CountingStrategy)
+    [paper_strategy] = paper.run()
+
+    live = Cerebro(mode="live", live_poller=lambda: bars)
+    live.addstrategy(CountingStrategy)
+    [live_strategy] = live.run()
+
+    assert paper_strategy.closes == [1.5]
+    assert live_strategy.closes == [1.5]

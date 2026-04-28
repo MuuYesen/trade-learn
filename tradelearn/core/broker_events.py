@@ -19,6 +19,9 @@ class BrokerEvent:
     reason: str | None = None
     status: str | None = None
     replay: bool = False
+    requires_confirmation: bool = False
+    max_notional: float | None = None
+    risk_tags: tuple[str, ...] = ()
 
 
 @dataclass
@@ -89,4 +92,7 @@ class BrokerEventPump:
             reason=raw_event.get("reason"),
             status=raw_event.get("status"),
             replay=bool(raw_event.get("replay", False)),
+            requires_confirmation=bool(raw_event.get("requires_confirmation", False)),
+            max_notional=raw_event.get("max_notional"),
+            risk_tags=tuple(raw_event.get("risk_tags", ())),
         )

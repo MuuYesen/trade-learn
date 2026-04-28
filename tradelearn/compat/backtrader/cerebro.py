@@ -1,11 +1,14 @@
 from __future__ import annotations
-from typing import Any, List, Dict, Type, Tuple
 
-from tradelearn.compat.backtrader.strategy import Strategy
+from typing import Any
+
+from tradelearn.backtest.core.models import FixedCommission, FixedSlippage
 from tradelearn.compat.backtrader.datafeed import DataFeed
 from tradelearn.compat.backtrader.sizer import FixedSize
-from tradelearn.backtest.core.models import FixedCommission, FixedSlippage
+from tradelearn.compat.backtrader.strategy import Strategy
+
 from .analyzer import Analyzer
+
 
 class Cerebro:
     """Main orchestrator for backtesting (Backtrader facade)."""
@@ -21,8 +24,8 @@ class Cerebro:
         mode: str = "backtest",
         **kwargs: Any,
     ) -> None:
-        self.datas: List[DataFeed] = []
-        self.strats: List[Tuple[Type[Strategy], tuple, dict]] = []
+        self.datas: list[DataFeed] = []
+        self.strats: list[tuple[type[Strategy], tuple, dict]] = []
         self.match_mode = match_mode
         self.callback_batch = int(callback_batch)
         self.trade_on_close = bool(trade_on_close)
@@ -37,7 +40,7 @@ class Cerebro:
         self.broker._slippage_model = slippage or FixedSlippage()
         self.broker._commission_model = commission or FixedCommission()
         self._sizer_spec = (FixedSize, {})
-        self.analyzers: Dict[str, Tuple[Type[Analyzer], dict]] = {}
+        self.analyzers: dict[str, tuple[type[Analyzer], dict]] = {}
 
     def setcash(self, cash: float) -> None:
         self.broker._cash = self.broker._active_cash = cash
@@ -58,14 +61,47 @@ class Cerebro:
             data._name = name
         self.datas.append(data)
 
-    def addstrategy(self, strategy: Type[Strategy], *args: Any, **kwargs: Any) -> None:
+    def addstrategy(self, strategy: type[Strategy], *args: Any, **kwargs: Any) -> None:
         self.strats.append((strategy, args, kwargs))
 
-    def addanalyzer(self, analyzer: Type[Analyzer], *args, _name=None, **kwargs) -> None:
+    def addanalyzer(self, analyzer: type[Analyzer], *args, _name=None, **kwargs) -> None:
         name = _name or analyzer.__name__.lower()
         self.analyzers[name] = (analyzer, kwargs)
 
-    def run(self) -> List[Strategy]:
+    def run(self) -> list[Strategy]:
+        if self.mode != "backtest":
+            return self._run_event_mode()
         # Main execution logic orchestrated here
         from tradelearn.backtest.core.engine import run_backtest
         return run_backtest(self)
+
+    def _run_event_mode(self) -> list[Strategy]:
+        from tradelearn.backtest.core.event_runner import EventRunner, LiveDriver, PaperDriver
+        from tradelearn.core import BrokerEventPump
+
+        strategy_cls, args, kwargs = self.strats[0]
+        strategy = strategy_cls(*args, **kwargs)
+        strategy.broker = self.broker
+        sizer_cls, sizer_kwargs = self._sizer_spec
+        strategy.setsizer(sizer_cls(**sizer_kwargs))
+        strategy.start()
+
+        pump = self.kwargs.get("broker_event_pump")
+        if pump is None:
+            poller = self.kwargs.get("broker_event_poller", lambda: ())
+            pump = BrokerEventPump(poller)
+        runner = EventRunner(
+            strategy=strategy,
+            broker_event_pump=pump,
+            buffer_capacity=int(self.kwargs.get("buffer_capacity", 512)),
+        )
+        if self.mode == "paper":
+            bars = self.kwargs.get("event_bars", ())
+            PaperDriver(runner, bars).run_once()
+        else:
+            poller = self.kwargs.get("live_poller")
+            if poller is None:
+                raise ValueError("live mode requires live_poller")
+            LiveDriver(runner, poller).poll_once()
+        strategy.stop()
+        return [strategy]

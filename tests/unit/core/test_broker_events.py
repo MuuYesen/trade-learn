@@ -68,3 +68,18 @@ def test_broker_event_pump_dispatches_status_partial_and_replay_events() -> None
     assert pump.poll_once() == 2
     assert statuses == [(1, "accepted", True)]
     assert partials == [{"size": 10, "filled": 4}]
+
+
+def test_broker_event_carries_live_risk_and_confirmation_fields() -> None:
+    event = BrokerEvent(
+        "status",
+        order_id=9,
+        status="pending_confirmation",
+        requires_confirmation=True,
+        max_notional=10000.0,
+        risk_tags=("daily-limit",),
+    )
+
+    assert event.requires_confirmation is True
+    assert event.max_notional == 10000.0
+    assert event.risk_tags == ("daily-limit",)
