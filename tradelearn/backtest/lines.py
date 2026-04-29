@@ -62,6 +62,36 @@ class LineSeries:
     def _advance(self, cursor: int) -> None:
         self._cursor = cursor
 
+    def to_series(self) -> pd.Series:
+        """Return the full line as a pandas Series for vector indicators."""
+        cached = self._series_cache
+        if cached is None:
+            cached = pd.Series(self._values)
+            self._series_cache = cached
+        return cached
+
+    def wrap_indicator(self, values: Any, name: str | None = None) -> Any:
+        """Wrap vector indicator output back into Engine line objects."""
+        if isinstance(values, pd.DataFrame):
+            from tradelearn.backtest.indicator_cache import IndicatorBundle
+
+            lines = {
+                str(column): self._wrap_one_indicator(values[column])
+                for column in values.columns
+            }
+            return IndicatorBundle(lines)
+        if isinstance(values, pd.Series):
+            return self._wrap_one_indicator(values)
+        return self._wrap_one_indicator(pd.Series(values, name=name))
+
+    def _wrap_one_indicator(self, values: pd.Series) -> LineSeries:
+        line = LineSeries(values.to_numpy())
+        cursor_source = getattr(self, "_cursor_source", None)
+        if cursor_source is not None:
+            line._cursor_source = cursor_source
+        line.min_period = getattr(self, "min_period", 0)
+        return line
+
     def __len__(self) -> int:
         buffer = self._buffer
         if buffer is not None:

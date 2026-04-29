@@ -92,6 +92,19 @@ class IndicatorProxy:
         series.attrs.update(self.attrs)
         return series
 
+    def to_series(self) -> pd.Series:
+        """Return the full line as a pandas Series for vector indicators."""
+        return pd.Series(self._data, index=self._index, name=self._name)
+
+    def wrap_indicator(self, values: Any, name: str | None = None) -> Any:
+        """Wrap vector indicator output back into Lite indicator proxies."""
+        return _wrap_indicator_result(
+            values,
+            self._feed,
+            self._index if self._index is not None else pd.RangeIndex(self._length),
+            name or self._name or "indicator",
+        )
+
 
 class IndicatorBundle:
     """Gradually revealed multi-column indicator bundle used by ``data.ta``."""

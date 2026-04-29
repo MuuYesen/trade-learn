@@ -26,6 +26,7 @@ __all__ = [
     "ema",
     "macd",
     "rsi",
+    "talib",
     "sma",
     "tdx",
     "tdx30",
@@ -35,6 +36,8 @@ __all__ = [
 
 def __getattr__(name: str) -> Any:
     """Lazily expose market-specific indicator namespaces."""
+    if name == "talib":
+        return importlib.import_module("tradelearn.indicators.talib")
     if name in {"tdx", "tdx30"}:
         return importlib.import_module("tradelearn.indicators.tdx")
     if name == "tv":

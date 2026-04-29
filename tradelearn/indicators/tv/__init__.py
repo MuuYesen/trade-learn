@@ -108,8 +108,27 @@ vwap = FunctionIndicator("tv.vwap", _vwap, {})
 supertrend = FunctionIndicator("tv.supertrend", _supertrend, {"length": 10, "multiplier": 3.0})
 ichimoku = FunctionIndicator("tv.ichimoku", _ichimoku, {"tenkan": 9, "kijun": 26, "senkou": 52})
 
+SMA = sma
+BBANDS = bbands
+RSI = rsi
+MACD = macd
+ATR = atr
+ADX = adx
+VWAP = vwap
+SUPERTREND = supertrend
+ICHIMOKU = ichimoku
+
 __all__ = [
+    "ADX",
+    "ATR",
     "BACKEND",
+    "BBANDS",
+    "ICHIMOKU",
+    "MACD",
+    "RSI",
+    "SMA",
+    "SUPERTREND",
+    "VWAP",
     "adx",
     "atr",
     "bbands",

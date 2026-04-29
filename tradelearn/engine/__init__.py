@@ -1,5 +1,7 @@
 """Backtrader-compatible facade backed by tradelearn's backtest engine."""
 
+import importlib
+
 import pandas as pd
 
 from tradelearn.engine import analyzers, feeds, indicators, observers, sizers
@@ -60,6 +62,9 @@ ind = indicators
 az = analyzers
 obs = observers
 CommissionInfo = CommInfoBase
+talib = importlib.import_module("tradelearn.indicators.talib")
+tdx = importlib.import_module("tradelearn.indicators.tdx")
+tv = importlib.import_module("tradelearn.indicators.tv")
 
 __all__ = [
     "Cerebro",
@@ -91,6 +96,9 @@ __all__ = [
     "Observer",
     "obs",
     "CommissionInfo",
+    "talib",
+    "tdx",
+    "tv",
     "Signal",
     "SignalStrategy",
     "SIGNAL_NONE",
