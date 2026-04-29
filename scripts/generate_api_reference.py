@@ -17,8 +17,8 @@ class ApiReferenceModule:
 
 
 API_REFERENCE_MODULES: tuple[ApiReferenceModule, ...] = (
-    ApiReferenceModule("Backtest", "tradelearn.backtest", "Strategy, Cerebro, broker, orders."),
-    ApiReferenceModule("Compat Backtrader", "tradelearn.engine", "Migration facade."),
+    ApiReferenceModule("Engine", "tradelearn.engine", "Backtrader-style advanced user API."),
+    ApiReferenceModule("Lite", "tradelearn.lite", "Tradelearn 1.x-style lightweight user API."),
     ApiReferenceModule("Data", "tradelearn.data", "Bars, providers, and cache helpers."),
     ApiReferenceModule("Indicators", "tradelearn.indicators", "Technical indicator facade."),
     ApiReferenceModule("Metrics", "tradelearn.metrics", "Returns, risk, and factor metrics."),

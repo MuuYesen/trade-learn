@@ -10,10 +10,12 @@ from scripts.generate_api_reference import (
 def test_render_api_reference_contains_mkdocstrings_directives() -> None:
     rendered = render_api_reference()
 
-    assert "::: tradelearn.backtest" in rendered
     assert "::: tradelearn.engine" in rendered
+    assert "::: tradelearn.lite" in rendered
     assert "::: tradelearn.ml" in rendered
     assert "::: tradelearn.report" in rendered
+    assert "::: tradelearn.backtest" not in rendered
+    assert "Compat Backtrader" not in rendered
     assert all(module.import_path in rendered for module in API_REFERENCE_MODULES)
 
 
