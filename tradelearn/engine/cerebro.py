@@ -51,6 +51,10 @@ class Cerebro:
         self.timers: list[tuple[tuple, dict]] = []
         self.calendars: list[Any] = []
         self._runstop = False
+        self.signals: list[tuple[int, type, tuple, dict]] = []
+        self._signal_strat: tuple[type, tuple, dict] | None = None
+        self._signal_concurrent: bool = False
+        self._signal_accumulate: bool = False
 
     def setcash(self, cash: float) -> None:
         self.broker.setcash(cash)
@@ -135,6 +139,18 @@ class Cerebro:
     def setsizer(self, sizer: type[Any], **kwargs: Any) -> None:
         self.addsizer(sizer, **kwargs)
 
+    def add_signal(self, sigtype: int, sigcls: type, *sigargs: Any, **sigkwargs: Any) -> None:
+        self.signals.append((sigtype, sigcls, sigargs, sigkwargs))
+
+    def signal_strategy(self, stratcls: type, *args: Any, **kwargs: Any) -> None:
+        self._signal_strat = (stratcls, args, kwargs)
+
+    def signal_concurrent(self, onoff: bool) -> None:
+        self._signal_concurrent = onoff
+
+    def signal_accumulate(self, onoff: bool) -> None:
+        self._signal_accumulate = onoff
+
     def runstop(self) -> None:
         self._runstop = True
 
@@ -144,10 +160,37 @@ class Cerebro:
     def run(self) -> list[Strategy]:
         if self.mode != "backtest":
             return self._run_event_mode()
-        # Main execution logic orchestrated here
+        specs = list(self.strats)
+        if self.signals:
+            from tradelearn.engine.signal import SignalStrategy
+            signal_args: tuple[Any, ...] = ()
+            signal_kwargs: dict[str, Any] = {}
+            strat_cls: type[Any] | None = None
+            if self._signal_strat is not None:
+                strat_cls, signal_args, signal_kwargs = self._signal_strat
+            elif specs:
+                first_cls, first_args, first_kwargs = specs[0]
+                if issubclass(first_cls, SignalStrategy):
+                    strat_cls = first_cls
+                    signal_args = first_args
+                    signal_kwargs = dict(first_kwargs)
+                    specs = specs[1:]
+            if strat_cls is None:
+                strat_cls = SignalStrategy
+            signal_kwargs = {
+                **signal_kwargs,
+                "signals": list(self.signals),
+                "_accumulate": self._signal_accumulate,
+                "_concurrent": self._signal_concurrent,
+            }
+            specs.insert(0, (
+                strat_cls,
+                signal_args,
+                signal_kwargs,
+            ))
         from tradelearn.backtest.engine import run_backtest
         results: list[Strategy] = []
-        specs = self.strats or [(Strategy, (), {})]
+        specs = specs or [(Strategy, (), {})]
         original_strats = self.strats
         for spec in specs:
             self._runstop = False

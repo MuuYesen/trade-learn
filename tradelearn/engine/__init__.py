@@ -8,6 +8,25 @@ from tradelearn.engine.base import TimeFrame
 from tradelearn.engine.cerebro import Cerebro
 from tradelearn.engine.grid import GridSearchResult, grid_search
 from tradelearn.engine.indicators import Indicator
+from tradelearn.engine.observers import Observer
+from tradelearn.engine.signal import (
+    SIGNAL_LONG,
+    SIGNAL_LONG_ANY,
+    SIGNAL_LONG_INV,
+    SIGNAL_LONGEXIT,
+    SIGNAL_LONGEXIT_ANY,
+    SIGNAL_LONGEXIT_INV,
+    SIGNAL_LONGSHORT,
+    SIGNAL_NONE,
+    SIGNAL_SHORT,
+    SIGNAL_SHORT_ANY,
+    SIGNAL_SHORT_INV,
+    SIGNAL_SHORTEXIT,
+    SIGNAL_SHORTEXIT_ANY,
+    SIGNAL_SHORTEXIT_INV,
+    Signal,
+    SignalStrategy,
+)
 from tradelearn.engine.sizers import AllInSizer, FixedSize, PercentSizer, Sizer
 from tradelearn.engine.strategy import (
     CommInfoBase,
@@ -39,6 +58,8 @@ def date2num(dt):
 # Aliases for Backtrader compatibility
 ind = indicators
 az = analyzers
+obs = observers
+CommissionInfo = CommInfoBase
 
 __all__ = [
     "Cerebro",
@@ -67,6 +88,25 @@ __all__ = [
     "sizers",
     "GridSearchResult",
     "grid_search",
+    "Observer",
+    "obs",
+    "CommissionInfo",
+    "Signal",
+    "SignalStrategy",
+    "SIGNAL_NONE",
+    "SIGNAL_LONGSHORT",
+    "SIGNAL_LONG",
+    "SIGNAL_LONG_INV",
+    "SIGNAL_LONG_ANY",
+    "SIGNAL_SHORT",
+    "SIGNAL_SHORT_INV",
+    "SIGNAL_SHORT_ANY",
+    "SIGNAL_LONGEXIT",
+    "SIGNAL_LONGEXIT_INV",
+    "SIGNAL_LONGEXIT_ANY",
+    "SIGNAL_SHORTEXIT",
+    "SIGNAL_SHORTEXIT_INV",
+    "SIGNAL_SHORTEXIT_ANY",
     "num2date",
     "date2num",
 ]

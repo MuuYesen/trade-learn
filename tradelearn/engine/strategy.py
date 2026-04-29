@@ -84,6 +84,12 @@ class Strategy(_BaseStrategy, LineRoot):
     def cancel(self, order):
         return self.broker.cancel(order)
 
+    def getdatabyname(self, name):
+        for data in self.datas:
+            if getattr(data, "_name", None) == name:
+                return data
+        raise KeyError(f"data feed {name!r} not found")
+
     def buy_bracket(
         self,
         data=None,
