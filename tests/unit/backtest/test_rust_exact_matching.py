@@ -341,6 +341,67 @@ def test_rust_broker_processes_rust_fills_with_batch_sync() -> None:
     assert broker._last_fill_idx == 2
 
 
+def test_rust_broker_processes_compact_columnar_fill_batch() -> None:
+    data = object()
+
+    class FakeEngine:
+        def get_new_fills_compact(self, start_idx: int):
+            assert start_idx == 0
+            return (
+                [1, 2],
+                [1.0, -1.0],
+                [10.0, 11.0],
+                [0.0, 0.0],
+                [0.0, 0.0],
+                [0.0, 1.0],
+            )
+
+    class FakeStrategy:
+        def __init__(self) -> None:
+            self._pending_size = {data: 0.0}
+            self.orders = []
+            self.trades = []
+
+        def notify_order(self, order) -> None:
+            self.orders.append((order.ref, order.status, order.executed.price))
+
+        def notify_trade(self, trade) -> None:
+            self.trades.append((trade.size, trade.price, trade.pnl))
+
+    broker = RustBroker(match_mode="exact")
+    broker._engine = FakeEngine()
+    first = Order(ref=1, data=data, ordtype=Order.Buy, size=1.0)
+    second = Order(ref=2, data=data, ordtype=Order.Sell, size=1.0)
+    broker._orders_by_ref = {1: first, 2: second}
+
+    strategy = FakeStrategy()
+
+    broker.process_fills(strategy, 1)
+
+    assert strategy.orders == [
+        (1, Order.Completed, 10.0),
+        (2, Order.Completed, 11.0),
+    ]
+    assert strategy.trades == [(1.0, 10.0, 0.0), (0.0, 11.0, 1.0)]
+    assert broker._last_fill_idx == 2
+
+
+def test_rust_broker_caches_fills_frame_until_new_fill() -> None:
+    data = object()
+    broker = RustBroker(match_mode="exact")
+    order = Order(ref=1, data=data, ordtype=Order.Buy, size=1.0)
+
+    first = broker.fills_frame()
+    second = broker.fills_frame()
+    assert first is second
+
+    broker._record_fill(order, 1.0, 10.0, 0.0)
+    third = broker.fills_frame()
+
+    assert third is not first
+    assert third["size"].tolist() == [1.0]
+
+
 def test_backtest_engine_buffers_orders_while_strategy_next_runs() -> None:
     data = pd.DataFrame(
         {
@@ -403,7 +464,7 @@ def test_rust_bar_loop_submits_drained_orders_after_python_callback() -> None:
             self.bound.extend(bindings)
 
     broker = BrokerRefSink()
-    seen: list[tuple[int, list]] = []
+    seen: list[tuple[int, object]] = []
 
     def on_bar(cursor, fills, cash, size, price):
         seen.append((cursor, fills))
@@ -417,9 +478,17 @@ def test_rust_bar_loop_submits_drained_orders_after_python_callback() -> None:
     engine.run_bar_loop(broker, on_bar, 0, 2)
 
     assert broker.bound == [(99, 1), (100, 2)]
-    assert seen[0] == (0, [])
+    assert seen[0] == (0, None)
     assert seen[1][0] == 1
-    assert seen[1][1][0][:5] == (1, "buy", 1.0, 11.0, 0.0)
+    order_ids, sizes, prices, comms, slippages, pnls = seen[1][1]
+    assert (order_ids[0], sizes[0], prices[0], comms[0], slippages[0], pnls[0]) == (
+        1,
+        1.0,
+        11.0,
+        0.0,
+        0.0,
+        0.0,
+    )
     assert engine.get_position() == (1.0, 11.0)
 
 

@@ -231,7 +231,7 @@ impl RustBarRunner {
         let stop = end.min(engine.inner.total_bars()).min(self.cursors.len());
         for cursor in start..stop {
             let fill_records = engine.inner.step_open(cursor);
-            let fills = engine.map_fills(fill_records);
+            let fills = engine.map_fills_compact(fill_records);
             let cash = engine.inner.get_cash();
             let (size, price) = engine.inner.get_position();
             let data_cursors = self.cursors[cursor].clone();
@@ -328,6 +328,11 @@ impl RustBacktestEngine {
         self.map_fills(fills)
     }
 
+    fn step_close_compact(&mut self, cursor: usize) -> Option<CompactFills> {
+        let fills = self.inner.step_close(cursor);
+        self.map_fills_compact(fills)
+    }
+
     fn step_open(&mut self, cursor: usize) -> Vec<(u64, String, f64, f64, f64, f64, f64)> {
         let fills = self.inner.step_open(cursor);
         self.map_fills(fills)
@@ -345,6 +350,18 @@ impl RustBacktestEngine {
         (fills, cash, size, price)
     }
 
+    fn step_open_collect_compact(
+        &mut self,
+        cursor: usize,
+        _fill_start_idx: usize,
+    ) -> (Option<CompactFills>, f64, f64, f64) {
+        let fill_records = self.inner.step_open(cursor);
+        let fills = self.map_fills_compact(fill_records);
+        let cash = self.inner.get_cash();
+        let (size, price) = self.inner.get_position();
+        (fills, cash, size, price)
+    }
+
     fn run_bar_loop(
         &mut self,
         py: Python<'_>,
@@ -356,7 +373,7 @@ impl RustBacktestEngine {
         let stop = end.min(self.inner.total_bars());
         for cursor in start..stop {
             let fill_records = self.inner.step_open(cursor);
-            let fills = self.map_fills(fill_records);
+            let fills = self.map_fills_compact(fill_records);
             let cash = self.inner.get_cash();
             let (size, price) = self.inner.get_position();
             let drained = on_bar.call1(py, (cursor, fills, cash, size, price))?;
@@ -490,6 +507,22 @@ impl RustBacktestEngine {
             })
             .collect()
     }
+
+    fn get_new_fills_compact(&self, start_idx: usize) -> Option<CompactFills> {
+        let fills = &self.inner.get_results().fills;
+        if start_idx >= fills.len() {
+            return None;
+        }
+        Some(compact_fills_from_iter(fills[start_idx..].iter()))
+    }
+
+    fn get_fills_compact(&self) -> Option<CompactFills> {
+        let fills = &self.inner.get_results().fills;
+        if fills.is_empty() {
+            return None;
+        }
+        Some(compact_fills_from_iter(fills.iter()))
+    }
 }
 
 fn parse_order_side(side: &str) -> PyResult<OrderSide> {
@@ -514,6 +547,28 @@ fn parse_order_type(order_type: &str) -> PyResult<OrderType> {
     }
 }
 
+type CompactFills = (Vec<u64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>);
+
+fn compact_fills_from_iter<'a>(fills: impl Iterator<Item = &'a FillRecord>) -> CompactFills {
+    let mut order_ids = Vec::new();
+    let mut sizes = Vec::new();
+    let mut prices = Vec::new();
+    let mut commissions = Vec::new();
+    let mut slippages = Vec::new();
+    let mut pnls = Vec::new();
+
+    for fill in fills {
+        order_ids.push(fill.order_id);
+        sizes.push(fill.size);
+        prices.push(fill.price);
+        commissions.push(fill.commission);
+        slippages.push(fill.slippage);
+        pnls.push(fill.pnl);
+    }
+
+    (order_ids, sizes, prices, commissions, slippages, pnls)
+}
+
 impl RustBacktestEngine {
     fn map_fills(&self, fills: Vec<FillRecord>) -> Vec<(u64, String, f64, f64, f64, f64, f64)> {
         fills
@@ -534,6 +589,13 @@ impl RustBacktestEngine {
                 )
             })
             .collect()
+    }
+
+    fn map_fills_compact(&self, fills: Vec<FillRecord>) -> Option<CompactFills> {
+        if fills.is_empty() {
+            return None;
+        }
+        Some(compact_fills_from_iter(fills.iter()))
     }
 }
 

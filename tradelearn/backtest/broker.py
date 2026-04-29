@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 OrderPayload = tuple[int, str, str, float, float | None, float | None]
 _EMPTY_ORDER_BUFFER: tuple[()] = ()
+CompactFillBatch = tuple[list[int], list[float], list[float], list[float], list[float], list[float]]
 
 
 class CommInfo:
@@ -60,11 +61,13 @@ class RustBroker(BaseBroker):
         self._orders: list[Order] = []
         self._orders_by_ref: dict[int, Order] = {}
         self._fills: list[dict[str, Any]] = []
+        self._fills_frame_cache: Any = None
+        self._fills_frame_cache_len = -1
         self._pending_orders: list[Order] = []
         self._order_count = 0
         self._last_fill_idx = 0
         self._rust_state_cache: tuple[int, float, float, float] | None = None
-        self._step_fills_from_collect: list[Any] | None = None
+        self._step_fills_from_collect: list[Any] | CompactFillBatch | None = None
         self._buffer_order_submissions = False
         self._order_submit_buffer: list[OrderPayload] = []
         self._proxy_events: list[Any] = []
@@ -140,7 +143,10 @@ class RustBroker(BaseBroker):
     def fills_frame(self):
         import pandas as pd
 
-        return pd.DataFrame(self._fills)
+        if self._fills_frame_cache is None or self._fills_frame_cache_len != len(self._fills):
+            self._fills_frame_cache = pd.DataFrame(self._fills)
+            self._fills_frame_cache_len = len(self._fills)
+        return self._fills_frame_cache
 
     def _fill_datetime(self, data: Any) -> Any:
         import pandas as pd
@@ -250,7 +256,10 @@ class RustBroker(BaseBroker):
             and self._engine is not None
             and hasattr(self._engine, "step_close")
         ):
-            self._step_fills_from_collect = self._engine.step_close(self._curr_idx)
+            if hasattr(self._engine, "step_close_compact"):
+                self._step_fills_from_collect = self._engine.step_close_compact(self._curr_idx)
+            else:
+                self._step_fills_from_collect = self._engine.step_close(self._curr_idx)
 
     def drain_order_buffer(self) -> list[OrderPayload] | tuple[()]:
         """Return buffered order payloads without calling back into Rust."""
@@ -423,7 +432,14 @@ class RustBroker(BaseBroker):
         self._rust_state_cache = None
         self._step_fills_from_collect = None
         if self._engine is not None:
-            if hasattr(self._engine, "step_open_collect"):
+            if hasattr(self._engine, "step_open_collect_compact"):
+                fills, cash, size, price = self._engine.step_open_collect_compact(
+                    i,
+                    self._last_fill_idx,
+                )
+                self._step_fills_from_collect = fills
+                self._rust_state_cache = (self._curr_idx, cash, size, price)
+            elif hasattr(self._engine, "step_open_collect"):
                 fills, cash, size, price = self._engine.step_open_collect(i, self._last_fill_idx)
                 self._step_fills_from_collect = fills
                 self._rust_state_cache = (self._curr_idx, cash, size, price)
@@ -431,17 +447,33 @@ class RustBroker(BaseBroker):
                 self._engine.step_open(i)
                 self._rust_state_cache = None
 
+    @staticmethod
+    def _fill_batch_len(fills: Any) -> int:
+        if fills is None:
+            return 0
+        if RustBroker._is_compact_fill_batch(fills):
+            return len(fills[0])
+        return len(fills)
+
+    @staticmethod
+    def _is_compact_fill_batch(fills: Any) -> bool:
+        return isinstance(fills, tuple) and len(fills) == 6
+
     def process_fills(self, strategy: Strategy, i: int) -> None:
         """Synchronize filled orders back to Python."""
         if self._engine is not None:
             if self._step_fills_from_collect is None:
-                new_fills = self._engine.get_new_fills(self._last_fill_idx)
+                if hasattr(self._engine, "get_new_fills_compact"):
+                    new_fills = self._engine.get_new_fills_compact(self._last_fill_idx)
+                else:
+                    new_fills = self._engine.get_new_fills(self._last_fill_idx)
             else:
                 new_fills = self._step_fills_from_collect
-                self._step_fills_from_collect = []
-            if new_fills:
+                self._step_fills_from_collect = None
+            fill_count = self._fill_batch_len(new_fills)
+            if fill_count:
                 self._process_rust_fills_batch(strategy, new_fills)
-                self._last_fill_idx += len(new_fills)
+                self._last_fill_idx += fill_count
         else:
             # BT Mode: Naive matching in Python
             if not self._pending_orders:
@@ -513,15 +545,23 @@ class RustBroker(BaseBroker):
                     remaining.append(order)
             self._pending_orders = remaining
 
-    def _process_rust_fills_batch(self, strategy: Strategy, fills: list[Any]) -> None:
+    def _iter_rust_fills(self, fills: Any):
+        if self._is_compact_fill_batch(fills):
+            order_ids, sizes, prices, comms, _slippages, pnls = fills
+            return zip(order_ids, sizes, prices, comms, pnls, strict=True)
+        return (
+            (fill[0], fill[2], fill[3], fill[4], fill[6])
+            for fill in fills
+        )
+
+    def _process_rust_fills_batch(self, strategy: Strategy, fills: Any) -> None:
         """Synchronize a batch of Rust fills while preserving notification order."""
         orders_by_ref_get = self._orders_by_ref.get
         pending_size = strategy._pending_size
         pos = self._pos
         mult = self._mult
 
-        for fill in fills:
-            order_id, _side_str, signed_size, price, comm, _slippage, pnl = fill[:7]
+        for order_id, signed_size, price, comm, pnl in self._iter_rust_fills(fills):
             order = orders_by_ref_get(order_id)
             if order is None:
                 continue
