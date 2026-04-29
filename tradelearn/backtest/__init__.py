@@ -31,7 +31,6 @@ from tradelearn.backtest.models import (
     Trade,
     _notify_order,
 )
-from tradelearn.backtest.strategy import Strategy as CoreStrategy
 
 
 def __getattr__(name):
@@ -47,7 +46,6 @@ __all__ = [
     "BarSnapshot",
     "CNAStockCommission",
     "CommissionModel",
-    "CoreStrategy",
     "ExecutedInfo",
     "EventRunner",
     "EventSnapshot",

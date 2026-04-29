@@ -320,7 +320,7 @@ def _strategy_class(strategy_name: str, strategy_dir: Path = STRATEGY_DIR) -> ty
     if not path.exists():
         raise GoldenDataError(f"missing strategy adapter: {strategy_name}")
     namespace = runpy.run_path(str(path))
-    from tradelearn.backtest import Strategy
+    from tradelearn.compat.backtrader import Strategy
 
     strategy_classes = [
         value
@@ -388,7 +388,7 @@ def run_expected_job(
 ) -> dict[str, Any]:
     """Run one TV subset golden adapter and return expected payload."""
 
-    from tradelearn.backtest import Cerebro
+    from tradelearn.compat.backtrader import Cerebro
 
     path = dataset_path(dataset, datasets_root)
     if not path.exists():

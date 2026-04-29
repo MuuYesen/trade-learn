@@ -181,6 +181,7 @@ def test_backtest_public_namespace_excludes_facade_apis() -> None:
     forbidden = {
         "Analyzer",
         "Cerebro",
+        "CoreStrategy",
         "Strategy",
         "Params",
         "TimeFrame",

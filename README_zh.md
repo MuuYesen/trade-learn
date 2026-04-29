@@ -19,6 +19,21 @@ trade-learn 是一个基于 alphalens、backtesting.py、pyfolio 和 quantstats 
 7. 优化 backtesting.py 回测框架，在原来仅支持单标的策略搭建的基础上，额外增加了投资组合策略搭建的解决方案。 
 8. 在整个策略搭建过程，除了模型需要用户自定义外，无需再引入其余第三方包，形成机器学习策略搭建的流程闭环。
 
+## 用户入口分层
+
+trade-learn 提供两个用户面 API,两者底层共享同一套 Rust 回测引擎,回测结果在数值上一致,按使用者经验深度选择:
+
+- **入门 / 快速验证**:`tradelearn.compat.backtesting`
+  风格对齐 backtesting.py。API 极简:`Strategy.init/next` + `self.buy/sell` + `self.I(...)`。
+  适合策略原型、教学、单 data 场景、`pd.Series` 风格的快速指标输出。
+
+- **资深 / 工程化**:`tradelearn.compat.backtrader`
+  风格对齐 Backtrader。API 完整:Analyzer / Observer / Sizer / Indicator / CommInfo / bracket orders / 多 data / multi-strategy 优化 / event 驱动 paper/live。
+  适合复杂策略、组合、生产化部署、未来接入实盘。
+
+> `tradelearn.backtest.*` 与 `tradelearn.core.*` 是上述两个 facade 的共享实现层与中性契约层,**不是**面向用户的公开 API,请勿直接 import。
+> 未来 paper/live adapter 接入点在 `compat.backtrader` 一侧,与现有 `Cerebro.run(mode="paper"|"live")` 路径一致。
+
 ## 下载方法
 需科学上网：
 ```bash
@@ -32,7 +47,7 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 ## 使用模板
 ```python
 import pandas as pd
-from tradelearn.backtest import Cerebro, Strategy
+from tradelearn.compat.backtrader import Cerebro, Strategy
 from tradelearn import ta
 
 if __name__ == '__main__':
@@ -378,4 +393,3 @@ Evaluate.analysis_report(strat=res, baseline=baseline, filename='./evaluate.html
 ## 联系方式
 
 微信公众号：知守溪的收纳屋  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 电子邮箱：muyes88@gmail.com
-

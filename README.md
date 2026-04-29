@@ -22,6 +22,21 @@ Summary of visualizations:
 7. Enhances the backtesting.py framework to support portfolio strategy development in addition to single-asset strategies.
 8. Ensures a closed-loop process for machine learning strategy development by eliminating the need for additional third-party packages beyond the user-customized model.
 
+## Choosing a User-Facing API
+
+trade-learn ships two user-facing APIs. Both are backed by the same Rust backtesting engine and produce numerically identical results — pick the one that matches your experience level:
+
+- **Beginner / quick validation**: `tradelearn.compat.backtesting`
+  Aligned with backtesting.py. Minimal surface: `Strategy.init/next` + `self.buy/sell` + `self.I(...)`.
+  Good for strategy prototyping, teaching, single-data setups, and `pd.Series` style stat output.
+
+- **Advanced / production**: `tradelearn.compat.backtrader`
+  Aligned with Backtrader. Full surface: Analyzer / Observer / Sizer / Indicator / CommInfo / bracket orders / multi-data / multi-strategy optimization / event-driven paper & live modes.
+  Good for complex strategies, portfolios, productionization, and future broker adapter integration.
+
+> `tradelearn.backtest.*` and `tradelearn.core.*` are the shared implementation layer and neutral contracts for the two facades — **not** a public user API. Please do not import them directly.
+> Future paper/live adapters plug into the `compat.backtrader` side, consistent with the existing `Cerebro.run(mode="paper"|"live")` path.
+
 ## Download
 Requires VPN:
 ```bash
@@ -35,7 +50,7 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 ## Usage Template
 ```python
 import pandas as pd
-from tradelearn.backtest import Cerebro, Strategy
+from tradelearn.compat.backtrader import Cerebro, Strategy
 from tradelearn import ta
 
 if __name__ == '__main__':
@@ -384,4 +399,3 @@ Evaluate.analysis_report(strat=res, baseline=baseline, filename='./evaluate.html
 ## Contact Information
 
 WeChat Official Account：知守溪的收纳屋  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Email：muyes88@gmail.com
-
