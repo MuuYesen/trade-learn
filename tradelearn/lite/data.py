@@ -153,6 +153,4 @@ def _ta_frame(data_feed: Any) -> pd.DataFrame:
     )
 
 
-BacktestingDataProxy = LiteDataProxy
-
-__all__ = ["BacktestingDataProxy", "LiteDataProxy", "_ta_frame"]
+__all__ = ["LiteDataProxy", "_ta_frame"]

@@ -251,3 +251,22 @@ def test_lite_strategy_module_stays_thin_facade() -> None:
     ]
 
     assert [token for token in forbidden if token in text] == []
+
+
+def test_lite_modules_do_not_keep_backtesting_py_names() -> None:
+    root = Path(__file__).parents[3]
+    checked = [
+        root / "tradelearn" / "lite" / "data.py",
+        root / "tradelearn" / "lite" / "strategy.py",
+    ]
+
+    offenders = [str(path.relative_to(root)) for path in checked if "Backtesting" in path.read_text()]
+
+    assert offenders == []
+
+
+def test_lite_backtest_uses_public_broker_storage_api() -> None:
+    root = Path(__file__).parents[3]
+    text = (root / "tradelearn" / "lite" / "backtest.py").read_text()
+
+    assert "broker._storage" not in text

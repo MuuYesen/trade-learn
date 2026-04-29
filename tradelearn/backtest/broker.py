@@ -87,6 +87,7 @@ class RustBroker:
         self._comminfo: Any = None
         self._slippage_model: Any = None
         self._commission_model: Any = None
+        self._storage: dict[str, Any] | None = None
 
     def configure_matching(
         self,
@@ -102,6 +103,14 @@ class RustBroker:
             self._slippage_model = slippage
         if commission is not None:
             self._commission_model = commission
+
+    def set_storage(self, storage: dict[str, Any] | None) -> None:
+        """Attach facade-level run storage without exposing broker internals."""
+        self._storage = storage
+
+    @property
+    def storage(self) -> dict[str, Any] | None:
+        return self._storage
 
     def _uses_rust_matching(self) -> bool:
         return self._engine is not None

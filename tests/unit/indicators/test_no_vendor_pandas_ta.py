@@ -13,15 +13,15 @@ def test_legacy_pandas_ta_vendor_tree_is_removed() -> None:
     assert not (repo_root / "tradelearn" / "query" / "tec" / "pandas_ta").exists()
 
 
-def test_backtesting_util_imports_without_vendor_pandas_ta() -> None:
-    """Backtesting compatibility code should not import the removed vendor tree."""
+def test_lite_util_imports_without_vendor_pandas_ta() -> None:
+    """Lite compatibility code should not import the removed vendor tree."""
     from tradelearn.lite import util
 
     assert util._TA is not None
 
 
-def test_backtesting_ta_accessor_delegates_to_pandas_ta_classic() -> None:
-    """Backtesting data.ta methods should use pandas-ta-classic after vendor removal."""
+def test_lite_ta_accessor_delegates_to_pandas_ta_classic() -> None:
+    """Lite data.ta methods should use pandas-ta-classic after vendor removal."""
     from tradelearn.lite.util import _TA
 
     data = pd.DataFrame(

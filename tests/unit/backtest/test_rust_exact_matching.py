@@ -13,12 +13,10 @@ from tradelearn.backtest.lines import LineSeries
 from tradelearn.backtest.models import Order, Stats
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
 from tradelearn.lite.backtest import Backtest
-from tradelearn.lite.strategy import (
-    BacktestingDataProxy,
-    IndicatorProxy,
-    PositionProxy,
-)
-from tradelearn.lite.strategy import Strategy as BacktestingStrategy
+from tradelearn.lite.data import LiteDataProxy
+from tradelearn.lite.indicator import IndicatorProxy
+from tradelearn.lite.position import PositionProxy
+from tradelearn.lite.strategy import Strategy as LiteStrategy
 from tradelearn.engine import Cerebro, DataFeed, Strategy
 from tradelearn.engine import indicators as btind
 from tradelearn.core import Fill, OrderRequest
@@ -494,7 +492,7 @@ def test_rust_broker_records_closed_trade_flags_in_fill_ledger() -> None:
     assert fills["pnl"].tolist() == [0.0, 1.0]
 
 
-def test_backtesting_run_uses_lazy_stats_without_materializing_fills(monkeypatch) -> None:
+def test_lite_run_uses_lazy_stats_without_materializing_fills(monkeypatch) -> None:
     data = pd.DataFrame(
         {
             "Open": [10.0, 11.0, 12.0, 13.0],
@@ -506,7 +504,7 @@ def test_backtesting_run_uses_lazy_stats_without_materializing_fills(monkeypatch
         index=pd.date_range("2024-01-01", periods=4),
     )
 
-    class RoundTrip(BacktestingStrategy):
+    class RoundTrip(LiteStrategy):
         def init(self) -> None:
             pass
 
@@ -559,7 +557,7 @@ def test_stats_lazy_artifacts_materialize_once() -> None:
     assert calls == {"fills": 1, "returns": 1}
 
 
-def test_backtesting_strategy_uses_public_basic_submit_fast_path() -> None:
+def test_lite_strategy_uses_public_basic_submit_fast_path() -> None:
     class FakeData:
         _cursor = 0
 
@@ -580,9 +578,9 @@ def test_backtesting_strategy_uses_public_basic_submit_fast_path() -> None:
             return "order"
 
         def _submit(self, *args, **kwargs):
-            raise AssertionError("backtesting facade should use submit_basic when available")
+            raise AssertionError("lite facade should use submit_basic when available")
 
-    strategy = BacktestingStrategy()
+    strategy = LiteStrategy()
     data = FakeData()
     strategy.datas = [data]
     strategy.broker = FakeBroker()
@@ -607,7 +605,7 @@ def test_backtest_engine_calls_strategy_setup_once() -> None:
         index=pd.date_range("2024-01-01", periods=3),
     )
 
-    class SetupCounter(BacktestingStrategy):
+    class SetupCounter(LiteStrategy):
         setup_calls = 0
 
         def _setup(self) -> None:
@@ -1194,7 +1192,7 @@ def test_line_series_hot_path_indexing_preserves_relative_semantics() -> None:
     assert line[1:3].tolist() == [2.0, 3.0]
 
 
-def test_backtesting_position_proxy_uses_broker_size_fast_path() -> None:
+def test_lite_position_proxy_uses_broker_size_fast_path() -> None:
     class FakeBroker:
         def __init__(self) -> None:
             self.size_calls = 0
@@ -1218,7 +1216,7 @@ def test_backtesting_position_proxy_uses_broker_size_fast_path() -> None:
     assert strategy.broker.size_calls == 2
 
 
-def test_backtesting_position_proxy_refreshes_after_broker_swap() -> None:
+def test_lite_position_proxy_refreshes_after_broker_swap() -> None:
     class FakeBroker:
         def __init__(self, size: float) -> None:
             self._size = size
@@ -1239,7 +1237,7 @@ def test_backtesting_position_proxy_refreshes_after_broker_swap() -> None:
     assert position.size == 3.0
 
 
-def test_backtesting_position_proxy_uses_public_current_position_size() -> None:
+def test_lite_position_proxy_uses_public_current_position_size() -> None:
     class FakeBroker:
         def __init__(self) -> None:
             self.size_calls = 0
@@ -1266,7 +1264,7 @@ def test_backtesting_position_proxy_uses_public_current_position_size() -> None:
     assert strategy.broker.size_calls == 2
 
 
-def test_backtesting_indicator_proxy_relative_indexing() -> None:
+def test_lite_indicator_proxy_relative_indexing() -> None:
     class Feed:
         _cursor = 2
 
@@ -1287,7 +1285,7 @@ def test_backtesting_indicator_proxy_relative_indexing() -> None:
         indicator.previous()
 
 
-def test_backtesting_data_proxy_exposes_fixed_line_proxy_before_cursor_starts() -> None:
+def test_lite_data_proxy_exposes_fixed_line_proxy_before_cursor_starts() -> None:
     class Feed:
         def __init__(self) -> None:
             self._cursor = -1
@@ -1302,14 +1300,14 @@ def test_backtesting_data_proxy_exposes_fixed_line_proxy_before_cursor_starts() 
         def get_array(self, name: str):
             return self.arrays[name]
 
-    proxy = BacktestingDataProxy(Feed())
+    proxy = LiteDataProxy(Feed())
 
     assert isinstance(proxy.close, IndicatorProxy)
     assert proxy.close is proxy.close
     assert pd.Series(proxy.close).tolist() == [4.0, 5.0, 6.0]
 
 
-def test_backtesting_data_proxy_reuses_line_proxy_after_cursor_starts() -> None:
+def test_lite_data_proxy_reuses_line_proxy_after_cursor_starts() -> None:
     class Feed:
         def __init__(self) -> None:
             self._cursor = 0
@@ -1324,7 +1322,7 @@ def test_backtesting_data_proxy_reuses_line_proxy_after_cursor_starts() -> None:
         def get_array(self, name: str):
             return self.arrays[name]
 
-    proxy = BacktestingDataProxy(Feed())
+    proxy = LiteDataProxy(Feed())
 
     first = proxy.close
     second = proxy.close
@@ -1333,7 +1331,7 @@ def test_backtesting_data_proxy_reuses_line_proxy_after_cursor_starts() -> None:
     assert first is second
 
 
-def test_backtesting_data_proxy_caches_extra_line_proxy_after_cursor_starts() -> None:
+def test_lite_data_proxy_caches_extra_line_proxy_after_cursor_starts() -> None:
     class Feed:
         def __init__(self) -> None:
             self._cursor = 0
@@ -1350,7 +1348,7 @@ def test_backtesting_data_proxy_caches_extra_line_proxy_after_cursor_starts() ->
             return self.arrays[name]
 
     feed = Feed()
-    proxy = BacktestingDataProxy(feed)
+    proxy = LiteDataProxy(feed)
 
     first = proxy.factor
     second = proxy.factor
@@ -1361,7 +1359,7 @@ def test_backtesting_data_proxy_caches_extra_line_proxy_after_cursor_starts() ->
     assert proxy.factor is not first
 
 
-def test_backtesting_strategy_init_runs_once() -> None:
+def test_lite_strategy_init_runs_once() -> None:
     data = pd.DataFrame(
         {
             "Open": [10.0, 11.0, 12.0],
@@ -1373,12 +1371,12 @@ def test_backtesting_strategy_init_runs_once() -> None:
         index=pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"], utc=True),
     )
 
-    class InitCountingStrategy(BacktestingStrategy):
+    class InitCountingStrategy(LiteStrategy):
         init_calls = 0
 
         def init(self) -> None:
             type(self).init_calls += 1
-            assert isinstance(self.data, BacktestingDataProxy)
+            assert isinstance(self.data, LiteDataProxy)
 
         def next(self) -> None:
             pass
@@ -1390,7 +1388,7 @@ def test_backtesting_strategy_init_runs_once() -> None:
     assert InitCountingStrategy.init_calls == 1
 
 
-def test_backtesting_strategy_I_caches_batch_indicator_results() -> None:
+def test_lite_strategy_I_caches_batch_indicator_results() -> None:
     data = pd.DataFrame(
         {
             "Open": [10.0, 11.0, 12.0, 13.0],
@@ -1407,7 +1405,7 @@ def test_backtesting_strategy_I_caches_batch_indicator_results() -> None:
         calls["count"] += 1
         return pd.Series(close).rolling(period).mean()
 
-    class CachedIndicatorStrategy(BacktestingStrategy):
+    class CachedIndicatorStrategy(LiteStrategy):
         cache_seen = False
 
         def init(self) -> None:
@@ -1458,7 +1456,7 @@ def test_backtrader_indicators_use_strategy_batch_cache_without_strategy_i_api()
     assert CachedBtIndicatorStrategy.cache_seen is True
 
 
-def test_backtesting_strategy_I_does_not_merge_distinct_lambda_indicators() -> None:
+def test_lite_strategy_I_does_not_merge_distinct_lambda_indicators() -> None:
     data = pd.DataFrame(
         {
             "Open": [10.0, 11.0, 12.0],
@@ -1470,7 +1468,7 @@ def test_backtesting_strategy_I_does_not_merge_distinct_lambda_indicators() -> N
         index=pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"], utc=True),
     )
 
-    class LambdaIndicatorStrategy(BacktestingStrategy):
+    class LambdaIndicatorStrategy(LiteStrategy):
         first_seen = None
         second_seen = None
 

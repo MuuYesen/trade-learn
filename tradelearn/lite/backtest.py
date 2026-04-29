@@ -51,7 +51,7 @@ class Backtest:
         from tradelearn.backtest.sizer import FixedSize
         self._sizer_spec = (FixedSize, {})
         self.broker = RustBroker(cash=cash, commission=commission, match_mode=match_mode)
-        self.broker._storage = self._storage
+        self.broker.set_storage(self._storage)
         self.analyzers = {}
 
     @staticmethod
@@ -66,7 +66,7 @@ class Backtest:
             commission=self._commission,
             match_mode=self.match_mode,
         )
-        self.broker._storage = self._storage
+        self.broker.set_storage(self._storage)
 
         # Tradelearn 1.x passes strategy params through run(**kwargs).
         if kwargs:

@@ -19,7 +19,7 @@ def _data() -> pd.DataFrame:
     )
 
 
-def test_backtesting_facade_accepts_tradelearn_1x_strategy_surface() -> None:
+def test_lite_facade_accepts_tradelearn_1x_strategy_surface() -> None:
     storage: dict[str, object] = {}
     seen: dict[str, object] = {}
 
@@ -70,7 +70,7 @@ def test_backtesting_facade_accepts_tradelearn_1x_strategy_surface() -> None:
     assert storage["last_close"] == 14.0
 
 
-def test_backtesting_facade_rejects_legacy_capitalized_data_aliases() -> None:
+def test_lite_facade_rejects_legacy_capitalized_data_aliases() -> None:
     class CapitalizedStrategy(Strategy):
         def init(self) -> None:
             _ = self.data.Close
@@ -82,7 +82,7 @@ def test_backtesting_facade_rejects_legacy_capitalized_data_aliases() -> None:
         Backtest(_data(), CapitalizedStrategy).run()
 
 
-def test_backtesting_facade_rejects_unknown_strategy_params() -> None:
+def test_lite_facade_rejects_unknown_strategy_params() -> None:
     class ParamStrategy(Strategy):
         known = 1
 
@@ -96,7 +96,7 @@ def test_backtesting_facade_rejects_unknown_strategy_params() -> None:
         Backtest(_data(), ParamStrategy).run(unknown=2)
 
 
-def test_backtesting_facade_validates_indicator_index() -> None:
+def test_lite_facade_validates_indicator_index() -> None:
     class BadIndicatorStrategy(Strategy):
         def init(self) -> None:
             bad = pd.Series([1, 2, 3], index=pd.date_range("2025-01-01", periods=3, tz="UTC"))

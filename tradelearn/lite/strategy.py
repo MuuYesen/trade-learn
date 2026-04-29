@@ -10,7 +10,7 @@ import pandas as pd
 from tradelearn.backtest.indicator_cache import BatchIndicatorCache
 from tradelearn.backtest.models import Order
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
-from tradelearn.lite.data import BacktestingDataProxy, LiteDataProxy, _ta_frame
+from tradelearn.lite.data import LiteDataProxy, _ta_frame
 from tradelearn.lite.indicator import IndicatorBundle, IndicatorProxy
 from tradelearn.lite.position import PositionProxy
 
@@ -75,7 +75,7 @@ class Strategy(CoreStrategy):
             }
             for i, feed in enumerate(self.datas):
                 setattr(self, f"data{i}", LiteDataProxy(feed))
-        self._storage = getattr(self.broker, "_storage", None)
+        self._storage = getattr(self.broker, "storage", None)
 
     def position(self, ticker: str | None = None) -> Any:
         """Return the Tradelearn Lite position view for a ticker."""
