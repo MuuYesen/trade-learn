@@ -576,6 +576,38 @@ class Strategy(CoreStrategy):
             **order_kwargs,
         )
 
+    def _buy_data(
+        self,
+        data: Any,
+        size: float | None = None,
+        price: float | None = None,
+        exectype: int | None = None,
+        **kwargs: Any,
+    ):
+        limit = price if exectype == Order.Limit else None
+        stop = price if exectype == Order.Stop else None
+        tag = kwargs.pop("tag", None)
+        info = kwargs.get("info")
+        if tag is None and isinstance(info, dict):
+            tag = info.get("tag")
+        return self._submit_1x_order(Order.Buy, data, size or 1, limit, stop, tag, **kwargs)
+
+    def _sell_data(
+        self,
+        data: Any,
+        size: float | None = None,
+        price: float | None = None,
+        exectype: int | None = None,
+        **kwargs: Any,
+    ):
+        limit = price if exectype == Order.Limit else None
+        stop = price if exectype == Order.Stop else None
+        tag = kwargs.pop("tag", None)
+        info = kwargs.get("info")
+        if tag is None and isinstance(info, dict):
+            tag = info.get("tag")
+        return self._submit_1x_order(Order.Sell, data, size or 1, limit, stop, tag, **kwargs)
+
     def sell(
         self,
         *,
@@ -598,15 +630,15 @@ class Strategy(CoreStrategy):
     def cancel(self, order: Any) -> None:
         return self.broker.cancel(order)
 
+    def _current_price(self, data: Any) -> float:
+        return float(data.get_array("close")[data._cursor])
+
     def order_target_size(self, *, ticker: str = None, target: float = 0, **kwargs: Any):
-        data = self._resolve_ticker_data(ticker)
-        current = self.getposition(data).size + self._pending_size.get(data, 0.0)
-        delta = float(target) - float(current)
-        if delta > 0:
-            return self.buy(ticker=ticker, size=delta, **kwargs)
-        if delta < 0:
-            return self.sell(ticker=ticker, size=abs(delta), **kwargs)
-        return None
+        return super().order_target_size(
+            data=self._resolve_ticker_data(ticker),
+            target=target,
+            **kwargs,
+        )
 
     def order_target_value(
         self,
@@ -616,24 +648,16 @@ class Strategy(CoreStrategy):
         price: float | None = None,
         **kwargs: Any,
     ):
-        data = self._resolve_ticker_data(ticker)
-        current = self.getposition(data).size + self._pending_size.get(data, 0.0)
-        price = float(price if price is not None else data.get_array("close")[data._cursor])
-        mult = getattr(self.broker, "_mult", 1.0)
-        current_value = float(current) * price * mult
-        delta_value = float(target) - current_value
-        if abs(delta_value) < 1e-12:
-            return None
-        size = int(abs(delta_value) / (price * mult))
-        if not size:
-            return None
-        if delta_value > 0:
-            return self.buy(ticker=ticker, size=size, **kwargs)
-        return self.sell(ticker=ticker, size=size, **kwargs)
+        return super().order_target_value(
+            data=self._resolve_ticker_data(ticker),
+            target=target,
+            price=price,
+            **kwargs,
+        )
 
     def order_target_percent(self, *, ticker: str = None, target: float = 0.0, **kwargs: Any):
-        return self.order_target_value(
-            ticker=ticker,
+        return super().order_target_value(
+            data=self._resolve_ticker_data(ticker),
             target=float(target) * float(self.broker.getvalue()),
             **kwargs,
         )
@@ -649,34 +673,16 @@ class Strategy(CoreStrategy):
         tp: float = None,
         tag: object = None,
     ) -> list[Any]:
-        data = self._resolve_ticker_data(ticker)
-        main = self._submit_1x_order(Order.Buy, data, size, limit, stop, tag, transmit=False)
-        stop_order = None
-        if sl is not None:
-            stop_order = self._submit_1x_order(
-                Order.Sell,
-                data,
-                size,
-                None,
-                sl,
-                tag,
-                parent=main,
-                transmit=False,
-            )
-        limit_order = None
-        if tp is not None:
-            limit_order = self._submit_1x_order(
-                Order.Sell,
-                data,
-                size,
-                tp,
-                None,
-                tag,
-                parent=main,
-                oco=stop_order,
-                transmit=True,
-            )
-        return [order for order in (main, stop_order, limit_order) if order is not None]
+        kwargs = {"info": {"tag": tag}} if tag is not None else {}
+        return super().buy_bracket(
+            data=self._resolve_ticker_data(ticker),
+            size=size,
+            price=limit or stop,
+            stopprice=sl,
+            limitprice=tp,
+            exectype=Order.Limit if limit else Order.Stop if stop else Order.Market,
+            **kwargs,
+        )
 
     def sell_bracket(
         self,
@@ -689,34 +695,16 @@ class Strategy(CoreStrategy):
         tp: float = None,
         tag: object = None,
     ) -> list[Any]:
-        data = self._resolve_ticker_data(ticker)
-        main = self._submit_1x_order(Order.Sell, data, size, limit, stop, tag, transmit=False)
-        stop_order = None
-        if sl is not None:
-            stop_order = self._submit_1x_order(
-                Order.Buy,
-                data,
-                size,
-                None,
-                sl,
-                tag,
-                parent=main,
-                transmit=False,
-            )
-        limit_order = None
-        if tp is not None:
-            limit_order = self._submit_1x_order(
-                Order.Buy,
-                data,
-                size,
-                tp,
-                None,
-                tag,
-                parent=main,
-                oco=stop_order,
-                transmit=True,
-            )
-        return [order for order in (main, stop_order, limit_order) if order is not None]
+        kwargs = {"info": {"tag": tag}} if tag is not None else {}
+        return super().sell_bracket(
+            data=self._resolve_ticker_data(ticker),
+            size=size,
+            price=limit or stop,
+            stopprice=sl,
+            limitprice=tp,
+            exectype=Order.Limit if limit else Order.Stop if stop else Order.Market,
+            **kwargs,
+        )
 
     def _resolve_ticker_data(self, ticker: str | None = None) -> Any:
         if ticker is None:

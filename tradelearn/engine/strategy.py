@@ -36,60 +36,6 @@ class Strategy(_BaseStrategy, LineRoot):
         """Shortcut for self.data.datetime to match backtrader behavior."""
         return self.data.datetime
 
-    def order_target_size(self, data=None, target=0, **kwargs):
-        """Place an order to rebalance position to have final size of target."""
-        if data is None:
-            data = self.data
-        # Use the effective position (including pending orders) to avoid duplicate orders
-        possize = self.getposition(data).size + self._pending_size.get(data, 0.0)
-        if not target and possize:
-            return self.close(data=data, **kwargs)
-        elif target > possize:
-            return self.buy(data=data, size=target - possize, **kwargs)
-        elif target < possize:
-            return self.sell(data=data, size=possize - target, **kwargs)
-        return None
-
-    def order_target_value(self, data=None, target=0.0, price=None, **kwargs):
-        """Place an order to rebalance position to have final value of target."""
-        if data is None:
-            data = self.data
-        # Use effective position to account for pending rebalances
-        possize = self.getposition(data).size + self._pending_size.get(data, 0.0)
-        if not target and possize:
-            return self.close(data=data, **kwargs)
-        price = price if price is not None else data.close[0]
-        # Get multiplier from commission info if possible
-        comminfo = self.broker.getcommissioninfo(data)
-        mult = getattr(comminfo.p, 'mult', 1.0)
-        
-        current_value = possize * price * mult
-        if target > current_value:
-            size = int((target - current_value) / (price * mult))
-            if size:
-                return self.buy(data=data, size=size, price=price, **kwargs)
-        elif target < current_value:
-            size = int((current_value - target) / (price * mult))
-            if size:
-                return self.sell(data=data, size=size, price=price, **kwargs)
-        return None
-
-    def order_target_percent(self, data=None, target=0.0, **kwargs):
-        """Place an order to rebalance position to target percentage of portfolio value."""
-        if data is None:
-            data = self.data
-        target_value = target * self.broker.getvalue()
-        return self.order_target_value(data=data, target=target_value, **kwargs)
-
-    def cancel(self, order):
-        return self.broker.cancel(order)
-
-    def getdatabyname(self, name):
-        for data in self.datas:
-            if getattr(data, "_name", None) == name:
-                return data
-        raise KeyError(f"data feed {name!r} not found")
-
     def buy_bracket(
         self,
         data=None,
@@ -109,43 +55,24 @@ class Strategy(_BaseStrategy, LineRoot):
         limitargs=None,
         **kwargs,
     ):
-        data = data or self.data
-        oargs = dict(oargs or {})
-        stopargs = dict(stopargs or {})
-        limitargs = dict(limitargs or {})
-        main = self.buy(
+        return super().buy_bracket(
             data=data,
             size=size,
             price=price,
+            stopprice=stopprice,
+            limitprice=limitprice,
             pricelimit=plimit,
             exectype=exectype,
             valid=valid,
-            transmit=False,
-            **kwargs,
-            **oargs,
-        )
-        stop = self.sell(
-            data=data,
-            size=size,
-            price=stopprice,
-            exectype=stopexec,
-            parent=main,
-            transmit=False,
             trailamount=trailamount,
             trailpercent=trailpercent,
-            **stopargs,
+            stopexec=stopexec,
+            limitexec=limitexec,
+            oargs=oargs,
+            stopargs=stopargs,
+            limitargs=limitargs,
+            **kwargs,
         )
-        limit = self.sell(
-            data=data,
-            size=size,
-            price=limitprice,
-            exectype=limitexec,
-            parent=main,
-            oco=stop,
-            transmit=True,
-            **limitargs,
-        )
-        return [main, stop, limit]
 
     def sell_bracket(
         self,
@@ -166,43 +93,24 @@ class Strategy(_BaseStrategy, LineRoot):
         limitargs=None,
         **kwargs,
     ):
-        data = data or self.data
-        oargs = dict(oargs or {})
-        stopargs = dict(stopargs or {})
-        limitargs = dict(limitargs or {})
-        main = self.sell(
+        return super().sell_bracket(
             data=data,
             size=size,
             price=price,
+            stopprice=stopprice,
+            limitprice=limitprice,
             pricelimit=plimit,
             exectype=exectype,
             valid=valid,
-            transmit=False,
-            **kwargs,
-            **oargs,
-        )
-        stop = self.buy(
-            data=data,
-            size=size,
-            price=stopprice,
-            exectype=stopexec,
-            parent=main,
-            transmit=False,
             trailamount=trailamount,
             trailpercent=trailpercent,
-            **stopargs,
+            stopexec=stopexec,
+            limitexec=limitexec,
+            oargs=oargs,
+            stopargs=stopargs,
+            limitargs=limitargs,
+            **kwargs,
         )
-        limit = self.buy(
-            data=data,
-            size=size,
-            price=limitprice,
-            exectype=limitexec,
-            parent=main,
-            oco=stop,
-            transmit=True,
-            **limitargs,
-        )
-        return [main, stop, limit]
 
 
 

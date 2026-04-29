@@ -84,6 +84,12 @@ class Strategy:
             return self.broker.getposition(data)
         return self._fallback_position(data)
 
+    def getdatabyname(self, name: str) -> Any:
+        for data in self.datas:
+            if getattr(data, "_name", None) == name:
+                return data
+        raise KeyError(f"data feed {name!r} not found")
+
     def setsizer(self, sizer: Any, name: Any = None) -> Any:
         if name is None:
             self._sizer = sizer
@@ -141,6 +147,26 @@ class Strategy:
     ):
         return self.submit_order(Order.Sell, data, size, price, exectype, **kwargs)
 
+    def _buy_data(
+        self,
+        data: Any,
+        size: float | None = None,
+        price: float | None = None,
+        exectype: int | None = None,
+        **kwargs,
+    ):
+        return self.buy(data=data, size=size, price=price, exectype=exectype, **kwargs)
+
+    def _sell_data(
+        self,
+        data: Any,
+        size: float | None = None,
+        price: float | None = None,
+        exectype: int | None = None,
+        **kwargs,
+    ):
+        return self.sell(data=data, size=size, price=price, exectype=exectype, **kwargs)
+
     def close(self, data: Any = None, size: float | None = None, **kwargs):
         data = self._resolve_data(data)
         pos = self.getposition(data)
@@ -151,6 +177,158 @@ class Strategy:
         elif effective_size < 0:
             return self.buy(data=data, size=size or abs(effective_size), **kwargs)
         return None
+
+    def cancel(self, order: Any):
+        return self.broker.cancel(order)
+
+    def _current_price(self, data: Any) -> float:
+        close = getattr(data, "close", None)
+        if close is not None:
+            return float(close[0])
+        return float(data.get_array("close")[data._cursor])
+
+    def _position_mult(self, data: Any) -> float:
+        getcommissioninfo = getattr(self.broker, "getcommissioninfo", None)
+        if callable(getcommissioninfo):
+            comminfo = getcommissioninfo(data)
+            return float(getattr(getattr(comminfo, "p", comminfo), "mult", 1.0))
+        return float(getattr(self.broker, "_mult", 1.0))
+
+    def order_target_size(self, data: Any = None, target: float = 0, **kwargs):
+        data = self._resolve_data(data)
+        possize = self.getposition(data).size + self._pending_size.get(data, 0.0)
+        delta = float(target) - float(possize)
+        if delta > 0:
+            return self._buy_data(data=data, size=delta, **kwargs)
+        if delta < 0:
+            return self._sell_data(data=data, size=abs(delta), **kwargs)
+        return None
+
+    def order_target_value(
+        self,
+        data: Any = None,
+        target: float = 0.0,
+        price: float | None = None,
+        **kwargs,
+    ):
+        data = self._resolve_data(data)
+        possize = self.getposition(data).size + self._pending_size.get(data, 0.0)
+        price = float(price if price is not None else self._current_price(data))
+        mult = self._position_mult(data)
+        current_value = float(possize) * price * mult
+        delta = float(target) - current_value
+        if abs(delta) < 1e-12:
+            return None
+        size = int(abs(delta) / (price * mult))
+        if not size:
+            return None
+        if delta > 0:
+            return self._buy_data(data=data, size=size, **kwargs)
+        return self._sell_data(data=data, size=size, **kwargs)
+
+    def order_target_percent(self, data: Any = None, target: float = 0.0, **kwargs):
+        data = self._resolve_data(data)
+        return self.order_target_value(
+            data=data,
+            target=float(target) * float(self.broker.getvalue()),
+            **kwargs,
+        )
+
+    def buy_bracket(
+        self,
+        data: Any = None,
+        size: float | None = None,
+        price: float | None = None,
+        stopprice: float | None = None,
+        limitprice: float | None = None,
+        pricelimit: float | None = None,
+        exectype: int = Order.Limit,
+        stopexec: int = Order.Stop,
+        limitexec: int = Order.Limit,
+        oargs: dict[str, Any] | None = None,
+        stopargs: dict[str, Any] | None = None,
+        limitargs: dict[str, Any] | None = None,
+        **kwargs,
+    ) -> list[Any]:
+        data = self._resolve_data(data)
+        main = self._buy_data(
+            data=data,
+            size=size,
+            price=price,
+            pricelimit=pricelimit,
+            exectype=exectype,
+            transmit=False,
+            **kwargs,
+            **dict(oargs or {}),
+        )
+        stop = self._sell_data(
+            data=data,
+            size=size,
+            price=stopprice,
+            exectype=stopexec,
+            parent=main,
+            transmit=False,
+            **dict(stopargs or {}),
+        )
+        limit = self._sell_data(
+            data=data,
+            size=size,
+            price=limitprice,
+            exectype=limitexec,
+            parent=main,
+            oco=stop,
+            transmit=True,
+            **dict(limitargs or {}),
+        )
+        return [main, stop, limit]
+
+    def sell_bracket(
+        self,
+        data: Any = None,
+        size: float | None = None,
+        price: float | None = None,
+        stopprice: float | None = None,
+        limitprice: float | None = None,
+        pricelimit: float | None = None,
+        exectype: int = Order.Limit,
+        stopexec: int = Order.Stop,
+        limitexec: int = Order.Limit,
+        oargs: dict[str, Any] | None = None,
+        stopargs: dict[str, Any] | None = None,
+        limitargs: dict[str, Any] | None = None,
+        **kwargs,
+    ) -> list[Any]:
+        data = self._resolve_data(data)
+        main = self._sell_data(
+            data=data,
+            size=size,
+            price=price,
+            pricelimit=pricelimit,
+            exectype=exectype,
+            transmit=False,
+            **kwargs,
+            **dict(oargs or {}),
+        )
+        stop = self._buy_data(
+            data=data,
+            size=size,
+            price=stopprice,
+            exectype=stopexec,
+            parent=main,
+            transmit=False,
+            **dict(stopargs or {}),
+        )
+        limit = self._buy_data(
+            data=data,
+            size=size,
+            price=limitprice,
+            exectype=limitexec,
+            parent=main,
+            oco=stop,
+            transmit=True,
+            **dict(limitargs or {}),
+        )
+        return [main, stop, limit]
 
     def _on_fill(self, data: Any, signed_size: float, price: float) -> None:
         """Handle fills produced by the Python fallback path.
