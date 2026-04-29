@@ -213,7 +213,16 @@ class Cerebro:
         self._runstop = True
 
     def plot(self, *args: Any, **kwargs: Any) -> list[Any]:
-        return []
+        reporter = self._last_reporter()
+        return [
+            reporter.equity_curve_chart(kwargs.get("benchmark")),
+            reporter.drawdown_chart(),
+            reporter.trade_distribution_chart(),
+        ]
+
+    def html(self, path: str, benchmark: Any | None = None) -> Any:
+        """Write an HTML report for the most recent run."""
+        return self._last_reporter().html(path, benchmark=benchmark)
 
     def run(self) -> list[Strategy]:
         if self.mode != "backtest":
@@ -259,7 +268,19 @@ class Cerebro:
             finally:
                 self._reset_strategy_context()
         self.strats = original_strats
+        self._last_results = results
         return results
+
+    def _last_reporter(self):
+        results = getattr(self, "_last_results", None)
+        if not results:
+            raise RuntimeError("run() must be called before plot() or html()")
+        stats = getattr(results[0], "stats", None)
+        if stats is None:
+            raise RuntimeError("last run did not produce stats")
+        from tradelearn.report import Reporter
+
+        return Reporter(stats)
 
     def _attach_observers(self, strategy: Any) -> None:
         strategy.observers = ObserverCollection()

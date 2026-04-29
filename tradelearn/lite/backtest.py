@@ -76,6 +76,9 @@ class Backtest:
 
         results = run_backtest(self)
         strategy_instance = results[0]
+        self._last_results = results
+        self._last_strategy = strategy_instance
+        self._last_stats = getattr(strategy_instance, "stats", None)
 
         # Generate statistics
         final_value = self.broker.getvalue()
@@ -129,8 +132,25 @@ class Backtest:
         return best_res
 
     def plot(self, *args, **kwargs):
-        """Mock plot method."""
-        print("Plotting is not yet implemented in tradelearn.lite")
+        """Return report charts for the most recent Lite run."""
+        reporter = self._last_reporter()
+        return [
+            reporter.equity_curve_chart(kwargs.get("benchmark")),
+            reporter.drawdown_chart(),
+            reporter.trade_distribution_chart(),
+        ]
+
+    def html(self, path: str, benchmark=None):
+        """Write an HTML report for the most recent Lite run."""
+        return self._last_reporter().html(path, benchmark=benchmark)
+
+    def _last_reporter(self):
+        stats = getattr(self, "_last_stats", None)
+        if stats is None:
+            raise RuntimeError("run() must be called before plot() or html()")
+        from tradelearn.report import Reporter
+
+        return Reporter(stats)
 
 def _optimize_worker(data, strategy_cls, cash, commission, match_mode, keys, params_values):
     params = dict(zip(keys, params_values, strict=False))

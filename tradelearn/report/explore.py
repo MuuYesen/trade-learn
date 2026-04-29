@@ -13,4 +13,6 @@ def explore_trades(trades: Any) -> Any:
         raise ImportError(
             "explore() requires pygwalker. Install with: pip install trade-learn[lab]"
         ) from exc
+    if getattr(trades, "empty", False):
+        raise ValueError("explore() requires at least one trade row")
     return pyg.walk(trades)

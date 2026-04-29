@@ -35,7 +35,7 @@ class Reporter:
     def summary(self, benchmark: pd.Series | None = None) -> dict[str, float | int | str]:
         """Return report summary statistics."""
         returns = self._get("returns")
-        trades = self._get("trades", default=pd.DataFrame())
+        trades = self._trades()
         summary = dict(self._get("summary", default={}) or {})
         computed: dict[str, float | int] = {
             "annual_return": metrics.annual_return(returns, periods=self.periods),
@@ -98,7 +98,7 @@ class Reporter:
 
     def trade_distribution(self, bins: int = 20) -> pd.DataFrame:
         """Return trade PnL histogram bins."""
-        return trade_distribution(self._get("trades", default=pd.DataFrame()), bins=bins)
+        return trade_distribution(self._trades(), bins=bins)
 
     def exposure(self) -> pd.DataFrame:
         """Return daily symbol exposure weights."""
@@ -226,6 +226,13 @@ class Reporter:
         if isinstance(self.stats, Mapping):
             return self.stats.get(name, default)
         return getattr(self.stats, name, default)
+
+    def _trades(self) -> pd.DataFrame:
+        """Return trades in a report-safe frame shape."""
+        trades = self._get("trades", default=pd.DataFrame())
+        if isinstance(trades, pd.DataFrame) and trades.empty and "pnl" not in trades:
+            return pd.DataFrame({"pnl": pd.Series(dtype="float64")})
+        return trades
 
     def _turnover(self) -> float:
         """Return explicit turnover summary or NaN until positions are supported."""
