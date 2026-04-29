@@ -27,25 +27,8 @@ plugins:
 
 nav:
   - Quickstart: README.md
-  - Project: PROJECT.md
-  - Runbook: RUNBOOK.md
-  - Specs:
-      - Architecture: specs/ARCHITECTURE.md
-      - Contracts: specs/CONTRACTS.md
-      - Backtest: specs/BACKTEST_SPEC.md
-      - Strategy: specs/STRATEGY_SPEC.md
-      - Migration: specs/MIGRATION.md
-      - Consistency: specs/CONSISTENCY.md
-      - Indicators: specs/INDICATORS_SPEC.md
-      - Metrics: specs/METRICS_SPEC.md
-      - Report: specs/REPORT_SPEC.md
-  - Internal:
-      - Event Loop: internal/event-loop.md
-      - Matching: internal/matching-design.md
-      - Portfolio: internal/portfolio.md
-  - Release:
-      - Evaluation: release/evaluation.md
-      - API Reference: api/reference.md
-      - Strategy Writing Guide: api/strategy.md
-      - Engine API Guide: api/engine.md
-      - Lite API Guide: api/lite.md
+  - Strategy Writing Guide: api/strategy.md
+  - Engine API Guide: api/engine.md
+  - Lite API Guide: api/lite.md
+  - API Reference: api/reference.md
+  - Evaluation: release/evaluation.md
