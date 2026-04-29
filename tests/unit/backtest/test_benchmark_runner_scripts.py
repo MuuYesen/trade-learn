@@ -24,6 +24,8 @@ def test_backtrader_benchmark_runner_completes() -> None:
     assert "QuickstartSmaCross" in result.stdout
     assert "OrderExecutionStrategy" in result.stdout
     assert "vs Prev TL" in result.stdout
+    assert "TL Bars/s" in result.stdout
+    assert "BT Bars/s" in result.stdout
 
 
 def test_backtrader_benchmark_gate_enforces_exact_and_min_speedup() -> None:

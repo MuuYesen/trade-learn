@@ -23,6 +23,7 @@ TARGET_STRATEGIES = [
 ]
 
 EXACT_TOLERANCE = 1e-3
+BAR_COUNT = len(pd.read_parquet(DATA_PATH))
 
 STRATEGY_CLASSES = {
     "01_quickstart": "QuickstartSmaCross",
@@ -228,15 +229,18 @@ def run_benchmark(
     prev_header = "vs Prev TL" if comparable_to_previous else "vs Prev TL*"
     print(
         f"{'Strategy':<25} | {'TL Value':<12} | {'BT Value':<12} | "
-        f"{'TL Time':<10} | {'BT Time':<10} | {'Speedup':<10} | "
+        f"{'TL Time':<10} | {'BT Time':<10} | {'TL Bars/s':<11} | "
+        f"{'BT Bars/s':<11} | {'Speedup':<10} | "
         f"{prev_header:<11} | {'Status':<10}"
     )
-    print(f"{'-' * 136}")
+    print(f"{'-' * 162}")
     for cls_name, res in final_results.items():
         tl, bt_res = res.get("Tradelearn"), res.get("Backtrader")
         if tl and bt_res:
             diff = tl["final_value"] - bt_res["final_value"]
             t_tl, t_bt = tl["elapsed_ms"], bt_res["elapsed_ms"]
+            tl_bars_per_sec = BAR_COUNT / (t_tl / 1000) if t_tl > 0 else 0
+            bt_bars_per_sec = BAR_COUNT / (t_bt / 1000) if t_bt > 0 else 0
             speedup = t_bt / t_tl if t_tl > 0 else 0
             prev_tl = PREVIOUS_TL_MS.get(cls_name)
             if comparable_to_previous and prev_tl:
@@ -252,10 +256,11 @@ def run_benchmark(
             print(
                 f"{cls_name:<25} | {tl['final_value']:<12.2f} | "
                 f"{bt_res['final_value']:<12.2f} | {t_tl:>7.1f}ms | "
-                f"{t_bt:>7.1f}ms | {speedup:>8.1f}x | "
+                f"{t_bt:>7.1f}ms | {tl_bars_per_sec:>9,.0f} | "
+                f"{bt_bars_per_sec:>9,.0f} | {speedup:>8.1f}x | "
                 f"{improvement_text:>11} | {status:<10}"
             )
-    print(f"{'=' * 136}\n")
+    print(f"{'=' * 162}\n")
     if not comparable_to_previous:
         print(
             "* Warm/repeated runs are not directly comparable with the saved single-run "
