@@ -27,8 +27,18 @@ plugins:
 
 nav:
   - Quickstart: README.md
-  - Strategy Writing Guide: api/strategy.md
-  - Engine API Guide: api/engine.md
-  - Lite API Guide: api/lite.md
-  - API Reference: api/reference.md
-  - Evaluation: release/evaluation.md
+  - Documentation:
+      - Strategy Writing Guide: api/strategy.md
+      - Engine API Guide: api/engine.md
+      - Lite API Guide: api/lite.md
+      - Evaluation: release/evaluation.md
+  - API Reference:
+      - Overview: api/reference.md
+      - Engine: api/reference/engine.md
+      - Lite: api/reference/lite.md
+      - Data: api/reference/data.md
+      - Indicators: api/reference/indicators.md
+      - Metrics: api/reference/metrics.md
+      - Factor: api/reference/factor.md
+      - Report: api/reference/report.md
+      - ML: api/reference/ml.md
