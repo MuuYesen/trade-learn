@@ -32,15 +32,6 @@ from tradelearn.backtest.models import (
     _notify_order,
 )
 
-
-def __getattr__(name):
-    if name == "SimBroker":
-        from tradelearn.backtest.broker import RustBroker
-
-        return RustBroker
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 __all__ = [
     "BarRangeSlippage",
     "BarSnapshot",
@@ -67,7 +58,6 @@ __all__ = [
     "RollingBarBuffer",
     "RollingIndicatorCache",
     "SharedBarBuffer",
-    "SimBroker",
     "SlippageModel",
     "Stats",
     "TieredCommission",

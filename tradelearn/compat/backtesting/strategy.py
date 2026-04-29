@@ -4,10 +4,12 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 from tradelearn.backtest.indicator_cache import BatchIndicatorCache
 from tradelearn.backtest.models import Order
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
+from tradelearn.compat.backtesting.util import _TA
 
 
 class BacktestingDataProxy:
@@ -30,6 +32,7 @@ class BacktestingDataProxy:
         "Low",
         "Close",
         "Volume",
+        "ta",
         "_extra_line_cache",
     )
 
@@ -50,6 +53,7 @@ class BacktestingDataProxy:
         self.Low = self._low_proxy
         self.Close = self._close_proxy
         self.Volume = self._volume_proxy
+        self.ta = _TA(_ta_frame(data_feed))
         self._extra_line_cache: dict[str, tuple[Any, IndicatorProxy]] = {}
 
     def __getattr__(self, name: str) -> Any:
@@ -74,6 +78,21 @@ class BacktestingDataProxy:
 
     def __len__(self) -> int:
         return self._feed._cursor + 1
+
+
+def _ta_frame(data_feed: Any) -> pd.DataFrame:
+    frame = getattr(data_feed, "_frame", None)
+    if frame is not None:
+        return frame
+    return pd.DataFrame(
+        {
+            "open": data_feed.get_array("open"),
+            "high": data_feed.get_array("high"),
+            "low": data_feed.get_array("low"),
+            "close": data_feed.get_array("close"),
+            "volume": data_feed.get_array("volume"),
+        }
+    )
 
 class PositionProxy:
     """Proxy for strategy.position."""

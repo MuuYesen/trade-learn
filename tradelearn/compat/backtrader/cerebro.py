@@ -150,6 +150,7 @@ class Cerebro:
         specs = self.strats or [(Strategy, (), {})]
         original_strats = self.strats
         for spec in specs:
+            self._runstop = False
             self.strats = [spec]
             self._prepare_strategy_context()
             try:

@@ -348,6 +348,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
     bind_strategy_context = getattr(cerebro, "_bind_strategy_context", None)
 
     strategy = strategy_cls(*args, **kwargs)
+    strategy.cerebro = cerebro
     if callable(bind_strategy_context):
         bind_strategy_context(strategy)
 
@@ -519,6 +520,13 @@ def run_backtest(cerebro: Any) -> list[Any]:
     )
     min_start = min_period - 1
 
+    class _RunStopped(Exception):
+        """Internal sentinel used to break out of Rust callback-driven loops."""
+
+    def raise_if_runstopped() -> None:
+        if bool(getattr(cerebro, "_runstop", False)):
+            raise _RunStopped
+
     def on_bar(i: int) -> list[Any]:
         strategy_pre_next(i)
 
@@ -539,6 +547,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     broker_process_fills(strategy, i)
             else:
                 strategy_next()
+            if bool(getattr(cerebro, "_runstop", False)):
+                return []
             if has_analyzer_bar_callbacks:
                 _analyzer_bar_step(strategy, analyzer_bar_callbacks)
             if has_observer_nexts:
@@ -573,6 +583,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     begin_order_buffering()
                     strategy_next()
                     orders = drain_order_buffer()
+                    raise_if_runstopped()
                     if has_analyzer_bar_callbacks:
                         _analyzer_bar_step(strategy, analyzer_bar_callbacks)
                     if has_observer_nexts:
@@ -603,6 +614,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     begin_order_buffering()
                     strategy_next()
                     orders = drain_order_buffer()
+                    raise_if_runstopped()
                     if has_analyzer_bar_callbacks:
                         _analyzer_bar_step(strategy, analyzer_bar_callbacks)
                     if has_observer_nexts:
@@ -610,7 +622,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     return orders if orders else None
                 return None
 
-        data_advance_plan.run(broker._engine, broker, on_rust_bar_multi, 0, limit)
+        try:
+            data_advance_plan.run(broker._engine, broker, on_rust_bar_multi, 0, limit)
+        except _RunStopped:
+            pass
     elif use_rust_bar_loop:
         if notify_cashvalue is None:
 
@@ -627,6 +642,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     begin_order_buffering()
                     strategy_next()
                     orders = drain_order_buffer()
+                    raise_if_runstopped()
                     if has_analyzer_bar_callbacks:
                         _analyzer_bar_step(strategy, analyzer_bar_callbacks)
                     if has_observer_nexts:
@@ -649,6 +665,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     begin_order_buffering()
                     strategy_next()
                     orders = drain_order_buffer()
+                    raise_if_runstopped()
                     if has_analyzer_bar_callbacks:
                         _analyzer_bar_step(strategy, analyzer_bar_callbacks)
                     if has_observer_nexts:
@@ -656,10 +673,15 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     return orders if orders else None
                 return None
 
-        broker._engine.run_bar_loop(broker, on_rust_bar, 0, limit)
+        try:
+            broker._engine.run_bar_loop(broker, on_rust_bar, 0, limit)
+        except _RunStopped:
+            pass
     else:
         for i in range(limit):
             on_bar(i)
+            if bool(getattr(cerebro, "_runstop", False)):
+                break
 
     # 4. Lifecycle Stop
     strategy.stop()

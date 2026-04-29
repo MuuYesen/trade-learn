@@ -15,14 +15,14 @@ def test_legacy_pandas_ta_vendor_tree_is_removed() -> None:
 
 def test_backtesting_util_imports_without_vendor_pandas_ta() -> None:
     """Backtesting compatibility code should not import the removed vendor tree."""
-    from tradelearn.strategy.backtest.backtesting_py.libs import _util
+    from tradelearn.compat.backtesting import util
 
-    assert _util._TA is not None
+    assert util._TA is not None
 
 
 def test_backtesting_ta_accessor_delegates_to_pandas_ta_classic() -> None:
     """Backtesting data.ta methods should use pandas-ta-classic after vendor removal."""
-    from tradelearn.strategy.backtest.backtesting_py.libs._util import _TA
+    from tradelearn.compat.backtesting.util import _TA
 
     data = pd.DataFrame(
         {

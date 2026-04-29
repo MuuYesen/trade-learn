@@ -15,6 +15,15 @@ def _sma(close: pd.Series, period: int = 20) -> pd.Series:
     return pta.sma(close, length=period)
 
 
+def _ema(close: pd.Series, length: int = 20) -> pd.Series:
+    """Exponential moving average.
+
+    NOTE: Values may differ from ta.tdx.ema / ta.tv.ema variants.
+    Choose the namespace that matches your market convention.
+    """
+    return pta.ema(close, length=length)
+
+
 def _bbands(close: pd.Series, length: int = 20, std: float = 2.0) -> pd.DataFrame:
     """Bollinger Bands.
 
@@ -27,4 +36,5 @@ def _bbands(close: pd.Series, length: int = 20, std: float = 2.0) -> pd.DataFram
 
 
 sma = FunctionIndicator("sma", _sma, {"period": 20})
+ema = FunctionIndicator("ema", _ema, {"length": 20})
 bbands = FunctionIndicator("bbands", _bbands, {"length": 20, "std": 2.0})

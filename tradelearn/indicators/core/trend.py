@@ -22,4 +22,21 @@ def _macd(
     return result
 
 
+def _adx(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    length: int = 14,
+) -> pd.DataFrame:
+    """Average Directional Index.
+
+    NOTE: Values may differ from ta.tdx.dmi / ta.tv.adx variants.
+    Choose the namespace that matches your market convention.
+    """
+    result = pta.adx(high, low, close, length=length).copy()
+    result.columns = ["adx", "dmp", "dmn"]
+    return result
+
+
 macd = FunctionIndicator("macd", _macd, {"fast": 12, "slow": 26, "signal": 9})
+adx = FunctionIndicator("adx", _adx, {"length": 14})

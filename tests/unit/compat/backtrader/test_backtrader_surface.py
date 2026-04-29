@@ -85,6 +85,90 @@ def test_resampledata_adds_higher_timeframe_feed() -> None:
     assert data1.buflen() < data0.buflen()
 
 
+def test_optstrategy_runs_parameter_grid() -> None:
+    class ParamStrategy(bt.Strategy):
+        params = (("fast", 1), ("slow", 2))
+
+        def next(self) -> None:
+            pass
+
+    cerebro = bt.Cerebro()
+    cerebro.adddata(_ohlcv())
+    cerebro.optstrategy(ParamStrategy, fast=[1, 2], slow=[3, 4])
+
+    results = cerebro.run()
+
+    assert [(strategy.p.fast, strategy.p.slow) for strategy in results] == [
+        (1, 3),
+        (1, 4),
+        (2, 3),
+        (2, 4),
+    ]
+
+
+def test_runstop_stops_later_strategy_callbacks() -> None:
+    class StopAfterTwo(bt.Strategy):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def next(self) -> None:
+            self.calls += 1
+            if self.calls == 2:
+                self.cerebro.runstop()
+
+    cerebro = bt.Cerebro()
+    cerebro.adddata(_ohlcv(10))
+    cerebro.addstrategy(StopAfterTwo)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.calls == 2
+
+
+def test_runstop_state_is_reset_between_runs() -> None:
+    class StopImmediately(bt.Strategy):
+        def next(self) -> None:
+            self.cerebro.runstop()
+
+    class CountAll(bt.Strategy):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def next(self) -> None:
+            self.calls += 1
+
+    first = bt.Cerebro()
+    first.adddata(_ohlcv(5))
+    first.addstrategy(StopImmediately)
+    first.run()
+
+    second = bt.Cerebro()
+    second.adddata(_ohlcv(5))
+    second.addstrategy(CountAll)
+
+    [strategy] = second.run()
+
+    assert strategy.calls == 5
+
+
+def test_addminperiod_extends_warmup_without_backtest_public_api() -> None:
+    class WarmupStrategy(bt.Strategy):
+        def __init__(self) -> None:
+            self.addminperiod(4)
+            self.calls: list[int] = []
+
+        def next(self) -> None:
+            self.calls.append(len(self))
+
+    cerebro = bt.Cerebro()
+    cerebro.adddata(_ohlcv(6))
+    cerebro.addstrategy(WarmupStrategy)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.calls == [4, 5, 6]
+
+
 def test_sizer_observer_and_analyzer_attribute_access() -> None:
     class BuyOnce(bt.Strategy):
         def next(self) -> None:

@@ -193,6 +193,10 @@ class Strategy:
         if indicator not in self._indicators:
             self._indicators.append(indicator)
 
+    def addminperiod(self, minperiod: int) -> None:
+        """Extend the strategy warmup period used before calling ``next``."""
+        self._manual_min_period = max(int(minperiod), int(self._manual_min_period))
+
     def __len__(self) -> int:
         if self.data is not None:
             return len(self.data)
