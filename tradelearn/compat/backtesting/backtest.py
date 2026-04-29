@@ -22,22 +22,62 @@ class Backtest:
         trade_on_close: bool = False,
         hedging: bool = False,
         exclusive_orders: bool = False,
+        holding: dict[str, float] | None = None,
+        trade_start_date: str | pd.Timestamp | None = None,
+        lot_size: int = 1,
+        fail_fast: bool = True,
+        storage: dict | None = None,
         match_mode: str = 'exact' # Default to exact for alignment
     ):
         self._data = data
         self._strategy_cls = strategy
         self._cash = cash
         self._commission = commission
+        self._holding = holding or {}
+        self._margin = margin
+        self.trade_on_close = trade_on_close
+        self.hedging = hedging
+        self.exclusive_orders = exclusive_orders
+        self.trade_start_date = trade_start_date
+        self.lot_size = lot_size
+        self.fail_fast = fail_fast
+        self._storage = storage if storage is not None else {}
 
         # Internal state to match run_backtest expectations
-        self.datas = [DataFeed(data)]
+        self.datas = [DataFeed(self._normalize_data(data), name="Asset")]
         self.strats = [(strategy, (), {})]
         self.match_mode = match_mode
         self.stats_mode = "lazy"
         from tradelearn.compat.backtrader.sizers import FixedSize
         self._sizer_spec = (FixedSize, {})
         self.broker = RustBroker(cash=cash, commission=commission, match_mode=match_mode)
+        self.broker._storage = self._storage
         self.analyzers = {}
+
+    @staticmethod
+    def _normalize_data(data: pd.DataFrame) -> pd.DataFrame:
+        frame = data.copy()
+        if isinstance(frame.columns, pd.MultiIndex):
+            if len(frame.columns.levels[0]) != 1:
+                raise NotImplementedError(
+                    "compat.backtesting currently supports one ticker per Backtest run"
+                )
+            frame = frame.xs(frame.columns.levels[0][0], axis=1, level=0)
+        lower = {column: str(column).lower() for column in frame.columns}
+        frame = frame.rename(columns=lower)
+        required = {"open", "high", "low", "close"}
+        missing = required.difference(frame.columns)
+        if missing:
+            raise ValueError(f"data must contain OHLC columns; missing {sorted(missing)}")
+        if "volume" not in frame.columns:
+            frame["volume"] = 0.0
+        if not isinstance(frame.index, pd.DatetimeIndex):
+            numeric_index = pd.to_numeric(frame.index, errors="coerce")
+            if not pd.isna(numeric_index).any() and numeric_index.max() > 10_000_000:
+                frame.index = pd.to_datetime(numeric_index, unit="s", utc=True)
+        if not frame.index.is_monotonic_increasing:
+            frame = frame.sort_index()
+        return frame
 
     def run(self, **kwargs) -> pd.Series:
         """Run the backtest and return statistics."""
@@ -47,6 +87,7 @@ class Backtest:
             commission=self._commission,
             match_mode=self.match_mode,
         )
+        self.broker._storage = self._storage
 
         # Update strategy params from kwargs if any
         if kwargs:
