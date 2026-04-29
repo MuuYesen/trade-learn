@@ -514,7 +514,7 @@ def test_backtesting_run_uses_lazy_stats_without_materializing_fills(monkeypatch
             if len(self.data) == 1:
                 self.buy(size=1)
             elif len(self.data) == 3:
-                self.position.close()
+                self.position().close()
 
     def fail_fills_frame(self):
         raise AssertionError("fills_frame should be lazy during Backtest.run()")
@@ -1304,9 +1304,9 @@ def test_backtesting_data_proxy_exposes_fixed_line_proxy_before_cursor_starts() 
 
     proxy = BacktestingDataProxy(Feed())
 
-    assert isinstance(proxy.Close, IndicatorProxy)
-    assert proxy.Close is proxy.Close
-    assert pd.Series(proxy.Close).tolist() == [4.0, 5.0, 6.0]
+    assert isinstance(proxy.close, IndicatorProxy)
+    assert proxy.close is proxy.close
+    assert pd.Series(proxy.close).tolist() == [4.0, 5.0, 6.0]
 
 
 def test_backtesting_data_proxy_reuses_line_proxy_after_cursor_starts() -> None:
@@ -1326,8 +1326,8 @@ def test_backtesting_data_proxy_reuses_line_proxy_after_cursor_starts() -> None:
 
     proxy = BacktestingDataProxy(Feed())
 
-    first = proxy.Close
-    second = proxy.Close
+    first = proxy.close
+    second = proxy.close
 
     assert isinstance(first, IndicatorProxy)
     assert first is second
@@ -1352,13 +1352,13 @@ def test_backtesting_data_proxy_caches_extra_line_proxy_after_cursor_starts() ->
     feed = Feed()
     proxy = BacktestingDataProxy(feed)
 
-    first = proxy.Factor
-    second = proxy.Factor
+    first = proxy.factor
+    second = proxy.factor
     assert isinstance(first, IndicatorProxy)
     assert first is second
 
     feed.arrays["factor"] = [7.0, 8.0, 9.0]
-    assert proxy.Factor is not first
+    assert proxy.factor is not first
 
 
 def test_backtesting_strategy_init_runs_once() -> None:
@@ -1411,8 +1411,8 @@ def test_backtesting_strategy_I_caches_batch_indicator_results() -> None:
         cache_seen = False
 
         def init(self) -> None:
-            self.first = self.I(counted_indicator, self.data.Close, period=2)
-            self.second = self.I(counted_indicator, self.data.Close, period=2)
+            self.first = self.I(counted_indicator, self.data.close, period=2)
+            self.second = self.I(counted_indicator, self.data.close, period=2)
 
         def next(self) -> None:
             type(self).cache_seen = self._batch_indicator_cache is not None

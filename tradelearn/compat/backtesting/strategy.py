@@ -28,11 +28,11 @@ class BacktestingDataProxy:
         "_low_proxy",
         "_close_proxy",
         "_volume_proxy",
-        "Open",
-        "High",
-        "Low",
-        "Close",
-        "Volume",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
         "ta",
         "_extra_line_cache",
     )
@@ -58,24 +58,24 @@ class BacktestingDataProxy:
         self._volume_proxy = IndicatorProxy(
             self._volume_array, data_feed, index=frame.index, name="volume"
         )
-        self.Open = self._open_proxy
-        self.High = self._high_proxy
-        self.Low = self._low_proxy
-        self.Close = self._close_proxy
-        self.Volume = self._volume_proxy
+        self.open = self._open_proxy
+        self.high = self._high_proxy
+        self.low = self._low_proxy
+        self.close = self._close_proxy
+        self.volume = self._volume_proxy
         self.ta = _TA(_ta_frame(data_feed))
         self._extra_line_cache: dict[str, tuple[Any, IndicatorProxy]] = {}
 
     def __getattr__(self, name: str) -> Any:
-        mapping = {
-            "Open": "open",
-            "High": "high",
-            "Low": "low",
-            "Close": "close",
-            "Volume": "volume"
-        }
-        core_name = mapping.get(name, name.lower())
-        return self._line_or_array(core_name)
+        if name[:1].isupper():
+            raise AttributeError(
+                f"Column '{name}' is not available in the Tradelearn 1.x facade; "
+                f"use '{name.lower()}' instead."
+            )
+        line = self._line_or_array(name)
+        if len(line._data) == 0:
+            raise AttributeError(f"Column '{name}' not in data")
+        return line
 
     def _line_or_array(self, core_name: str) -> Any:
         arr = self._feed.get_array(core_name)
@@ -196,9 +196,23 @@ class PositionProxy:
         data = strategy.datas[0]
         effective_size = self.size + strategy._pending_size.get(data, 0.0)
         if effective_size > 0:
-            return strategy.sell(data=data, size=abs(effective_size) * float(portion))
+            return strategy._submit_1x_order(
+                Order.Sell,
+                data,
+                abs(effective_size) * float(portion),
+                None,
+                None,
+                None,
+            )
         if effective_size < 0:
-            return strategy.buy(data=data, size=abs(effective_size) * float(portion))
+            return strategy._submit_1x_order(
+                Order.Buy,
+                data,
+                abs(effective_size) * float(portion),
+                None,
+                None,
+                None,
+            )
         return None
 
     @property
@@ -271,8 +285,10 @@ class Strategy(CoreStrategy):
             self._bt_close_array = data.get_array("close")
         self._storage = getattr(self.broker, "_storage", None)
 
-    @property
-    def position(self) -> Any:
+    def position(self, ticker: str | None = None) -> Any:
+        """Return the Tradelearn 1.x position view for a ticker."""
+        if ticker is not None and ticker != self.data.the_ticker:
+            raise ValueError("multi-asset position lookup is not supported by this facade yet")
         return self._bt_position
 
     def I(  # noqa: E743
@@ -388,7 +404,6 @@ class Strategy(CoreStrategy):
         self,
         *,
         ticker: str = None,
-        data: Any = None,
         size: float = _FULL_EQUITY,
         limit: float = None,
         stop: float = None,
@@ -399,37 +414,46 @@ class Strategy(CoreStrategy):
         assert 0 < size < 1 or round(size) == size, (
             "size must be a positive fraction of equity, or a positive whole number of units"
         )
-        # backtesting.py size can be pct (0.0 to 1.0)
-        data = data or self._resolve_ticker_data(ticker)
+        data = self._resolve_ticker_data(ticker)
+        return self._submit_1x_order(Order.Buy, data, size, limit, stop, tag)
+
+    def _submit_1x_order(
+        self,
+        side: int,
+        data: Any,
+        size: float,
+        limit: float | None,
+        stop: float | None,
+        tag: object | None,
+    ) -> Any:
         broker = self.broker
         if 0 < size < 1:
             equity = broker.getvalue()
-            # Use current price adjusted for commission to match original logic
             price = (
                 self._bt_close_array[data._cursor]
                 if data is self._bt_primary_data
                 else data.get_array("close")[data._cursor]
             )
             comm_ratio = broker.commission_ratio
-            adjusted_price = price * (1 + comm_ratio)
+            adjusted_price = price * (1 + comm_ratio if side == Order.Buy else 1 - comm_ratio)
             size = int((equity * size) / adjusted_price)
-        
+
         actual_size = float(abs(size))
         pending = self._pending_size
-        pending[data] = pending.get(data, 0.0) + actual_size
+        pending_delta = actual_size if side == Order.Buy else -actual_size
+        pending[data] = pending.get(data, 0.0) + pending_delta
         exectype = Order.Limit if limit else Order.Stop if stop else Order.Market
         if tag is None:
             submit = getattr(broker, "submit_basic", broker._submit)
-            return submit(self, data, Order.Buy, actual_size, limit or stop, exectype)
+            return submit(self, data, side, actual_size, limit or stop, exectype)
         return broker._submit(
-            self, data, Order.Buy, actual_size, limit or stop, exectype, info={"tag": tag}
+            self, data, side, actual_size, limit or stop, exectype, info={"tag": tag}
         )
 
     def sell(
         self,
         *,
         ticker: str = None,
-        data: Any = None,
         size: float = _FULL_EQUITY,
         limit: float = None,
         stop: float = None,
@@ -440,30 +464,8 @@ class Strategy(CoreStrategy):
         assert 0 < size < 1 or round(size) == size, (
             "size must be a positive fraction of equity, or a positive whole number of units"
         )
-        data = data or self._resolve_ticker_data(ticker)
-        broker = self.broker
-        if 0 < size < 1:
-            equity = broker.getvalue()
-            price = (
-                self._bt_close_array[data._cursor]
-                if data is self._bt_primary_data
-                else data.get_array("close")[data._cursor]
-            )
-            comm_ratio = broker.commission_ratio
-            # For short, price is effectively lower due to commission
-            adjusted_price = price * (1 - comm_ratio)
-            size = int((equity * size) / adjusted_price)
-            
-        actual_size = float(abs(size))
-        pending = self._pending_size
-        pending[data] = pending.get(data, 0.0) - actual_size
-        exectype = Order.Limit if limit else Order.Stop if stop else Order.Market
-        if tag is None:
-            submit = getattr(broker, "submit_basic", broker._submit)
-            return submit(self, data, Order.Sell, actual_size, limit or stop, exectype)
-        return broker._submit(
-            self, data, Order.Sell, actual_size, limit or stop, exectype, info={"tag": tag}
-        )
+        data = self._resolve_ticker_data(ticker)
+        return self._submit_1x_order(Order.Sell, data, size, limit, stop, tag)
 
     def _resolve_ticker_data(self, ticker: str | None = None) -> Any:
         if ticker is None:

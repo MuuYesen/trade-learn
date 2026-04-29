@@ -69,6 +69,18 @@ def test_backtesting_facade_accepts_tradelearn_1x_strategy_surface() -> None:
     assert storage["last_close"] == 14.0
 
 
+def test_backtesting_facade_rejects_backtesting_py_capitalized_data_aliases() -> None:
+    class CapitalizedStrategy(Strategy):
+        def init(self) -> None:
+            _ = self.data.Close
+
+        def next(self) -> None:
+            pass
+
+    with pytest.raises(AttributeError, match="use 'close' instead"):
+        Backtest(_data(), CapitalizedStrategy).run()
+
+
 def test_backtesting_facade_rejects_unknown_strategy_params() -> None:
     class ParamStrategy(Strategy):
         known = 1
