@@ -15,6 +15,17 @@ from bokeh.models import (
 from bokeh.plotting import figure
 from bokeh.transform import linear_cmap
 
+MARKET_UP = "#2ca36c"
+MARKET_DOWN = "#d65a5a"
+MARKET_UP_LINE = "#1f6f4a"
+MARKET_DOWN_LINE = "#9f3434"
+MARKET_BLUE = "#2f6fa8"
+MARKET_MUTED = "#6f7f8d"
+MARKET_GRID = "#e8edf2"
+MARKET_BORDER = "#ccd7e0"
+MARKET_BACKGROUND = "#fbfcfe"
+MARKET_DRAWDOWN = "#fff3c4"
+
 
 def market_replay(
     market_data: pd.DataFrame,
@@ -59,17 +70,17 @@ def market_replay(
                         + list(reversed(equity_frame["high_watermark"].tolist())),
                     }
                 ),
-                fill_color="#ffffea",
-                line_color="#ffcb66",
-                fill_alpha=0.9,
+                fill_color=MARKET_DRAWDOWN,
+                line_color="#e2b74e",
+                fill_alpha=0.55,
                 legend_label="Drawdown",
             )
             strategy_line = equity_plot.line(
                 "bar_index",
                 "relative_equity",
                 source=eq_source,
-                line_width=1.8,
-                color="#1f77b4",
+                line_width=2.0,
+                color=MARKET_BLUE,
                 legend_label="Strategy",
             )
             equity_plot.line(
@@ -77,7 +88,8 @@ def market_replay(
                 "buy_hold",
                 source=eq_source,
                 line_width=1.1,
-                color="#666666",
+                color=MARKET_MUTED,
+                line_dash="dashed",
                 legend_label="Buy&Hold",
             )
             peak = equity_frame["relative_equity"].idxmax()
@@ -87,22 +99,25 @@ def market_replay(
             equity_plot.scatter(
                 [equity_frame.loc[peak, "bar_index"]],
                 [equity_frame.loc[peak, "relative_equity"]],
-                color="cyan",
-                size=8,
+                color="#49c6d8",
+                line_color="#1d7d8d",
+                size=9,
                 legend_label=f"Peak ({equity_frame.loc[peak, 'relative_equity']:.1%})",
             )
             equity_plot.scatter(
                 [equity_frame.loc[final, "bar_index"]],
                 [equity_frame.loc[final, "relative_equity"]],
-                color="blue",
-                size=8,
+                color=MARKET_BLUE,
+                line_color="#1a4f79",
+                size=9,
                 legend_label=f"Final ({equity_frame.loc[final, 'relative_equity']:.1%})",
             )
             equity_plot.scatter(
                 [equity_frame.loc[max_dd, "bar_index"]],
                 [equity_frame.loc[max_dd, "relative_equity"]],
-                color="red",
-                size=8,
+                color=MARKET_DOWN,
+                line_color=MARKET_DOWN_LINE,
+                size=9,
                 legend_label=f"Max Drawdown ({equity_frame.loc[max_dd, 'drawdown']:.1%})",
             )
             equity_plot.yaxis.axis_label = "Equity"
@@ -117,7 +132,7 @@ def market_replay(
     if not trades_frame.empty:
         pl_plot = _market_section("Profit / Loss", height=96, x_range=x_range)
         pl_plot.add_layout(
-            Span(location=0, dimension="width", line_color="#666666", line_dash="dashed")
+            Span(location=0, dimension="width", line_color=MARKET_MUTED, line_dash="dashed")
         )
         trade_source = ColumnDataSource(trades_frame)
         win = trades_frame[trades_frame["return_pct"] >= 0]
@@ -128,8 +143,8 @@ def market_replay(
                 "return_pct",
                 source=ColumnDataSource(win),
                 marker="triangle",
-                fill_color="#3aa76d",
-                line_color="black",
+                fill_color=MARKET_UP,
+                line_color=MARKET_UP_LINE,
                 size="marker_size",
                 legend_label="Winning Trades",
             )
@@ -139,8 +154,8 @@ def market_replay(
                 "return_pct",
                 source=ColumnDataSource(loss),
                 marker="inverted_triangle",
-                fill_color="#d65f5f",
-                line_color="black",
+                fill_color=MARKET_DOWN,
+                line_color=MARKET_DOWN_LINE,
                 size="marker_size",
                 legend_label="Losing Trades",
             )
@@ -170,7 +185,14 @@ def market_replay(
     if has_ohlc:
         inc = frame["close"] >= frame["open"]
         price_plot.segment(
-            "bar_index", "high", "bar_index", "low", source=source, color="black", line_width=1
+            "bar_index",
+            "high",
+            "bar_index",
+            "low",
+            source=source,
+            color="#2f3b45",
+            line_width=1,
+            alpha=0.78,
         )
         up = frame.loc[inc]
         down = frame.loc[~inc]
@@ -181,8 +203,9 @@ def market_replay(
                 "open",
                 "close",
                 source=ColumnDataSource(up),
-                fill_color="#3aa76d",
-                line_color="black",
+                fill_color=MARKET_UP,
+                line_color=MARKET_UP_LINE,
+                fill_alpha=0.82,
                 legend_label="Up",
             )
         if not down.empty:
@@ -192,8 +215,9 @@ def market_replay(
                 "open",
                 "close",
                 source=ColumnDataSource(down),
-                fill_color="#d65f5f",
-                line_color="black",
+                fill_color=MARKET_DOWN,
+                line_color=MARKET_DOWN_LINE,
+                fill_alpha=0.82,
                 legend_label="Down",
             )
         price_renderer = price_plot.scatter(
@@ -223,8 +247,8 @@ def market_replay(
             ys="line_ys",
             source=trade_source,
             line_color="line_color",
-            line_width=7,
-            line_alpha=0.75,
+            line_width=4,
+            line_alpha=0.62,
             line_dash="dotted",
             legend_label=f"Trades ({len(trades_frame)})",
         )
@@ -237,9 +261,9 @@ def market_replay(
                 "price",
                 source=ColumnDataSource(buys),
                 marker="triangle",
-                size=10,
-                color="#169c5a",
-                line_color="black",
+                size=11,
+                color=MARKET_UP,
+                line_color="white",
                 legend_label="Buy",
             )
         if not sells.empty:
@@ -248,9 +272,9 @@ def market_replay(
                 "price",
                 source=ColumnDataSource(sells),
                 marker="inverted_triangle",
-                size=10,
-                color="#c43c39",
-                line_color="black",
+                size=11,
+                color=MARKET_DOWN,
+                line_color="white",
                 legend_label="Sell",
             )
     price_plot.yaxis.axis_label = "Price"
@@ -261,7 +285,7 @@ def market_replay(
         volume_source = ColumnDataSource(
             frame.assign(
                 volume_color=[
-                    "#3aa76d" if close >= open_ else "#d65f5f"
+                    MARKET_UP if close >= open_ else MARKET_DOWN
                     for close, open_ in zip(
                         frame["close"],
                         frame.get("open", frame["close"]),
@@ -276,7 +300,7 @@ def market_replay(
             "volume",
             source=volume_source,
             color="volume_color",
-            alpha=0.72,
+            alpha=0.42,
         )
         volume_plot.yaxis.axis_label = "Volume"
         volume_plot.yaxis.formatter = NumeralTickFormatter(format="0 a")
@@ -809,7 +833,7 @@ def _trade_segments(fills: pd.DataFrame, frame: pd.DataFrame) -> pd.DataFrame:
                 "marker_size": _trade_marker_size(size),
                 "line_xs": [entry_bar, exit_bar],
                 "line_ys": [entry_price, exit_price],
-                "line_color": "#2f7f4f" if return_pct >= 0 else "#9d2f2f",
+                "line_color": MARKET_UP_LINE if return_pct >= 0 else MARKET_DOWN_LINE,
             }
         )
         remaining = float(current["size"]) - size
@@ -844,26 +868,43 @@ def _market_section(title: str, *, height: int, x_range):
         tools="xpan,xwheel_zoom,box_zoom,undo,redo,reset,save",
         active_drag="xpan",
         active_scroll="xwheel_zoom",
+        background_fill_color=MARKET_BACKGROUND,
+        border_fill_color="white",
+        outline_line_color=MARKET_BORDER,
     )
 
 
 def _style_market_section(plot) -> None:
     """Apply common 1.x-inspired Bokeh styling."""
-    plot.min_border_left = 0
-    plot.min_border_top = 3
-    plot.min_border_bottom = 6
-    plot.min_border_right = 10
-    plot.outline_line_color = "#666666"
+    plot.min_border_left = 8
+    plot.min_border_top = 8
+    plot.min_border_bottom = 8
+    plot.min_border_right = 12
+    plot.outline_line_color = MARKET_BORDER
+    plot.outline_line_width = 1
+    plot.grid.grid_line_color = MARKET_GRID
+    plot.grid.grid_line_alpha = 0.75
+    plot.grid.grid_line_width = 1
+    plot.axis.axis_line_color = MARKET_BORDER
+    plot.axis.major_tick_line_color = MARKET_BORDER
+    plot.axis.minor_tick_line_color = None
+    plot.axis.major_label_text_color = "#52616f"
+    plot.axis.axis_label_text_color = "#52616f"
+    plot.title.text_color = "#24313a"
+    plot.title.text_font_size = "11pt"
+    plot.title.text_font_style = "bold"
     plot.toolbar.logo = None
     plot.add_tools(CrosshairTool(dimensions="both"))
     if plot.legend:
         plot.legend.location = "top_left"
         plot.legend.border_line_width = 1
-        plot.legend.border_line_color = "#333333"
-        plot.legend.background_fill_alpha = 0.82
-        plot.legend.padding = 5
-        plot.legend.spacing = 0
-        plot.legend.margin = 0
+        plot.legend.border_line_color = "#d7e0e7"
+        plot.legend.background_fill_color = "white"
+        plot.legend.background_fill_alpha = 0.88
+        plot.legend.padding = 6
+        plot.legend.spacing = 1
+        plot.legend.margin = 4
+        plot.legend.label_text_color = "#33424f"
         plot.legend.label_text_font_size = "8pt"
         plot.legend.click_policy = "hide"
 
