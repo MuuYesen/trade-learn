@@ -45,12 +45,13 @@ def test_backtesting_facade_accepts_tradelearn_1x_strategy_surface() -> None:
 
         def next(self) -> None:
             seen["first_next_len"] = seen.setdefault("first_next_len", len(self.data.close))
-            self.storage["last_close"] = float(self.data.close[-1])
-            self.record(signal={"direct": self.direct[-1], "threshold": self.threshold})
+            self.storage["last_close"] = float(self.data.close[0])
+            self.record(signal={"direct": self.direct[0], "threshold": self.threshold})
             if len(self.data.close) == 3:
-                assert self.data.close[-1] == 12.0
+                assert self.data.close[0] == 12.0
+                assert self.data.close[-1] == 11.0
                 assert self.data.close.df.index.equals(self.data.index)
-                assert self.direct[-1] == 3
+                assert self.direct[0] == 3
                 assert self.position().size == 0
                 assert self.position().is_long is False
                 self.buy(size=1, tag="entry")

@@ -20,6 +20,10 @@ class Position:
     def __bool__(self) -> bool:
         return abs(self.size) > 1e-9
 
+    def __call__(self, *args: Any, **kwargs: Any) -> Position:
+        """Return self so facade position objects can be used as ``position()``."""
+        return self
+
     def update(self, size_delta: float, price: float) -> None:
         new_size = self.size + size_delta
         if abs(new_size) < 1e-9:
