@@ -8,6 +8,7 @@ from bokeh.models import (
     ColumnDataSource,
     CrosshairTool,
     HoverTool,
+    Legend,
     NumeralTickFormatter,
     Range1d,
     Span,
@@ -55,7 +56,7 @@ def market_replay(
     plots = []
 
     if equity is not None and not equity.empty:
-        equity_plot = _market_section("Equity", height=120, x_range=x_range)
+        equity_plot = _market_section("Equity", height=150, x_range=x_range)
         equity_frame = _equity_replay_frame(equity, frame)
         if not equity_frame.empty:
             eq_source = ColumnDataSource(equity_frame)
@@ -130,7 +131,7 @@ def market_replay(
             plots.append(equity_plot)
 
     if not trades_frame.empty:
-        pl_plot = _market_section("Profit / Loss", height=96, x_range=x_range)
+        pl_plot = _market_section("Profit / Loss", height=120, x_range=x_range)
         pl_plot.add_layout(
             Span(location=0, dimension="width", line_color=MARKET_MUTED, line_dash="dashed")
         )
@@ -181,7 +182,7 @@ def market_replay(
         )
         plots.append(pl_plot)
 
-    price_plot = _market_section("OHLC / Trades", height=390, x_range=x_range)
+    price_plot = _market_section("OHLC / Trades", height=430, x_range=x_range)
     if has_ohlc:
         inc = frame["close"] >= frame["open"]
         price_plot.segment(
@@ -281,7 +282,7 @@ def market_replay(
     plots.append(price_plot)
 
     if has_volume:
-        volume_plot = _market_section("Volume", height=105, x_range=x_range)
+        volume_plot = _market_section("Volume", height=115, x_range=x_range)
         volume_source = ColumnDataSource(
             frame.assign(
                 volume_color=[
@@ -896,17 +897,31 @@ def _style_market_section(plot) -> None:
     plot.toolbar.logo = None
     plot.add_tools(CrosshairTool(dimensions="both"))
     if plot.legend:
-        plot.legend.location = "top_left"
-        plot.legend.border_line_width = 1
-        plot.legend.border_line_color = "#d7e0e7"
-        plot.legend.background_fill_color = "white"
-        plot.legend.background_fill_alpha = 0.88
-        plot.legend.padding = 6
-        plot.legend.spacing = 1
-        plot.legend.margin = 4
-        plot.legend.label_text_color = "#33424f"
-        plot.legend.label_text_font_size = "8pt"
-        plot.legend.click_policy = "hide"
+        _dock_legend(plot)
+
+
+def _dock_legend(plot) -> None:
+    """Move legends outside the plot area so they never cover market data."""
+    legends = list(plot.legend)
+    for legend in legends:
+        plot.center.remove(legend)
+    items = [item for legend in legends for item in legend.items]
+    if not items:
+        return
+    docked = Legend(items=items)
+    docked.orientation = "horizontal"
+    docked.location = "center"
+    docked.border_line_width = 0
+    docked.background_fill_color = None
+    docked.padding = 2
+    docked.spacing = 12
+    docked.margin = 2
+    docked.label_text_color = "#33424f"
+    docked.label_text_font_size = "8pt"
+    docked.glyph_width = 14
+    docked.glyph_height = 10
+    docked.click_policy = "hide"
+    plot.add_layout(docked, "above")
 
 
 def _add_line_hover(plot, renderers, tooltips, *, vline: bool = True) -> None:
