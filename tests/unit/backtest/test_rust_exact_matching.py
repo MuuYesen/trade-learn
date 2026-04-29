@@ -21,6 +21,7 @@ from tradelearn.compat.backtesting.strategy import (
 from tradelearn.compat.backtesting.strategy import Strategy as BacktestingStrategy
 from tradelearn.compat.backtrader import Cerebro, DataFeed, Strategy
 from tradelearn.compat.backtrader import indicators as btind
+from tradelearn.core import Fill, OrderRequest
 
 
 def _match(
@@ -643,6 +644,51 @@ def test_broker_submit_paths_preserve_submitted_and_accepted_notifications() -> 
         submit(owner, object(), Order.Buy, 1.0, None, Order.Market)
 
         assert owner.statuses == [Order.Submitted, Order.Accepted]
+
+
+def test_backtest_order_adapts_to_core_order_request_and_fill() -> None:
+    request = OrderRequest(
+        symbol="data0",
+        side="sell",
+        qty=3.0,
+        order_type="limit",
+        limit_price=8.0,
+        tif=Order.DAY,
+        client_oid="client-1",
+    )
+    data = object()
+
+    order = Order.from_request(7, request, data=data)
+    fill = order.to_fill(qty=-3.0, price=8.0, commission=0.5, broker_oid="broker-7")
+
+    assert order.ref == 7
+    assert order.ordtype == Order.Sell
+    assert order.exectype == Order.Limit
+    assert order.price == 8.0
+    assert order.time_in_force == Order.DAY
+    assert order.info["client_oid"] == "client-1"
+    assert isinstance(fill, Fill)
+    assert fill.symbol == "data0"
+    assert fill.qty == -3.0
+    assert fill.price == 8.0
+    assert fill.commission == 0.5
+
+    stop_limit = Order.from_request(
+        8,
+        OrderRequest(
+            symbol="data0",
+            side="buy",
+            qty=1.0,
+            order_type="stop_limit",
+            stop_price=9.0,
+            limit_price=9.5,
+        ),
+        data=data,
+    )
+
+    assert stop_limit.exectype == Order.StopLimit
+    assert stop_limit.price == 9.0
+    assert stop_limit.pricelimit == 9.5
 
 
 def test_backtest_engine_buffers_orders_while_strategy_next_runs() -> None:

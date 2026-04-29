@@ -16,6 +16,14 @@ from typing import Any, Protocol
 import numpy as np
 import pandas as pd
 
+from tradelearn.core.broker_contracts import (
+    AccountSnapshot,
+    Fill,
+    OrderAck,
+    OrderRequest,
+    OrderStatusUpdate,
+    PositionSnapshot,
+)
 from tradelearn.core.errors import ContractError
 
 
@@ -48,37 +56,37 @@ class Experiment:
 
 
 class Broker(Protocol):
-    """Broker protocol reserved for the paper/live target contract.
+    """Broker-neutral target protocol for backtest, paper, and live adapters.
 
-    Backtest brokers such as ``RustBroker`` are not required to implement this
-    protocol until the broker-neutral paper/live adapter layer is promoted.
+    Backtest runtime brokers may keep richer internal state machines, but the
+    adapter boundary should translate into these neutral contracts.
     """
 
-    def place(self, order: Any) -> Any:
+    def place(self, req: OrderRequest) -> OrderAck:
         """Place an order and return its broker-specific order id."""
         ...
 
-    def cancel(self, oid: Any) -> None:
+    def cancel(self, broker_oid: str) -> None:
         """Cancel an existing order by id."""
         ...
 
-    def modify(self, oid: Any, **kwargs: Any) -> None:
+    def modify(self, broker_oid: str, **kwargs: Any) -> None:
         """Modify broker-supported order fields."""
         ...
 
-    def positions(self) -> list[Any]:
+    def positions(self) -> list[PositionSnapshot]:
         """Return current broker positions."""
         ...
 
-    def account(self) -> Any:
+    def account(self) -> AccountSnapshot:
         """Return current account state."""
         ...
 
-    def order_status(self, oid: Any) -> Any:
+    def order_status(self, broker_oid: str) -> OrderStatusUpdate:
         """Return the current status for an order id."""
         ...
 
-    def on_fill(self, cb: Callable[[Any], None]) -> None:
+    def on_fill(self, cb: Callable[[Fill], None]) -> None:
         """Register a fill callback."""
         ...
 

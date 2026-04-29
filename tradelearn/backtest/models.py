@@ -7,6 +7,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from tradelearn.core.broker_contracts import Fill, OrderRequest
+
 
 class Params:
     """Simple parameter storage object."""
@@ -329,6 +331,52 @@ class Order:
 
     def alive(self) -> bool:
         return self.status in (Order.Created, Order.Submitted, Order.Accepted, Order.Partial)
+
+    @classmethod
+    def from_request(cls, ref: int, request: OrderRequest, *, data: Any = None) -> Order:
+        """Create a backtest runtime order from a broker-neutral request."""
+        side = cls.Buy if request.side == "buy" else cls.Sell
+        exectype = {
+            "market": cls.Market,
+            "limit": cls.Limit,
+            "stop": cls.Stop,
+            "stop_limit": cls.StopLimit,
+        }.get(request.order_type, cls.Market)
+        price = (
+            request.stop_price
+            if request.order_type in ("stop", "stop_limit")
+            else request.limit_price
+        )
+        return cls(
+            ref=ref,
+            data=data,
+            ordtype=side,
+            size=float(request.qty),
+            price=price,
+            pricelimit=request.limit_price if request.order_type == "stop_limit" else None,
+            exectype=exectype,
+            time_in_force=request.tif,
+            info={"client_oid": request.client_oid, "symbol": request.symbol},
+        )
+
+    def to_fill(
+        self,
+        *,
+        qty: float,
+        price: float,
+        commission: float,
+        ts: pd.Timestamp | None = None,
+        broker_oid: str | None = None,
+    ) -> Fill:
+        """Emit a broker-neutral fill event for this backtest order."""
+        return Fill(
+            broker_oid=broker_oid or str(self.ref),
+            symbol=str(self.info.get("symbol") or getattr(self.data, "_name", "data0")),
+            qty=float(qty),
+            price=float(price),
+            commission=float(commission),
+            ts=ts or pd.Timestamp.utcnow(),
+        )
 
 
 @dataclass
