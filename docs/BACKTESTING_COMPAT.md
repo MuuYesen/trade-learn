@@ -1,46 +1,76 @@
-# Backtesting.py Compatibility Layer
+# Lite API And Backtesting.py Policy
 
-Tradelearn provides a high-fidelity compatibility layer for the `backtesting.py` library. This allows users to run strategies written for `backtesting.py` directly on the Tradelearn microkernel without modifying the strategy logic.
+Tradelearn v2 no longer maintains a `backtesting.py` compatibility facade.
 
-## Directory Structure
-- `tradelearn/compat/backtesting/`: The facade implementation.
-  - `backtest.py`: Implementation of the `Backtest` runner.
-  - `strategy.py`: Implementation of the `Strategy` base class and indexing proxies.
-- `examples/backtesting/`: Migrated example strategies.
+The current user-facing APIs are:
 
-## Usage
-Strategies should be written using standard `backtesting.py` syntax:
+- `tradelearn.engine`: Backtrader-style advanced API.
+- `tradelearn.lite`: Tradelearn 1.x-style lightweight API.
+
+Both APIs share the same private runtime:
+
+```text
+tradelearn.engine ─┐
+                   ├─> tradelearn.backtest runtime ─> Rust matching / broker / portfolio
+tradelearn.lite   ─┘
+```
+
+## Lite Syntax
+
+Lite is intentionally small and follows Tradelearn 1.x-style semantics:
 
 ```python
-from backtesting import Backtest, Strategy
+from tradelearn.lite import Backtest, Strategy
+
 
 class MyStrategy(Strategy):
     def init(self):
-        self.ma = self.I(lambda: pd.Series(self.data.Close).rolling(20).mean())
+        self.sma = self.I(lambda close: close.rolling(20).mean(), self.data.close.df)
 
     def next(self):
-        if self.data.Close[-1] > self.ma[-1]:
+        if self.data.close[0] > self.sma[0]:
             self.buy()
-        elif self.data.Close[-1] < self.ma[-1]:
-            self.position.close()
+        elif self.position() and self.data.close[0] < self.sma[0]:
+            self.position().close()
 ```
 
-To run this strategy in Tradelearn, either:
-1. Ensure `tradelearn.compat.backtesting` is imported as `backtesting`.
-2. Use a local `backtesting.py` shim that redirects to Tradelearn.
+Rules:
 
-## Architecture
-The facade maps `backtesting.py` calls to the Tradelearn microkernel:
-- **Data Access**: `BacktestingDataProxy` translates capitalized attributes (`Close`, `Open`) and ensures indexing (`[-1]`) matches the current simulation bar.
-- **Indicators**: `self.I()` pre-calculates indicators on the full dataset but returns a `IndicatorProxy` that prevents lookahead bias during `next()`.
-- **Execution**: `buy()` and `sell()` calls are translated to the `RustBroker` via the core strategy.
+- `self.data.close[0]` is the current bar.
+- `self.data.close[-1]` is the previous bar.
+- `self.position()` returns the Lite position proxy.
+- `self.position().close()` closes the current Lite position.
+- `self.I(...)` registers a vectorized indicator and exposes it bar by bar.
+- `self.I(pd.DataFrame(...))` supports multi-column indicators, including `indicator[:, 0]`.
 
-## Supported Features
-- [x] `init()` and `next()` lifecycle.
-- [x] `self.I()` for indicator registration.
-- [x] Capitalized data attribute access (`data.Close`, etc.).
-- [x] Relative indexing (`[-1]`, `[-2]`) for data and indicators.
-- [x] `self.position` proxy with `close()` method.
-- [x] Percentage-based sizing in `buy(size=0.95)`.
-- [x] Basic performance statistics (`Return`, `Win Rate`, `# Trades`).
-- [ ] Interactive plotting (Placeholder).
+## What Is Not Supported
+
+Lite does not support the `backtesting.py` syntax:
+
+```python
+self.data.Close[-1]     # not supported
+self.position.close()   # not supported
+```
+
+This is deliberate. Mixing backtesting.py indexing with Tradelearn/Backtrader indexing would make strategy code ambiguous.
+
+## Testing Policy
+
+Testing is split into two responsibilities:
+
+| Layer | Purpose | Acceptance |
+|---|---|---|
+| `tradelearn.engine` | Validate the shared runtime and Rust kernel against Backtrader | `benchmark_bt.py` must remain Backtrader `EXACT` |
+| `tradelearn.lite` | Validate Lite syntax adapts correctly into the shared runtime | Lite surface tests and 1.x strategy smoke tests must pass |
+
+Lite does not separately validate matching, fills, or portfolio accounting. Those belong to the shared runtime and are covered through the Backtrader parity benchmark.
+
+The Lite acceptance rule is:
+
+```text
+Lite strategy smoke tests pass
++
+engine Backtrader benchmark remains EXACT
+```
+
+No formal test should import `backtesting.py` as a required compatibility target.
