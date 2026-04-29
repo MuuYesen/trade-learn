@@ -38,6 +38,12 @@ def test_backtrader_facade_exports_common_surface() -> None:
         assert hasattr(bt, name)
 
 
+def test_root_timeframe_alias_points_to_backtrader_facade() -> None:
+    from tradelearn.compat.backtrader import TimeFrame
+
+    assert bt.TimeFrame is TimeFrame
+
+
 def test_cerebro_exposes_runtime_compat_methods() -> None:
     cerebro = bt.Cerebro()
     for name in [

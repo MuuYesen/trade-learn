@@ -133,3 +133,43 @@ def test_backtest_runtime_uses_timezone_aware_now() -> None:
     text = (root / "tradelearn" / "backtest" / "models.py").read_text()
 
     assert "Timestamp.utcnow" not in text
+
+
+def test_backtest_models_has_no_backtrader_facade_only_classes() -> None:
+    root = Path(__file__).parents[3]
+    text = (root / "tradelearn" / "backtest" / "models.py").read_text()
+    forbidden = [
+        "class Params",
+        "class TimeFrame",
+        "class BaseAnalyzer",
+        "class BaseSizer",
+        "class BaseBroker",
+    ]
+
+    assert [token for token in forbidden if token in text] == []
+
+
+def test_backtest_modules_do_not_import_backtrader_facade_only_classes() -> None:
+    root = Path(__file__).parents[3]
+    backtest_root = root / "tradelearn" / "backtest"
+    forbidden = {"Params", "TimeFrame", "BaseAnalyzer", "BaseSizer", "BaseBroker"}
+    offenders: list[str] = []
+
+    for path in backtest_root.rglob("*.py"):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or node.module != "tradelearn.backtest.models":
+                continue
+            imported = {alias.name for alias in node.names}
+            if forbidden & imported:
+                offenders.append(str(path.relative_to(root)))
+                break
+
+    assert offenders == []
+
+
+def test_root_namespace_does_not_import_facade_only_classes_from_backtest_models() -> None:
+    root = Path(__file__).parents[3]
+    text = (root / "tradelearn" / "__init__.py").read_text()
+
+    assert "from tradelearn.backtest.models import TimeFrame" not in text

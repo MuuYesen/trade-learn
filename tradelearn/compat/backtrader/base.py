@@ -4,13 +4,7 @@ import inspect
 from typing import Any
 
 from tradelearn.backtest.lines import DelayedLine, IndicatorLine, Lines, LineSeries
-from tradelearn.backtest.models import (
-    BaseAnalyzer,
-    BaseBroker,
-    BaseSizer,
-    Params,
-    _notify_order,
-)
+from tradelearn.backtest.models import _notify_order
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
 
 __all__ = [
@@ -24,6 +18,7 @@ __all__ = [
     "Lines",
     "MetaParams",
     "Params",
+    "TimeFrame",
     "_G",
     "_notify_order",
     "collect_param_defaults",
@@ -32,6 +27,113 @@ __all__ = [
     "set_current_strategy",
     "split_param_kwargs",
 ]
+
+
+class Params:
+    """Backtrader-style parameter storage object."""
+
+    def __init__(self, defaults: Any = (), **kwargs):
+        self._keys: list[str] = []
+        if isinstance(defaults, dict):
+            for name, val in defaults.items():
+                if name not in self._keys:
+                    self._keys.append(name)
+                setattr(self, name, val)
+        elif isinstance(defaults, (list, tuple)):
+            for name, val in defaults:
+                if isinstance(name, (list, tuple)):  # tuple of (name, val)
+                    if name[0] not in self._keys:
+                        self._keys.append(name[0])
+                    setattr(self, name[0], name[1])
+                else:
+                    if name not in self._keys:
+                        self._keys.append(name)
+                    setattr(self, name, val)
+        for name, val in kwargs.items():
+            if name not in self._keys:
+                self._keys.append(name)
+            setattr(self, name, val)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if not name.startswith("_") and hasattr(self, "_keys") and name not in self._keys:
+            self._keys.append(name)
+        super().__setattr__(name, value)
+
+    def __getitem__(self, index: int) -> Any:
+        return getattr(self, self._keys[index])
+
+    def asdict(self) -> dict[str, Any]:
+        return {key: getattr(self, key) for key in self._keys}
+
+
+class TimeFrame:
+    (NoTimeFrame, MicroSeconds, Seconds, Minutes, Days, Weeks, Months, Years) = range(8)
+    Names = ["", "MicroSeconds", "Seconds", "Minutes", "Days", "Weeks", "Months", "Years"]
+
+    @classmethod
+    def getname(cls, tf: int, compression: int = 1) -> str:
+        if tf < len(cls.Names):
+            name = cls.Names[tf]
+            if compression > 1:
+                name = f"{compression}{name}"
+            return name
+        return ""
+
+
+class BaseBroker:
+    def __init__(self, **kwargs):
+        pass
+
+    def setcash(self, cash: float):
+        pass
+
+    def setcommission(self, commission: float):
+        pass
+
+    def getcash(self) -> float:
+        return 0.0
+
+    def getvalue(self) -> float:
+        return 0.0
+
+    def get_cash(self) -> float:
+        return self.getcash()
+
+    def get_value(self) -> float:
+        return self.getvalue()
+
+
+class BaseSizer:
+    pass
+
+
+class BaseAnalyzer:
+    def __init__(self, **kwargs):
+        self.strategy = None
+
+    def on_order(self, order: Any):
+        pass
+
+    def on_bar(self, bar: Any) -> None:
+        pass
+
+    def on_start(self) -> None:
+        pass
+
+    def on_fill(self, fill: Any) -> None:
+        pass
+
+    def on_trade(self, trade: Any) -> None:
+        pass
+
+    def stop(self):
+        pass
+
+    def on_end(self, stats: Any) -> None:
+        pass
+
+    def get_analysis(self) -> dict[str, Any]:
+        return {}
 
 
 # Centralized context to avoid import-time shadowing

@@ -55,7 +55,7 @@ def __getattr__(name: str) -> Any:
         from tradelearn.compat.backtrader import AllInSizer
         return AllInSizer
     if name == "TimeFrame":
-        from tradelearn.backtest.models import TimeFrame
+        from tradelearn.compat.backtrader import TimeFrame
         return TimeFrame
     if name == "Order":
         from tradelearn.compat.backtrader import Order

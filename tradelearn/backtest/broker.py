@@ -5,14 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
-from tradelearn.backtest.models import (
-    BaseBroker,
-    ExecutedInfo,
-    Order,
-    Position,
-    Trade,
-    _notify_order,
-)
+from tradelearn.backtest.models import ExecutedInfo, Order, Position, Trade, _notify_order
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
 from tradelearn.core import BrokerEventPump
 
@@ -42,7 +35,7 @@ class CommInfo:
         return abs(size) * price * self.p.commission
 
 
-class RustBroker(BaseBroker):
+class RustBroker:
     """Proxy for the high-performance Rust backtesting engine."""
 
     _RUST_MATCH_MODES = {"exact", "smart"}
@@ -54,7 +47,6 @@ class RustBroker(BaseBroker):
         mult: float = 1.0,
         match_mode: str = "exact",
     ):
-        super().__init__()
         if match_mode not in self._RUST_MATCH_MODES:
             raise ValueError(
                 f"Unsupported match_mode={match_mode!r}; expected one of "
@@ -93,6 +85,23 @@ class RustBroker(BaseBroker):
         self._pos = Position(size=0.0, price=0.0)
         self._active_cash = cash
         self._comminfo: Any = None
+        self._slippage_model: Any = None
+        self._commission_model: Any = None
+
+    def configure_matching(
+        self,
+        *,
+        trade_on_close: bool | None = None,
+        slippage: Any | None = None,
+        commission: Any | None = None,
+    ) -> None:
+        """Configure matching options exposed to facade runners."""
+        if trade_on_close is not None:
+            self._trade_on_close = bool(trade_on_close)
+        if slippage is not None:
+            self._slippage_model = slippage
+        if commission is not None:
+            self._commission_model = commission
 
     def _uses_rust_matching(self) -> bool:
         return self._engine is not None
@@ -158,6 +167,9 @@ class RustBroker(BaseBroker):
             _, _cash, size, _price = self._get_rust_state()
             return size
         return self._pos.size
+
+    def current_position_size(self) -> float:
+        return self.get_position_size()
 
     def drain_proxy_events(self) -> list[Any]:
         events = self._proxy_events

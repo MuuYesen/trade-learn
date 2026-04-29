@@ -78,36 +78,25 @@ class BacktestingDataProxy:
 class PositionProxy:
     """Proxy for strategy.position."""
 
-    __slots__ = ("_strategy", "_size_getter_broker", "_rust_state_getter", "_size_getter")
+    __slots__ = ("_strategy", "_size_getter_broker", "_size_getter")
 
     def __init__(self, strategy: Strategy):
         self._strategy = strategy
         self._size_getter_broker = None
-        self._rust_state_getter = None
         self._size_getter = None
 
     def _bind_broker_size_getters(self, broker):
         self._size_getter_broker = broker
-        self._rust_state_getter = getattr(broker, "_get_rust_state", None)
-        self._size_getter = (
-            None
-            if self._rust_state_getter is not None
-            else getattr(broker, "get_position_size", None)
+        self._size_getter = getattr(
+            broker,
+            "current_position_size",
+            getattr(broker, "get_position_size", None),
         )
 
     def __bool__(self) -> bool:
         broker = self._strategy.broker
         if broker is not self._size_getter_broker:
             self._bind_broker_size_getters(broker)
-        rust_state_getter = self._rust_state_getter
-        if rust_state_getter is not None:
-            try:
-                cache = broker._rust_state_cache
-            except AttributeError:
-                cache = None
-            if cache is not None and cache[0] == broker._curr_idx:
-                return cache[2] != 0
-            return rust_state_getter()[2] != 0
         size_getter = self._size_getter
         if size_getter is not None:
             return size_getter() != 0
@@ -118,15 +107,6 @@ class PositionProxy:
         broker = self._strategy.broker
         if broker is not self._size_getter_broker:
             self._bind_broker_size_getters(broker)
-        rust_state_getter = self._rust_state_getter
-        if rust_state_getter is not None:
-            try:
-                cache = broker._rust_state_cache
-            except AttributeError:
-                cache = None
-            if cache is not None and cache[0] == broker._curr_idx:
-                return cache[2]
-            return rust_state_getter()[2]
         size_getter = self._size_getter
         if size_getter is not None:
             return size_getter()

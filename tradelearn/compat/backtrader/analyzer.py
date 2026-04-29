@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from tradelearn.backtest.models import BaseAnalyzer, Stats
+from tradelearn.backtest.models import Stats
 
-from .base import MetaParams, Params
+from .base import BaseAnalyzer, MetaParams, Params
 
 
 class Analyzer(BaseAnalyzer, metaclass=MetaParams):

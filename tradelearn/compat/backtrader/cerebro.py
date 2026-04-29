@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from tradelearn.backtest.models import FixedCommission, FixedSlippage
+from tradelearn.compat.backtrader.base import TimeFrame
 from tradelearn.compat.backtrader.datafeed import DataFeed
 from tradelearn.compat.backtrader.observers import ObserverCollection, Value
 from tradelearn.compat.backtrader.sizers import FixedSize
@@ -38,9 +39,11 @@ class Cerebro:
         self.kwargs = kwargs
         from tradelearn.backtest.broker import RustBroker
         self.broker = RustBroker(match_mode=match_mode)
-        self.broker._trade_on_close = self.trade_on_close
-        self.broker._slippage_model = slippage or FixedSlippage()
-        self.broker._commission_model = commission or FixedCommission()
+        self.broker.configure_matching(
+            trade_on_close=self.trade_on_close,
+            slippage=slippage or FixedSlippage(),
+            commission=commission or FixedCommission(),
+        )
         self._sizer_spec = (FixedSize, {})
         self.analyzers: dict[str, tuple[type[Analyzer], dict]] = {}
         self.observers: dict[str, tuple[type[Any], dict]] = {}
@@ -50,7 +53,7 @@ class Cerebro:
         self._runstop = False
 
     def setcash(self, cash: float) -> None:
-        self.broker._cash = self.broker._active_cash = cash
+        self.broker.setcash(cash)
 
     def setcommission(self, commission: float = 0.0, margin: float = 0.0, mult: float = 1.0, 
                       comminfo: Any = None, name: str | None = None) -> None:
@@ -58,12 +61,11 @@ class Cerebro:
         if comminfo:
             self.broker.set_comminfo(comminfo)
         else:
-            self.broker.commission_ratio = commission
-            self.broker._mult = mult
+            self.broker.setcommission(commission=commission, margin=margin, mult=mult)
 
     def set_coc(self, coc: bool = True) -> None:
         self.trade_on_close = bool(coc)
-        self.broker._trade_on_close = self.trade_on_close
+        self.broker.configure_matching(trade_on_close=self.trade_on_close)
 
     def adddata(self, data: Any, name: str | None = None) -> Any:
         if hasattr(data, 'columns') and hasattr(data, 'index'):
@@ -81,7 +83,6 @@ class Cerebro:
         name: str | None = None,
         **kwargs: Any,
     ) -> DataFeed:
-        from tradelearn.backtest.models import TimeFrame
         from tradelearn.data.resampler import resample_frame
 
         source_frame = data if hasattr(data, "columns") and hasattr(data, "index") else data._frame

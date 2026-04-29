@@ -10,43 +10,6 @@ import pandas as pd
 from tradelearn.core.broker_contracts import Fill, OrderRequest
 
 
-class Params:
-    """Simple parameter storage object."""
-
-    def __init__(self, defaults: Any = (), **kwargs):
-        self._keys: list[str] = []
-        if isinstance(defaults, dict):
-            for name, val in defaults.items():
-                if name not in self._keys:
-                    self._keys.append(name)
-                setattr(self, name, val)
-        elif isinstance(defaults, (list, tuple)):
-            for name, val in defaults:
-                if isinstance(name, (list, tuple)):  # tuple of (name, val)
-                    if name[0] not in self._keys:
-                        self._keys.append(name[0])
-                    setattr(self, name[0], name[1])
-                else:
-                    if name not in self._keys:
-                        self._keys.append(name)
-                    setattr(self, name, val)
-        for name, val in kwargs.items():
-            if name not in self._keys:
-                self._keys.append(name)
-            setattr(self, name, val)
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        if not name.startswith("_") and hasattr(self, "_keys") and name not in self._keys:
-            self._keys.append(name)
-        super().__setattr__(name, value)
-
-    def __getitem__(self, index: int) -> Any:
-        return getattr(self, self._keys[index])
-
-    def asdict(self) -> dict[str, Any]:
-        return {key: getattr(self, key) for key in self._keys}
-
-
 @dataclass
 class Position:
     size: float = 0.0
@@ -69,20 +32,6 @@ class Position:
         elif self.size * new_size < 0:
             self.price = price
         self.size = new_size
-
-
-class TimeFrame:
-    (NoTimeFrame, MicroSeconds, Seconds, Minutes, Days, Weeks, Months, Years) = range(8)
-    Names = ["", "MicroSeconds", "Seconds", "Minutes", "Days", "Weeks", "Months", "Years"]
-
-    @classmethod
-    def getname(cls, tf: int, compression: int = 1) -> str:
-        if tf < len(cls.Names):
-            name = cls.Names[tf]
-            if compression > 1:
-                name = f"{compression}{name}"
-            return name
-        return ""
 
 
 @dataclass
@@ -398,47 +347,6 @@ class Trade:
 
     def getstatusname(self) -> str:
         return ["Created", "Open", "Closed"][self.status]
-
-
-class BaseBroker:
-    def __init__(self, **kwargs):
-        pass
-
-    def setcash(self, cash: float):
-        pass
-
-    def setcommission(self, commission: float):
-        pass
-
-    def getcash(self) -> float:
-        return 0.0
-
-    def getvalue(self) -> float:
-        return 0.0
-
-    def get_cash(self) -> float:
-        return self.getcash()
-
-    def get_value(self) -> float:
-        return self.getvalue()
-
-
-class BaseSizer:
-    pass
-
-
-class BaseAnalyzer:
-    def __init__(self, **kwargs):
-        self.strategy = None
-
-    def on_order(self, order: Order):
-        pass
-
-    def on_trade(self, trade: Any):
-        pass
-
-    def stop(self):
-        pass
 
 
 def _notify_order(strategy: Any, order: Order) -> None:

@@ -1239,14 +1239,17 @@ def test_backtesting_position_proxy_refreshes_after_broker_swap() -> None:
     assert position.size == 3.0
 
 
-def test_backtesting_position_proxy_can_use_rust_state_fast_path() -> None:
+def test_backtesting_position_proxy_uses_public_current_position_size() -> None:
     class FakeBroker:
         def __init__(self) -> None:
-            self.state_calls = 0
+            self.size_calls = 0
+
+        def current_position_size(self) -> float:
+            self.size_calls += 1
+            return 4.0
 
         def _get_rust_state(self):
-            self.state_calls += 1
-            return 0, 100.0, 4.0, 10.0
+            raise AssertionError("PositionProxy should not read Rust private state")
 
     class FakeStrategy:
         def __init__(self) -> None:
@@ -1260,7 +1263,7 @@ def test_backtesting_position_proxy_can_use_rust_state_fast_path() -> None:
 
     assert bool(position) is True
     assert position.size == 4.0
-    assert strategy.broker.state_calls == 2
+    assert strategy.broker.size_calls == 2
 
 
 def test_backtesting_indicator_proxy_relative_indexing() -> None:

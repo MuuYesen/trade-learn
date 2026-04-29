@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from tradelearn.backtest.models import Params
 from tradelearn.backtest.sizer import Sizer as CoreSizer
+from tradelearn.compat.backtrader.base import Params
 
 
 class Sizer(CoreSizer):
