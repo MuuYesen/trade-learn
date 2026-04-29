@@ -33,6 +33,7 @@ class Backtest:
         self.datas = [DataFeed(data)]
         self.strats = [(strategy, (), {})]
         self.match_mode = match_mode
+        self.stats_mode = "lazy"
         from tradelearn.compat.backtrader.sizers import FixedSize
         self._sizer_spec = (FixedSize, {})
         self.broker = RustBroker(cash=cash, commission=commission, match_mode=match_mode)
@@ -56,11 +57,9 @@ class Backtest:
 
         # Generate statistics
         final_value = self.broker.getvalue()
-        fills = self.broker.fills_frame()
-        if not fills.empty and "trade_closed" in fills.columns:
-            closed = fills[fills["trade_closed"]]
-            trade_count = int(len(closed))
-            wins = int((closed["pnl"] > 0).sum()) if "pnl" in closed.columns else 0
+        trade_summary = getattr(self.broker, "trade_summary", None)
+        if callable(trade_summary):
+            trade_count, wins = trade_summary()
         else:
             trades = getattr(strategy_instance, "_trades", [])
             trade_count = len(trades)

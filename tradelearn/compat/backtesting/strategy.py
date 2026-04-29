@@ -12,6 +12,27 @@ from tradelearn.backtest.strategy import Strategy as CoreStrategy
 
 class BacktestingDataProxy:
     """Proxy for data to support backtesting.py style capitalized attributes and indexing."""
+
+    __slots__ = (
+        "_feed",
+        "_open_array",
+        "_high_array",
+        "_low_array",
+        "_close_array",
+        "_volume_array",
+        "_open_proxy",
+        "_high_proxy",
+        "_low_proxy",
+        "_close_proxy",
+        "_volume_proxy",
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume",
+        "_extra_line_cache",
+    )
+
     def __init__(self, data_feed: Any):
         self._feed = data_feed
         self._open_array = data_feed.get_array("open")
@@ -56,6 +77,9 @@ class BacktestingDataProxy:
 
 class PositionProxy:
     """Proxy for strategy.position."""
+
+    __slots__ = ("_strategy", "_size_getter_broker", "_rust_state_getter", "_size_getter")
+
     def __init__(self, strategy: Strategy):
         self._strategy = strategy
         self._size_getter_broker = None
@@ -75,6 +99,9 @@ class PositionProxy:
         broker = self._strategy.broker
         if broker is not self._size_getter_broker:
             self._bind_broker_size_getters(broker)
+        cache = getattr(broker, "_rust_state_cache", None)
+        if cache is not None and cache[0] == getattr(broker, "_curr_idx", None):
+            return cache[2] != 0
         rust_state_getter = self._rust_state_getter
         if rust_state_getter is not None:
             return rust_state_getter()[2] != 0
@@ -88,6 +115,9 @@ class PositionProxy:
         broker = self._strategy.broker
         if broker is not self._size_getter_broker:
             self._bind_broker_size_getters(broker)
+        cache = getattr(broker, "_rust_state_cache", None)
+        if cache is not None and cache[0] == getattr(broker, "_curr_idx", None):
+            return cache[2]
         rust_state_getter = self._rust_state_getter
         if rust_state_getter is not None:
             return rust_state_getter()[2]
@@ -98,7 +128,14 @@ class PositionProxy:
 
     def close(self):
         # In backtesting.py, position.close() closes the position
-        self._strategy.close()
+        strategy = self._strategy
+        data = strategy.datas[0]
+        effective_size = self.size + strategy._pending_size.get(data, 0.0)
+        if effective_size > 0:
+            return strategy.sell(data=data, size=abs(effective_size))
+        if effective_size < 0:
+            return strategy.buy(data=data, size=abs(effective_size))
+        return None
 
 class Strategy(CoreStrategy):
     """Facade for backtesting.py style strategies."""
@@ -108,12 +145,15 @@ class Strategy(CoreStrategy):
         self._bt_position = PositionProxy(self)
         self._indicator_cache = {}
         self._batch_indicator_cache = None
+        self._bt_close_array = None
 
     def _setup(self):
         """Bind backtesting.py compatibility proxies before init()."""
         if self._bt_data is None:
-            self._bt_data = BacktestingDataProxy(self.datas[0])
+            data = self.datas[0]
+            self._bt_data = BacktestingDataProxy(data)
             self.data = self._bt_data
+            self._bt_close_array = data.get_array("close")
 
     @property
     def position(self) -> Any:
@@ -185,16 +225,24 @@ class Strategy(CoreStrategy):
         if 0 < size < 1:
             equity = self.broker.getvalue()
             # Use current price adjusted for commission to match original logic
-            price = data.get_array('close')[data._cursor]
+            price = (
+                self._bt_close_array[data._cursor]
+                if data is self.datas[0]
+                else data.get_array("close")[data._cursor]
+            )
             comm_ratio = getattr(self.broker, 'commission_ratio', 0.0)
             adjusted_price = price * (1 + comm_ratio)
             size = int((equity * size) / adjusted_price)
         
-        return super().buy(
-            data=data,
-            size=size,
-            price=limit or stop,
-            exectype=Order.Limit if limit else Order.Stop if stop else Order.Market,
+        actual_size = float(abs(size))
+        self._pending_size[data] = self._pending_size.get(data, 0.0) + actual_size
+        return self.broker._submit(
+            self,
+            data,
+            Order.Buy,
+            actual_size,
+            limit or stop,
+            Order.Limit if limit else Order.Stop if stop else Order.Market,
         )
 
     def sell(
@@ -210,17 +258,32 @@ class Strategy(CoreStrategy):
         data = data or self.datas[0]
         if 0 < size < 1:
             equity = self.broker.getvalue()
-            price = data.get_array('close')[data._cursor]
+            price = (
+                self._bt_close_array[data._cursor]
+                if data is self.datas[0]
+                else data.get_array("close")[data._cursor]
+            )
             comm_ratio = getattr(self.broker, 'commission_ratio', 0.0)
             # For short, price is effectively lower due to commission
             adjusted_price = price * (1 - comm_ratio)
             size = int((equity * size) / adjusted_price)
             
-        return super().sell(data=data, size=size, price=limit or stop,
-                            exectype=Order.Limit if limit else Order.Stop if stop else Order.Market)
+        actual_size = float(abs(size))
+        self._pending_size[data] = self._pending_size.get(data, 0.0) - actual_size
+        return self.broker._submit(
+            self,
+            data,
+            Order.Sell,
+            actual_size,
+            limit or stop,
+            Order.Limit if limit else Order.Stop if stop else Order.Market,
+        )
 
 class IndicatorProxy:
     """Proxy for indicators and data to support backtesting.py syntax."""
+
+    __slots__ = ("_data", "_feed", "_cursor_ptr")
+
     def __init__(self, data: np.ndarray, feed: Any):
         # We store as numpy array for speed
         self._data = np.asarray(data)

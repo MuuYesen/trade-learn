@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -93,17 +94,89 @@ class BarSnapshot:
     data: Any
 
 
-@dataclass
 class Stats:
-    returns: pd.Series
-    equity: pd.Series
-    trades: pd.DataFrame
-    positions: pd.DataFrame
-    orders: pd.DataFrame
-    summary: dict[str, Any]
-    analyzers: dict[str, Any]
-    config: dict[str, Any]
-    fills: pd.DataFrame
+    """Backtest result container with optional lazy pandas artifact materialization."""
+
+    def __init__(
+        self,
+        *,
+        returns: pd.Series | Callable[[], pd.Series],
+        equity: pd.Series | Callable[[], pd.Series],
+        trades: pd.DataFrame | Callable[[], pd.DataFrame],
+        positions: pd.DataFrame | Callable[[], pd.DataFrame],
+        orders: pd.DataFrame | Callable[[], pd.DataFrame],
+        summary: dict[str, Any],
+        analyzers: dict[str, Any],
+        config: dict[str, Any],
+        fills: pd.DataFrame | Callable[[], pd.DataFrame],
+    ) -> None:
+        self._returns = returns
+        self._equity = equity
+        self._trades = trades
+        self._positions = positions
+        self._orders = orders
+        self.summary = summary
+        self.analyzers = analyzers
+        self.config = config
+        self._fills = fills
+
+    @staticmethod
+    def _materialize(value: Any) -> Any:
+        return value() if callable(value) else value
+
+    @property
+    def returns(self) -> pd.Series:
+        self._returns = self._materialize(self._returns)
+        return self._returns
+
+    @returns.setter
+    def returns(self, value: pd.Series | Callable[[], pd.Series]) -> None:
+        self._returns = value
+
+    @property
+    def equity(self) -> pd.Series:
+        self._equity = self._materialize(self._equity)
+        return self._equity
+
+    @equity.setter
+    def equity(self, value: pd.Series | Callable[[], pd.Series]) -> None:
+        self._equity = value
+
+    @property
+    def trades(self) -> pd.DataFrame:
+        self._trades = self._materialize(self._trades)
+        return self._trades
+
+    @trades.setter
+    def trades(self, value: pd.DataFrame | Callable[[], pd.DataFrame]) -> None:
+        self._trades = value
+
+    @property
+    def positions(self) -> pd.DataFrame:
+        self._positions = self._materialize(self._positions)
+        return self._positions
+
+    @positions.setter
+    def positions(self, value: pd.DataFrame | Callable[[], pd.DataFrame]) -> None:
+        self._positions = value
+
+    @property
+    def orders(self) -> pd.DataFrame:
+        self._orders = self._materialize(self._orders)
+        return self._orders
+
+    @orders.setter
+    def orders(self, value: pd.DataFrame | Callable[[], pd.DataFrame]) -> None:
+        self._orders = value
+
+    @property
+    def fills(self) -> pd.DataFrame:
+        self._fills = self._materialize(self._fills)
+        return self._fills
+
+    @fills.setter
+    def fills(self, value: pd.DataFrame | Callable[[], pd.DataFrame]) -> None:
+        self._fills = value
 
 
 @dataclass(frozen=True)

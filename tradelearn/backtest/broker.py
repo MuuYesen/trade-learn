@@ -66,6 +66,8 @@ class RustBroker(BaseBroker):
         self._fills_frame_cache_len = -1
         self._pending_orders: list[Order] = []
         self._order_count = 0
+        self._closed_trade_count = 0
+        self._winning_trade_count = 0
         self._last_fill_idx = 0
         self._rust_state_cache: tuple[int, float, float, float] | None = None
         self._step_fills_from_collect: list[Any] | CompactFillBatch | None = None
@@ -154,6 +156,9 @@ class RustBroker(BaseBroker):
             self._fills_frame_cache_len = len(self._fills)
         return self._fills_frame_cache
 
+    def trade_summary(self) -> tuple[int, int]:
+        return self._closed_trade_count, self._winning_trade_count
+
     def _fill_datetime(self, data: Any) -> Any:
         timestamps = getattr(data, "_datetime", None)
         if timestamps is None:
@@ -195,7 +200,8 @@ class RustBroker(BaseBroker):
         )
 
     def _notify_order_event(self, owner: Strategy, order: Order) -> None:
-        _notify_order(owner, order)
+        if getattr(type(owner), "notify_order", None) is not CoreStrategy.notify_order:
+            _notify_order(owner, order)
         for analyzer in getattr(owner, "analyzers", {}).values():
             on_order = getattr(analyzer, "on_order", None)
             if callable(on_order):
@@ -554,6 +560,10 @@ class RustBroker(BaseBroker):
             new_size = pos.size
 
             trade_closed = old_size != 0 and old_size * new_size <= 0
+            if trade_closed:
+                self._closed_trade_count += 1
+                if pnl > 0:
+                    self._winning_trade_count += 1
             if wants_trade_event and old_size == 0 and new_size != 0:
                 trade = Trade(data=data, size=new_size, price=price, status=Trade.Open)
                 trade.pnl = 0.0

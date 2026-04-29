@@ -493,6 +493,39 @@ def test_rust_broker_records_closed_trade_flags_in_fill_ledger() -> None:
     assert fills["pnl"].tolist() == [0.0, 1.0]
 
 
+def test_backtesting_run_uses_lazy_stats_without_materializing_fills(monkeypatch) -> None:
+    data = pd.DataFrame(
+        {
+            "Open": [10.0, 11.0, 12.0, 13.0],
+            "High": [10.0, 11.0, 12.0, 13.0],
+            "Low": [10.0, 11.0, 12.0, 13.0],
+            "Close": [10.0, 11.0, 12.0, 13.0],
+            "Volume": [100.0, 100.0, 100.0, 100.0],
+        },
+        index=pd.date_range("2024-01-01", periods=4),
+    )
+
+    class RoundTrip(BacktestingStrategy):
+        def init(self) -> None:
+            pass
+
+        def next(self) -> None:
+            if len(self.data) == 1:
+                self.buy(size=1)
+            elif len(self.data) == 3:
+                self.position.close()
+
+    def fail_fills_frame(self):
+        raise AssertionError("fills_frame should be lazy during Backtest.run()")
+
+    monkeypatch.setattr(RustBroker, "fills_frame", fail_fills_frame)
+
+    stats = Backtest(data, RoundTrip, cash=1000, commission=0.0).run()
+
+    assert stats["# Trades"] == 1
+    assert stats["Win Rate [%]"] == 100.0
+
+
 def test_backtest_engine_buffers_orders_while_strategy_next_runs() -> None:
     data = pd.DataFrame(
         {

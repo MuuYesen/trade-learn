@@ -172,13 +172,7 @@ def _positions_frame(strategy: Any, fills: pd.DataFrame, index: pd.Index) -> pd.
     return pd.DataFrame(rows, columns=columns)
 
 
-def _build_stats(cerebro: Any, strategy: Any) -> Stats:
-    data = strategy.data
-    frame = getattr(data, "_frame", None)
-    if not isinstance(frame, pd.DataFrame):
-        primary = cerebro.datas[0] if getattr(cerebro, "datas", None) else None
-        frame = getattr(primary, "_frame", pd.DataFrame())
-    index = frame.index
+def _build_equity_returns(strategy: Any, index: pd.Index) -> tuple[pd.Series, pd.Series]:
     values = []
     observers_get = getattr(
         getattr(strategy, "observers", {}),
@@ -196,6 +190,75 @@ def _build_stats(cerebro: Any, strategy: Any) -> Stats:
     equity = pd.Series(values[: len(index)], index=index, name="equity", dtype=float)
     returns = equity.pct_change().fillna(0.0)
     returns.name = "returns"
+    return equity, returns
+
+
+def _stats_config(cerebro: Any) -> dict[str, Any]:
+    return {
+        "callback_batch": getattr(cerebro, "callback_batch", 1),
+        "trade_on_close": bool(getattr(cerebro, "trade_on_close", False)),
+        "exactbars": bool(getattr(cerebro, "exactbars", False)),
+        "stdstats": bool(getattr(cerebro, "stdstats", True)),
+        "broker": {
+            "cash": getattr(cerebro.broker, "_cash", 0.0),
+            "commission": getattr(cerebro.broker, "commission_ratio", 0.0),
+        },
+    }
+
+
+def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -> Stats:
+    data = strategy.data
+    frame = getattr(data, "_frame", None)
+    if not isinstance(frame, pd.DataFrame):
+        primary = cerebro.datas[0] if getattr(cerebro, "datas", None) else None
+        frame = getattr(primary, "_frame", pd.DataFrame())
+    index = frame.index
+
+    if lazy_artifacts:
+        final_cash = float(strategy.broker.getcash())
+        final_value = float(strategy.broker.getvalue())
+        total_orders = float(len(getattr(strategy.broker, "_orders", ())))
+        total_fills = float(len(getattr(strategy.broker, "_fills", ())))
+        trade_summary = getattr(strategy.broker, "trade_summary", None)
+        total_trades = float(trade_summary()[0]) if callable(trade_summary) else 0.0
+
+        def equity_factory() -> pd.Series:
+            return _build_equity_returns(strategy, index)[0]
+
+        def returns_factory() -> pd.Series:
+            return _build_equity_returns(strategy, index)[1]
+
+        def fills_factory() -> pd.DataFrame:
+            return _fills_frame(strategy.broker)
+
+        def positions_factory() -> pd.DataFrame:
+            return _positions_frame(strategy, fills_factory(), index)
+
+        return Stats(
+            returns=returns_factory,
+            equity=equity_factory,
+            trades=lambda: pd.DataFrame(),
+            positions=positions_factory,
+            orders=lambda: _orders_frame(strategy.broker),
+            summary={
+                "bars": float(len(index)),
+                "final_cash": final_cash,
+                "final_value": final_value,
+                "final_realized_pnl": 0.0,
+                "final_unrealized_pnl": 0.0,
+                "final_margin_used": 0.0,
+                "max_drawdown": 0.0,
+                "sharpe": float("nan"),
+                "total_trades": total_trades,
+                "total_orders": total_orders,
+                "total_fills": total_fills,
+            },
+            analyzers={},
+            config=_stats_config(cerebro),
+            fills=fills_factory,
+        )
+
+    equity, returns = _build_equity_returns(strategy, index)
     drawdowns = (equity.cummax() - equity) / equity.cummax().replace(0, np.nan)
     fills = _fills_frame(strategy.broker)
     orders = _orders_frame(strategy.broker)
@@ -221,16 +284,7 @@ def _build_stats(cerebro: Any, strategy: Any) -> Stats:
         orders=orders,
         summary=summary,
         analyzers={},
-        config={
-            "callback_batch": getattr(cerebro, "callback_batch", 1),
-            "trade_on_close": bool(getattr(cerebro, "trade_on_close", False)),
-            "exactbars": bool(getattr(cerebro, "exactbars", False)),
-            "stdstats": bool(getattr(cerebro, "stdstats", True)),
-            "broker": {
-                "cash": getattr(cerebro.broker, "_cash", 0.0),
-                "commission": getattr(cerebro.broker, "commission_ratio", 0.0),
-            },
-        },
+        config=_stats_config(cerebro),
         fills=fills,
     )
 
@@ -600,8 +654,13 @@ def run_backtest(cerebro: Any) -> list[Any]:
 
     # 4. Lifecycle Stop
     strategy.stop()
-    stats = _build_stats(cerebro, strategy)
     metrics_engine = getattr(strategy, "metrics_engine", None)
+    lazy_stats = (
+        getattr(cerebro, "stats_mode", "full") == "lazy"
+        and metrics_engine is None
+        and not strategy.analyzers
+    )
+    stats = _build_stats(cerebro, strategy, lazy_artifacts=lazy_stats)
     if metrics_engine is not None:
         metrics_engine.compute(stats)
     for ana in strategy.analyzers.values():
