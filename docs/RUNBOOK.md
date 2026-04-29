@@ -110,6 +110,44 @@ uv run pytest tests/unit/lite tests/unit/examples/test_1x_strategy_examples.py -
 - Lite 策略使用 `Strategy.I(...)`,内部复用 `BatchIndicatorCache`。
 - 不再维护 `backtesting.py` 对齐 runner;正式测试不应 import `backtesting.py`。
 
+### 吞吐 Benchmark 与 profiling 口径
+
+`benchmark_bt.py` 用于 Backtrader 数值对齐审计,不是极限吞吐测试。大数据吞吐使用
+`benchmark_throughput.py`:
+
+```bash
+uv run python benchmarks/runners/benchmark_throughput.py --bars 550000 --repeat 1 --warmup 0
+```
+
+2026-04-29 本地 55 万根 1min K 线实测:
+
+| 引擎 | 时间 | bars/s | vs 1,682 bars/s | vs 419,552 bars/s | Trades |
+|---|---:|---:|---:|---:|---:|
+| Tradelearn Engine | 4.0443s | 135,994 | 80.9x | 32.4% | 10,299 |
+| Tradelearn Lite | 2.7177s | 202,381 | 120.3x | 48.2% | 5,149 |
+| Backtrader | 33.4450s | 16,445 | 9.8x | 3.9% | 10,299 |
+
+同一策略阶段拆分 profiling:
+
+| 阶段 | Engine | Lite | Backtrader |
+|---|---:|---:|---:|
+| 数据生成 | 0.0244s | 0.0244s | 0.0244s |
+| DataFrame copy | 0.0038s | 0.0027s | 0.0015s |
+| runner/feed 初始化 | 0.0300s | 0.0059s | 0.0001s |
+| `run()` 主循环 | 4.0536s | 2.7000s | 33.6156s |
+| 结果读取 | ~0s | ~0s | ~0s |
+| 合计 | 4.0875s | 2.7086s | 33.6173s |
+| bars/s | 134,557 | 203,055 | 16,361 |
+
+结论:
+
+- 55 万 bar 下,Tradelearn Engine 约 **13.5 万 bars/s**,Lite 约 **20.2 万 bars/s**。
+- 99% 以上时间在 `run()` 主循环,数据构造、feed 初始化和结果读取不是瓶颈。
+- cProfile 显示主要开销来自每 bar Python 回调、策略 `next()`、`position()`、indicator/line
+  `__getitem__` 和成交回传;Rust `step_open_collect_compact` 约 0.7-0.8s,不是主要瓶颈。
+- 和 419,552 bars/s 的差距主要来自 Tradelearn 保留事件驱动 Python 策略 API,每根 bar 仍进入
+  Python `next()`;纯批处理或更少 Python callback 的框架吞吐口径不可直接等价比较。
+
 ### Lint / 格式化
 
 ```bash
