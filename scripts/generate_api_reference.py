@@ -17,17 +17,58 @@ class ApiReferenceModule:
     title: str
     import_path: str
     summary: str
+    common_entries: tuple[str, ...]
 
 
 API_REFERENCE_MODULES: tuple[ApiReferenceModule, ...] = (
-    ApiReferenceModule("Engine", "tradelearn.engine", "Backtrader-style advanced user API."),
-    ApiReferenceModule("Lite", "tradelearn.lite", "Tradelearn 1.x-style lightweight user API."),
-    ApiReferenceModule("Data", "tradelearn.data", "Bars, providers, and cache helpers."),
-    ApiReferenceModule("Indicators", "tradelearn.indicators", "Technical indicator facade."),
-    ApiReferenceModule("Metrics", "tradelearn.metrics", "Returns, risk, and factor metrics."),
-    ApiReferenceModule("Factor", "tradelearn.factor", "Alpha formulas and FactorAnalyzer."),
-    ApiReferenceModule("Report", "tradelearn.report", "HTML, Excel, and explorer reports."),
-    ApiReferenceModule("ML", "tradelearn.ml", "MLStrategy, FeatureStore, registry, selector."),
+    ApiReferenceModule(
+        "Engine",
+        "tradelearn.engine",
+        "Backtrader 风格高级事件驱动 API。",
+        ("Cerebro", "Strategy", "Order", "ind", "Analyzer", "Sizer"),
+    ),
+    ApiReferenceModule(
+        "Lite",
+        "tradelearn.lite",
+        "Tradelearn 1.x 风格轻量 API。",
+        ("Backtest", "Strategy", "Signal", "SignalStrategy"),
+    ),
+    ApiReferenceModule(
+        "Data",
+        "tradelearn.data",
+        "K 线数据、provider、缓存与重采样工具。",
+        ("DataProvider", "CacheProvider", "resample_frame"),
+    ),
+    ApiReferenceModule(
+        "Indicators",
+        "tradelearn.indicators",
+        "技术指标 facade,包含 pandas-ta-classic / TDX / TradingView 生态入口。",
+        ("sma", "ema", "rsi", "macd", "ta", "tdx", "tv"),
+    ),
+    ApiReferenceModule(
+        "Metrics",
+        "tradelearn.metrics",
+        "收益、风险、回撤与因子评价指标。",
+        ("returns", "sharpe", "max_drawdown", "alpha_beta"),
+    ),
+    ApiReferenceModule(
+        "Factor",
+        "tradelearn.factor",
+        "Alpha 公式与因子分析工具。",
+        ("FactorAnalyzer", "alphas"),
+    ),
+    ApiReferenceModule(
+        "Report",
+        "tradelearn.report",
+        "HTML、Excel 与研究报告导出。",
+        ("Report", "TearSheet", "export_excel"),
+    ),
+    ApiReferenceModule(
+        "ML",
+        "tradelearn.ml",
+        "机器学习策略、特征存储、模型注册与特征筛选。",
+        ("MLStrategy", "FeatureStore", "ModelRegistry", "FeatureSelector"),
+    ),
 )
 
 
@@ -408,32 +449,91 @@ def render_lite_api_guide() -> str:
 
 
 def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE_MODULES) -> str:
-    """Render a mkdocstrings-backed API reference markdown page."""
+    """Render the readable API reference index page."""
     parts = [
         "# API Reference",
         "",
-        "This page is generated from Python docstrings via mkdocstrings.",
+        "本页由 `scripts/generate_api_reference.py` 自动生成。",
         "",
-        "- [Engine API Guide](engine.md)",
-        "- [Lite API Guide](lite.md)",
+        "把这里当作 API 地图:需要示例和调用流程时看 Guide;需要完整类、函数、"
+        "参数签名时看模块 Reference。",
         "",
+        "## 先看这里",
+        "",
+        "| 目标 | 阅读 |",
+        "|---|---|",
+        "| 编写 Backtrader 风格事件策略、Analyzer、Observer、Sizer | "
+        "[Engine API Guide](engine.md) |",
+        "| 编写 Tradelearn 1.x 风格轻量策略 | [Lite API Guide](lite.md) |",
+        "| 查询精确类/函数签名和完整 docstring | 下方模块 Reference 链接 |",
+        "",
+        "## 公开模块",
+        "",
+        "| 模块 | 用途 | 常用入口 | 完整 Reference |",
+        "|---|---|---|---|",
     ]
     for module in modules:
-        parts.extend(
-            [
-                f"## {module.title}",
-                "",
-                module.summary,
-                "",
-                f"::: {module.import_path}",
-                "    options:",
-                "      show_source: true",
-                "      show_root_heading: true",
-                "      members_order: source",
-                "",
-            ]
+        slug = _module_slug(module)
+        entries = ", ".join(f"`{entry}`" for entry in module.common_entries)
+        parts.append(
+            "| "
+            f"`{module.import_path}` | "
+            f"{module.summary} | "
+            f"{entries} | "
+            f"[{module.title}](reference/{slug}.md) |"
         )
+    parts.extend(
+        [
+            "",
+            "## Generated Pages",
+            "",
+            "- [Engine API Guide](engine.md)",
+            "- [Lite API Guide](lite.md)",
+        ]
+    )
+    for module in modules:
+        slug = _module_slug(module)
+        parts.append(f"- [`{module.import_path}`](reference/{slug}.md)")
     return "\n".join(parts).rstrip() + "\n"
+
+
+def _module_slug(module: ApiReferenceModule) -> str:
+    return module.import_path.rsplit(".", 1)[-1].replace("_", "-")
+
+
+def render_module_reference(module: ApiReferenceModule) -> str:
+    """Render one mkdocstrings-backed module reference page."""
+    parts = [
+        f"# {module.title} Reference",
+        "",
+        module.summary,
+        "",
+        "[Back to API Reference](../reference.md)",
+        "",
+        f"::: {module.import_path}",
+        "    options:",
+        "      show_source: true",
+        "      show_root_heading: true",
+        "      members_order: source",
+        "",
+    ]
+    return "\n".join(parts).rstrip() + "\n"
+
+
+def write_api_reference_pages(
+    docs_dir: Path | str = Path("docs"),
+    modules: tuple[ApiReferenceModule, ...] = API_REFERENCE_MODULES,
+) -> tuple[Path, ...]:
+    """Write the readable index and per-module mkdocstrings reference pages."""
+    docs_path = Path(docs_dir)
+    outputs = [write_api_reference(docs_path)]
+    reference_dir = docs_path / "api" / "reference"
+    reference_dir.mkdir(parents=True, exist_ok=True)
+    for module in modules:
+        output = reference_dir / f"{_module_slug(module)}.md"
+        output.write_text(render_module_reference(module), encoding="utf-8")
+        outputs.append(output)
+    return tuple(outputs)
 
 
 def write_api_reference(docs_dir: Path | str = Path("docs")) -> Path:
@@ -457,9 +557,9 @@ def write_api_guides(docs_dir: Path | str = Path("docs")) -> tuple[Path, Path]:
 
 def write_api_docs(docs_dir: Path | str = Path("docs")) -> tuple[Path, ...]:
     """Write every generated API documentation page."""
-    reference = write_api_reference(docs_dir)
+    reference_pages = write_api_reference_pages(docs_dir)
     guides = write_api_guides(docs_dir)
-    return (reference, *guides)
+    return (*reference_pages, *guides)
 
 
 def main(argv: list[str] | None = None) -> int:

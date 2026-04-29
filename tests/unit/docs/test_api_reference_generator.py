@@ -5,20 +5,35 @@ from scripts.generate_api_reference import (
     render_api_reference,
     render_engine_api_guide,
     render_lite_api_guide,
+    render_module_reference,
     write_api_reference,
+    write_api_reference_pages,
 )
 
 
-def test_render_api_reference_contains_mkdocstrings_directives() -> None:
+def test_render_api_reference_is_readable_overview_not_module_dump() -> None:
     rendered = render_api_reference()
 
-    assert "::: tradelearn.engine" in rendered
-    assert "::: tradelearn.lite" in rendered
-    assert "::: tradelearn.ml" in rendered
-    assert "::: tradelearn.report" in rendered
+    assert "## 先看这里" in rendered
+    assert "## 公开模块" in rendered
+    assert "| 模块 | 用途 | 常用入口 | 完整 Reference |" in rendered
+    assert "[Engine API Guide](engine.md)" in rendered
+    assert "[Lite API Guide](lite.md)" in rendered
+    assert "[`tradelearn.engine`](reference/engine.md)" in rendered
+    assert "::: tradelearn.engine" not in rendered
+    assert "::: tradelearn.lite" not in rendered
     assert "::: tradelearn.backtest" not in rendered
     assert "Compat Backtrader" not in rendered
     assert all(module.import_path in rendered for module in API_REFERENCE_MODULES)
+
+
+def test_render_module_reference_contains_single_mkdocstrings_directive() -> None:
+    rendered = render_module_reference(API_REFERENCE_MODULES[0])
+
+    assert rendered.startswith("# Engine Reference")
+    assert "::: tradelearn.engine" in rendered
+    assert "::: tradelearn.lite" not in rendered
+    assert "show_source: true" in rendered
 
 
 def test_write_api_reference_creates_expected_page(tmp_path) -> None:
@@ -27,6 +42,15 @@ def test_write_api_reference_creates_expected_page(tmp_path) -> None:
     assert output == tmp_path / "api" / "reference.md"
     assert output.exists()
     assert output.read_text(encoding="utf-8").startswith("# API Reference")
+
+
+def test_write_api_reference_pages_creates_module_pages(tmp_path) -> None:
+    outputs = write_api_reference_pages(tmp_path)
+
+    assert tmp_path / "api" / "reference.md" in outputs
+    assert tmp_path / "api" / "reference" / "engine.md" in outputs
+    assert tmp_path / "api" / "reference" / "lite.md" in outputs
+    assert (tmp_path / "api" / "reference" / "engine.md").exists()
 
 
 def test_render_engine_api_guide_includes_code_signatures_and_parameter_tables() -> None:
