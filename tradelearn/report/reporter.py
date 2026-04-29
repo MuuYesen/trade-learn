@@ -27,10 +27,16 @@ from tradelearn.report.html import write_html_report
 class Reporter:
     """Build report-ready summaries and series from backtest stats."""
 
-    def __init__(self, stats: Any, periods: int = 252) -> None:
+    def __init__(
+        self,
+        stats: Any,
+        periods: int = 252,
+        market_data: pd.DataFrame | None = None,
+    ) -> None:
         """Create a reporter from a Stats-like object or mapping."""
         self.stats = stats
         self.periods = periods
+        self.market_data = None if market_data is None else pd.DataFrame(market_data).copy()
 
     def summary(self, benchmark: pd.Series | None = None) -> dict[str, float | int | str]:
         """Return report summary statistics."""
@@ -177,6 +183,12 @@ class Reporter:
     def trade_distribution_chart(self, bins: int = 20):
         """Return a Bokeh trade distribution chart."""
         return charts.trade_distribution(self.trade_distribution(bins=bins))
+
+    def price_trades_chart(self):
+        """Return a Bokeh price chart with fill markers when market data exists."""
+        if self.market_data is None:
+            return None
+        return charts.price_trades(self.market_data, self._get("fills", default=pd.DataFrame()))
 
     def exposure_chart(self):
         """Return a Bokeh exposure chart."""

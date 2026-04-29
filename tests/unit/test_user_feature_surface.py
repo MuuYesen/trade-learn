@@ -9,6 +9,7 @@ import tradelearn.engine as bt
 from tradelearn import metrics
 from tradelearn.lite import Backtest, Strategy
 from tradelearn.ml import MLStrategy
+from tradelearn.report import Reporter
 
 
 def _bars(mult: float = 1.0) -> pd.DataFrame:
@@ -58,14 +59,16 @@ def test_engine_plot_and_html_use_reporter_after_run(tmp_path: Path) -> None:
     [strategy] = cerebro.run()
     charts = cerebro.plot()
     path = tmp_path / "engine-report.html"
-    result = cerebro.html(path)
+    result = Reporter(strategy.stats, market_data=_bars()).html(path)
 
     assert strategy.stats is not None
     assert strategy.stats.summary["total_fills"] == 2
     assert not strategy.stats.positions.empty
-    assert len(charts) >= 3
+    assert len(charts) == 1
     assert result == path
     assert "Summary Stats" in path.read_text()
+    assert "Price / Trades" in path.read_text()
+    assert not hasattr(cerebro, "html")
 
 
 def test_lite_plot_and_html_use_shared_reporter_after_run(tmp_path: Path) -> None:
@@ -74,12 +77,14 @@ def test_lite_plot_and_html_use_shared_reporter_after_run(tmp_path: Path) -> Non
 
     charts = backtest.plot()
     path = tmp_path / "lite-report.html"
-    result = backtest.html(path)
+    result = Reporter(backtest._last_stats, market_data=_bars()).html(path)
 
     assert stats["# Trades"] >= 0
-    assert len(charts) >= 3
+    assert len(charts) == 1
     assert result == path
     assert "Summary Stats" in path.read_text()
+    assert "Price / Trades" in path.read_text()
+    assert not hasattr(backtest, "html")
 
 
 def test_oco_multitimeframe_multiasset_ml_and_metrics_surfaces() -> None:

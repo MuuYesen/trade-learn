@@ -7,6 +7,50 @@ from bokeh.plotting import figure
 from bokeh.transform import linear_cmap
 
 
+def price_trades(market_data: pd.DataFrame, fills: pd.DataFrame | None = None):
+    """Return a price curve with buy/sell fill markers."""
+    frame = _market_frame(market_data)
+    plot = figure(
+        title="Price / Trades",
+        x_axis_type="datetime",
+        height=360,
+        sizing_mode="stretch_width",
+    )
+    if frame.empty:
+        return plot
+    plot.line(
+        frame["date"],
+        frame["close"],
+        line_width=2,
+        color="#1f77b4",
+        legend_label="Close",
+    )
+    if fills is not None and not fills.empty and {"datetime", "price"}.issubset(fills.columns):
+        fill_frame = _fills_plot_frame(fills)
+        buys = fill_frame[fill_frame["side"].str.lower().eq("buy")]
+        sells = fill_frame[fill_frame["side"].str.lower().eq("sell")]
+        if not buys.empty:
+            plot.scatter(
+                buys["date"],
+                buys["price"],
+                marker="triangle",
+                size=10,
+                color="#2ca02c",
+                legend_label="Buy",
+            )
+        if not sells.empty:
+            plot.scatter(
+                sells["date"],
+                sells["price"],
+                marker="inverted_triangle",
+                size=10,
+                color="#d62728",
+                legend_label="Sell",
+            )
+    plot.legend.location = "top_left"
+    return plot
+
+
 def equity_curve(
     equity: pd.Series,
     benchmark: pd.Series | None = None,
@@ -350,3 +394,28 @@ def _plot_frame(series: pd.Series, name: str) -> pd.DataFrame:
     if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
         frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
     return frame
+
+
+def _market_frame(market_data: pd.DataFrame) -> pd.DataFrame:
+    """Return normalized OHLCV data for plotting."""
+    if market_data.empty:
+        return pd.DataFrame(columns=["date", "close"])
+    frame = market_data.copy()
+    frame.columns = [str(column).lower() for column in frame.columns]
+    if "close" not in frame:
+        return pd.DataFrame(columns=["date", "close"])
+    frame = frame.reset_index().rename(columns={frame.index.name or "index": "date"})
+    if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
+        frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
+    else:
+        frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
+    return frame.dropna(subset=["date", "close"])
+
+
+def _fills_plot_frame(fills: pd.DataFrame) -> pd.DataFrame:
+    """Return fills with timezone-naive dates for plotting."""
+    frame = fills.copy()
+    frame["date"] = pd.to_datetime(frame["datetime"], errors="coerce")
+    if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
+        frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
+    return frame.dropna(subset=["date", "price"])

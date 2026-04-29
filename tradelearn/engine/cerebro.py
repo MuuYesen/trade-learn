@@ -214,15 +214,8 @@ class Cerebro:
 
     def plot(self, *args: Any, **kwargs: Any) -> list[Any]:
         reporter = self._last_reporter()
-        return [
-            reporter.equity_curve_chart(kwargs.get("benchmark")),
-            reporter.drawdown_chart(),
-            reporter.trade_distribution_chart(),
-        ]
-
-    def html(self, path: str, benchmark: Any | None = None) -> Any:
-        """Write an HTML report for the most recent run."""
-        return self._last_reporter().html(path, benchmark=benchmark)
+        chart = reporter.price_trades_chart()
+        return [] if chart is None else [chart]
 
     def run(self) -> list[Strategy]:
         if self.mode != "backtest":
@@ -274,13 +267,18 @@ class Cerebro:
     def _last_reporter(self):
         results = getattr(self, "_last_results", None)
         if not results:
-            raise RuntimeError("run() must be called before plot() or html()")
+            raise RuntimeError("run() must be called before plot()")
         stats = getattr(results[0], "stats", None)
         if stats is None:
             raise RuntimeError("last run did not produce stats")
         from tradelearn.report import Reporter
 
-        return Reporter(stats)
+        return Reporter(stats, market_data=self._report_market_data())
+
+    def _report_market_data(self):
+        if not self.datas:
+            return None
+        return getattr(self.datas[0], "_frame", None)
 
     def _attach_observers(self, strategy: Any) -> None:
         strategy.observers = ObserverCollection()

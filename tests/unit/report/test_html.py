@@ -36,11 +36,41 @@ def test_reporter_html_writes_single_file_tear_sheet(tmp_path) -> None:
     assert "Drawdown" in html
     assert "Top 10 Drawdowns" in html
     assert "Monthly Returns Heatmap" in html
-    assert "Rolling Sharpe" in html
     assert "Trade Distribution" in html
+    assert "Rolling Sharpe" not in html
     assert "Tradelearn" in html
     assert "Bokeh" in html
     assert "annual_return" in html
+
+
+def test_reporter_html_adds_price_trades_chart_when_market_data_exists(tmp_path) -> None:
+    """Reporter.html can include a 1.x-style price curve with fills."""
+    path = tmp_path / "market-report.html"
+    stats = _stats()
+    market_data = pd.DataFrame(
+        {
+            "open": [10.0, 10.5, 11.0],
+            "high": [10.8, 11.2, 11.7],
+            "low": [9.8, 10.2, 10.8],
+            "close": [10.6, 11.0, 11.5],
+            "volume": [100.0, 110.0, 120.0],
+        },
+        index=pd.date_range("2024-01-01", periods=3, tz="UTC"),
+    )
+    stats.fills = pd.DataFrame(
+        {
+            "datetime": pd.date_range("2024-01-01", periods=2, tz="UTC"),
+            "side": ["buy", "sell"],
+            "price": [10.6, 11.0],
+        }
+    )
+
+    Reporter(stats, market_data=market_data).html(path)
+
+    html = path.read_text()
+    assert "Price / Trades" in html
+    assert "Buy" in html
+    assert "Sell" in html
 
 
 def test_reporter_html_accepts_mapping_stats(tmp_path) -> None:
@@ -126,7 +156,7 @@ def test_reporter_html_accepts_benchmark_series(tmp_path) -> None:
     assert "alpha" in html
     assert "beta" in html
     assert "information_ratio" in html
-    assert "Rolling Beta" in html
+    assert "Rolling Beta" not in html
     assert (tmp_path / "rolling_beta.parquet").exists()
 
 

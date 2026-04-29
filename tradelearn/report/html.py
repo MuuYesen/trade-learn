@@ -48,7 +48,11 @@ def write_html_report(
     config = reporter._get("config", default={}) or {}
     metadata = _metadata(summary, returns, config)
     top_drawdowns = reporter.top_drawdowns(limit=10)
-    plots = {
+    plots = {}
+    price_plot = reporter.price_trades_chart()
+    if price_plot is not None:
+        plots["Price / Trades"] = price_plot
+    plots.update({
         "Equity Curve": charts.equity_curve(
             reporter.equity_curve(),
             benchmark_returns,
@@ -58,7 +62,7 @@ def write_html_report(
         "Monthly Returns Heatmap": charts.monthly_heatmap(reporter.monthly_heatmap()),
         "Rolling Sharpe": charts.rolling_sharpe(reporter.rolling_sharpe()),
         "Trade Distribution": charts.trade_distribution(reporter.trade_distribution()),
-    }
+    })
     if not rolling_beta.empty:
         plots["Rolling Beta"] = charts.rolling_beta(rolling_beta)
     if _has_multi_asset_exposure(exposure):
@@ -79,6 +83,7 @@ def write_html_report(
         )
     if not factor_quantile_returns.empty:
         plots["Factor Quantile Returns"] = charts.quantile_returns(factor_quantile_returns)
+    plots = {title: plot for title, plot in plots.items() if _has_glyph_renderers(plot)}
     script, chart_components = components(plots)
     output.write_text(
         _render_html(
@@ -166,6 +171,11 @@ def _write_artifacts(
             sort_keys=True,
         )
     )
+
+
+def _has_glyph_renderers(plot: Any) -> bool:
+    """Return True when a Bokeh figure has actual plotted glyphs."""
+    return bool(getattr(plot, "renderers", ()))
 
 
 def _render_html(
