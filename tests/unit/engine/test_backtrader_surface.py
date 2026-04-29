@@ -73,6 +73,17 @@ def test_set_coc_keeps_cheat_on_close_out_of_generic_kwargs() -> None:
     assert "cheat_on_close" not in cerebro.kwargs
 
 
+def test_broker_exposes_backtrader_cash_value_aliases() -> None:
+    cerebro = bt.Cerebro()
+
+    cerebro.broker.set_cash(12345.0)
+
+    assert cerebro.broker.get_cash() == 12345.0
+    assert cerebro.broker.getcash() == 12345.0
+    assert cerebro.broker.get_value() == 12345.0
+    assert cerebro.broker.getvalue() == 12345.0
+
+
 def test_resampledata_adds_higher_timeframe_feed() -> None:
     cerebro = bt.Cerebro()
     data0 = bt.DataFeed(_ohlcv(15), name="1m")

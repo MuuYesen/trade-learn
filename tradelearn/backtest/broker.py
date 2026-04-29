@@ -129,6 +129,9 @@ class RustBroker:
         self._cash = float(cash)
         self._active_cash = float(cash)
 
+    def set_cash(self, cash: float) -> None:
+        self.setcash(cash)
+
     def setcommission(
         self, commission: float = 0.0, margin: float = 0.0, mult: float = 1.0
     ) -> None:
@@ -148,6 +151,9 @@ class RustBroker:
             return cash
         return self._active_cash
 
+    def get_cash(self) -> float:
+        return self.getcash()
+
     def getvalue(self) -> float:
         if self._engine is not None:
             _, cash, size, _price = self._get_rust_state()
@@ -164,6 +170,9 @@ class RustBroker:
                 current_price = self._close_prices[self._curr_idx]
                 val += self._pos.size * current_price * self._mult
         return val
+
+    def get_value(self) -> float:
+        return self.getvalue()
 
     def getposition(self, data: Any = None) -> Position:
         if self._engine is not None:
