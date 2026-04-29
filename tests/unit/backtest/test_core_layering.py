@@ -124,7 +124,8 @@ def test_runnable_tools_are_not_kept_under_tests() -> None:
 
     assert not (root / "tests" / "runners").exists()
     assert (root / "benchmarks" / "runners" / "benchmark_bt.py").exists()
-    assert (root / "benchmarks" / "runners" / "compare_backtesting.py").exists()
+    assert not (root / "benchmarks" / "runners" / "compare_backtesting.py").exists()
+    assert not (root / "benchmarks" / "runners" / "speed_test_backtesting.py").exists()
     assert (root / "scripts" / "examples" / "ml_strategy.py").exists()
 
 

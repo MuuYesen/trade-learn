@@ -70,7 +70,7 @@ CI 里作为对照源:
 ```python
 # tests/consistency/test_xxx.py
 from reference.tradelearn_1x.backtest import Backtest as OldBT
-from tradelearn.backtest import Cerebro
+from tradelearn.engine import Cerebro
 
 # 同样输入,两者必须产出一致
 ```
@@ -87,30 +87,28 @@ uv run pytest tests/golden/                  # 金标对照
 uv run pytest --doctest-modules tradelearn/  # docstring 示例
 ```
 
-### Backtrader / backtesting 对齐与性能门禁
+### Backtrader 对齐与 Lite smoke
 
 ```bash
-# backtesting.py 对齐与 bars/s 吞吐
-uv run python benchmarks/runners/compare_backtesting.py
-
-# backtesting.py 稳定门禁: repeat median,Return/# Trades 对齐,最低 1.35x
-uv run python benchmarks/runners/compare_backtesting.py --warmup 1 --repeat 3 --min-speedup 1.35
-
 # Backtrader 8 个迁移策略数值对齐
 uv run python benchmarks/runners/benchmark_bt.py
 
 # CI 使用的稳定性能口径: warmup + repeat median,低于阈值或非 EXACT 会失败
 uv run python benchmarks/runners/benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2
+
+# Lite 语法层与 1.x 策略 smoke
+uv run pytest tests/unit/lite tests/unit/examples/test_1x_strategy_examples.py -q
 ```
 
 说明:
 
-- `compare_backtesting.py` 默认单次结果用于本地查看;门禁口径使用 `--warmup 1 --repeat 3 --min-speedup 1.35`。
-- `benchmark_bt.py` 默认单次结果用于 smoke test,会输出 `vs Prev TL`。
+- `benchmark_bt.py` 是底层正确性的正式验收,必须保持 Backtrader `EXACT`。
+- Lite 只测试语法适配层是否接入同一 runtime,不单独做撮合/portfolio 对齐。
 - CI 口径使用 `--warmup 1 --repeat 3`,避免 0.1s 级别单次噪声误判。
 - `--min-speedup` 是退化门槛,不是发布宣传性能目标;Backtrader 当前设置为保守的 `1.2x`。
 - Backtrader 策略不提供 `Strategy.I`;指标缓存接在 `bt.indicators.*` 内部。
-- backtesting.py 策略继续使用 `Strategy.I(...)`,内部复用 `BatchIndicatorCache`。
+- Lite 策略使用 `Strategy.I(...)`,内部复用 `BatchIndicatorCache`。
+- 不再维护 `backtesting.py` 对齐 runner;正式测试不应 import `backtesting.py`。
 
 ### Lint / 格式化
 

@@ -132,7 +132,7 @@ def test_lite_rejects_sl_tp_until_bracket_orders_are_implemented() -> None:
 
 def test_lite_examples_do_not_use_backtesting_py_surface() -> None:
     root = Path(__file__).parents[3]
-    checked_paths = [root / "examples" / "backtesting"]
+    checked_paths = [root / "examples" / "lite"]
     forbidden = [
         "from backtesting import",
         "self.data.Close",

@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 
 from benchmarks.runners.benchmark_bt import _benchmark_passed
-from benchmarks.runners.compare_backtesting import _comparison_passed
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -50,46 +49,3 @@ def test_backtrader_benchmark_gate_enforces_exact_and_min_speedup() -> None:
     assert _benchmark_passed(exact_fast, min_speedup=1.2) is True
     assert _benchmark_passed(exact_slow, min_speedup=1.2) is False
     assert _benchmark_passed(mismatch, min_speedup=1.2) is False
-
-
-def test_backtesting_compare_results_runner_completes() -> None:
-    result = subprocess.run(
-        [sys.executable, "benchmarks/runners/compare_backtesting.py"],
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert "RESULTS COMPARISON: BTCUSDT" in result.stdout
-    assert "RESULTS COMPARISON: ETHUSDT" in result.stdout
-    assert "Bars/s" in result.stdout
-
-
-def test_backtesting_compare_gate_enforces_alignment_and_min_speedup() -> None:
-    exact_fast = {
-        "BTCUSDT": {
-            "return_diff": 0.0,
-            "trades_diff": 0.0,
-            "speedup": 1.4,
-        }
-    }
-    exact_slow = {
-        "BTCUSDT": {
-            "return_diff": 0.0,
-            "trades_diff": 0.0,
-            "speedup": 1.2,
-        }
-    }
-    mismatch = {
-        "BTCUSDT": {
-            "return_diff": 0.02,
-            "trades_diff": 0.0,
-            "speedup": 1.4,
-        }
-    }
-
-    assert _comparison_passed(exact_fast, min_speedup=1.35) is True
-    assert _comparison_passed(exact_slow, min_speedup=1.35) is False
-    assert _comparison_passed(mismatch, min_speedup=1.35) is False

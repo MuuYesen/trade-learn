@@ -66,7 +66,7 @@ def _sample_data() -> pd.DataFrame:
 
 
 def _load_strategy(module_name: str, class_name: str) -> Type[LiteStrategy]:
-    module = importlib.import_module(f"examples.backtesting.{module_name}")
+    module = importlib.import_module(f"examples.lite.{module_name}")
     return getattr(module, class_name)
 
 

@@ -19,7 +19,7 @@ Summary of visualizations:
 4. Provides tools for "Exploratory Analysis" and "Optimal Model Selection" to rapidly identify patterns in the dataset and assess the performance of various models.
 5. Features algorithms for "Causal Graph Construction" and "Causal Feature Selection," extending the gplearn library to support "Feature Derivation" for time series data.
 6. Integrates open-source strategy development components from the Quantopian platform, including tools like empyrical, alphalens, and pyfolio.
-7. Enhances the backtesting.py framework to support portfolio strategy development in addition to single-asset strategies.
+7. Provides two strategy APIs: `tradelearn.engine` for Backtrader-style production workflows and `tradelearn.lite` for Tradelearn 1.x-style quick validation.
 8. Ensures a closed-loop process for machine learning strategy development by eliminating the need for additional third-party packages beyond the user-customized model.
 
 ## Choosing a User-Facing API

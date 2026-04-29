@@ -1,6 +1,6 @@
 ## trade-learn：机器学习交易策略搭建研究的全套解决方案
 
-trade-learn 是一个基于 alphalens、backtesting.py、pyfolio 和 quantstats 的机器学习策略研发工具包，提供因子采集、因子处理、因子评估、因果分析、模型定义和策略回测的全套策略研发流程，并支持可视化结果以 html 文件进行存档分享。
+trade-learn 是一个基于 alphalens、backtrader、pyfolio 和 quantstats 的机器学习策略研发工具包，提供因子采集、因子处理、因子评估、因果分析、模型定义和策略回测的全套策略研发流程，并支持可视化结果以 html 文件进行存档分享。
 
 <img src="docs/assets/flow_zh.png" alt="img" width="100%">
 
@@ -16,7 +16,7 @@ trade-learn 是一个基于 alphalens、backtesting.py、pyfolio 和 quantstats 
 4. 提供「探索性分析」和「最优模型选择」工具，迅速预览数据集的规律，以及常见模型在数据集的性能表现。
 5. 提供「因果图构建」和「因果特征选择」算法，扩展 gplearn 的函数库，实现面向时序数据进行「特征衍生」。
 6. 内嵌美国量化交易平台 quantopian 开源的策略研发组件，如 empyrical、alphalens、pyfolio 工具包。 
-7. 优化 backtesting.py 回测框架，在原来仅支持单标的策略搭建的基础上，额外增加了投资组合策略搭建的解决方案。 
+7. 提供两套策略入口:`tradelearn.engine` 面向 Backtrader 风格工程化策略,`tradelearn.lite` 面向 Tradelearn 1.x 风格快速验证。 
 8. 在整个策略搭建过程，除了模型需要用户自定义外，无需再引入其余第三方包，形成机器学习策略搭建的流程闭环。
 
 ## 用户入口分层
