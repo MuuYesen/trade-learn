@@ -106,7 +106,8 @@ class MetaParams(type):
             for i, d in enumerate(datas):
                 setattr(instance, f'data{i}', d)
         else:
-            print(f"DEBUG: {cls.__name__} has NO DATA. _G.current_data={_G.current_data}")
+            instance.datas = []
+            instance.data = None
 
         # 5. Setup Hook (Data and aliasing)
         if hasattr(instance, '_setup'):
@@ -135,7 +136,9 @@ class MetaParams(type):
             if has_var_args:
                 instance.__init__(*args, **other_kwargs)
             else:
-                pos_params = [p for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+                pos_params = [
+                    p for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+                ]
                 instance.__init__(*args[:len(pos_params)], **other_kwargs)
         finally:
             set_current_strategy(prev_strat)
@@ -177,10 +180,12 @@ class LineRoot(metaclass=MetaParams):
     def _advance(self, i: int) -> None:
         if hasattr(self, 'lines'):
             for line in self.lines:
-                if line: line._advance(i)
+                if line:
+                    line._advance(i)
 
     def __getattr__(self, name: str) -> Any:
         if name != 'lines' and hasattr(self, 'lines'):
             line = getattr(self.lines, name, None)
-            if line is not None: return line
+            if line is not None:
+                return line
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")

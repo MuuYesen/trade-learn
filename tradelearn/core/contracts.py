@@ -1,4 +1,10 @@
-"""Core contract objects and validators from ``docs/specs/CONTRACTS.md``."""
+"""Core contract objects and validators from ``docs/specs/CONTRACTS.md``.
+
+Only cross-runtime contracts belong here. Backtest-specific runtime models such
+as ``Order``, ``Trade``, and ``ExecutedInfo`` stay in the backtest package until
+they are split into broker-neutral contracts for backtest, paper, and live
+trading.
+"""
 
 from __future__ import annotations
 
@@ -42,7 +48,11 @@ class Experiment:
 
 
 class Broker(Protocol):
-    """Broker protocol reserved by the Stage 0 contracts."""
+    """Broker protocol reserved for the paper/live target contract.
+
+    Backtest brokers such as ``RustBroker`` are not required to implement this
+    protocol until the broker-neutral paper/live adapter layer is promoted.
+    """
 
     def place(self, order: Any) -> Any:
         """Place an order and return its broker-specific order id."""

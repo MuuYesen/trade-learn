@@ -22,6 +22,14 @@ if TYPE_CHECKING:
 OrderPayload = tuple[int, str, str, float, float | None, float | None]
 _EMPTY_ORDER_BUFFER: tuple[()] = ()
 CompactFillBatch = tuple[list[int], list[float], list[float], list[float], list[float], list[float]]
+_ORDER_TYPE_TO_RUST = {
+    1: "market",
+    2: "limit",
+    3: "stop",
+    4: "stop_limit",
+    6: "stop",
+    7: "stop_limit",
+}
 
 
 class CommInfo:
@@ -57,6 +65,12 @@ class RustBroker(BaseBroker):
         self._mult = mult
         self.match_mode = match_mode
         self._engine = None  # Initialized in engine.py
+        self._step_open_collect = None
+        self._step_open_collect_compact = None
+        self._step_close = None
+        self._step_close_compact = None
+        self._get_new_fills = None
+        self._get_new_fills_compact = None
         self._close_prices = None
         self._curr_idx = 0
         self._orders: list[Order] = []
@@ -82,6 +96,16 @@ class RustBroker(BaseBroker):
 
     def _uses_rust_matching(self) -> bool:
         return self._engine is not None
+
+    def bind_engine(self, engine: Any) -> None:
+        """Bind a Rust engine and cache optional FFI methods once."""
+        self._engine = engine
+        self._step_open_collect = getattr(engine, "step_open_collect", None)
+        self._step_open_collect_compact = getattr(engine, "step_open_collect_compact", None)
+        self._step_close = getattr(engine, "step_close", None)
+        self._step_close_compact = getattr(engine, "step_close_compact", None)
+        self._get_new_fills = getattr(engine, "get_new_fills", None)
+        self._get_new_fills_compact = getattr(engine, "get_new_fills_compact", None)
 
     def setcash(self, cash: float) -> None:
         self._cash = float(cash)
@@ -297,12 +321,12 @@ class RustBroker(BaseBroker):
             submitted
             and self._trade_on_close
             and self._engine is not None
-            and hasattr(self._engine, "step_close")
+            and self._step_close is not None
         ):
-            if hasattr(self._engine, "step_close_compact"):
-                self._step_fills_from_collect = self._engine.step_close_compact(self._curr_idx)
+            if self._step_close_compact is not None:
+                self._step_fills_from_collect = self._step_close_compact(self._curr_idx)
             else:
-                self._step_fills_from_collect = self._engine.step_close(self._curr_idx)
+                self._step_fills_from_collect = self._step_close(self._curr_idx)
 
     def drain_order_buffer(self) -> list[OrderPayload] | tuple[()]:
         """Return buffered order payloads without calling back into Rust."""
@@ -369,15 +393,7 @@ class RustBroker(BaseBroker):
         actual_size: float,
         price: float | None,
     ) -> tuple[str, str, float, float | None, float | None]:
-        otypes = {
-            Order.Market: "market",
-            Order.Limit: "limit",
-            Order.Stop: "stop",
-            Order.StopLimit: "stop_limit",
-            Order.StopTrail: "stop",
-            Order.StopTrailLimit: "stop_limit",
-        }
-        ot_str = otypes.get(order.exectype, "market")
+        ot_str = _ORDER_TYPE_TO_RUST.get(order.exectype, "market")
         limit_price = None
         stop_price = None
         if order.exectype == Order.Limit:
@@ -420,24 +436,7 @@ class RustBroker(BaseBroker):
             trailpercent=kwargs.get("trailpercent"),
             info=dict(kwargs.get("info", {})),
         )
-        order.status = Order.Submitted
-        self._orders.append(order)
-        self._orders_by_ref[order.ref] = order
-        self._notify_order_event(owner, order)
-
-        if self._engine is not None:
-            side_str = "buy" if is_buy else "sell"
-            payload = self._rust_order_payload(order, side_str, actual_size, price)
-            if self._buffer_order_submissions:
-                self._order_submit_buffer.append((order.ref, *payload))
-            else:
-                self._submit_to_rust_engine(order, *payload)
-            order.status = Order.Accepted
-        else:
-            # BT Mode: Add to pending
-            order.status = Order.Accepted
-            self._pending_orders.append(order)
-        self._notify_order_event(owner, order)
+        self._register_and_route_order(owner, order, is_buy, actual_size, price)
 
         return order
 
@@ -464,6 +463,18 @@ class RustBroker(BaseBroker):
             price=price,
             exectype=exectype,
         )
+        self._register_and_route_order(owner, order, is_buy, actual_size, price)
+
+        return order
+
+    def _register_and_route_order(
+        self,
+        owner: Strategy,
+        order: Order,
+        is_buy: bool,
+        actual_size: float,
+        price: float | None,
+    ) -> None:
         order.status = Order.Submitted
         self._orders.append(order)
         self._orders_by_ref[order.ref] = order
@@ -481,8 +492,6 @@ class RustBroker(BaseBroker):
             order.status = Order.Accepted
             self._pending_orders.append(order)
         self._notify_order_event(owner, order)
-
-        return order
 
     def cancel(self, order: Order) -> None:
         """Cancel an order in the Python mirror and pending queue."""
@@ -518,15 +527,15 @@ class RustBroker(BaseBroker):
         self._rust_state_cache = None
         self._step_fills_from_collect = None
         if self._engine is not None:
-            if hasattr(self._engine, "step_open_collect_compact"):
-                fills, cash, size, price = self._engine.step_open_collect_compact(
+            if self._step_open_collect_compact is not None:
+                fills, cash, size, price = self._step_open_collect_compact(
                     i,
                     self._last_fill_idx,
                 )
                 self._step_fills_from_collect = fills
                 self._rust_state_cache = (self._curr_idx, cash, size, price)
-            elif hasattr(self._engine, "step_open_collect"):
-                fills, cash, size, price = self._engine.step_open_collect(i, self._last_fill_idx)
+            elif self._step_open_collect is not None:
+                fills, cash, size, price = self._step_open_collect(i, self._last_fill_idx)
                 self._step_fills_from_collect = fills
                 self._rust_state_cache = (self._curr_idx, cash, size, price)
             else:
@@ -549,10 +558,10 @@ class RustBroker(BaseBroker):
         """Synchronize filled orders back to Python."""
         if self._engine is not None:
             if self._step_fills_from_collect is None:
-                if hasattr(self._engine, "get_new_fills_compact"):
-                    new_fills = self._engine.get_new_fills_compact(self._last_fill_idx)
+                if self._get_new_fills_compact is not None:
+                    new_fills = self._get_new_fills_compact(self._last_fill_idx)
                 else:
-                    new_fills = self._engine.get_new_fills(self._last_fill_idx)
+                    new_fills = self._get_new_fills(self._last_fill_idx)
             else:
                 new_fills = self._step_fills_from_collect
                 self._step_fills_from_collect = None

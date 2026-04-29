@@ -153,6 +153,11 @@ class Strategy:
         return None
 
     def _on_fill(self, data: Any, signed_size: float, price: float) -> None:
+        """Handle fills produced by the Python fallback path.
+
+        Rust-backed runs synchronize fills in ``RustBroker._process_rust_fills_batch``;
+        this hook is intentionally not called from that path.
+        """
         self._pending_size[data] = self._pending_size.get(data, 0.0) - signed_size
         if abs(self._pending_size[data]) < 1e-9:
             self._pending_size[data] = 0.0

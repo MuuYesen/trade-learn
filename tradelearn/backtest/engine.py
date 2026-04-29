@@ -357,9 +357,6 @@ def run_backtest(cerebro: Any) -> list[Any]:
         strategy.data = cerebro.datas[0]
     strategy.broker = cerebro.broker
 
-    if hasattr(strategy, "_setup"):
-        strategy._setup()
-
     # ... (Rust Engine Initialization omitted for brevity but preserved in real file) ...
     # ---------------------------------------------------------
     # Rust Engine Initialization
@@ -407,7 +404,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
             1.0,
             cerebro.broker.match_mode == "smart",
         )
-        cerebro.broker._engine = rust_engine
+        cerebro.broker.bind_engine(rust_engine)
         cerebro.broker._open_prices = opens
         cerebro.broker._high_prices = highs
         cerebro.broker._low_prices = lows

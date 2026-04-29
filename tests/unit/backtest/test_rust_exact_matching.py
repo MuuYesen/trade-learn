@@ -166,7 +166,7 @@ def test_rust_broker_caches_cash_and_position_within_bar() -> None:
 
     engine = FakeEngine()
     broker = RustBroker(match_mode="exact")
-    broker._engine = engine
+    broker.bind_engine(engine)
     broker._close_prices = [12.0]
     broker._curr_idx = 0
 
@@ -206,7 +206,7 @@ def test_rust_broker_uses_combined_step_snapshot_when_available() -> None:
 
     engine = FakeEngine()
     broker = RustBroker(match_mode="exact")
-    broker._engine = engine
+    broker.bind_engine(engine)
     broker._close_prices = [12.0]
 
     broker.step(0)
@@ -229,7 +229,7 @@ def test_rust_broker_can_buffer_order_submissions_for_rust_driven_callbacks() ->
 
     engine = FakeEngine()
     broker = RustBroker(match_mode="exact")
-    broker._engine = engine
+    broker.bind_engine(engine)
 
     broker.begin_order_buffering()
     order = broker.buy(object(), object(), size=2.0, price=9.5, exectype=Order.Limit)
@@ -251,7 +251,7 @@ def test_rust_broker_can_drain_buffer_without_reentering_engine() -> None:
             raise AssertionError("drain_order_buffer must not call the Rust engine")
 
     broker = RustBroker(match_mode="exact")
-    broker._engine = FakeEngine()
+    broker.bind_engine(FakeEngine())
 
     broker.begin_order_buffering()
     order = broker.sell(object(), object(), size=3.0, price=8.0, exectype=Order.Stop)
@@ -271,7 +271,7 @@ def test_rust_broker_can_drain_buffer_without_reentering_engine() -> None:
 
 def test_rust_broker_reuses_empty_order_buffer_result() -> None:
     broker = RustBroker(match_mode="exact")
-    broker._engine = object()
+    broker.bind_engine(object())
 
     broker.begin_order_buffering()
     first = broker.drain_order_buffer()
@@ -285,7 +285,7 @@ def test_rust_broker_reuses_empty_order_buffer_result() -> None:
 
 def test_rust_broker_can_bind_order_refs_in_batch() -> None:
     broker = RustBroker(match_mode="exact")
-    broker._engine = object()
+    broker.bind_engine(object())
 
     broker.begin_order_buffering()
     first = broker.buy(object(), object(), size=1.0)
@@ -325,7 +325,7 @@ def test_rust_broker_processes_rust_fills_with_batch_sync() -> None:
             self.trades.append((trade.size, trade.price, trade.pnl))
 
     broker = RustBroker(match_mode="exact")
-    broker._engine = FakeEngine()
+    broker.bind_engine(FakeEngine())
     first = Order(ref=1, data=data, ordtype=Order.Buy, size=1.0)
     second = Order(ref=2, data=data, ordtype=Order.Sell, size=1.0)
     broker._orders_by_ref = {1: first, 2: second}
@@ -370,7 +370,7 @@ def test_rust_broker_processes_compact_columnar_fill_batch() -> None:
             self.trades.append((trade.size, trade.price, trade.pnl))
 
     broker = RustBroker(match_mode="exact")
-    broker._engine = FakeEngine()
+    broker.bind_engine(FakeEngine())
     first = Order(ref=1, data=data, ordtype=Order.Buy, size=1.0)
     second = Order(ref=2, data=data, ordtype=Order.Sell, size=1.0)
     broker._orders_by_ref = {1: first, 2: second}
@@ -592,6 +592,57 @@ def test_backtesting_strategy_uses_basic_submit_fast_path() -> None:
     assert order == "order"
     assert len(strategy.broker.basic_calls) == 1
     assert strategy.broker.basic_calls[0][2] == Order.Buy
+
+
+def test_backtest_engine_calls_strategy_setup_once() -> None:
+    data = pd.DataFrame(
+        {
+            "Open": [10.0, 11.0, 12.0],
+            "High": [10.0, 11.0, 12.0],
+            "Low": [10.0, 11.0, 12.0],
+            "Close": [10.0, 11.0, 12.0],
+            "Volume": [100.0, 100.0, 100.0],
+        },
+        index=pd.date_range("2024-01-01", periods=3),
+    )
+
+    class SetupCounter(BacktestingStrategy):
+        setup_calls = 0
+
+        def _setup(self) -> None:
+            type(self).setup_calls += 1
+            super()._setup()
+
+        def init(self) -> None:
+            pass
+
+        def next(self) -> None:
+            pass
+
+    SetupCounter.setup_calls = 0
+
+    Backtest(data, SetupCounter, cash=1000).run()
+
+    assert SetupCounter.setup_calls == 1
+
+
+def test_broker_submit_paths_preserve_submitted_and_accepted_notifications() -> None:
+    class Owner(CoreStrategy):
+        def __init__(self) -> None:
+            super().__init__()
+            self.statuses = []
+
+        def notify_order(self, order) -> None:
+            self.statuses.append(order.status)
+
+    for submit_name in ("_submit", "_submit_basic"):
+        owner = Owner()
+        broker = RustBroker(match_mode="exact")
+        submit = getattr(broker, submit_name)
+
+        submit(owner, object(), Order.Buy, 1.0, None, Order.Market)
+
+        assert owner.statuses == [Order.Submitted, Order.Accepted]
 
 
 def test_backtest_engine_buffers_orders_while_strategy_next_runs() -> None:
