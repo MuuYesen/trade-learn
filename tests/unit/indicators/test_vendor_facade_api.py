@@ -82,6 +82,18 @@ def test_engine_no_longer_exports_short_ind_alias() -> None:
     assert "indicators" not in bt.__all__
 
 
+def test_root_and_engine_share_vendor_indicator_namespaces() -> None:
+    assert tl.talib is bt.talib
+    assert tl.tdx is bt.tdx
+    assert tl.tv is bt.tv
+    assert "talib" in tl.__all__
+    assert "tdx" in tl.__all__
+    assert "tv" in tl.__all__
+    assert "talib" in bt.__all__
+    assert "tdx" in bt.__all__
+    assert "tv" in bt.__all__
+
+
 def test_lite_no_longer_exports_chain_ta_accessors() -> None:
     seen: dict[str, bool] = {}
 
