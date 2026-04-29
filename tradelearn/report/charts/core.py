@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import pandas as pd
 from bokeh.layouts import gridplot
-from bokeh.models import ColumnDataSource, HoverTool, Span
+from bokeh.models import (
+    ColumnDataSource,
+    CrosshairTool,
+    HoverTool,
+    NumeralTickFormatter,
+    Range1d,
+    Span,
+)
 from bokeh.plotting import figure
 from bokeh.transform import linear_cmap
 
@@ -14,170 +21,277 @@ def market_replay(
     fills: pd.DataFrame | None = None,
     equity: pd.Series | None = None,
 ):
-    """Return a 1.x-style market replay grid with equity, P/L, OHLC, and volume."""
+    """Return a 1.x-style market replay grid with equity, P/L, OHLC, trades, and volume."""
     frame = _market_frame(market_data)
     if frame.empty:
         return price_trades(market_data, fills)
 
-    replay_range = None
+    frame = frame.reset_index(drop=True).copy()
+    frame["bar_index"] = frame.index.astype(float)
+    has_ohlc = {"open", "high", "low", "close"}.issubset(frame.columns)
+    has_volume = "volume" in frame and frame["volume"].notna().any()
+    fills_frame = _fills_plot_frame(fills) if _fills_have_plot_columns(fills) else pd.DataFrame()
+    fills_frame = _attach_bar_index(fills_frame, frame)
+    trades_frame = _trade_segments(fills_frame, frame)
+
+    x_pad = max((len(frame) - 1) / 20, 1.0)
+    x_range = Range1d(
+        start=float(frame["bar_index"].iloc[0] - x_pad),
+        end=float(frame["bar_index"].iloc[-1] + x_pad),
+        min_interval=10,
+    )
+    source = ColumnDataSource(frame)
     plots = []
 
     if equity is not None and not equity.empty:
-        equity_frame = _plot_frame(equity, "equity").dropna()
+        equity_plot = _market_section("Equity", height=120, x_range=x_range)
+        equity_frame = _equity_replay_frame(equity, frame)
         if not equity_frame.empty:
-            equity_plot = figure(
-                title="Equity",
-                x_axis_type="datetime",
-                height=140,
-                sizing_mode="stretch_width",
-                tools="xpan,xwheel_zoom,box_zoom,reset,save",
-                active_drag="xpan",
-                active_scroll="xwheel_zoom",
+            eq_source = ColumnDataSource(equity_frame)
+            equity_plot.patch(
+                "bar_index",
+                "drawdown_fill",
+                source=ColumnDataSource(
+                    {
+                        "bar_index": list(equity_frame["bar_index"])
+                        + list(reversed(equity_frame["bar_index"].tolist())),
+                        "drawdown_fill": list(equity_frame["relative_equity"])
+                        + list(reversed(equity_frame["high_watermark"].tolist())),
+                    }
+                ),
+                fill_color="#ffffea",
+                line_color="#ffcb66",
+                fill_alpha=0.9,
+                legend_label="Drawdown",
             )
-            equity_plot.line(
-                equity_frame["date"],
-                equity_frame["equity"] / equity_frame["equity"].iloc[0],
-                line_width=2,
+            strategy_line = equity_plot.line(
+                "bar_index",
+                "relative_equity",
+                source=eq_source,
+                line_width=1.8,
                 color="#1f77b4",
                 legend_label="Strategy",
             )
-            equity_plot.yaxis.axis_label = "Relative Equity"
-            replay_range = equity_plot.x_range
+            equity_plot.line(
+                "bar_index",
+                "buy_hold",
+                source=eq_source,
+                line_width=1.1,
+                color="#666666",
+                legend_label="Buy&Hold",
+            )
+            peak = equity_frame["relative_equity"].idxmax()
+            final = equity_frame.index[-1]
+            dd = equity_frame["drawdown"]
+            max_dd = dd.idxmin()
+            equity_plot.scatter(
+                [equity_frame.loc[peak, "bar_index"]],
+                [equity_frame.loc[peak, "relative_equity"]],
+                color="cyan",
+                size=8,
+                legend_label=f"Peak ({equity_frame.loc[peak, 'relative_equity']:.1%})",
+            )
+            equity_plot.scatter(
+                [equity_frame.loc[final, "bar_index"]],
+                [equity_frame.loc[final, "relative_equity"]],
+                color="blue",
+                size=8,
+                legend_label=f"Final ({equity_frame.loc[final, 'relative_equity']:.1%})",
+            )
+            equity_plot.scatter(
+                [equity_frame.loc[max_dd, "bar_index"]],
+                [equity_frame.loc[max_dd, "relative_equity"]],
+                color="red",
+                size=8,
+                legend_label=f"Max Drawdown ({equity_frame.loc[max_dd, 'drawdown']:.1%})",
+            )
+            equity_plot.yaxis.axis_label = "Equity"
+            equity_plot.yaxis.formatter = NumeralTickFormatter(format="0,0.[00]%")
+            _add_line_hover(
+                equity_plot,
+                [strategy_line],
+                [("Date", "@date{%F %T}"), ("Equity", "@relative_equity{0,0.[00]%}")],
+            )
             plots.append(equity_plot)
 
-    fills_frame = (
-        _fills_plot_frame(fills)
-        if fills is not None and not fills.empty and {"datetime", "price"}.issubset(fills.columns)
-        else pd.DataFrame()
-    )
-    closed_fills = pd.DataFrame()
-    if not fills_frame.empty and "trade_closed" in fills_frame:
-        closed_fills = fills_frame[fills_frame["trade_closed"].astype(bool)]
-    if not closed_fills.empty and "pnl" in closed_fills:
-        pl_plot = _linked_figure(
-            "Profit / Loss",
-            height=100,
-            x_range=replay_range,
-        )
+    if not trades_frame.empty:
+        pl_plot = _market_section("Profit / Loss", height=96, x_range=x_range)
         pl_plot.add_layout(
-            Span(location=0, dimension="width", line_dash="dashed", line_color="#666666")
+            Span(location=0, dimension="width", line_color="#666666", line_dash="dashed")
         )
-        colors = ["#2ca02c" if pnl >= 0 else "#d62728" for pnl in closed_fills["pnl"]]
-        pl_plot.scatter(
-            closed_fills["date"],
-            closed_fills["pnl"],
-            size=9,
-            color=colors,
-            legend_label="Closed P/L",
+        trade_source = ColumnDataSource(trades_frame)
+        win = trades_frame[trades_frame["return_pct"] >= 0]
+        loss = trades_frame[trades_frame["return_pct"] < 0]
+        if not win.empty:
+            pl_plot.scatter(
+                "exit_bar",
+                "return_pct",
+                source=ColumnDataSource(win),
+                marker="triangle",
+                fill_color="#3aa76d",
+                line_color="black",
+                size="marker_size",
+                legend_label="Winning Trades",
+            )
+        if not loss.empty:
+            pl_plot.scatter(
+                "exit_bar",
+                "return_pct",
+                source=ColumnDataSource(loss),
+                marker="inverted_triangle",
+                fill_color="#d65f5f",
+                line_color="black",
+                size="marker_size",
+                legend_label="Losing Trades",
+            )
+        hidden = pl_plot.scatter(
+            "exit_bar",
+            "return_pct",
+            source=trade_source,
+            marker="circle",
+            size=1,
+            alpha=0.0,
         )
-        pl_plot.yaxis.axis_label = "P/L"
-        replay_range = pl_plot.x_range
+        pl_plot.yaxis.axis_label = "Profit / Loss"
+        pl_plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+        _add_line_hover(
+            pl_plot,
+            [hidden],
+            [
+                ("Exit", "@exit_datetime{%F %T}"),
+                ("Size", "@size{0,0.####}"),
+                ("P/L", "@return_pct{+0.[000]%}"),
+            ],
+            vline=False,
+        )
         plots.append(pl_plot)
 
-    price_plot = _linked_figure(
-        "OHLC / Trades",
-        height=360,
-        x_range=replay_range,
-    )
-    source = ColumnDataSource(frame)
-    has_ohlc = {"open", "high", "low", "close"}.issubset(frame.columns)
+    price_plot = _market_section("OHLC / Trades", height=390, x_range=x_range)
     if has_ohlc:
         inc = frame["close"] >= frame["open"]
-        width = _bar_width_ms(frame["date"])
         price_plot.segment(
-            "date",
-            "high",
-            "date",
-            "low",
-            source=source,
-            color="#2f3b45",
-            line_width=1,
+            "bar_index", "high", "bar_index", "low", source=source, color="black", line_width=1
         )
-        price_plot.vbar(
-            frame.loc[inc, "date"],
-            width,
-            frame.loc[inc, "open"],
-            frame.loc[inc, "close"],
-            fill_color="#3aa76d",
-            line_color="#2f3b45",
-            alpha=0.82,
-            legend_label="Up",
-        )
-        price_plot.vbar(
-            frame.loc[~inc, "date"],
-            width,
-            frame.loc[~inc, "open"],
-            frame.loc[~inc, "close"],
-            fill_color="#d65f5f",
-            line_color="#2f3b45",
-            alpha=0.82,
-            legend_label="Down",
-        )
-        renderers = price_plot.renderers[-3:]
-    else:
-        renderer = price_plot.line(
-            "date",
+        up = frame.loc[inc]
+        down = frame.loc[~inc]
+        if not up.empty:
+            price_plot.vbar(
+                "bar_index",
+                0.8,
+                "open",
+                "close",
+                source=ColumnDataSource(up),
+                fill_color="#3aa76d",
+                line_color="black",
+                legend_label="Up",
+            )
+        if not down.empty:
+            price_plot.vbar(
+                "bar_index",
+                0.8,
+                "open",
+                "close",
+                source=ColumnDataSource(down),
+                fill_color="#d65f5f",
+                line_color="black",
+                legend_label="Down",
+            )
+        price_renderer = price_plot.scatter(
+            "bar_index",
             "close",
             source=source,
-            line_width=2,
+            marker="circle",
+            size=1,
+            alpha=0.0,
+        )
+        _add_ohlc_index_hover(price_plot, [price_renderer])
+    else:
+        price_renderer = price_plot.line(
+            "bar_index",
+            "close",
+            source=source,
+            line_width=1.6,
             color="#1f77b4",
             legend_label="Close",
         )
-        renderers = [renderer]
+        _add_close_index_hover(price_plot, [price_renderer])
+
+    if not trades_frame.empty:
+        trade_source = ColumnDataSource(trades_frame)
+        price_plot.multi_line(
+            xs="line_xs",
+            ys="line_ys",
+            source=trade_source,
+            line_color="line_color",
+            line_width=7,
+            line_alpha=0.75,
+            line_dash="dotted",
+            legend_label=f"Trades ({len(trades_frame)})",
+        )
     if not fills_frame.empty:
         buys = fills_frame[fills_frame["side"].str.lower().eq("buy")]
         sells = fills_frame[fills_frame["side"].str.lower().eq("sell")]
         if not buys.empty:
             price_plot.scatter(
-                buys["date"],
-                buys["price"],
+                "bar_index",
+                "price",
+                source=ColumnDataSource(buys),
                 marker="triangle",
-                size=11,
+                size=10,
                 color="#169c5a",
-                line_color="#0f5f39",
+                line_color="black",
                 legend_label="Buy",
             )
         if not sells.empty:
             price_plot.scatter(
-                sells["date"],
-                sells["price"],
+                "bar_index",
+                "price",
+                source=ColumnDataSource(sells),
                 marker="inverted_triangle",
-                size=11,
+                size=10,
                 color="#c43c39",
-                line_color="#7f2524",
+                line_color="black",
                 legend_label="Sell",
             )
     price_plot.yaxis.axis_label = "Price"
-    if has_ohlc:
-        _add_ohlc_hover(price_plot, renderers)
-    else:
-        _add_close_hover(price_plot, renderers)
-    replay_range = price_plot.x_range
     plots.append(price_plot)
 
-    if "volume" in frame and frame["volume"].notna().any():
-        volume_plot = _linked_figure(
-            "Volume",
-            height=110,
-            x_range=replay_range,
+    if has_volume:
+        volume_plot = _market_section("Volume", height=105, x_range=x_range)
+        volume_source = ColumnDataSource(
+            frame.assign(
+                volume_color=[
+                    "#3aa76d" if close >= open_ else "#d65f5f"
+                    for close, open_ in zip(
+                        frame["close"],
+                        frame.get("open", frame["close"]),
+                        strict=True,
+                    )
+                ]
+            )
         )
-        volume_plot.vbar(
-            frame["date"],
-            _bar_width_ms(frame["date"]),
-            frame["volume"],
-            color="#8aa1b2",
+        renderer = volume_plot.vbar(
+            "bar_index",
+            0.8,
+            "volume",
+            source=volume_source,
+            color="volume_color",
             alpha=0.72,
         )
         volume_plot.yaxis.axis_label = "Volume"
+        volume_plot.yaxis.formatter = NumeralTickFormatter(format="0 a")
+        _add_line_hover(
+            volume_plot,
+            [renderer],
+            [("Date", "@date{%F %T}"), ("Volume", "@volume{0.00 a}")],
+        )
         plots.append(volume_plot)
 
     for plot in plots[:-1]:
         plot.xaxis.visible = False
     for plot in plots:
-        plot.toolbar.logo = None
-        if plot.legend:
-            plot.legend.location = "top_left"
-            plot.legend.click_policy = "hide"
+        _style_market_section(plot)
+
     return gridplot(
         plots,
         ncols=1,
@@ -185,7 +299,6 @@ def market_replay(
         toolbar_location="right",
         merge_tools=True,
     )
-
 
 def price_trades(market_data: pd.DataFrame, fills: pd.DataFrame | None = None):
     """Return a price curve with buy/sell fill markers."""
@@ -599,6 +712,196 @@ def _fills_plot_frame(fills: pd.DataFrame) -> pd.DataFrame:
     if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
         frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
     return frame.dropna(subset=["date", "price"])
+
+
+def _fills_have_plot_columns(fills: pd.DataFrame | None) -> bool:
+    """Return True when fills can be projected onto the market replay chart."""
+    return fills is not None and not fills.empty and {"datetime", "price", "side"}.issubset(
+        fills.columns
+    )
+
+
+def _attach_bar_index(fills: pd.DataFrame, frame: pd.DataFrame) -> pd.DataFrame:
+    """Attach nearest market bar index to each fill."""
+    if fills.empty:
+        return fills
+    bars = frame[["date", "bar_index"]].sort_values("date")
+    projected = pd.merge_asof(
+        fills.sort_values("date"),
+        bars,
+        on="date",
+        direction="nearest",
+    )
+    return projected.dropna(subset=["bar_index"])
+
+
+def _equity_replay_frame(equity: pd.Series, frame: pd.DataFrame) -> pd.DataFrame:
+    """Return equity aligned to replay bar indices with 1.x-style derived columns."""
+    equity_frame = _plot_frame(pd.Series(equity).dropna(), "equity")
+    if equity_frame.empty:
+        return pd.DataFrame()
+    bars = frame[["date", "bar_index", "close"]].sort_values("date")
+    projected = pd.merge_asof(
+        bars,
+        equity_frame.sort_values("date"),
+        on="date",
+        direction="nearest",
+    ).dropna(subset=["equity"])
+    if projected.empty:
+        return projected
+    initial_equity = projected["equity"].iloc[0]
+    initial_close = projected["close"].iloc[0]
+    if not initial_equity or not initial_close:
+        return pd.DataFrame()
+    projected["relative_equity"] = projected["equity"] / initial_equity
+    projected["buy_hold"] = projected["close"] / initial_close
+    projected["high_watermark"] = projected["relative_equity"].cummax()
+    projected["drawdown"] = projected["relative_equity"] / projected["high_watermark"] - 1.0
+    return projected.reset_index(drop=True)
+
+
+def _trade_segments(fills: pd.DataFrame, frame: pd.DataFrame) -> pd.DataFrame:
+    """Build approximate 1.x-style entry-exit trade segments from fill rows."""
+    if fills.empty:
+        return pd.DataFrame()
+    active: dict[str, dict[str, object]] = {}
+    segments = []
+    for _, fill in fills.sort_values("date").iterrows():
+        side = str(fill.get("side", "")).lower()
+        signed = float(fill.get("size", 0.0) or 0.0)
+        if signed == 0:
+            signed = abs(float(fill.get("qty", 0.0) or 0.0))
+            signed = signed if side == "buy" else -signed
+        data_name = str(fill.get("data", "") or "__default__")
+        current = active.get(data_name)
+        direction = 1 if signed > 0 else -1
+        if current is None:
+            active[data_name] = {
+                "bar": float(fill["bar_index"]),
+                "price": float(fill["price"]),
+                "size": abs(signed),
+                "direction": direction,
+                "datetime": fill["date"],
+            }
+            continue
+        if int(current["direction"]) == direction:
+            current["size"] = float(current["size"]) + abs(signed)
+            continue
+        entry_price = float(current["price"])
+        exit_price = float(fill["price"])
+        entry_bar = float(current["bar"])
+        exit_bar = float(fill["bar_index"])
+        size = min(float(current["size"]), abs(signed))
+        if entry_price:
+            return_pct = (exit_price / entry_price - 1.0) * int(current["direction"])
+        else:
+            return_pct = 0.0
+        segments.append(
+            {
+                "entry_bar": entry_bar,
+                "exit_bar": exit_bar,
+                "entry_datetime": current["datetime"],
+                "exit_datetime": fill["date"],
+                "entry_price": entry_price,
+                "exit_price": exit_price,
+                "size": size * int(current["direction"]),
+                "return_pct": return_pct,
+                "marker_size": _trade_marker_size(size),
+                "line_xs": [entry_bar, exit_bar],
+                "line_ys": [entry_price, exit_price],
+                "line_color": "#2f7f4f" if return_pct >= 0 else "#9d2f2f",
+            }
+        )
+        remaining = float(current["size"]) - size
+        if remaining > 1e-12:
+            current["size"] = remaining
+        elif abs(signed) > size:
+            active[data_name] = {
+                "bar": float(fill["bar_index"]),
+                "price": float(fill["price"]),
+                "size": abs(signed) - size,
+                "direction": direction,
+                "datetime": fill["date"],
+            }
+        else:
+            active.pop(data_name, None)
+    return pd.DataFrame(segments)
+
+
+def _trade_marker_size(size: float) -> float:
+    """Return a bounded marker size for the P/L section."""
+    return max(8.0, min(20.0, 8.0 + abs(float(size)) ** 0.5))
+
+
+def _market_section(title: str, *, height: int, x_range):
+    """Return a 1.x-style linked replay figure."""
+    return figure(
+        title=title,
+        x_axis_type="linear",
+        height=height,
+        x_range=x_range,
+        sizing_mode="stretch_width",
+        tools="xpan,xwheel_zoom,box_zoom,undo,redo,reset,save",
+        active_drag="xpan",
+        active_scroll="xwheel_zoom",
+    )
+
+
+def _style_market_section(plot) -> None:
+    """Apply common 1.x-inspired Bokeh styling."""
+    plot.min_border_left = 0
+    plot.min_border_top = 3
+    plot.min_border_bottom = 6
+    plot.min_border_right = 10
+    plot.outline_line_color = "#666666"
+    plot.toolbar.logo = None
+    plot.add_tools(CrosshairTool(dimensions="both"))
+    if plot.legend:
+        plot.legend.location = "top_left"
+        plot.legend.border_line_width = 1
+        plot.legend.border_line_color = "#333333"
+        plot.legend.background_fill_alpha = 0.82
+        plot.legend.padding = 5
+        plot.legend.spacing = 0
+        plot.legend.margin = 0
+        plot.legend.label_text_font_size = "8pt"
+        plot.legend.click_policy = "hide"
+
+
+def _add_line_hover(plot, renderers, tooltips, *, vline: bool = True) -> None:
+    """Attach a shared hover tool."""
+    plot.add_tools(
+        HoverTool(
+            point_policy="follow_mouse",
+            renderers=list(renderers),
+            formatters={"@date": "datetime", "@exit_datetime": "datetime"},
+            tooltips=list(tooltips),
+            mode="vline" if vline else "mouse",
+        )
+    )
+
+
+def _add_ohlc_index_hover(plot, renderers) -> None:
+    """Attach OHLC hover tool for linear-index market replay plots."""
+    _add_line_hover(
+        plot,
+        renderers,
+        [
+            ("Date", "@date{%F %T}"),
+            ("#", "@bar_index{0,0}"),
+            ("OHLC", "@open{0,0.0000}  @high{0,0.0000}  @low{0,0.0000}  @close{0,0.0000}"),
+            ("Volume", "@volume{0,0}"),
+        ],
+    )
+
+
+def _add_close_index_hover(plot, renderers) -> None:
+    """Attach close-price hover tool for linear-index market replay plots."""
+    _add_line_hover(
+        plot,
+        renderers,
+        [("Date", "@date{%F %T}"), ("#", "@bar_index{0,0}"), ("Close", "@close{0,0.0000}")],
+    )
 
 
 def _linked_figure(title: str, *, height: int, x_range=None):
