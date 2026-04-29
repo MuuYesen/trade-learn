@@ -57,6 +57,8 @@ def test_engine_plot_and_html_use_reporter_after_run(tmp_path: Path) -> None:
 
     [strategy] = cerebro.run()
     charts = cerebro.plot()
+    plot_path = tmp_path / "engine-plot.html"
+    plot_result = cerebro.plot(plot_path)
     path = tmp_path / "engine-report.html"
     result = cerebro.report(path)
 
@@ -64,6 +66,9 @@ def test_engine_plot_and_html_use_reporter_after_run(tmp_path: Path) -> None:
     assert strategy.stats.summary["total_fills"] == 2
     assert not strategy.stats.positions.empty
     assert len(charts) == 1
+    assert "LightweightCharts" in charts[0]
+    assert plot_result == plot_path
+    assert "LightweightCharts" in plot_path.read_text()
     assert result == path
     assert "Summary Stats" in path.read_text()
     assert "Price / Trades" in path.read_text()
@@ -76,11 +81,16 @@ def test_lite_plot_and_html_use_shared_reporter_after_run(tmp_path: Path) -> Non
     stats = backtest.run()
 
     charts = backtest.plot()
+    plot_path = tmp_path / "lite-plot.html"
+    plot_result = backtest.plot(plot_path)
     path = tmp_path / "lite-report.html"
     result = backtest.report(path)
 
     assert stats["# Trades"] >= 0
     assert len(charts) == 1
+    assert "LightweightCharts" in charts[0]
+    assert plot_result == plot_path
+    assert "LightweightCharts" in plot_path.read_text()
     assert result == path
     assert "Summary Stats" in path.read_text()
     assert "Price / Trades" in path.read_text()
