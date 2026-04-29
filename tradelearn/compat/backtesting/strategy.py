@@ -246,7 +246,8 @@ class Strategy(CoreStrategy):
         actual_size = float(abs(size))
         pending = self._pending_size
         pending[data] = pending.get(data, 0.0) + actual_size
-        return broker._submit(
+        submit = getattr(broker, "_submit_basic", broker._submit)
+        return submit(
             self,
             data,
             Order.Buy,
@@ -282,7 +283,8 @@ class Strategy(CoreStrategy):
         actual_size = float(abs(size))
         pending = self._pending_size
         pending[data] = pending.get(data, 0.0) - actual_size
-        return broker._submit(
+        submit = getattr(broker, "_submit_basic", broker._submit)
+        return submit(
             self,
             data,
             Order.Sell,
@@ -294,13 +296,13 @@ class Strategy(CoreStrategy):
 class IndicatorProxy:
     """Proxy for indicators and data to support backtesting.py syntax."""
 
-    __slots__ = ("_data", "_feed", "_cursor_ptr")
+    __slots__ = ("_data", "_feed", "_length")
 
     def __init__(self, data: np.ndarray, feed: Any):
         # We store as numpy array for speed
         self._data = np.asarray(data)
         self._feed = feed
-        self._cursor_ptr = None # Cache for feed._cursor reference
+        self._length = len(self._data)
 
     def __array__(self, dtype=None, copy=None) -> np.ndarray:
         cursor = self._feed._cursor
@@ -351,5 +353,5 @@ class IndicatorProxy:
     def __len__(self) -> int:
         cursor = self._feed._cursor
         if cursor < 0:
-            return len(self._data)
+            return self._length
         return cursor + 1

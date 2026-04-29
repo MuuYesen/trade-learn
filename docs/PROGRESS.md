@@ -1,6 +1,6 @@
 # Current Progress
 
-最后更新:2026-04-28
+最后更新:2026-04-29
 
 这份文档只保留当前项目状态、阶段摘要和下一步。完整历史流水已归档到
 [`docs/archive/progress-2026-04.md`](./archive/progress-2026-04.md)。
@@ -23,9 +23,9 @@
 | 当前阶段 | 阶段 9 发版 + 阶段 10 前置优化并行 |
 | 总路线图完成度 | 约 80% |
 | 已完成主线 | 工程地基、metrics、factor/report、Rust 撮合核、CLI、ML 能力、compat.backtrader、compat.backtesting 对齐与性能前置优化 |
-| 当前性能基线 | `compare_backtesting.py` 约 2.5x;`benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2` 8/8 EXACT |
+| 当前性能基线 | `compare_backtesting.py` 当前实测约 1.5x,其中 BTCUSDT 约 1.49x-1.56x、ETHUSDT 约 1.46x-1.49x;`benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2` 8/8 EXACT,约 2.5x-7.5x |
 | 下一里程碑 | Stage 9 Week 2: wheel 含 Rust 二进制 -> PyPI / GitHub Release + NOTICE 最终审查 |
-| Stage 10 状态 | Rust callback loop、订单缓冲、fill 增量同步、`_pre_next`、Rust primary-clock 多数据游标计划、共享 bar buffer、BrokerEventPump 已完成;完整 BarRunner struct、批量 fill/order sync、正式 benchmark 门禁仍可继续 |
+| Stage 10 状态 | Rust callback loop、订单缓冲、fill 增量同步、`_pre_next`、Rust primary-clock 多数据游标计划、共享 bar buffer、BrokerEventPump、lazy stats 与 backtesting facade 热路径修补已完成;后续优化坚持单一 core runner,不新增 compat 专属 runner 或 slim mode |
 
 ## 阶段总览
 
@@ -58,11 +58,13 @@ uv run python benchmarks/runners/benchmark_bt.py smart --warmup 1 --repeat 3 --m
 - `237bec3` core line primitives 下沉,core 不再依赖 compat。
 - `04e4634` 补项目结构文档并忽略本地 artifacts。
 - `59c8164` 保证 `examples/` 只保留策略文件,runner/data 移出。
+- `a7835cc` 在不新增 runner 的前提下压缩 backtesting.py facade 每 bar 热路径。
+- `aea60ad` 引入 lazy stats materialization,保留完整 artifacts 能力但默认不急切构建 pandas 产物。
 - 本轮整理:临时脚本/IDE 配置移出 git,历史进度归档,文档门禁改用 `PROJECT.md` 作为愿景/路线入口。
 
 ## 当前待办
 
 1. Stage 9: 构建并验证含 Rust 二进制的 wheel。
 2. Stage 9: PyPI / GitHub Release / NOTICE 最终审查。
-3. Stage 10: 若继续优化,优先完整 BarRunner struct、批量 fill/order sync、正式 benchmark gate。
+3. Stage 10: 若继续优化,优先 profile 证明后的 proxy/submit 微优化和正式 benchmark gate;暂不推进独立 fast runner、core slim mode、批 callback 或策略下沉。
 4. 清理类任务: 后续可拆分超大测试文件 `test_rust_exact_matching.py`、`test_strategy_api.py`、`test_alpha_metadata.py`。

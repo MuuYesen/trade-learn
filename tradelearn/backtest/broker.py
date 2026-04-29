@@ -441,6 +441,49 @@ class RustBroker(BaseBroker):
 
         return order
 
+    def _submit_basic(
+        self,
+        owner: Strategy,
+        data: Any,
+        side: int,
+        size: float,
+        price: float | None,
+        exectype: Any,
+    ) -> Order:
+        """Fast path for facade orders without optional Backtrader metadata."""
+        self._order_count += 1
+        is_buy = side == Order.Buy
+        actual_size = float(size if size is not None else 1.0)
+        exectype = exectype or Order.Market
+
+        order = Order(
+            ref=self._order_count,
+            data=data,
+            ordtype=side,
+            size=actual_size,
+            price=price,
+            exectype=exectype,
+        )
+        order.status = Order.Submitted
+        self._orders.append(order)
+        self._orders_by_ref[order.ref] = order
+        self._notify_order_event(owner, order)
+
+        if self._engine is not None:
+            side_str = "buy" if is_buy else "sell"
+            payload = self._rust_order_payload(order, side_str, actual_size, price)
+            if self._buffer_order_submissions:
+                self._order_submit_buffer.append((order.ref, *payload))
+            else:
+                self._submit_to_rust_engine(order, *payload)
+            order.status = Order.Accepted
+        else:
+            order.status = Order.Accepted
+            self._pending_orders.append(order)
+        self._notify_order_event(owner, order)
+
+        return order
+
     def cancel(self, order: Order) -> None:
         """Cancel an order in the Python mirror and pending queue."""
         if order.status in (Order.Completed, Order.Canceled, Order.Expired):

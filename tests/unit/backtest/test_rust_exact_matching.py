@@ -10,7 +10,7 @@ from tradelearn.backtest.broker import RustBroker
 from tradelearn.backtest.data import DataContainer, RollingBarBuffer
 from tradelearn.backtest.engine import _build_bar_advancers, _build_data_advance_plan
 from tradelearn.backtest.lines import LineSeries
-from tradelearn.backtest.models import Order
+from tradelearn.backtest.models import Order, Stats
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
 from tradelearn.compat.backtesting.backtest import Backtest
 from tradelearn.compat.backtesting.strategy import (
@@ -524,6 +524,74 @@ def test_backtesting_run_uses_lazy_stats_without_materializing_fills(monkeypatch
 
     assert stats["# Trades"] == 1
     assert stats["Win Rate [%]"] == 100.0
+
+
+def test_stats_lazy_artifacts_materialize_once() -> None:
+    calls = {"fills": 0, "returns": 0}
+    fills = pd.DataFrame({"size": [1.0], "price": [10.0]})
+    returns = pd.Series([0.0, 0.01], name="returns")
+
+    def fills_factory() -> pd.DataFrame:
+        calls["fills"] += 1
+        return fills
+
+    def returns_factory() -> pd.Series:
+        calls["returns"] += 1
+        return returns
+
+    stats = Stats(
+        returns=returns_factory,
+        equity=lambda: pd.Series([100.0, 101.0], name="equity"),
+        trades=lambda: pd.DataFrame(),
+        positions=lambda: pd.DataFrame(),
+        orders=lambda: pd.DataFrame(),
+        summary={"final_value": 101.0},
+        analyzers={},
+        config={},
+        fills=fills_factory,
+    )
+
+    assert stats.fills is fills
+    assert stats.fills is fills
+    assert stats.returns is returns
+    assert stats.returns is returns
+    assert calls == {"fills": 1, "returns": 1}
+
+
+def test_backtesting_strategy_uses_basic_submit_fast_path() -> None:
+    class FakeData:
+        _cursor = 0
+
+        def get_array(self, name: str):
+            return np.array([10.0])
+
+    class FakeBroker:
+        commission_ratio = 0.0
+
+        def __init__(self) -> None:
+            self.basic_calls = []
+
+        def getvalue(self) -> float:
+            return 1000.0
+
+        def _submit_basic(self, *args):
+            self.basic_calls.append(args)
+            return "order"
+
+        def _submit(self, *args, **kwargs):
+            raise AssertionError("backtesting facade should use _submit_basic when available")
+
+    strategy = BacktestingStrategy()
+    data = FakeData()
+    strategy.datas = [data]
+    strategy.broker = FakeBroker()
+    strategy._setup()
+
+    order = strategy.buy(size=1)
+
+    assert order == "order"
+    assert len(strategy.broker.basic_calls) == 1
+    assert strategy.broker.basic_calls[0][2] == Order.Buy
 
 
 def test_backtest_engine_buffers_orders_while_strategy_next_runs() -> None:
