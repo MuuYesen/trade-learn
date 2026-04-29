@@ -332,6 +332,24 @@ class Strategy(CoreStrategy):
             values = line._values
         else:
             indicator_name = name or getattr(funcval, "name", None) or funcval.__class__.__name__
+            if isinstance(funcval, pd.DataFrame):
+                if not funcval.index.equals(self.data.index):
+                    raise ValueError(
+                        "Indicators of pd.DataFrame or pd.Series must have the same index as `data`"
+                    )
+                proxy = IndicatorBundle(funcval, self.datas[0], indicator_name)
+                proxy.attrs.update(
+                    {
+                        "name": indicator_name,
+                        "plot": plot,
+                        "overlay": overlay,
+                        "color": color,
+                        "scatter": scatter,
+                        **kwargs,
+                    }
+                )
+                self._indicator_cache[cache_key] = proxy
+                return proxy
             values = self._coerce_indicator_values(funcval, indicator_name)
 
         proxy = IndicatorProxy(values, self.datas[0], index=self.data.index, name=indicator_name)
@@ -691,8 +709,17 @@ class IndicatorBundle:
         except KeyError as exc:
             raise AttributeError(name) from exc
 
-    def __getitem__(self, key: str) -> IndicatorProxy:
+    def __getitem__(self, key: str | tuple[slice, int]) -> IndicatorProxy:
+        if isinstance(key, tuple):
+            rows, column = key
+            if rows != slice(None):
+                raise TypeError("Lite indicator bundles only support full-row column slicing")
+            return self._lines[str(self._frame.columns[int(column)]).lower()]
         return self._lines[key]
+
+    def __len__(self) -> int:
+        first = next(iter(self._lines.values()))
+        return len(first)
 
     @property
     def df(self) -> pd.DataFrame:

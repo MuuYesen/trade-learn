@@ -78,6 +78,32 @@ def test_lite_data_ta_returns_current_bar_line_proxy() -> None:
     assert "macd_prev" in seen
 
 
+def test_lite_i_accepts_dataframe_indicator_and_slice_columns() -> None:
+    seen: dict[str, float] = {}
+
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            frame = pd.DataFrame(
+                {
+                    "DIF": [0.0, 0.1, 0.3, 0.2, 0.4],
+                    "DEA": [0.0, 0.0, 0.2, 0.25, 0.3],
+                },
+                index=self.data.index,
+            )
+            self.macd = self.I(frame, name="macd")
+            self.start_on_bar(2)
+
+        def next(self) -> None:
+            dif = self.macd[:, 0]
+            dea = self.macd[:, 1]
+            seen["dif_now"] = dif[0]
+            seen["dea_prev"] = dea[-1]
+
+    Backtest(_data(), LiteStrategy, cash=1000.0).run()
+
+    assert seen == {"dif_now": 0.4, "dea_prev": 0.25}
+
+
 def test_lite_records_are_exposed_from_run_result() -> None:
     class LiteStrategy(Strategy):
         def init(self) -> None:
