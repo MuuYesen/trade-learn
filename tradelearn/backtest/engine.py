@@ -112,14 +112,27 @@ def _positions_frame(strategy: Any, fills: pd.DataFrame, index: pd.Index) -> pd.
     if fills.empty:
         return pd.DataFrame(columns=columns)
 
+    def is_missing_scalar(value: Any) -> bool:
+        if value is None:
+            return True
+        try:
+            missing = pd.isna(value)
+        except (TypeError, ValueError):
+            return False
+        return bool(missing) if isinstance(missing, (bool, np.bool_)) else False
+
     position_size = 0.0
     avg_price = 0.0
     realized_pnl = 0.0
     rows = []
     data_name = getattr(getattr(strategy, "data", None), "_name", None)
-    for fill in fills.to_dict("records"):
-        signed_size = float(fill.get("size", 0.0))
-        price = float(fill.get("price", 0.0))
+    sizes = fills["size"].to_numpy(dtype=float, copy=False)
+    prices = fills["price"].to_numpy(dtype=float, copy=False)
+    datetimes = fills["datetime"].to_numpy(copy=False) if "datetime" in fills else None
+    data_values = fills["data"].to_numpy(copy=False) if "data" in fills else None
+    fallback_datetime = index[-1] if len(index) else None
+
+    for row_idx, (signed_size, price) in enumerate(zip(sizes, prices, strict=True)):
         previous_size = position_size
         new_size = position_size + signed_size
         if previous_size == 0 or previous_size * signed_size > 0:
@@ -135,10 +148,16 @@ def _positions_frame(strategy: Any, fills: pd.DataFrame, index: pd.Index) -> pd.
         position_size = 0.0 if abs(new_size) < 1e-9 else new_size
         mark_price = price
         value = position_size * mark_price
+        fill_datetime = datetimes[row_idx] if datetimes is not None else None
+        if is_missing_scalar(fill_datetime):
+            fill_datetime = fallback_datetime
+        fill_data = data_values[row_idx] if data_values is not None else None
+        if is_missing_scalar(fill_data):
+            fill_data = data_name
         rows.append(
             {
-                "datetime": fill.get("datetime") or (index[-1] if len(index) else None),
-                "data": fill.get("data") or data_name,
+                "datetime": fill_datetime,
+                "data": fill_data,
                 "size": position_size,
                 "avg_price": avg_price,
                 "mark_price": mark_price,

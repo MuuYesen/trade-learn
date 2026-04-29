@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from tradelearn import _rust
+from tradelearn.backtest import broker as broker_module
 from tradelearn.backtest.broker import RustBroker
 from tradelearn.backtest.data import DataContainer, RollingBarBuffer
 from tradelearn.backtest.engine import _build_bar_advancers, _build_data_advance_plan
@@ -400,6 +401,70 @@ def test_rust_broker_caches_fills_frame_until_new_fill() -> None:
 
     assert third is not first
     assert third["size"].tolist() == [1.0]
+
+
+def test_rust_broker_requires_rust_engine_for_fill_processing() -> None:
+    broker = RustBroker(match_mode="exact")
+    broker._pending_orders = [Order(ref=1, data=object(), ordtype=Order.Buy, size=1.0)]
+
+    try:
+        broker.process_fills(object(), 0)
+    except RuntimeError as exc:
+        assert "RustBroker requires a Rust engine" in str(exc)
+    else:
+        raise AssertionError("RustBroker should not run Python matching fallback")
+
+
+def test_rust_broker_skips_fill_object_when_no_fill_callbacks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = object()
+
+    class StrategySink:
+        def __init__(self) -> None:
+            self._pending_size = {data: 0.0}
+
+        def notify_order(self, order) -> None:
+            pass
+
+    def fail_namespace(*args, **kwargs):
+        raise AssertionError("fill object should be lazy when no analyzer consumes it")
+
+    monkeypatch.setattr(broker_module, "SimpleNamespace", fail_namespace)
+    broker = RustBroker(match_mode="exact")
+    order = Order(ref=1, data=data, ordtype=Order.Buy, size=1.0)
+    broker._orders_by_ref = {1: order}
+
+    broker._process_rust_fills_batch(
+        StrategySink(),
+        ([1], [1.0], [10.0], [0.0], [0.0], [0.0]),
+    )
+
+
+def test_rust_broker_skips_trade_object_when_no_trade_callbacks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = object()
+
+    class StrategySink:
+        def __init__(self) -> None:
+            self._pending_size = {data: 0.0}
+
+        def notify_order(self, order) -> None:
+            pass
+
+    def fail_trade(*args, **kwargs):
+        raise AssertionError("trade object should be lazy when no callback consumes it")
+
+    monkeypatch.setattr(broker_module, "Trade", fail_trade)
+    broker = RustBroker(match_mode="exact")
+    order = Order(ref=1, data=data, ordtype=Order.Buy, size=1.0)
+    broker._orders_by_ref = {1: order}
+
+    broker._process_rust_fills_batch(
+        StrategySink(),
+        ([1], [1.0], [10.0], [0.0], [0.0], [0.0]),
+    )
 
 
 def test_backtest_engine_buffers_orders_while_strategy_next_runs() -> None:

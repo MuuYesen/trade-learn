@@ -13,6 +13,7 @@ from tradelearn.backtest.models import (
     Trade,
     _notify_order,
 )
+from tradelearn.backtest.strategy import Strategy as CoreStrategy
 from tradelearn.core import BrokerEventPump
 
 if TYPE_CHECKING:
@@ -189,6 +190,13 @@ class RustBroker(BaseBroker):
     def _notify_fill_event(
         self, owner: Strategy, order: Order, signed_size: float, price: float, comm: float
     ) -> None:
+        callbacks = [
+            on_fill
+            for analyzer in getattr(owner, "analyzers", {}).values()
+            if callable(on_fill := getattr(analyzer, "on_fill", None))
+        ]
+        if not callbacks:
+            return
         fill = SimpleNamespace(
             order=order,
             ref=order.ref,
@@ -197,17 +205,32 @@ class RustBroker(BaseBroker):
             price=price,
             commission=comm,
         )
-        for analyzer in getattr(owner, "analyzers", {}).values():
-            on_fill = getattr(analyzer, "on_fill", None)
-            if callable(on_fill):
-                on_fill(fill)
+        for on_fill in callbacks:
+            on_fill(fill)
 
     def _notify_trade_event(self, owner: Strategy, trade: Trade) -> None:
-        owner.notify_trade(trade)
-        for analyzer in getattr(owner, "analyzers", {}).values():
-            on_trade = getattr(analyzer, "on_trade", None)
-            if callable(on_trade):
-                on_trade(trade)
+        notify_trade = getattr(owner, "notify_trade", None)
+        if callable(notify_trade):
+            notify_trade(trade)
+        for on_trade in self._trade_callbacks(owner):
+            on_trade(trade)
+
+    @staticmethod
+    def _trade_callbacks(owner: Strategy) -> tuple[Any, ...]:
+        return tuple(
+            on_trade
+            for analyzer in getattr(owner, "analyzers", {}).values()
+            if "on_trade" in type(analyzer).__dict__
+            and callable(on_trade := getattr(analyzer, "on_trade", None))
+        )
+
+    @staticmethod
+    def _strategy_wants_trade(owner: Strategy) -> bool:
+        notify_trade = getattr(type(owner), "notify_trade", None)
+        return notify_trade is not None and notify_trade is not CoreStrategy.notify_trade
+
+    def _wants_trade_event(self, owner: Strategy) -> bool:
+        return self._strategy_wants_trade(owner) or bool(self._trade_callbacks(owner))
 
     def _get_rust_state(self) -> tuple[int, float, float, float]:
         """Return cached Rust cash/position for the current bar."""
@@ -474,76 +497,8 @@ class RustBroker(BaseBroker):
             if fill_count:
                 self._process_rust_fills_batch(strategy, new_fills)
                 self._last_fill_idx += fill_count
-        else:
-            # BT Mode: Naive matching in Python
-            if not self._pending_orders:
-                return
-            o = self._open_prices[i]
-            h = self._high_prices[i]
-            low = self._low_prices[i]
-            remaining = []
-            for order in self._pending_orders:
-                executed = False
-                exec_price = 0.0
-
-                if order.exectype == Order.Market:
-                    # Executed at Open of current bar
-                    executed = True
-                    exec_price = o
-                elif order.exectype == Order.Limit:
-                    is_buy = order.isbuy()
-                    limit_price = order.price
-                    if is_buy:
-                        if low <= limit_price:
-                            executed = True
-                            exec_price = min(o, limit_price)
-                    else:  # Sell
-                        if h >= limit_price:
-                            executed = True
-                            exec_price = max(o, limit_price)
-                elif order.exectype == Order.Stop:
-                    is_buy = order.isbuy()
-                    stop_price = order.price
-                    if is_buy:
-                        if h >= stop_price:
-                            executed = True
-                            exec_price = max(o, stop_price)
-                    else:  # Sell
-                        if low <= stop_price:
-                            executed = True
-                            exec_price = min(o, stop_price)
-
-                if executed:
-                    order.status = Order.Completed
-                    abs_size = abs(order.size)
-
-                    if self._comminfo:
-                        # Use custom commission logic if available
-                        comm = self._comminfo.getcommission(abs_size, exec_price, False)
-                    else:
-                        comm = abs_size * exec_price * self.commission_ratio * self._mult
-
-                    order.executed = ExecutedInfo(
-                        price=exec_price,
-                        size=abs_size,
-                        comm=comm,
-                        value=abs_size * exec_price * self._mult,
-                    )
-                    signed_size = order.size if order.isbuy() else -order.size
-                    # self._pos.update(signed_size, exec_price) - Strategy._on_fill will do this
-                    self._active_cash -= comm
-                    if order.isbuy():
-                        self._active_cash -= abs_size * exec_price
-                    else:
-                        self._active_cash += abs_size * exec_price
-
-                    self._record_fill(order, signed_size, exec_price, comm)
-                    strategy._on_fill(order.data, signed_size, exec_price)
-                    self._notify_fill_event(strategy, order, signed_size, exec_price, comm)
-                    self._notify_order_event(strategy, order)
-                else:
-                    remaining.append(order)
-            self._pending_orders = remaining
+        elif self._pending_orders:
+            raise RuntimeError("RustBroker requires a Rust engine for order matching")
 
     def _iter_rust_fills(self, fills: Any):
         if self._is_compact_fill_batch(fills):
@@ -560,6 +515,7 @@ class RustBroker(BaseBroker):
         pending_size = strategy._pending_size
         pos = self._pos
         mult = self._mult
+        wants_trade_event = self._wants_trade_event(strategy)
 
         for order_id, signed_size, price, comm, pnl in self._iter_rust_fills(fills):
             order = orders_by_ref_get(order_id)
@@ -583,13 +539,13 @@ class RustBroker(BaseBroker):
             pos.update(signed_size, price)
             new_size = pos.size
 
-            if old_size == 0 and new_size != 0:
+            if wants_trade_event and old_size == 0 and new_size != 0:
                 trade = Trade(data=data, size=new_size, price=price, status=Trade.Open)
                 trade.pnl = 0.0
                 trade.pnlcomm = 0.0
                 trade.isopen = True
                 self._notify_trade_event(strategy, trade)
-            elif old_size != 0 and (old_size * new_size <= 0):
+            elif wants_trade_event and old_size != 0 and (old_size * new_size <= 0):
                 trade = Trade(data=data, size=new_size, price=price, status=Trade.Closed)
                 trade.pnl = pnl
                 trade.pnlcomm = pnl
