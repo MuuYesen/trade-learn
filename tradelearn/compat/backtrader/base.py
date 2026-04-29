@@ -8,8 +8,8 @@ from tradelearn.backtest.models import (
     BaseAnalyzer,
     BaseBroker,
     BaseSizer,
-    Order,
     Params,
+    _notify_order,
 )
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
 
@@ -184,6 +184,3 @@ class LineRoot(metaclass=MetaParams):
             line = getattr(self.lines, name, None)
             if line is not None: return line
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-
-def _notify_order(strategy: Any, order: Order) -> None:
-    strategy.notify_order(order)
