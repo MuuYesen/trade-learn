@@ -14,7 +14,7 @@ from tradelearn.compat.backtesting.util import _TA
 
 
 class BacktestingDataProxy:
-    """Proxy for data to support backtesting.py style capitalized attributes and indexing."""
+    """Tradelearn 1.x data view with gradually revealed lower-case OHLCV lines."""
 
     __slots__ = (
         "_feed",
@@ -149,7 +149,7 @@ def _ta_frame(data_feed: Any) -> pd.DataFrame:
     )
 
 class PositionProxy:
-    """Proxy for strategy.position."""
+    """Tradelearn 1.x position view returned by ``strategy.position()``."""
 
     __slots__ = ("_strategy", "_size_getter_broker", "_size_getter")
 
@@ -191,7 +191,6 @@ class PositionProxy:
         return self._strategy.getposition().size
 
     def close(self, portion: float = 1.0):
-        # In backtesting.py, position.close() closes the position
         strategy = self._strategy
         data = strategy.datas[0]
         effective_size = self.size + strategy._pending_size.get(data, 0.0)
@@ -243,7 +242,7 @@ class PositionProxy:
         return self.size < 0
 
 class Strategy(CoreStrategy):
-    """Facade for backtesting.py style strategies."""
+    """Tradelearn 1.x-style strategy facade."""
 
     class __FULL_EQUITY(float):  # noqa: N801
         def __repr__(self) -> str:
@@ -276,7 +275,7 @@ class Strategy(CoreStrategy):
         return params
 
     def _setup(self):
-        """Bind backtesting.py compatibility proxies before init()."""
+        """Bind Tradelearn 1.x facade views before init()."""
         if self._bt_data is None:
             data = self.datas[0]
             self._bt_primary_data = data
@@ -575,7 +574,7 @@ class Strategy(CoreStrategy):
         return None
 
 class IndicatorProxy:
-    """Proxy for indicators and data to support backtesting.py syntax."""
+    """Gradually revealed indicator/data line used by the 1.x facade."""
 
     __slots__ = ("_data", "_feed", "_length", "_index", "_name", "attrs")
 

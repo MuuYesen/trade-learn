@@ -1,4 +1,4 @@
-"""Utility helpers for the backtesting.py-compatible facade."""
+"""Utility helpers for the Tradelearn 1.x-style backtesting facade."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pandas_ta_classic as pta
 
 
 class _TA:
-    """Small pandas-ta-classic accessor for backtesting.py-style ``data.ta`` usage."""
+    """Small pandas-ta-classic accessor for 1.x-style ``data.ta`` usage."""
 
     _CLOSE_ONLY = {"bbands", "ema", "macd", "roc", "rsi", "sma"}
     _OHLC = {"adx", "atr", "ichimoku", "supertrend"}

@@ -69,7 +69,7 @@ def test_backtesting_facade_accepts_tradelearn_1x_strategy_surface() -> None:
     assert storage["last_close"] == 14.0
 
 
-def test_backtesting_facade_rejects_backtesting_py_capitalized_data_aliases() -> None:
+def test_backtesting_facade_rejects_legacy_capitalized_data_aliases() -> None:
     class CapitalizedStrategy(Strategy):
         def init(self) -> None:
             _ = self.data.Close

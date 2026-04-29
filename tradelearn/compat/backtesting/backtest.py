@@ -10,7 +10,7 @@ from .strategy import Strategy
 
 
 class Backtest:
-    """Facade for backtesting.py Backtest class."""
+    """Tradelearn 1.x-style quick backtest facade."""
 
     def __init__(
         self,
@@ -43,7 +43,7 @@ class Backtest:
         self.fail_fast = fail_fast
         self._storage = storage if storage is not None else {}
 
-        # Internal state to match run_backtest expectations
+        # Internal state to match the shared backtest runtime expectations.
         self.datas = [DataFeed(self._normalize_data(data), name="Asset")]
         self.strats = [(strategy, (), {})]
         self.match_mode = match_mode
@@ -89,7 +89,7 @@ class Backtest:
         )
         self.broker._storage = self._storage
 
-        # Update strategy params from kwargs if any
+        # Tradelearn 1.x passes strategy params through run(**kwargs).
         if kwargs:
             self.strats = [(self._strategy_cls, (), kwargs)]
 
@@ -115,7 +115,7 @@ class Backtest:
         })
 
     def optimize(self, **kwargs) -> pd.Series:
-        """Grid search optimization."""
+        """Simple grid search optimization."""
         import itertools
         from concurrent.futures import ProcessPoolExecutor
 
@@ -126,8 +126,6 @@ class Backtest:
         print(f"Starting Grid Search: {len(grid)} combinations...")
 
         with ProcessPoolExecutor() as executor:
-            # Pass data and class separately to avoid pickling the whole 'self' if not needed
-            # But here it's easier to just pass what we need
             results = list(executor.map(_optimize_worker,
                                         itertools.repeat(self._data),
                                         itertools.repeat(self._strategy_cls),
