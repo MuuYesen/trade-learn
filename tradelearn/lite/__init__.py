@@ -1,5 +1,7 @@
 from .backtest import Backtest
-from .strategy import Strategy
+from .strategy import Signal, Strategy
 from .util import _TA
 
-__all__ = ["Backtest", "Strategy", "_TA"]
+SignalStrategy = Strategy
+
+__all__ = ["Backtest", "Signal", "SignalStrategy", "Strategy", "_TA"]

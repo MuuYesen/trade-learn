@@ -161,13 +161,28 @@ def _ta_frame(data_feed: Any) -> pd.DataFrame:
 BacktestingDataProxy = LiteDataProxy
 
 
+class Signal:
+    """Lite signal wrapper with line-like indexing."""
+
+    def __init__(self, values: Any) -> None:
+        self._values = values
+
+    def __getitem__(self, index: int) -> float:
+        try:
+            return float(self._values[index])
+        except (IndexError, TypeError, ValueError):
+            return 0.0
+
+
 class PositionProxy:
     """Tradelearn Lite position view returned by ``strategy.position()``."""
 
-    __slots__ = ("_strategy", "_size_getter_broker", "_size_getter")
+    __slots__ = ("_strategy", "_ticker", "_data", "_size_getter_broker", "_size_getter")
 
-    def __init__(self, strategy: Strategy):
+    def __init__(self, strategy: Strategy, ticker: str | None = None, data: Any = None):
         self._strategy = strategy
+        self._ticker = ticker
+        self._data = data
         self._size_getter_broker = None
         self._size_getter = None
 
@@ -180,32 +195,31 @@ class PositionProxy:
         )
 
     def __call__(self, ticker: str | None = None) -> PositionProxy:
-        if ticker is not None and ticker != self._strategy.data.the_ticker:
-            raise ValueError("multi-asset position lookup is not supported by this facade yet")
-        return self
+        return self._strategy.position(ticker)
 
     def __bool__(self) -> bool:
         broker = self._strategy.broker
         if broker is not self._size_getter_broker:
             self._bind_broker_size_getters(broker)
         size_getter = self._size_getter
-        if size_getter is not None:
+        if size_getter is not None and self._data is self._strategy._bt_primary_data:
             return size_getter() != 0
         return self.size != 0
 
     @property
     def size(self) -> float:
+        data = self._data or self._strategy._bt_primary_data
         broker = self._strategy.broker
         if broker is not self._size_getter_broker:
             self._bind_broker_size_getters(broker)
         size_getter = self._size_getter
-        if size_getter is not None:
+        if size_getter is not None and data is self._strategy._bt_primary_data:
             return size_getter()
-        return self._strategy.getposition().size
+        return self._strategy.getposition(data).size
 
     def close(self, portion: float = 1.0):
         strategy = self._strategy
-        data = strategy.datas[0]
+        data = self._data or strategy.datas[0]
         effective_size = self.size + strategy._pending_size.get(data, 0.0)
         if effective_size > 0:
             return strategy._submit_1x_order(
@@ -229,10 +243,11 @@ class PositionProxy:
 
     @property
     def pl(self) -> float:
-        pos = self._strategy.getposition(self._strategy.datas[0])
+        data = self._data or self._strategy.datas[0]
+        pos = self._strategy.getposition(data)
         if pos.size == 0:
             return 0.0
-        price = self._strategy._bt_close_array[self._strategy.datas[0]._cursor]
+        price = data.get_array("close")[data._cursor]
         return (
             (float(price) - float(pos.price))
             * float(pos.size)
@@ -241,7 +256,8 @@ class PositionProxy:
 
     @property
     def pl_pct(self) -> float:
-        pos = self._strategy.getposition(self._strategy.datas[0])
+        data = self._data or self._strategy.datas[0]
+        pos = self._strategy.getposition(data)
         if pos.size == 0 or pos.price == 0:
             return 0.0
         return (self.pl / (abs(pos.size) * float(pos.price))) * 100.0
@@ -263,11 +279,22 @@ class Strategy(CoreStrategy):
 
     _FULL_EQUITY = __FULL_EQUITY(1 - sys.float_info.epsilon)
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        user_next = cls.__dict__.get("next")
+        if user_next is None or user_next is Strategy.next:
+            return
+        if "_next_lite_custom" not in cls.__dict__:
+            cls._next_lite_custom = user_next
+        cls.next = Strategy.next
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._params = self._check_params(kwargs)
         self._bt_data = None
         self._bt_position = PositionProxy(self)
+        self._bt_positions: dict[str | None, PositionProxy] = {}
+        self._bt_data_by_ticker: dict[str, Any] = {}
         self._indicator_cache = {}
         self._batch_indicator_cache = None
         self._bt_close_array = None
@@ -275,6 +302,9 @@ class Strategy(CoreStrategy):
         self._records: dict[str, pd.Series | pd.DataFrame] = {}
         self._storage: dict[str, Any] | None = None
         self._start_on_day = 0
+        self._lite_signals: list[tuple[str, Any, str | None]] = []
+        self._lite_signal_sentinel: Any = None
+        self._lite_signal_state: dict[str | None, int] = {}
 
     def _check_params(self, params: dict[str, Any]) -> dict[str, Any]:
         for key, value in params.items():
@@ -295,13 +325,66 @@ class Strategy(CoreStrategy):
             self._bt_data = LiteDataProxy(data)
             self.data = self._bt_data
             self._bt_close_array = data.get_array("close")
+            self._bt_data_by_ticker = {
+                str(getattr(feed, "_name", None) or f"data{i}"): feed
+                for i, feed in enumerate(self.datas)
+            }
+            for i, feed in enumerate(self.datas):
+                setattr(self, f"data{i}", LiteDataProxy(feed))
         self._storage = getattr(self.broker, "_storage", None)
 
     def position(self, ticker: str | None = None) -> Any:
         """Return the Tradelearn Lite position view for a ticker."""
-        if ticker is not None and ticker != self.data.the_ticker:
-            raise ValueError("multi-asset position lookup is not supported by this facade yet")
-        return self._bt_position
+        if ticker is None:
+            return self._bt_position
+        data = self._resolve_ticker_data(ticker)
+        proxy = self._bt_positions.get(ticker)
+        if proxy is None or proxy._data is not data:
+            proxy = PositionProxy(self, ticker=ticker, data=data)
+            self._bt_positions[ticker] = proxy
+        return proxy
+
+    def signal(self, line: Any, *, kind: str = "long", ticker: str | None = None) -> Any:
+        """Register a Lite signal line as strategy syntax sugar."""
+        kind = kind.lower()
+        if kind not in {"long", "short", "longshort"}:
+            raise ValueError("kind must be one of 'long', 'short', or 'longshort'")
+        self._lite_signals.append((kind, line, ticker))
+        return line
+
+    def next(self) -> None:
+        self._process_lite_signals()
+        self._next_lite_custom()
+
+    def _next_lite_custom(self) -> None:
+        pass
+
+    def _signal_value(self, line: Any) -> float:
+        try:
+            return float(line[0])
+        except (IndexError, TypeError, ValueError):
+            return 0.0
+
+    def _process_lite_signals(self) -> None:
+        if not self._lite_signals:
+            return
+        for kind, line, ticker in self._lite_signals:
+            value = self._signal_value(line)
+            state = self._lite_signal_state.get(ticker, 0)
+            if kind == "long":
+                if value > 0.0 and state <= 0:
+                    self.buy(ticker=ticker, size=1)
+                    self._lite_signal_state[ticker] = 1
+            elif kind == "short":
+                if value < 0.0 and state >= 0:
+                    self.sell(ticker=ticker, size=1)
+                    self._lite_signal_state[ticker] = -1
+            elif value > 0.0 and state <= 0:
+                self.buy(ticker=ticker, size=1)
+                self._lite_signal_state[ticker] = 1
+            elif value < 0.0 and state >= 0:
+                self.sell(ticker=ticker, size=1)
+                self._lite_signal_state[ticker] = -1
 
     def I(  # noqa: E743
         self,
@@ -441,10 +524,11 @@ class Strategy(CoreStrategy):
         tp: float = None,
         tag: object = None,
     ):
-        _reject_bracket_args(sl, tp)
         assert 0 < size < 1 or round(size) == size, (
             "size must be a positive fraction of equity, or a positive whole number of units"
         )
+        if sl is not None or tp is not None:
+            return self.buy_bracket(ticker=ticker, size=size, sl=sl, tp=tp, tag=tag)
         data = self._resolve_ticker_data(ticker)
         return self._submit_1x_order(Order.Buy, data, size, limit, stop, tag)
 
@@ -456,6 +540,7 @@ class Strategy(CoreStrategy):
         limit: float | None,
         stop: float | None,
         tag: object | None,
+        **order_kwargs: Any,
     ) -> Any:
         broker = self.broker
         if 0 < size < 1:
@@ -474,11 +559,21 @@ class Strategy(CoreStrategy):
         pending_delta = actual_size if side == Order.Buy else -actual_size
         pending[data] = pending.get(data, 0.0) + pending_delta
         exectype = Order.Limit if limit else Order.Stop if stop else Order.Market
-        if tag is None:
+        if tag is None and not order_kwargs:
             submit = getattr(broker, "submit_basic", broker._submit)
             return submit(self, data, side, actual_size, limit or stop, exectype)
+        info = dict(order_kwargs.pop("info", {}))
+        if tag is not None:
+            info["tag"] = tag
         return broker._submit(
-            self, data, side, actual_size, limit or stop, exectype, info={"tag": tag}
+            self,
+            data,
+            side,
+            actual_size,
+            limit or stop,
+            exectype,
+            info=info,
+            **order_kwargs,
         )
 
     def sell(
@@ -492,19 +587,142 @@ class Strategy(CoreStrategy):
         tp: float = None,
         tag: object = None,
     ):
-        _reject_bracket_args(sl, tp)
         assert 0 < size < 1 or round(size) == size, (
             "size must be a positive fraction of equity, or a positive whole number of units"
         )
+        if sl is not None or tp is not None:
+            return self.sell_bracket(ticker=ticker, size=size, sl=sl, tp=tp, tag=tag)
         data = self._resolve_ticker_data(ticker)
         return self._submit_1x_order(Order.Sell, data, size, limit, stop, tag)
+
+    def cancel(self, order: Any) -> None:
+        return self.broker.cancel(order)
+
+    def order_target_size(self, *, ticker: str = None, target: float = 0, **kwargs: Any):
+        data = self._resolve_ticker_data(ticker)
+        current = self.getposition(data).size + self._pending_size.get(data, 0.0)
+        delta = float(target) - float(current)
+        if delta > 0:
+            return self.buy(ticker=ticker, size=delta, **kwargs)
+        if delta < 0:
+            return self.sell(ticker=ticker, size=abs(delta), **kwargs)
+        return None
+
+    def order_target_value(
+        self,
+        *,
+        ticker: str = None,
+        target: float = 0.0,
+        price: float | None = None,
+        **kwargs: Any,
+    ):
+        data = self._resolve_ticker_data(ticker)
+        current = self.getposition(data).size + self._pending_size.get(data, 0.0)
+        price = float(price if price is not None else data.get_array("close")[data._cursor])
+        mult = getattr(self.broker, "_mult", 1.0)
+        current_value = float(current) * price * mult
+        delta_value = float(target) - current_value
+        if abs(delta_value) < 1e-12:
+            return None
+        size = int(abs(delta_value) / (price * mult))
+        if not size:
+            return None
+        if delta_value > 0:
+            return self.buy(ticker=ticker, size=size, **kwargs)
+        return self.sell(ticker=ticker, size=size, **kwargs)
+
+    def order_target_percent(self, *, ticker: str = None, target: float = 0.0, **kwargs: Any):
+        return self.order_target_value(
+            ticker=ticker,
+            target=float(target) * float(self.broker.getvalue()),
+            **kwargs,
+        )
+
+    def buy_bracket(
+        self,
+        *,
+        ticker: str = None,
+        size: float = _FULL_EQUITY,
+        limit: float = None,
+        stop: float = None,
+        sl: float = None,
+        tp: float = None,
+        tag: object = None,
+    ) -> list[Any]:
+        data = self._resolve_ticker_data(ticker)
+        main = self._submit_1x_order(Order.Buy, data, size, limit, stop, tag, transmit=False)
+        stop_order = None
+        if sl is not None:
+            stop_order = self._submit_1x_order(
+                Order.Sell,
+                data,
+                size,
+                None,
+                sl,
+                tag,
+                parent=main,
+                transmit=False,
+            )
+        limit_order = None
+        if tp is not None:
+            limit_order = self._submit_1x_order(
+                Order.Sell,
+                data,
+                size,
+                tp,
+                None,
+                tag,
+                parent=main,
+                oco=stop_order,
+                transmit=True,
+            )
+        return [order for order in (main, stop_order, limit_order) if order is not None]
+
+    def sell_bracket(
+        self,
+        *,
+        ticker: str = None,
+        size: float = _FULL_EQUITY,
+        limit: float = None,
+        stop: float = None,
+        sl: float = None,
+        tp: float = None,
+        tag: object = None,
+    ) -> list[Any]:
+        data = self._resolve_ticker_data(ticker)
+        main = self._submit_1x_order(Order.Sell, data, size, limit, stop, tag, transmit=False)
+        stop_order = None
+        if sl is not None:
+            stop_order = self._submit_1x_order(
+                Order.Buy,
+                data,
+                size,
+                None,
+                sl,
+                tag,
+                parent=main,
+                transmit=False,
+            )
+        limit_order = None
+        if tp is not None:
+            limit_order = self._submit_1x_order(
+                Order.Buy,
+                data,
+                size,
+                tp,
+                None,
+                tag,
+                parent=main,
+                oco=stop_order,
+                transmit=True,
+            )
+        return [order for order in (main, stop_order, limit_order) if order is not None]
 
     def _resolve_ticker_data(self, ticker: str | None = None) -> Any:
         if ticker is None:
             return self._bt_primary_data
-        for data in self.datas:
-            if getattr(data, "_name", None) == ticker:
-                return data
+        if ticker in self._bt_data_by_ticker:
+            return self._bt_data_by_ticker[ticker]
         if self.data is not None and ticker == self.data.the_ticker:
             return self._bt_primary_data
         raise ValueError(f"Unknown ticker {ticker!r}")

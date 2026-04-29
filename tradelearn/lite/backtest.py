@@ -14,7 +14,7 @@ class Backtest:
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: pd.DataFrame | dict[str, pd.DataFrame],
         strategy: type[Strategy],
         cash: float = 10_000,
         commission: float = .0,
@@ -44,7 +44,7 @@ class Backtest:
         self._storage = storage if storage is not None else {}
 
         # Internal state to match the shared backtest runtime expectations.
-        self.datas = [DataFeed(self._normalize_data(data), name="Asset")]
+        self.datas = self._build_data_feeds(data)
         self.strats = [(strategy, (), {})]
         self.match_mode = match_mode
         self.stats_mode = "lazy"
@@ -53,6 +53,17 @@ class Backtest:
         self.broker = RustBroker(cash=cash, commission=commission, match_mode=match_mode)
         self.broker._storage = self._storage
         self.analyzers = {}
+
+    @classmethod
+    def _build_data_feeds(cls, data: pd.DataFrame | dict[str, pd.DataFrame]) -> list[DataFeed]:
+        if isinstance(data, dict):
+            if not data:
+                raise ValueError("data dict must contain at least one ticker")
+            return [
+                DataFeed(cls._normalize_data(frame), name=str(name))
+                for name, frame in data.items()
+            ]
+        return [DataFeed(cls._normalize_data(data), name="Asset")]
 
     @staticmethod
     def _normalize_data(data: pd.DataFrame) -> pd.DataFrame:

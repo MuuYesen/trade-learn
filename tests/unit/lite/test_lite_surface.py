@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from tradelearn.lite import Backtest, Strategy
+from tradelearn.lite import Backtest, Signal, SignalStrategy, Strategy
 
 
 def _data() -> pd.DataFrame:
@@ -124,10 +124,96 @@ def test_lite_rejects_sl_tp_until_bracket_orders_are_implemented() -> None:
             self.start_on_bar(1)
 
         def next(self) -> None:
-            self.buy(size=1, sl=9.0)
+            if len(self.data) == 2:
+                self.buy(size=1, sl=9.0, tp=13.0)
 
-    with pytest.raises(NotImplementedError, match="sl/tp"):
-        Backtest(_data(), LiteStrategy, cash=1000.0).run()
+    stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
+    orders = stats["_strategy"].orders
+
+    assert len(orders) == 3
+    assert orders[1].parent is orders[0]
+    assert orders[2].oco is orders[1]
+
+
+def test_lite_exposes_engine_order_target_helpers() -> None:
+    seen: dict[str, float] = {}
+
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(1)
+
+        def next(self) -> None:
+            if len(self.data) == 2:
+                self.order_target_size(target=3)
+            elif len(self.data) == 3:
+                seen["size_after_target"] = self.position().size
+                self.order_target_value(target=24.0)
+            elif len(self.data) == 4:
+                seen["size_after_value"] = self.position().size
+                self.order_target_percent(target=0.0)
+
+    Backtest(_data(), LiteStrategy, cash=1000.0).run()
+
+    assert seen["size_after_target"] == 3
+    assert seen["size_after_value"] == 2
+
+
+def test_lite_supports_explicit_bracket_helpers() -> None:
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(1)
+
+        def next(self) -> None:
+            if len(self.data) == 2:
+                orders = self.buy_bracket(size=1, sl=9.0, tp=13.0)
+                assert len(orders) == 3
+                assert orders[1].parent is orders[0]
+                assert orders[2].oco is orders[1]
+
+    stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
+
+    assert len(stats["_strategy"].orders) == 3
+
+
+def test_lite_signal_sugar_trades_on_positive_signal() -> None:
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.sig = self.I(pd.Series([0.0, 1.0, 1.0, 0.0, 0.0], index=self.data.index))
+            self.signal(self.sig, kind="long")
+            self.start_on_bar(1)
+
+    stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
+
+    assert stats["_strategy"].position().size > 0
+    assert len(stats["_strategy"].orders) >= 1
+
+
+def test_lite_exports_signal_strategy_names() -> None:
+    assert SignalStrategy is Strategy
+    wrapped = Signal([0.0, 1.0])
+    assert wrapped[1] == 1.0
+
+
+def test_lite_accepts_dict_data_and_ticker_orders() -> None:
+    data = {
+        "AAA": _data(),
+        "BBB": _data().assign(close=[20.0, 21.0, 22.0, 23.0, 24.0]),
+    }
+    seen: dict[str, float] = {}
+
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(1)
+
+        def next(self) -> None:
+            if len(self.data) == 2:
+                self.buy(ticker="BBB", size=2)
+            elif len(self.data) == 3:
+                seen["bbb_size"] = self.position("BBB").size
+
+    Backtest(data, LiteStrategy, cash=1000.0).run()
+
+    assert seen["bbb_size"] == 2
 
 
 def test_lite_examples_do_not_use_backtesting_py_surface() -> None:
