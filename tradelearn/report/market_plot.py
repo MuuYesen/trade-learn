@@ -80,7 +80,23 @@ def market_replay_html(
     .metric {{ background: #fbfcfe; padding: 10px 14px; }}
     .metric-label {{ color: var(--muted); font-size: 12px; margin-bottom: 4px; }}
     .metric-value {{ color: var(--text); font-size: 18px; font-weight: 740; }}
-    #market-chart {{ height: 860px; }}
+    .pane-title {{
+      height: 32px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--border);
+      border-top: 1px solid var(--border);
+      background: linear-gradient(180deg, #ffffff, #f8fbfd);
+      color: #314451;
+      font-size: 13px;
+      font-weight: 760;
+    }}
+    .chart-pane {{ width: 100%; }}
+    #equity-chart {{ height: 150px; }}
+    #pl-chart {{ height: 110px; }}
+    #price-chart {{ height: 520px; }}
+    #volume-chart {{ height: 120px; }}
     .legend {{
       display: flex;
       gap: 16px;
@@ -109,7 +125,10 @@ def market_replay_html(
     .empty {{ padding: 56px; color: var(--muted); text-align: center; }}
     @media (max-width: 900px) {{
       .chart-head {{ grid-template-columns: repeat(2, minmax(120px, 1fr)); }}
-      #market-chart {{ height: 760px; }}
+      #equity-chart {{ height: 130px; }}
+      #pl-chart {{ height: 90px; }}
+      #price-chart {{ height: 430px; }}
+      #volume-chart {{ height: 100px; }}
     }}
   </style>
 </head>
@@ -126,7 +145,14 @@ def market_replay_html(
         <div class="metric"><div class="metric-label">Trades</div><div class="metric-value" id="m-trades">-</div></div>
         <div class="metric"><div class="metric-label">Bars</div><div class="metric-value" id="m-bars">-</div></div>
       </div>
-      <div id="market-chart"></div>
+      <div class="pane-title">Equity</div>
+      <div id="equity-chart" class="chart-pane"></div>
+      <div class="pane-title">Profit / Loss</div>
+      <div id="pl-chart" class="chart-pane"></div>
+      <div class="pane-title">OHLC / Trades</div>
+      <div id="price-chart" class="chart-pane"></div>
+      <div class="pane-title">Volume</div>
+      <div id="volume-chart" class="chart-pane"></div>
       <div class="legend">
         <span class="equity">Equity</span>
         <span class="pl">Profit / Loss</span>
@@ -141,7 +167,6 @@ def market_replay_html(
   <script>
     const payload = {payload_json};
     const LC = window.LightweightCharts;
-    const container = document.getElementById('market-chart');
 
     function fmtPct(value) {{
       if (value === null || value === undefined || Number.isNaN(value)) return '-';
@@ -156,23 +181,20 @@ def market_replay_html(
     document.getElementById('m-equity').textContent = fmtMoney(payload.stats.finalEquity);
     document.getElementById('m-return').textContent = fmtPct(payload.stats.returnPct);
 
-    if (!payload.candles.length) {{
-      container.innerHTML = '<div class="empty">No market data</div>';
-    }} else {{
-      const chart = LC.createChart(container, {{
+    function makeChart(id) {{
+      const container = document.getElementById(id);
+      if (!payload.candles.length) {{
+        container.innerHTML = '<div class="empty">No market data</div>';
+        return null;
+      }}
+      return LC.createChart(container, {{
         autoSize: true,
-        height: 860,
         attributionLogo: false,
         layout: {{
           background: {{ color: '#ffffff' }},
           textColor: '#314451',
           fontSize: 12,
           attributionLogo: false,
-          panes: {{
-            separatorColor: '#d6e0e8',
-            separatorHoverColor: '#9fb3c1',
-            enableResize: true,
-          }},
         }},
         grid: {{
           vertLines: {{ color: '#edf2f6' }},
@@ -182,62 +204,70 @@ def market_replay_html(
         timeScale: {{ borderColor: '#d6e0e8', timeVisible: true, secondsVisible: false }},
         crosshair: {{ mode: LC.CrosshairMode.Normal }},
       }});
+    }}
 
-      const equitySeries = chart.addSeries(
-        LC.LineSeries,
-        {{ color: '#2962ff', lineWidth: 2, priceLineVisible: false }},
-        0
-      );
+    const equityChart = makeChart('equity-chart');
+    const plChart = makeChart('pl-chart');
+    const priceChart = makeChart('price-chart');
+    const volumeChart = makeChart('volume-chart');
+    const charts = [equityChart, plChart, priceChart, volumeChart].filter(Boolean);
+
+    if (charts.length) {{
+      const equitySeries = equityChart.addSeries(LC.LineSeries, {{
+        color: '#2962ff',
+        lineWidth: 2,
+        priceLineVisible: false,
+      }});
       if (payload.equity.length) equitySeries.setData(payload.equity);
 
-      const plSeries = chart.addSeries(
-        LC.HistogramSeries,
-        {{
-          priceFormat: {{ type: 'percent' }},
-          priceLineVisible: false,
-          base: 0,
-        }},
-        1
-      );
+      const plSeries = plChart.addSeries(LC.HistogramSeries, {{
+        priceFormat: {{ type: 'percent' }},
+        priceLineVisible: false,
+        base: 0,
+      }});
       if (payload.pnl.length) plSeries.setData(payload.pnl);
 
-      const candles = chart.addSeries(LC.CandlestickSeries, {{
+      const candles = priceChart.addSeries(LC.CandlestickSeries, {{
         upColor: '#26a69a',
         downColor: '#ef5350',
         borderUpColor: '#16877d',
         borderDownColor: '#d33f3c',
         wickUpColor: '#78909c',
         wickDownColor: '#78909c',
-      }}, 2);
+      }});
       candles.setData(payload.candles);
       if (payload.markers.length) LC.createSeriesMarkers(candles, payload.markers);
 
       if (payload.tradeLines.length) {{
         for (const line of payload.tradeLines) {{
-          const series = chart.addSeries(LC.LineSeries, {{
+          const series = priceChart.addSeries(LC.LineSeries, {{
             color: line.color,
             lineWidth: 2,
             lineStyle: LC.LineStyle.Dotted,
             priceLineVisible: false,
             lastValueVisible: false,
-          }}, 2);
+          }});
           series.setData(line.points);
         }}
       }}
 
-      const volume = chart.addSeries(LC.HistogramSeries, {{
+      const volume = volumeChart.addSeries(LC.HistogramSeries, {{
         priceFormat: {{ type: 'volume' }},
         priceLineVisible: false,
-      }}, 3);
+      }});
       if (payload.volume.length) volume.setData(payload.volume);
 
-      chart.timeScale().fitContent();
-      const panes = chart.panes ? chart.panes() : [];
-      if (panes.length >= 4) {{
-        panes[0].setHeight(150);
-        panes[1].setHeight(110);
-        panes[2].setHeight(500);
-        panes[3].setHeight(120);
+      charts.forEach(chart => chart.timeScale().fitContent());
+      let syncing = false;
+      for (const chart of charts) {{
+        chart.timeScale().subscribeVisibleLogicalRangeChange(range => {{
+          if (syncing || !range) return;
+          syncing = true;
+          for (const other of charts) {{
+            if (other !== chart) other.timeScale().setVisibleLogicalRange(range);
+          }}
+          syncing = false;
+        }});
       }}
     }}
   </script>
