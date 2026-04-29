@@ -30,7 +30,8 @@ class ThroughputResult:
     elapsed_s: float
     bars_per_sec: float
     final_value: float
-    trades: int
+    fills: int
+    closed_trades: int
 
     @property
     def vs_reference_baseline(self) -> float:
@@ -57,20 +58,26 @@ def make_data(n_bars: int) -> pd.DataFrame:
     )
 
 
-def _timed(factory: Callable[[], tuple[float, int]], *, warmup: int, repeat: int) -> tuple[float, int, float]:
+def _timed(
+    factory: Callable[[], tuple[float, int, int]],
+    *,
+    warmup: int,
+    repeat: int,
+) -> tuple[float, int, int, float]:
     for _ in range(max(0, warmup)):
         factory()
     timings: list[float] = []
     final_value = 0.0
-    trades = 0
+    fills = 0
+    closed_trades = 0
     for _ in range(max(1, repeat)):
         start = time.perf_counter()
-        final_value, trades = factory()
+        final_value, fills, closed_trades = factory()
         timings.append(time.perf_counter() - start)
-    return final_value, trades, statistics.median(timings)
+    return final_value, fills, closed_trades, statistics.median(timings)
 
 
-def run_engine(data: pd.DataFrame) -> tuple[float, int]:
+def run_engine(data: pd.DataFrame, *, trade_on_close: bool = False) -> tuple[float, int, int]:
     import tradelearn.engine as bt
 
     class EngineSmaCross(bt.Strategy):
@@ -87,16 +94,17 @@ def run_engine(data: pd.DataFrame) -> tuple[float, int]:
             elif self.position and self.data.close[0] < self.sma[0]:
                 self.close()
 
-    cerebro = bt.Cerebro(trade_on_close=True)
+    cerebro = bt.Cerebro(trade_on_close=trade_on_close)
     cerebro.adddata(bt.feeds.PandasData(dataname=data, name="throughput"))
     cerebro.addstrategy(EngineSmaCross)
     cerebro.broker.setcash(100_000.0)
     [strategy] = cerebro.run()
-    trades = len(strategy.stats.fills) if strategy.stats is not None else 0
-    return float(cerebro.broker.getvalue()), trades
+    fills = len(strategy.stats.fills) if strategy.stats is not None else 0
+    closed_trades, _wins = cerebro.broker.trade_summary()
+    return float(cerebro.broker.getvalue()), fills, int(closed_trades)
 
 
-def run_lite(data: pd.DataFrame) -> tuple[float, int]:
+def run_lite(data: pd.DataFrame, *, trade_on_close: bool = False) -> tuple[float, int, int]:
     from tradelearn.lite import Backtest, Strategy
 
     class LiteSmaCross(Strategy):
@@ -113,11 +121,13 @@ def run_lite(data: pd.DataFrame) -> tuple[float, int]:
             elif self.position() and self.data.close[0] < self.sma[0]:
                 self.position().close()
 
-    stats = Backtest(data, LiteSmaCross, cash=100_000.0, trade_on_close=True).run()
-    return float(stats["Equity Final [$]"]), int(stats["# Trades"])
+    backtest = Backtest(data, LiteSmaCross, cash=100_000.0, trade_on_close=trade_on_close)
+    stats = backtest.run()
+    fills = len(backtest.broker.fills_frame())
+    return float(stats["Equity Final [$]"]), fills, int(stats["# Trades"])
 
 
-def run_backtrader(data: pd.DataFrame) -> tuple[float, int]:
+def run_backtrader(data: pd.DataFrame) -> tuple[float, int, int]:
     import backtrader as bt
 
     class PandasData(bt.feeds.PandasData):
@@ -137,10 +147,15 @@ def run_backtrader(data: pd.DataFrame) -> tuple[float, int]:
         def __init__(self) -> None:
             self.sma = bt.indicators.SMA(self.data.close, period=self.p.period)
             self.fills = 0
+            self.closed_trades = 0
 
         def notify_order(self, order) -> None:
             if order.status == order.Completed:
                 self.fills += 1
+
+        def notify_trade(self, trade) -> None:
+            if trade.isclosed:
+                self.closed_trades += 1
 
         def next(self) -> None:
             if self.sma[0] != self.sma[0]:
@@ -155,7 +170,7 @@ def run_backtrader(data: pd.DataFrame) -> tuple[float, int]:
     cerebro.adddata(PandasData(dataname=data))
     cerebro.addstrategy(BacktraderSmaCross)
     [strategy] = cerebro.run()
-    return float(cerebro.broker.getvalue()), int(strategy.fills)
+    return float(cerebro.broker.getvalue()), int(strategy.fills), int(strategy.closed_trades)
 
 
 def run_benchmark(
@@ -166,7 +181,7 @@ def run_benchmark(
     include_backtrader: bool = True,
 ) -> list[ThroughputResult]:
     data = make_data(n_bars)
-    runners: list[tuple[str, Callable[[pd.DataFrame], tuple[float, int]]]] = [
+    runners: list[tuple[str, Callable[[pd.DataFrame], tuple[float, int, int]]]] = [
         ("Tradelearn Engine", run_engine),
         ("Tradelearn Lite", run_lite),
     ]
@@ -175,7 +190,7 @@ def run_benchmark(
 
     results: list[ThroughputResult] = []
     for name, runner in runners:
-        final_value, trades, elapsed_s = _timed(
+        final_value, fills, closed_trades, elapsed_s = _timed(
             lambda runner=runner: runner(data.copy()),
             warmup=warmup,
             repeat=repeat,
@@ -186,7 +201,8 @@ def run_benchmark(
                 elapsed_s=elapsed_s,
                 bars_per_sec=n_bars / elapsed_s if elapsed_s > 0 else 0.0,
                 final_value=final_value,
-                trades=trades,
+                fills=fills,
+                closed_trades=closed_trades,
             )
         )
     return results
@@ -203,7 +219,8 @@ def print_results(results: list[ThroughputResult], *, n_bars: int, repeat: int, 
     print("=" * 116)
     print(
         f"{'Engine':<18} | {'Time [s]':>9} | {'Bars/s':>12} | "
-        f"{'vs 1,682':>10} | {'vs 419,552':>11} | {'Final Value':>12} | {'Trades':>6}"
+        f"{'vs 1,682':>10} | {'vs 419,552':>11} | {'Final Value':>12} | "
+        f"{'Fills':>7} | {'Closed Trades':>13}"
     )
     print("-" * 116)
     for result in results:
@@ -212,7 +229,8 @@ def print_results(results: list[ThroughputResult], *, n_bars: int, repeat: int, 
             f"{result.bars_per_sec:>12,.0f} | "
             f"{result.vs_reference_baseline:>9.1f}x | "
             f"{result.target_pct:>10.1f}% | "
-            f"{result.final_value:>12.2f} | {result.trades:>6}"
+            f"{result.final_value:>12.2f} | "
+            f"{result.fills:>7} | {result.closed_trades:>13}"
         )
     print("=" * 116)
 

@@ -119,34 +119,38 @@ uv run pytest tests/unit/lite tests/unit/examples/test_1x_strategy_examples.py -
 uv run python benchmarks/runners/benchmark_throughput.py --bars 550000 --repeat 1 --warmup 0
 ```
 
-2026-04-29 本地 55 万根 1min K 线实测:
+2026-04-29 本地 55 万根 1min K 线实测。该 runner 使用默认 next-bar 语义,并要求
+Engine、Lite、Backtrader 的 final value / fills / closed trades 口径一致:
 
-| 引擎 | 时间 | bars/s | vs 1,682 bars/s | vs 419,552 bars/s | Trades |
-|---|---:|---:|---:|---:|---:|
-| Tradelearn Engine | 4.0443s | 135,994 | 80.9x | 32.4% | 10,299 |
-| Tradelearn Lite | 2.7177s | 202,381 | 120.3x | 48.2% | 5,149 |
-| Backtrader | 33.4450s | 16,445 | 9.8x | 3.9% | 10,299 |
+| 引擎 | 时间 | bars/s | vs 1,682 bars/s | vs 419,552 bars/s | Final Value | Fills | Closed Trades |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Tradelearn Engine | 3.0494s | 180,364 | 107.2x | 43.0% | 118399.33 | 10,299 | 5,149 |
+| Tradelearn Lite | 2.0122s | 273,334 | 162.5x | 65.1% | 118399.33 | 10,299 | 5,149 |
+| Backtrader | 33.6004s | 16,369 | 9.7x | 3.9% | 118399.33 | 10,299 | 5,149 |
 
 同一策略阶段拆分 profiling:
 
 | 阶段 | Engine | Lite | Backtrader |
 |---|---:|---:|---:|
-| 数据生成 | 0.0244s | 0.0244s | 0.0244s |
-| DataFrame copy | 0.0038s | 0.0027s | 0.0015s |
-| runner/feed 初始化 | 0.0300s | 0.0059s | 0.0001s |
-| `run()` 主循环 | 4.0536s | 2.7000s | 33.6156s |
-| 结果读取 | ~0s | ~0s | ~0s |
-| 合计 | 4.0875s | 2.7086s | 33.6173s |
-| bars/s | 134,557 | 203,055 | 16,361 |
+| 数据生成 | 0.0224s | 0.0224s | 0.0224s |
+| DataFrame copy | 0.0096s | 0.0014s | 0.0015s |
+| runner/feed 初始化 | 0.0333s | 0.0054s | 0.0001s |
+| `run()` 主循环 | 2.9494s | 2.0368s | 33.2570s |
+| 结果读取 | ~0s | 0.0077s | ~0s |
+| 合计 | 2.9923s | 2.0513s | 33.2588s |
+| bars/s | 183,803 | 268,119 | 16,537 |
 
 结论:
 
-- 55 万 bar 下,Tradelearn Engine 约 **13.5 万 bars/s**,Lite 约 **20.2 万 bars/s**。
+- 55 万 bar 下,Tradelearn Engine 约 **18.0 万 bars/s**,Lite 约 **27.3 万 bars/s**。
 - 99% 以上时间在 `run()` 主循环,数据构造、feed 初始化和结果读取不是瓶颈。
 - cProfile 显示主要开销来自每 bar Python 回调、策略 `next()`、`position()`、indicator/line
-  `__getitem__` 和成交回传;Rust `step_open_collect_compact` 约 0.7-0.8s,不是主要瓶颈。
+  `__getitem__` 和成交回传;Rust `run_bar_loop` 包含 callback 调度,其中 Python `on_rust_bar`
+  回调仍是主成本。
 - 和 419,552 bars/s 的差距主要来自 Tradelearn 保留事件驱动 Python 策略 API,每根 bar 仍进入
   Python `next()`;纯批处理或更少 Python callback 的框架吞吐口径不可直接等价比较。
+- 若测试 `trade_on_close=True`,Engine 与 Lite 也必须保持语义一致;吞吐 runner 默认不打开该选项,
+  以便和 Backtrader 默认 next-bar 口径比较。
 
 ### Lint / 格式化
 
