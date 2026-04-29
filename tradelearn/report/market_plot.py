@@ -11,7 +11,7 @@ from typing import Any
 import pandas as pd
 
 LIGHTWEIGHT_CHARTS_CDN = (
-    "https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"
+    "https://unpkg.com/lightweight-charts@5/dist/lightweight-charts.standalone.production.js"
 )
 
 
@@ -35,11 +35,11 @@ def market_replay_html(
   <script src="{escape(script_url)}"></script>
   <style>
     :root {{
-      --bg: #f5f7fa;
+      --bg: #f3f6f9;
       --panel: #ffffff;
-      --border: #d8e1e8;
+      --border: #d6e0e8;
       --text: #1f2d38;
-      --muted: #6c7a86;
+      --muted: #697985;
       --grid: #edf2f6;
       --up: #26a69a;
       --down: #ef5350;
@@ -54,33 +54,33 @@ def market_replay_html(
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
         Arial, sans-serif;
     }}
-    .shell {{ max-width: 1480px; margin: 0 auto; padding: 20px 22px 28px; }}
+    .shell {{ max-width: 1480px; margin: 0 auto; padding: 18px 22px 28px; }}
     .header {{
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 14px;
+      gap: 18px;
+      margin-bottom: 12px;
     }}
-    h1 {{ font-size: 22px; line-height: 1.2; margin: 0; font-weight: 720; letter-spacing: .01em; }}
-    .meta {{ color: var(--muted); font-size: 13px; }}
+    h1 {{ font-size: 22px; line-height: 1.2; margin: 0; font-weight: 740; }}
+    .meta {{ color: var(--muted); font-size: 13px; white-space: nowrap; }}
     .chart-card {{
       background: var(--panel);
       border: 1px solid var(--border);
       box-shadow: 0 10px 30px rgba(31, 45, 56, 0.06);
       overflow: hidden;
     }}
-    .chart-title {{
-      height: 34px;
-      padding: 8px 14px;
+    .chart-head {{
+      display: grid;
+      grid-template-columns: repeat(4, minmax(120px, 1fr));
+      gap: 1px;
+      background: var(--border);
       border-bottom: 1px solid var(--border);
-      font-size: 13px;
-      font-weight: 700;
-      color: #314451;
-      background: linear-gradient(180deg, #ffffff, #f9fbfd);
     }}
-    #equity {{ height: 150px; }}
-    #price {{ height: 520px; }}
-    #volume {{ height: 130px; }}
+    .metric {{ background: #fbfcfe; padding: 10px 14px; }}
+    .metric-label {{ color: var(--muted); font-size: 12px; margin-bottom: 4px; }}
+    .metric-value {{ color: var(--text); font-size: 18px; font-weight: 740; }}
+    #market-chart {{ height: 860px; }}
     .legend {{
       display: flex;
       gap: 16px;
@@ -103,8 +103,14 @@ def market_replay_html(
     .legend .up::before {{ background: var(--up); }}
     .legend .down::before {{ background: var(--down); }}
     .legend .equity::before {{ background: var(--blue); }}
-    .legend .trade::before {{ background: var(--amber); }}
-    .empty {{ padding: 40px; color: var(--muted); text-align: center; }}
+    .legend .pl::before {{ background: var(--amber); }}
+    .attribution {{ padding: 0 14px 12px; color: var(--muted); font-size: 11px; }}
+    .attribution a {{ color: #3d6f8f; text-decoration: none; }}
+    .empty {{ padding: 56px; color: var(--muted); text-align: center; }}
+    @media (max-width: 900px) {{
+      .chart-head {{ grid-template-columns: repeat(2, minmax(120px, 1fr)); }}
+      #market-chart {{ height: 760px; }}
+    }}
   </style>
 </head>
 <body>
@@ -114,93 +120,125 @@ def market_replay_html(
       <div class="meta">Generated {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}</div>
     </div>
     <section class="chart-card">
-      <div class="chart-title">Equity</div>
-      <div id="equity"></div>
-      <div class="chart-title">OHLC / Trades</div>
-      <div id="price"></div>
-      <div class="chart-title">Volume</div>
-      <div id="volume"></div>
+      <div class="chart-head">
+        <div class="metric"><div class="metric-label">Final Equity</div><div class="metric-value" id="m-equity">-</div></div>
+        <div class="metric"><div class="metric-label">Return</div><div class="metric-value" id="m-return">-</div></div>
+        <div class="metric"><div class="metric-label">Trades</div><div class="metric-value" id="m-trades">-</div></div>
+        <div class="metric"><div class="metric-label">Bars</div><div class="metric-value" id="m-bars">-</div></div>
+      </div>
+      <div id="market-chart"></div>
       <div class="legend">
-        <span class="equity">Strategy equity</span>
+        <span class="equity">Equity</span>
+        <span class="pl">Profit / Loss</span>
         <span class="up">Up candle / buy</span>
         <span class="down">Down candle / sell</span>
-        <span class="trade">Trade marker</span>
+      </div>
+      <div class="attribution">
+        Charts powered by <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">TradingView Lightweight Charts</a>.
       </div>
     </section>
   </main>
   <script>
     const payload = {payload_json};
     const LC = window.LightweightCharts;
-    const commonLayout = {{
-      layout: {{ background: {{ color: '#ffffff' }}, textColor: '#314451', fontSize: 12 }},
-      grid: {{ vertLines: {{ color: '#edf2f6' }}, horzLines: {{ color: '#edf2f6' }} }},
-      rightPriceScale: {{ borderColor: '#d8e1e8' }},
-      timeScale: {{ borderColor: '#d8e1e8', timeVisible: true, secondsVisible: false }},
-      crosshair: {{ mode: LC.CrosshairMode.Normal }},
-    }};
+    const container = document.getElementById('market-chart');
 
-    function makeChart(id, height) {{
-      const el = document.getElementById(id);
-      const chart = LC.createChart(el, {{ ...commonLayout, height }});
-      new ResizeObserver(entries => {{
-        for (const entry of entries) {{
-          chart.applyOptions({{ width: Math.floor(entry.contentRect.width) }});
-        }}
-      }}).observe(el);
-      return chart;
+    function fmtPct(value) {{
+      if (value === null || value === undefined || Number.isNaN(value)) return '-';
+      return `${{(value * 100).toFixed(2)}}%`;
     }}
+    function fmtMoney(value) {{
+      if (value === null || value === undefined || Number.isNaN(value)) return '-';
+      return Number(value).toLocaleString(undefined, {{ maximumFractionDigits: 2 }});
+    }}
+    document.getElementById('m-bars').textContent = payload.stats.bars;
+    document.getElementById('m-trades').textContent = payload.stats.trades;
+    document.getElementById('m-equity').textContent = fmtMoney(payload.stats.finalEquity);
+    document.getElementById('m-return').textContent = fmtPct(payload.stats.returnPct);
 
     if (!payload.candles.length) {{
-      document.getElementById('price').innerHTML = '<div class="empty">No market data</div>';
+      container.innerHTML = '<div class="empty">No market data</div>';
     }} else {{
-      const equityChart = makeChart('equity', 150);
-      const priceChart = makeChart('price', 520);
-      const volumeChart = makeChart('volume', 130);
-
-      if (payload.equity.length) {{
-        const equitySeries = equityChart.addSeries(
-          LC.LineSeries,
-          {{ color: '#2962ff', lineWidth: 2 }}
-        );
-        equitySeries.setData(payload.equity);
-      }}
-
-      const candles = priceChart.addSeries(LC.CandlestickSeries, {{
-        upColor: '#26a69a', downColor: '#ef5350', borderUpColor: '#16877d',
-        borderDownColor: '#d33f3c', wickUpColor: '#78909c', wickDownColor: '#78909c'
+      const chart = LC.createChart(container, {{
+        autoSize: true,
+        height: 860,
+        attributionLogo: false,
+        layout: {{
+          background: {{ color: '#ffffff' }},
+          textColor: '#314451',
+          fontSize: 12,
+          attributionLogo: false,
+          panes: {{
+            separatorColor: '#d6e0e8',
+            separatorHoverColor: '#9fb3c1',
+            enableResize: true,
+          }},
+        }},
+        grid: {{
+          vertLines: {{ color: '#edf2f6' }},
+          horzLines: {{ color: '#edf2f6' }},
+        }},
+        rightPriceScale: {{ borderColor: '#d6e0e8' }},
+        timeScale: {{ borderColor: '#d6e0e8', timeVisible: true, secondsVisible: false }},
+        crosshair: {{ mode: LC.CrosshairMode.Normal }},
       }});
+
+      const equitySeries = chart.addSeries(
+        LC.LineSeries,
+        {{ color: '#2962ff', lineWidth: 2, priceLineVisible: false }},
+        0
+      );
+      if (payload.equity.length) equitySeries.setData(payload.equity);
+
+      const plSeries = chart.addSeries(
+        LC.HistogramSeries,
+        {{
+          priceFormat: {{ type: 'percent' }},
+          priceLineVisible: false,
+          base: 0,
+        }},
+        1
+      );
+      if (payload.pnl.length) plSeries.setData(payload.pnl);
+
+      const candles = chart.addSeries(LC.CandlestickSeries, {{
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        borderUpColor: '#16877d',
+        borderDownColor: '#d33f3c',
+        wickUpColor: '#78909c',
+        wickDownColor: '#78909c',
+      }}, 2);
       candles.setData(payload.candles);
-      if (payload.markers.length) candles.setMarkers(payload.markers);
+      if (payload.markers.length) LC.createSeriesMarkers(candles, payload.markers);
 
       if (payload.tradeLines.length) {{
         for (const line of payload.tradeLines) {{
-          const series = priceChart.addSeries(LC.LineSeries, {{
-            color: line.color, lineWidth: 2, lineStyle: LC.LineStyle.Dotted,
-            priceLineVisible: false, lastValueVisible: false,
-          }});
+          const series = chart.addSeries(LC.LineSeries, {{
+            color: line.color,
+            lineWidth: 2,
+            lineStyle: LC.LineStyle.Dotted,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          }}, 2);
           series.setData(line.points);
         }}
       }}
 
-      if (payload.volume.length) {{
-        const volume = volumeChart.addSeries(LC.HistogramSeries, {{
-          color: '#90a4ae', priceFormat: {{ type: 'volume' }}, priceLineVisible: false,
-        }});
-        volume.setData(payload.volume);
-      }}
+      const volume = chart.addSeries(LC.HistogramSeries, {{
+        priceFormat: {{ type: 'volume' }},
+        priceLineVisible: false,
+      }}, 3);
+      if (payload.volume.length) volume.setData(payload.volume);
 
-      const charts = [equityChart, priceChart, volumeChart];
-      charts.forEach(chart => chart.timeScale().fitContent());
-      const syncRange = source => {{
-        const range = source.timeScale().getVisibleLogicalRange();
-        if (!range) return;
-        charts.forEach(chart => {{
-          if (chart !== source) chart.timeScale().setVisibleLogicalRange(range);
-        }});
-      }};
-      charts.forEach(chart => {{
-        chart.timeScale().subscribeVisibleLogicalRangeChange(() => syncRange(chart));
-      }});
+      chart.timeScale().fitContent();
+      const panes = chart.panes ? chart.panes() : [];
+      if (panes.length >= 4) {{
+        panes[0].setHeight(150);
+        panes[1].setHeight(110);
+        panes[2].setHeight(500);
+        panes[3].setHeight(120);
+      }}
     }}
   </script>
 </body>
@@ -235,12 +273,15 @@ def _payload(
     market = _market_frame(market_data)
     fill_frame = _fills_frame(fills)
     fill_frame = _attach_fill_time(fill_frame, market)
+    trade_lines = _trade_lines(fill_frame)
     return {
         "candles": _candles(market),
         "volume": _volume(market),
         "equity": _equity(equity),
         "markers": _markers(fill_frame),
-        "tradeLines": _trade_lines(fill_frame),
+        "tradeLines": trade_lines,
+        "pnl": _profit_loss(trade_lines),
+        "stats": _stats(market, equity, trade_lines),
     }
 
 
@@ -370,6 +411,7 @@ def _trade_lines(fills: pd.DataFrame) -> list[dict[str, Any]]:
         lines.append(
             {
                 "color": "rgba(38, 166, 154, 0.8)" if pnl >= 0 else "rgba(239, 83, 80, 0.8)",
+                "returnPct": pnl,
                 "points": [
                     {"time": _time(current.time), "value": entry_price},
                     {"time": _time(fill.time), "value": exit_price},
@@ -378,6 +420,41 @@ def _trade_lines(fills: pd.DataFrame) -> list[dict[str, Any]]:
         )
         active.pop(data_name, None)
     return lines
+
+
+def _profit_loss(trade_lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "time": line["points"][-1]["time"],
+            "value": float(line.get("returnPct", 0.0)),
+            "color": "rgba(38, 166, 154, 0.75)"
+            if float(line.get("returnPct", 0.0)) >= 0
+            else "rgba(239, 83, 80, 0.75)",
+        }
+        for line in trade_lines
+        if line.get("points")
+    ]
+
+
+def _stats(
+    market: pd.DataFrame,
+    equity: pd.Series | None,
+    trade_lines: list[dict[str, Any]],
+) -> dict[str, Any]:
+    final_equity: float | None = None
+    return_pct: float | None = None
+    if equity is not None and not equity.empty:
+        series = pd.Series(equity).dropna()
+        if not series.empty:
+            first = float(series.iloc[0])
+            final_equity = float(series.iloc[-1])
+            return_pct = final_equity / first - 1.0 if first else None
+    return {
+        "bars": int(len(market)),
+        "trades": int(len(trade_lines)),
+        "finalEquity": final_equity,
+        "returnPct": return_pct,
+    }
 
 
 def _time(value: Any) -> str:

@@ -8,6 +8,7 @@ import pandas as pd
 
 from tradelearn import metrics
 from tradelearn.report import Reporter
+from tradelearn.report.market_plot import _payload, market_replay_html
 
 
 def test_html_template_exists() -> None:
@@ -71,6 +72,46 @@ def test_reporter_html_adds_price_trades_chart_when_market_data_exists(tmp_path)
     assert "Price / Trades" in html
     assert "Buy" in html
     assert "Sell" in html
+
+
+def test_market_replay_html_uses_lightweight_v5_panes_and_complete_payload() -> None:
+    """Market replay plot exports all chart panes using the Lightweight Charts v5 API."""
+    market_data = pd.DataFrame(
+        {
+            "open": [10.0, 11.0, 10.5],
+            "high": [11.5, 11.2, 11.4],
+            "low": [9.8, 10.2, 10.1],
+            "close": [11.0, 10.5, 11.2],
+            "volume": [100.0, 120.0, 90.0],
+        },
+        index=pd.date_range("2024-01-01", periods=3, tz="UTC"),
+    )
+    fills = pd.DataFrame(
+        {
+            "datetime": pd.date_range("2024-01-01", periods=2, tz="UTC"),
+            "side": ["buy", "sell"],
+            "price": [11.0, 10.5],
+            "size": [1.0, -1.0],
+        }
+    )
+    equity = pd.Series(
+        [100_000.0, 100_500.0, 100_250.0],
+        index=market_data.index,
+        name="equity",
+    )
+
+    payload = _payload(market_data=market_data, fills=fills, equity=equity)
+    html = market_replay_html(market_data=market_data, fills=fills, equity=equity)
+
+    assert payload["stats"]["bars"] == 3
+    assert payload["stats"]["trades"] == 1
+    assert payload["pnl"]
+    assert payload["tradeLines"]
+    assert "lightweight-charts@5" in html
+    assert "createSeriesMarkers" in html
+    assert "setMarkers" not in html
+    assert "Profit / Loss" in html
+    assert "Final Equity" in html
 
 
 def test_reporter_html_accepts_mapping_stats(tmp_path) -> None:
