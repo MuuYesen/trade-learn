@@ -1,6 +1,42 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
+
+
+def _find_import_offenders(root: Path, forbidden_prefixes: tuple[str, ...]) -> list[str]:
+    offenders: list[str] = []
+
+    for path in root.rglob("*.py"):
+        if "__pycache__" in path.parts:
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            imported: list[str] = []
+            if isinstance(node, ast.Import):
+                imported = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported = [node.module]
+            if any(
+                module == prefix or module.startswith(f"{prefix}.")
+                for module in imported
+                for prefix in forbidden_prefixes
+            ):
+                offenders.append(str(path.relative_to(root)))
+                break
+
+    return offenders
+
+
+def test_import_boundary_scanner_ignores_comments(tmp_path: Path) -> None:
+    module = tmp_path / "module.py"
+    module.write_text(
+        "# NOTE: do not import tradelearn.compat here\n"
+        "value = 'tradelearn.backtest appears in plain text'\n"
+        "from tradelearn.core import StreamBar\n"
+    )
+
+    assert _find_import_offenders(tmp_path, ("tradelearn.compat", "tradelearn.backtest")) == []
 
 
 def test_core_layer_does_not_import_compat() -> None:
@@ -9,12 +45,13 @@ def test_core_layer_does_not_import_compat() -> None:
     offenders: list[str] = []
 
     for core_root in core_roots:
-        for path in core_root.rglob("*.py"):
-            if "__pycache__" in path.parts:
-                continue
-            text = path.read_text()
-            if "tradelearn.compat" in text or "compat.backtrader" in text:
-                offenders.append(str(path.relative_to(root)))
+        offenders.extend(
+            str(core_root / offender)
+            for offender in _find_import_offenders(
+                core_root,
+                ("tradelearn.compat", "compat.backtrader"),
+            )
+        )
 
     assert offenders == []
 
@@ -22,14 +59,7 @@ def test_core_layer_does_not_import_compat() -> None:
 def test_platform_core_does_not_import_backtest_or_facades() -> None:
     root = Path(__file__).parents[3]
     platform_core = root / "tradelearn" / "core"
-    offenders: list[str] = []
-
-    for path in platform_core.rglob("*.py"):
-        if "__pycache__" in path.parts:
-            continue
-        text = path.read_text()
-        if "tradelearn.backtest" in text or "tradelearn.compat" in text:
-            offenders.append(str(path.relative_to(root)))
+    offenders = _find_import_offenders(platform_core, ("tradelearn.backtest", "tradelearn.compat"))
 
     assert offenders == []
 
@@ -96,3 +126,10 @@ def test_runnable_tools_are_not_kept_under_tests() -> None:
     assert (root / "benchmarks" / "runners" / "benchmark_bt.py").exists()
     assert (root / "benchmarks" / "runners" / "compare_backtesting.py").exists()
     assert (root / "scripts" / "examples" / "ml_strategy.py").exists()
+
+
+def test_backtest_runtime_uses_timezone_aware_now() -> None:
+    root = Path(__file__).parents[3]
+    text = (root / "tradelearn" / "backtest" / "models.py").read_text()
+
+    assert "Timestamp.utcnow" not in text

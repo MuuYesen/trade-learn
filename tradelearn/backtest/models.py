@@ -375,7 +375,7 @@ class Order:
             qty=float(qty),
             price=float(price),
             commission=float(commission),
-            ts=ts or pd.Timestamp.utcnow(),
+            ts=ts or pd.Timestamp.now(tz="UTC"),
         )
 
 

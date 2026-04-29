@@ -63,7 +63,6 @@ class Cerebro:
 
     def set_coc(self, coc: bool = True) -> None:
         self.trade_on_close = bool(coc)
-        self.kwargs["cheat_on_close"] = self.trade_on_close
         self.broker._trade_on_close = self.trade_on_close
 
     def adddata(self, data: Any, name: str | None = None) -> Any:

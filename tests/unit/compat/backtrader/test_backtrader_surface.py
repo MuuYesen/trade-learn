@@ -57,6 +57,16 @@ def test_cerebro_exposes_runtime_compat_methods() -> None:
         assert callable(getattr(cerebro, name))
 
 
+def test_set_coc_keeps_cheat_on_close_out_of_generic_kwargs() -> None:
+    cerebro = bt.Cerebro()
+
+    cerebro.set_coc(True)
+
+    assert cerebro.trade_on_close is True
+    assert cerebro.broker._trade_on_close is True
+    assert "cheat_on_close" not in cerebro.kwargs
+
+
 def test_resampledata_adds_higher_timeframe_feed() -> None:
     cerebro = bt.Cerebro()
     data0 = bt.DataFeed(_ohlcv(15), name="1m")
