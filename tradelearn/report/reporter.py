@@ -22,7 +22,6 @@ from tradelearn.report.analytics import (
 from tradelearn.report.excel import write_excel_report
 from tradelearn.report.explore import explore_trades
 from tradelearn.report.html import write_html_report
-from tradelearn.report.market_plot import market_replay_html, write_market_replay_html
 
 
 class Reporter:
@@ -198,29 +197,6 @@ class Reporter:
     def price_trades_chart(self):
         """Return the market replay chart; kept as an internal compatibility alias."""
         return self.market_replay_chart()
-
-    def market_replay_html(self, title: str = "Tradelearn Market Replay") -> str:
-        """Return a Lightweight Charts market replay HTML document."""
-        return market_replay_html(
-            market_data=self.market_data,
-            fills=self._get("fills", default=pd.DataFrame()),
-            equity=self._get("equity", default=pd.Series(dtype="float64")),
-            title=title,
-        )
-
-    def write_market_replay_html(
-        self,
-        path: str,
-        title: str = "Tradelearn Market Replay",
-    ) -> Any:
-        """Write a Lightweight Charts market replay HTML document."""
-        return write_market_replay_html(
-            path,
-            market_data=self.market_data,
-            fills=self._get("fills", default=pd.DataFrame()),
-            equity=self._get("equity", default=pd.Series(dtype="float64")),
-            title=title,
-        )
 
     def exposure_chart(self):
         """Return a Bokeh exposure chart."""

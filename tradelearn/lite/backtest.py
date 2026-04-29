@@ -131,13 +131,11 @@ class Backtest:
         print(f"Best Params: {best_params}")
         return best_res
 
-    def plot(self, path: str | None = None, *args, **kwargs):
-        """Return or write a Lightweight Charts market replay HTML plot."""
+    def plot(self, *args, **kwargs):
+        """Return market replay charts for the most recent Lite run."""
         reporter = self._last_reporter()
-        title = kwargs.pop("title", "Tradelearn Lite Market Replay")
-        if path is not None:
-            return reporter.write_market_replay_html(path, title=title)
-        return [reporter.market_replay_html(title=title)]
+        chart = reporter.market_replay_chart()
+        return [] if chart is None else [chart]
 
     def report(self, path: str = "report.html", benchmark=None):
         """Write a Tradelearn HTML report for the most recent Lite run."""

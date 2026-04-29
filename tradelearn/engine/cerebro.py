@@ -212,13 +212,11 @@ class Cerebro:
     def runstop(self) -> None:
         self._runstop = True
 
-    def plot(self, path: str | None = None, *args: Any, **kwargs: Any) -> Any:
-        """Return or write a Lightweight Charts market replay HTML plot."""
+    def plot(self, *args: Any, **kwargs: Any) -> list[Any]:
+        """Return market replay charts for the most recent run."""
         reporter = self._last_reporter()
-        title = kwargs.pop("title", "Tradelearn Engine Market Replay")
-        if path is not None:
-            return reporter.write_market_replay_html(path, title=title)
-        return [reporter.market_replay_html(title=title)]
+        chart = reporter.market_replay_chart()
+        return [] if chart is None else [chart]
 
     def report(self, path: str = "report.html", benchmark: Any | None = None) -> Any:
         """Write a Tradelearn HTML report for the most recent run."""
