@@ -35,7 +35,7 @@
 
 - 配置、日志、错误类型、seed/time/progress
 - `BrokerEvent` / `BrokerEventPump`
-- 通用契约对象
+- 通用契约对象,例如 `StreamBar` 和 broker-neutral 的 `OrderRequest` / `Fill` / `PositionSnapshot`
 
 它是更底层的运行基础,不应该知道任何 facade。
 
@@ -44,6 +44,7 @@
 - 不允许 import `tradelearn.backtest.*`。
 - 不允许 import `tradelearn.compat.*`。
 - 不接收回测专属 runtime,例如 bar loop、回测 broker wrapper、LineSeries、Sizer、Strategy 基类。
+- 不接收回测状态机对象,例如 `Order`、`Trade`、`ExecutedInfo`; 这些只能由 runtime/facade 适配成 core 中性契约。
 - 只放跨 backtest、paper、live 都成立的契约和基础工具。
 
 ### `tradelearn/compat/backtrader/`
