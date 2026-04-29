@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from tradelearn.backtest.sizer import FixedSize as CoreFixedSize
 from tradelearn.backtest.sizer import Sizer as CoreSizer
 from tradelearn.engine.base import Params
 
@@ -15,7 +16,7 @@ class Sizer(CoreSizer):
         self.params = self.p = Params(cls_params, **kwargs)
 
 
-class FixedSize(Sizer):
+class FixedSize(Sizer, CoreFixedSize):
     params = (("stake", 1),)
 
     def getsizing(self, data: Any, isbuy: bool, **kwargs: Any) -> float:

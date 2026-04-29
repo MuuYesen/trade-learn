@@ -4,7 +4,7 @@ import pandas as pd
 
 from tradelearn.backtest.broker import RustBroker
 from tradelearn.backtest.engine import run_backtest
-from tradelearn.engine.datafeed import DataFeed
+from tradelearn.backtest.feed import build_data_feeds, normalize_ohlcv_frame
 
 from .strategy import Strategy
 
@@ -44,51 +44,19 @@ class Backtest:
         self._storage = storage if storage is not None else {}
 
         # Internal state to match the shared backtest runtime expectations.
-        self.datas = self._build_data_feeds(data)
+        self.datas = build_data_feeds(data)
         self.strats = [(strategy, (), {})]
         self.match_mode = match_mode
         self.stats_mode = "lazy"
-        from tradelearn.engine.sizers import FixedSize
+        from tradelearn.backtest.sizer import FixedSize
         self._sizer_spec = (FixedSize, {})
         self.broker = RustBroker(cash=cash, commission=commission, match_mode=match_mode)
         self.broker._storage = self._storage
         self.analyzers = {}
 
-    @classmethod
-    def _build_data_feeds(cls, data: pd.DataFrame | dict[str, pd.DataFrame]) -> list[DataFeed]:
-        if isinstance(data, dict):
-            if not data:
-                raise ValueError("data dict must contain at least one ticker")
-            return [
-                DataFeed(cls._normalize_data(frame), name=str(name))
-                for name, frame in data.items()
-            ]
-        return [DataFeed(cls._normalize_data(data), name="Asset")]
-
     @staticmethod
     def _normalize_data(data: pd.DataFrame) -> pd.DataFrame:
-        frame = data.copy()
-        if isinstance(frame.columns, pd.MultiIndex):
-            if len(frame.columns.levels[0]) != 1:
-                raise NotImplementedError(
-                    "tradelearn.lite currently supports one ticker per Backtest run"
-                )
-            frame = frame.xs(frame.columns.levels[0][0], axis=1, level=0)
-        lower = {column: str(column).lower() for column in frame.columns}
-        frame = frame.rename(columns=lower)
-        required = {"open", "high", "low", "close"}
-        missing = required.difference(frame.columns)
-        if missing:
-            raise ValueError(f"data must contain OHLC columns; missing {sorted(missing)}")
-        if "volume" not in frame.columns:
-            frame["volume"] = 0.0
-        if not isinstance(frame.index, pd.DatetimeIndex):
-            numeric_index = pd.to_numeric(frame.index, errors="coerce")
-            if not pd.isna(numeric_index).any() and numeric_index.max() > 10_000_000:
-                frame.index = pd.to_datetime(numeric_index, unit="s", utc=True)
-        if not frame.index.is_monotonic_increasing:
-            frame = frame.sort_index()
-        return frame
+        return normalize_ohlcv_frame(data)
 
     def run(self, **kwargs) -> pd.Series:
         """Run the backtest and return statistics."""

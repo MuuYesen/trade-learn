@@ -73,6 +73,7 @@ def test_backtest_runtime_modules_are_flattened() -> None:
         "data.py",
         "engine.py",
         "event_runner.py",
+        "feed.py",
         "indicator_cache.py",
         "lines.py",
         "models.py",
@@ -193,3 +194,19 @@ def test_backtest_public_namespace_excludes_facade_apis() -> None:
     }
 
     assert forbidden.isdisjoint(set(backtest.__all__))
+
+
+def test_facades_do_not_import_each_other() -> None:
+    root = Path(__file__).parents[3]
+
+    lite_offenders = _find_import_offenders(
+        root / "tradelearn" / "lite",
+        ("tradelearn.engine",),
+    )
+    engine_offenders = _find_import_offenders(
+        root / "tradelearn" / "engine",
+        ("tradelearn.lite",),
+    )
+
+    assert lite_offenders == []
+    assert engine_offenders == []
