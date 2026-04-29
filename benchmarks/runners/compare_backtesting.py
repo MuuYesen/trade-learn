@@ -1,7 +1,9 @@
 # 1. Load the original backtesting.py
 # We need to bypass the local shim 'backtesting.py'
+import argparse
 import importlib.util
 import os
+import statistics
 import sys
 import time
 from pathlib import Path
@@ -28,6 +30,7 @@ def load_original_backtesting():
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "benchmarks" / "data" / "backtesting"
+DEFAULT_SYMBOLS = ("BTCUSDT", "ETHUSDT")
 
 
 # 3. Define the Strategy (same code for both)
@@ -89,7 +92,36 @@ def load_data(symbol):
     return df
 
 
-def run_comparison(symbol):
+def _timed_run(factory, *, warmup: int, repeat: int):
+    for _ in range(warmup):
+        factory()
+    durations = []
+    stats = None
+    for _ in range(repeat):
+        start_time = time.time()
+        stats = factory()
+        durations.append(time.time() - start_time)
+    return stats, statistics.median(durations)
+
+
+def _comparison_passed(
+    results: dict[str, dict[str, float]],
+    *,
+    min_speedup: float,
+    return_tol: float = 1e-2,
+    trades_tol: float = 0.0,
+) -> bool:
+    for result in results.values():
+        if abs(result["return_diff"]) > return_tol:
+            return False
+        if abs(result["trades_diff"]) > trades_tol:
+            return False
+        if result["speedup"] < min_speedup:
+            return False
+    return True
+
+
+def run_comparison(symbol, *, warmup: int = 0, repeat: int = 1):
     print(f"\nComparing results for {symbol}...")
     data = load_data(symbol)
     bar_count = len(data)
@@ -100,31 +132,35 @@ def run_comparison(symbol):
     orig_strat_cls = get_strategy_class(bt_orig.Strategy)
 
     print("Running Original backtesting.py...")
-    start_time = time.time()
-    bt = bt_orig.Backtest(
-        data,
-        orig_strat_cls,
-        cash=initial_cash,
-        commission=0.0008,
-        exclusive_orders=True,
-    )
-    stats_orig = bt.run()
-    orig_duration = time.time() - start_time
+
+    def run_original():
+        bt = bt_orig.Backtest(
+            data,
+            orig_strat_cls,
+            cash=initial_cash,
+            commission=0.0008,
+            exclusive_orders=True,
+        )
+        return bt.run()
+
+    stats_orig, orig_duration = _timed_run(run_original, warmup=warmup, repeat=repeat)
 
     # Run Tradelearn
     tl_strat_cls = get_strategy_class(tl_bt.Strategy)
 
     print("Running Tradelearn Facade...")
-    start_time = time.time()
-    bt_tl = tl_bt.Backtest(
-        data,
-        tl_strat_cls,
-        cash=initial_cash,
-        commission=0.0008,
-        exclusive_orders=True,
-    )
-    stats_tl = bt_tl.run()
-    tl_duration = time.time() - start_time
+
+    def run_tradelearn():
+        bt_tl = tl_bt.Backtest(
+            data,
+            tl_strat_cls,
+            cash=initial_cash,
+            commission=0.0008,
+            exclusive_orders=True,
+        )
+        return bt_tl.run()
+
+    stats_tl, tl_duration = _timed_run(run_tradelearn, warmup=warmup, repeat=repeat)
 
     # Compare
     print("\n" + "=" * 50)
@@ -140,10 +176,12 @@ def run_comparison(symbol):
         ("Win Rate [%]", "Win Rate [%]"),
     ]
 
+    diffs = {}
     for label, key in metrics:
         v_orig = stats_orig[key]
         v_tl = stats_tl[key]
         diff = v_tl - v_orig
+        diffs[key] = float(diff)
         print(f"{label:<20} | {v_orig:>12.2f} | {v_tl:>12.2f} | {diff:>10.2f}")
 
     print("-" * 65)
@@ -159,8 +197,47 @@ def run_comparison(symbol):
         f"{tl_bars_per_sec:>12,.0f} | {bars_per_sec_speedup:>10.2f}x"
     )
     print("=" * 50)
+    return {
+        "return_diff": diffs["Return [%]"],
+        "trades_diff": diffs["# Trades"],
+        "speedup": orig_duration / tl_duration if tl_duration else 0.0,
+        "orig_duration": orig_duration,
+        "tl_duration": tl_duration,
+        "orig_bars_per_sec": orig_bars_per_sec,
+        "tl_bars_per_sec": tl_bars_per_sec,
+    }
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Compare Tradelearn with backtesting.py.")
+    parser.add_argument("--symbols", nargs="+", default=list(DEFAULT_SYMBOLS))
+    parser.add_argument("--warmup", type=int, default=0)
+    parser.add_argument("--repeat", type=int, default=1)
+    parser.add_argument("--min-speedup", type=float, default=0.0)
+    parser.add_argument("--return-tol", type=float, default=1e-2)
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    results = {
+        symbol: run_comparison(symbol, warmup=args.warmup, repeat=args.repeat)
+        for symbol in args.symbols
+    }
+    if args.min_speedup:
+        passed = _comparison_passed(
+            results,
+            min_speedup=args.min_speedup,
+            return_tol=args.return_tol,
+        )
+        status = "PASS" if passed else "FAIL"
+        print(
+            f"\nGate: {status} "
+            f"(min_speedup={args.min_speedup:.2f}x, return_tol={args.return_tol})"
+        )
+        return 0 if passed else 1
+    return 0
 
 
 if __name__ == "__main__":
-    run_comparison("BTCUSDT")
-    run_comparison("ETHUSDT")
+    raise SystemExit(main())

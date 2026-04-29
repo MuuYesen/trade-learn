@@ -49,7 +49,7 @@
 ```bash
 uv run pytest tests/unit/backtest/test_compat_runner_scripts.py -q
 uv run pytest tests/unit/examples/test_examples_layout.py -q
-uv run python benchmarks/runners/compare_backtesting.py
+uv run python benchmarks/runners/compare_backtesting.py --warmup 1 --repeat 3 --min-speedup 1.35
 uv run python benchmarks/runners/benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2
 ```
 
@@ -60,11 +60,12 @@ uv run python benchmarks/runners/benchmark_bt.py smart --warmup 1 --repeat 3 --m
 - `59c8164` 保证 `examples/` 只保留策略文件,runner/data 移出。
 - `a7835cc` 在不新增 runner 的前提下压缩 backtesting.py facade 每 bar 热路径。
 - `aea60ad` 引入 lazy stats materialization,保留完整 artifacts 能力但默认不急切构建 pandas 产物。
+- `d6ad7d1` 收口 backtesting.py facade 保守优化并同步真实 1.5x 左右性能基线。
 - 本轮整理:临时脚本/IDE 配置移出 git,历史进度归档,文档门禁改用 `PROJECT.md` 作为愿景/路线入口。
 
 ## 当前待办
 
 1. Stage 9: 构建并验证含 Rust 二进制的 wheel。
 2. Stage 9: PyPI / GitHub Release / NOTICE 最终审查。
-3. Stage 10: 若继续优化,优先 profile 证明后的 proxy/submit 微优化和正式 benchmark gate;暂不推进独立 fast runner、core slim mode、批 callback 或策略下沉。
+3. Stage 10: 性能优化进入收口状态;后续只接受 profile 证明的局部小修,暂不推进独立 fast runner、core slim mode、批 callback 或策略下沉。
 4. 清理类任务: 后续可拆分超大测试文件 `test_rust_exact_matching.py`、`test_strategy_api.py`、`test_alpha_metadata.py`。
