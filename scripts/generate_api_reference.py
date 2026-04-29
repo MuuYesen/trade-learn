@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -174,6 +175,69 @@ def _render_guide(
     return "\n".join(parts).rstrip() + "\n"
 
 
+def _public_symbol_names(module: ApiReferenceModule) -> tuple[str, ...]:
+    try:
+        imported = importlib.import_module(module.import_path)
+    except Exception:
+        return module.common_entries
+    exported = getattr(imported, "__all__", None)
+    if exported:
+        return tuple(str(name) for name in exported)
+    return module.common_entries
+
+
+def _public_symbols_text(module: ApiReferenceModule, *, limit: int = 10) -> str:
+    names = _public_symbol_names(module)
+    if not names:
+        return ""
+    shown = names[:limit]
+    text = ", ".join(f"`{name}`" for name in shown)
+    remaining = len(names) - len(shown)
+    if remaining > 0:
+        text += f", ... (+{remaining})"
+    return text
+
+
+def _member_signature(member: Any) -> str:
+    if isinstance(member, property):
+        return ""
+    try:
+        return str(inspect.signature(member))
+    except (TypeError, ValueError):
+        return ""
+
+
+def _member_summary(member: Any) -> str:
+    doc = inspect.getdoc(member.fget if isinstance(member, property) else member)
+    if not doc:
+        return ""
+    return doc.splitlines()[0]
+
+
+def _render_member_index(title: str, cls: type[Any], names: tuple[str, ...]) -> list[str]:
+    rows = [
+        f"### {title}",
+        "",
+        "| Member | Kind | Signature | Summary |",
+        "|---|---|---|---|",
+    ]
+    for name in names:
+        member = inspect.getattr_static(cls, name, None)
+        if member is None:
+            continue
+        kind = "property" if isinstance(member, property) else "method"
+        signature = _member_signature(getattr(cls, name, member))
+        rows.append(
+            "| "
+            f"`{cls.__name__}.{name}` | "
+            f"{kind} | "
+            f"`{signature}` | "
+            f"{_member_summary(member)} |"
+        )
+    rows.append("")
+    return rows
+
+
 def render_engine_api_guide() -> str:
     """Render the Engine guide from public facade signatures."""
     from tradelearn.engine.cerebro import Cerebro
@@ -294,7 +358,7 @@ def render_engine_api_guide() -> str:
             returns="`Order | None`。",
         ),
     )
-    return _render_guide(
+    guide = _render_guide(
         "Engine API",
         "tradelearn.engine",
         (
@@ -303,11 +367,91 @@ def render_engine_api_guide() -> str:
         ),
         targets,
     )
+    parts = [
+        guide.rstrip(),
+        "",
+        "## Complete Engine Surface",
+        "",
+        "下表从运行时代码自动抽取,用于补足 Guide 未逐段展开的常用接口。",
+        "",
+        *_render_member_index(
+            "Cerebro",
+            Cerebro,
+            (
+                "setcash",
+                "getbroker",
+                "setbroker",
+                "setcommission",
+                "set_coc",
+                "adddata",
+                "chaindata",
+                "rolloverdata",
+                "resampledata",
+                "replaydata",
+                "addstrategy",
+                "optstrategy",
+                "addanalyzer",
+                "addobserver",
+                "addwriter",
+                "getwriterheaders",
+                "getwriterinfo",
+                "getwritervalues",
+                "addstore",
+                "addtimer",
+                "addcalendar",
+                "addsizer",
+                "setsizer",
+                "add_signal",
+                "signal_strategy",
+                "signal_concurrent",
+                "signal_accumulate",
+                "runstop",
+                "plot",
+                "run",
+            ),
+        ),
+        *_render_member_index(
+            "Strategy",
+            Strategy,
+            (
+                "datetime",
+                "position",
+                "start",
+                "init",
+                "prenext",
+                "next",
+                "stop",
+                "notify_order",
+                "notify_trade",
+                "notify_cashvalue",
+                "getposition",
+                "getdatabyname",
+                "getpositionbyname",
+                "setsizer",
+                "getsizer",
+                "getsizing",
+                "submit_order",
+                "buy",
+                "sell",
+                "close",
+                "cancel",
+                "order_target_size",
+                "order_target_value",
+                "order_target_percent",
+                "buy_bracket",
+                "sell_bracket",
+                "addminperiod",
+            ),
+        ),
+    ]
+    return "\n".join(parts).rstrip() + "\n"
 
 
 def render_lite_api_guide() -> str:
     """Render the Lite guide from public facade signatures."""
     from tradelearn.lite.backtest import Backtest
+    from tradelearn.lite.data import LiteDataProxy
+    from tradelearn.lite.position import PositionProxy
     from tradelearn.lite.strategy import Strategy
 
     targets = (
@@ -437,7 +581,7 @@ def render_lite_api_guide() -> str:
             returns="`None`。",
         ),
     )
-    return _render_guide(
+    guide = _render_guide(
         "Lite API",
         "tradelearn.lite",
         (
@@ -446,6 +590,58 @@ def render_lite_api_guide() -> str:
         ),
         targets,
     )
+    parts = [
+        guide.rstrip(),
+        "",
+        "## Complete Lite Surface",
+        "",
+        "下表从运行时代码自动抽取,用于检查 Lite 语法糖暴露了哪些入口。",
+        "",
+        *_render_member_index(
+            "Backtest",
+            Backtest,
+            ("run", "optimize", "plot"),
+        ),
+        *_render_member_index(
+            "Strategy",
+            Strategy,
+            (
+                "position",
+                "signal",
+                "I",
+                "buy",
+                "sell",
+                "cancel",
+                "order_target_size",
+                "order_target_value",
+                "order_target_percent",
+                "buy_bracket",
+                "sell_bracket",
+                "record",
+                "equity",
+                "storage",
+                "orders",
+                "trades",
+                "closed_trades",
+                "alloc",
+                "rebalance",
+                "start_on_day",
+                "start_on_bar",
+                "prepare_data",
+            ),
+        ),
+        *_render_member_index(
+            "LiteDataProxy",
+            LiteDataProxy,
+            ("df", "index", "now", "tickers", "the_ticker", "pip"),
+        ),
+        *_render_member_index(
+            "PositionProxy",
+            PositionProxy,
+            ("size", "close", "pl", "pl_pct", "is_long", "is_short"),
+        ),
+    ]
+    return "\n".join(parts).rstrip() + "\n"
 
 
 def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE_MODULES) -> str:
@@ -474,13 +670,30 @@ def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE
     ]
     for module in modules:
         slug = _module_slug(module)
-        entries = ", ".join(f"`{entry}`" for entry in module.common_entries)
+        entries = _public_symbols_text(module)
         parts.append(
             "| "
             f"`{module.import_path}` | "
             f"{module.summary} | "
             f"{entries} | "
             f"[{module.title}](reference/{slug}.md) |"
+        )
+    parts.extend(
+        [
+            "",
+            "## Public Symbols by Module",
+            "",
+        ]
+    )
+    for module in modules:
+        symbols = ", ".join(f"`{name}`" for name in _public_symbol_names(module))
+        parts.extend(
+            [
+                f"### `{module.import_path}`",
+                "",
+                symbols or "_No explicit `__all__`; see full reference._",
+                "",
+            ]
         )
     parts.extend(
         [

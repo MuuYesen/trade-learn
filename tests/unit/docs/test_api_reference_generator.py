@@ -20,6 +20,10 @@ def test_render_api_reference_is_readable_overview_not_module_dump() -> None:
     assert "[Engine API Guide](engine.md)" in rendered
     assert "[Lite API Guide](lite.md)" in rendered
     assert "[`tradelearn.engine`](reference/engine.md)" in rendered
+    assert "## Public Symbols by Module" in rendered
+    assert "`Cerebro`" in rendered
+    assert "`DataProvider`" in rendered
+    assert "`win_rate`" in rendered
     assert "::: tradelearn.engine" not in rendered
     assert "::: tradelearn.lite" not in rendered
     assert "::: tradelearn.backtest" not in rendered
@@ -61,6 +65,11 @@ def test_render_engine_api_guide_includes_code_signatures_and_parameter_tables()
     assert "| `match_mode` | `str` | `'exact'` |" in rendered
     assert "## `Strategy.buy_bracket`" in rendered
     assert "| `stopprice` |" in rendered
+    assert "## Complete Engine Surface" in rendered
+    assert "| `Cerebro.addobserver` | method |" in rendered
+    assert "| `Cerebro.getwriterinfo` | method |" in rendered
+    assert "| `Strategy.close` | method |" in rendered
+    assert "| `Strategy.getpositionbyname` | method |" in rendered
 
 
 def test_render_lite_api_guide_includes_code_signatures_and_parameter_tables() -> None:
@@ -72,3 +81,8 @@ def test_render_lite_api_guide_includes_code_signatures_and_parameter_tables() -
     assert "## `Strategy.buy`" in rendered
     assert "| `ticker` | `str` | `None` |" in rendered
     assert "| `sl` | `float` | `None` |" in rendered
+    assert "## Complete Lite Surface" in rendered
+    assert "| `Strategy.rebalance` | method |" in rendered
+    assert "| `Strategy.orders` | property |" in rendered
+    assert "| `LiteDataProxy.df` | property |" in rendered
+    assert "| `PositionProxy.pl_pct` | property |" in rendered
