@@ -145,13 +145,16 @@ class RustBroker(BaseBroker):
         import pandas as pd
 
         if self._fills_frame_cache is None or self._fills_frame_cache_len != len(self._fills):
-            self._fills_frame_cache = pd.DataFrame(self._fills)
+            frame = pd.DataFrame(self._fills)
+            if not frame.empty and "datetime" in frame.columns:
+                datetimes = frame["datetime"]
+                if pd.api.types.is_numeric_dtype(datetimes):
+                    frame["datetime"] = pd.to_datetime(datetimes, unit="s")
+            self._fills_frame_cache = frame
             self._fills_frame_cache_len = len(self._fills)
         return self._fills_frame_cache
 
     def _fill_datetime(self, data: Any) -> Any:
-        import pandas as pd
-
         timestamps = getattr(data, "_datetime", None)
         if timestamps is None:
             return None
@@ -162,11 +165,20 @@ class RustBroker(BaseBroker):
         except (IndexError, TypeError):
             return None
         try:
-            return pd.to_datetime(int(value), unit="s")
+            return int(value)
         except (TypeError, ValueError, OverflowError):
             return value
 
-    def _record_fill(self, order: Order, signed_size: float, price: float, comm: float) -> None:
+    def _record_fill(
+        self,
+        order: Order,
+        signed_size: float,
+        price: float,
+        comm: float,
+        *,
+        pnl: float = 0.0,
+        trade_closed: bool = False,
+    ) -> None:
         self._fills.append(
             {
                 "datetime": self._fill_datetime(order.data),
@@ -177,6 +189,8 @@ class RustBroker(BaseBroker):
                 "price": price,
                 "commission": comm,
                 "value": abs(signed_size) * price * self._mult,
+                "pnl": pnl,
+                "trade_closed": trade_closed,
             }
         )
 
@@ -539,19 +553,27 @@ class RustBroker(BaseBroker):
             pos.update(signed_size, price)
             new_size = pos.size
 
+            trade_closed = old_size != 0 and old_size * new_size <= 0
             if wants_trade_event and old_size == 0 and new_size != 0:
                 trade = Trade(data=data, size=new_size, price=price, status=Trade.Open)
                 trade.pnl = 0.0
                 trade.pnlcomm = 0.0
                 trade.isopen = True
                 self._notify_trade_event(strategy, trade)
-            elif wants_trade_event and old_size != 0 and (old_size * new_size <= 0):
+            elif wants_trade_event and trade_closed:
                 trade = Trade(data=data, size=new_size, price=price, status=Trade.Closed)
                 trade.pnl = pnl
                 trade.pnlcomm = pnl
                 trade.isclosed = True
                 self._notify_trade_event(strategy, trade)
 
-            self._record_fill(order, signed_size, price, comm)
+            self._record_fill(
+                order,
+                signed_size,
+                price,
+                comm,
+                pnl=pnl,
+                trade_closed=trade_closed,
+            )
             self._notify_fill_event(strategy, order, signed_size, price, comm)
             self._notify_order_event(strategy, order)

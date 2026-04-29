@@ -56,14 +56,21 @@ class Backtest:
 
         # Generate statistics
         final_value = self.broker.getvalue()
-        trades = getattr(strategy_instance, '_trades', [])
-        wins = [t for t in trades if getattr(t, 'pnl', 0) > 0]
-        win_rate = (len(wins) / len(trades) * 100) if trades else 0.0
+        fills = self.broker.fills_frame()
+        if not fills.empty and "trade_closed" in fills.columns:
+            closed = fills[fills["trade_closed"]]
+            trade_count = int(len(closed))
+            wins = int((closed["pnl"] > 0).sum()) if "pnl" in closed.columns else 0
+        else:
+            trades = getattr(strategy_instance, "_trades", [])
+            trade_count = len(trades)
+            wins = sum(1 for trade in trades if getattr(trade, "pnl", 0) > 0)
+        win_rate = (wins / trade_count * 100) if trade_count else 0.0
 
         return pd.Series({
             "Equity Final [$]": final_value,
             "Return [%]": (final_value / self._cash - 1) * 100,
-            "# Trades": len(trades),
+            "# Trades": trade_count,
             "Win Rate [%]": win_rate
         })
 

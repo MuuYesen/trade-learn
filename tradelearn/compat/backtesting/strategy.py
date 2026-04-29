@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 
@@ -64,7 +65,11 @@ class PositionProxy:
     def _bind_broker_size_getters(self, broker):
         self._size_getter_broker = broker
         self._rust_state_getter = getattr(broker, "_get_rust_state", None)
-        self._size_getter = None if self._rust_state_getter is not None else getattr(broker, "get_position_size", None)
+        self._size_getter = (
+            None
+            if self._rust_state_getter is not None
+            else getattr(broker, "get_position_size", None)
+        )
 
     def __bool__(self) -> bool:
         broker = self._strategy.broker
@@ -103,11 +108,6 @@ class Strategy(CoreStrategy):
         self._bt_position = PositionProxy(self)
         self._indicator_cache = {}
         self._batch_indicator_cache = None
-        self._trades = []
-
-    def notify_trade(self, trade: Any):
-        if trade.isclosed:
-            self._trades.append(trade)
 
     def _setup(self):
         """Bind backtesting.py compatibility proxies before init()."""
@@ -133,7 +133,12 @@ class Strategy(CoreStrategy):
             indicator_name = func.__class__.__name__
         elif indicator_name == "<lambda>":
             indicator_name = f"{indicator_name}:{id(func)}"
-        line = batch_cache.precompute(indicator_name, getattr(func, "compute", func), *args, **kwargs)
+        line = batch_cache.precompute(
+            indicator_name,
+            getattr(func, "compute", func),
+            *args,
+            **kwargs,
+        )
         # We need to return something that, when indexed with [-1], 
         # returns the value at the CURRENT cursor.
         proxy = IndicatorProxy(line._values, self.datas[0])
@@ -145,7 +150,12 @@ class Strategy(CoreStrategy):
             self._batch_indicator_cache = BatchIndicatorCache(self.datas[0])
         return self._batch_indicator_cache
 
-    def _indicator_cache_key(self, func: Callable, args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[Any, ...]:
+    def _indicator_cache_key(
+        self,
+        func: Callable,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> tuple[Any, ...]:
         return (
             self._cache_value_key(func),
             tuple(self._cache_value_key(arg) for arg in args),
@@ -160,7 +170,16 @@ class Strategy(CoreStrategy):
             return ("id", id(value))
         return ("value", value)
 
-    def buy(self, *, data: Any = None, size: float = 0.9999, limit: float = None, stop: float = None, sl: float = None, tp: float = None):
+    def buy(
+        self,
+        *,
+        data: Any = None,
+        size: float = 0.9999,
+        limit: float = None,
+        stop: float = None,
+        sl: float = None,
+        tp: float = None,
+    ):
         # backtesting.py size can be pct (0.0 to 1.0)
         data = data or self.datas[0]
         if 0 < size < 1:
@@ -171,10 +190,23 @@ class Strategy(CoreStrategy):
             adjusted_price = price * (1 + comm_ratio)
             size = int((equity * size) / adjusted_price)
         
-        return super().buy(data=data, size=size, price=limit or stop, 
-                           exectype=Order.Limit if limit else Order.Stop if stop else Order.Market)
+        return super().buy(
+            data=data,
+            size=size,
+            price=limit or stop,
+            exectype=Order.Limit if limit else Order.Stop if stop else Order.Market,
+        )
 
-    def sell(self, *, data: Any = None, size: float = 0.9999, limit: float = None, stop: float = None, sl: float = None, tp: float = None):
+    def sell(
+        self,
+        *,
+        data: Any = None,
+        size: float = 0.9999,
+        limit: float = None,
+        stop: float = None,
+        sl: float = None,
+        tp: float = None,
+    ):
         data = data or self.datas[0]
         if 0 < size < 1:
             equity = self.broker.getvalue()
@@ -197,7 +229,8 @@ class IndicatorProxy:
 
     def __array__(self, dtype=None, copy=None) -> np.ndarray:
         cursor = self._feed._cursor
-        if cursor < 0: return self._data
+        if cursor < 0:
+            return self._data
         return self._data[:cursor + 1]
 
     def __iter__(self):
@@ -226,7 +259,8 @@ class IndicatorProxy:
             if key < 0:
                 # Relative indexing from CURRENT cursor
                 idx = cursor + 1 + key
-                if idx < 0: raise IndexError("Index out of bounds")
+                if idx < 0:
+                    raise IndexError("Index out of bounds")
                 return data[idx]
             else:
                 return data[key]
@@ -234,7 +268,8 @@ class IndicatorProxy:
             # Handle slices up to cursor
             start = key.start if key.start is not None else 0
             stop = key.stop if key.stop is not None else cursor + 1
-            if stop > cursor + 1: stop = cursor + 1
+            if stop > cursor + 1:
+                stop = cursor + 1
             return data[start:stop:key.step]
         return data[key]
 

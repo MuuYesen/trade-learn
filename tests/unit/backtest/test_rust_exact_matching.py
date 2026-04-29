@@ -467,6 +467,32 @@ def test_rust_broker_skips_trade_object_when_no_trade_callbacks(
     )
 
 
+def test_rust_broker_records_closed_trade_flags_in_fill_ledger() -> None:
+    data = object()
+
+    class StrategySink:
+        def __init__(self) -> None:
+            self._pending_size = {data: 0.0}
+
+        def notify_order(self, order) -> None:
+            pass
+
+    broker = RustBroker(match_mode="exact")
+    first = Order(ref=1, data=data, ordtype=Order.Buy, size=1.0)
+    second = Order(ref=2, data=data, ordtype=Order.Sell, size=1.0)
+    broker._orders_by_ref = {1: first, 2: second}
+
+    broker._process_rust_fills_batch(
+        StrategySink(),
+        ([1, 2], [1.0, -1.0], [10.0, 11.0], [0.0, 0.0], [0.0, 0.0], [0.0, 1.0]),
+    )
+
+    fills = broker.fills_frame()
+
+    assert fills["trade_closed"].tolist() == [False, True]
+    assert fills["pnl"].tolist() == [0.0, 1.0]
+
+
 def test_backtest_engine_buffers_orders_while_strategy_next_runs() -> None:
     data = pd.DataFrame(
         {
