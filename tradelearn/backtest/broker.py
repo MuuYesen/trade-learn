@@ -145,6 +145,9 @@ class RustBroker:
         if hasattr(comminfo, "p") and hasattr(comminfo.p, "commission"):
             self.commission_ratio = comminfo.p.commission
 
+    def addcommissioninfo(self, comminfo: Any, name: str | None = None) -> None:
+        self.set_comminfo(comminfo)
+
     def getcash(self) -> float:
         if self._engine is not None:
             _, cash, _, _ = self._get_rust_state()

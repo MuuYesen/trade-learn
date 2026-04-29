@@ -59,6 +59,12 @@ class Cerebro:
     def setcash(self, cash: float) -> None:
         self.broker.setcash(cash)
 
+    def getbroker(self) -> Any:
+        return self.broker
+
+    def setbroker(self, broker: Any) -> None:
+        self.broker = broker
+
     def setcommission(self, commission: float = 0.0, margin: float = 0.0, mult: float = 1.0, 
                       comminfo: Any = None, name: str | None = None) -> None:
         """Set commission parameters or a custom CommInfo object."""

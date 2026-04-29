@@ -84,6 +84,28 @@ def test_broker_exposes_backtrader_cash_value_aliases() -> None:
     assert cerebro.broker.getvalue() == 12345.0
 
 
+def test_cerebro_getbroker_and_broker_addcommissioninfo() -> None:
+    cerebro = bt.Cerebro()
+    comminfo = bt.CommInfoBase(commission=0.002, mult=5.0)
+
+    assert cerebro.getbroker() is cerebro.broker
+    cerebro.broker.addcommissioninfo(comminfo)
+
+    assert cerebro.broker.getcommissioninfo(None) is comminfo
+    assert cerebro.broker.commission_ratio == 0.002
+    assert cerebro.broker.get_mult() == 5.0
+
+
+def test_cerebro_setbroker_replaces_broker_object() -> None:
+    cerebro = bt.Cerebro()
+    broker = cerebro.broker.__class__(cash=4321.0)
+
+    cerebro.setbroker(broker)
+
+    assert cerebro.broker is broker
+    assert cerebro.getbroker() is broker
+
+
 def test_resampledata_adds_higher_timeframe_feed() -> None:
     cerebro = bt.Cerebro()
     data0 = bt.DataFeed(_ohlcv(15), name="1m")
