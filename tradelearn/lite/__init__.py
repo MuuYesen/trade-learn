@@ -1,5 +1,6 @@
 from .backtest import Backtest
-from .strategy import Signal, Strategy
+from .indicator import Signal
+from .strategy import Strategy
 from .util import _TA
 
 SignalStrategy = Strategy

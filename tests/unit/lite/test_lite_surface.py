@@ -236,3 +236,18 @@ def test_lite_examples_do_not_use_backtesting_py_surface() -> None:
                 offenders.append(str(path.relative_to(root)))
 
     assert offenders == []
+
+
+def test_lite_strategy_module_stays_thin_facade() -> None:
+    root = Path(__file__).parents[3]
+    text = (root / "tradelearn" / "lite" / "strategy.py").read_text()
+    forbidden = [
+        "class LiteDataProxy",
+        "class PositionProxy",
+        "class IndicatorProxy",
+        "class IndicatorBundle",
+        "class _LineTA",
+        "def _wrap_indicator_result",
+    ]
+
+    assert [token for token in forbidden if token in text] == []
