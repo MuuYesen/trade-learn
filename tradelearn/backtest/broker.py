@@ -326,6 +326,14 @@ class RustBroker:
             return self._comminfo
         return _LegacyCommInfo(self.commission_ratio)
 
+    def get_orders_history(self) -> list[Order]:
+        return list(self._orders)
+
+    def get_orders_open(self, safe: bool = False) -> list[Order]:
+        open_statuses = {Order.Submitted, Order.Accepted, Order.Partial}
+        orders = [order for order in self._orders if order.status in open_statuses]
+        return list(orders) if safe else orders
+
     def begin_order_buffering(self) -> None:
         """Delay Rust order submission until callbacks return."""
         self._buffer_order_submissions = True

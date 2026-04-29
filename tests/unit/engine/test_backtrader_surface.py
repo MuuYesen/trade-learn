@@ -106,6 +106,53 @@ def test_cerebro_setbroker_replaces_broker_object() -> None:
     assert cerebro.getbroker() is broker
 
 
+def test_cerebro_addstore_keeps_store_reference() -> None:
+    cerebro = bt.Cerebro()
+    store = object()
+
+    cerebro.addstore(store)
+
+    assert cerebro.stores == [store]
+
+
+def test_broker_order_history_and_open_orders_surface() -> None:
+    class SubmitOnce(bt.Strategy):
+        def next(self) -> None:
+            if len(self) == 1:
+                self.order = self.buy(size=1)
+
+    cerebro = bt.Cerebro()
+    cerebro.adddata(_ohlcv(4))
+    cerebro.addstrategy(SubmitOnce)
+    strategy = cerebro.run()[0]
+
+    history = strategy.broker.get_orders_history()
+    assert strategy.order in history
+    assert strategy.broker.get_orders_open() == []
+
+
+def test_cerebro_tracks_datas_by_name() -> None:
+    cerebro = bt.Cerebro()
+    data = cerebro.adddata(_ohlcv(), name="asset0")
+
+    assert cerebro.datasbyname["asset0"] is data
+
+
+def test_strategy_getpositionbyname_resolves_named_data() -> None:
+    class BuyNamed(bt.Strategy):
+        def next(self) -> None:
+            if len(self) == 1:
+                self.buy(data=self.getdatabyname("asset0"), size=1)
+            self.named_position = self.getpositionbyname("asset0")
+
+    cerebro = bt.Cerebro()
+    cerebro.adddata(_ohlcv(4), name="asset0")
+    cerebro.addstrategy(BuyNamed)
+    strategy = cerebro.run()[0]
+
+    assert strategy.named_position.size == 1
+
+
 def test_resampledata_adds_higher_timeframe_feed() -> None:
     cerebro = bt.Cerebro()
     data0 = bt.DataFeed(_ohlcv(15), name="1m")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from typing import Any
 
 from tradelearn.backtest.models import FixedCommission, FixedSlippage
@@ -27,6 +28,7 @@ class Cerebro:
         **kwargs: Any,
     ) -> None:
         self.datas: list[DataFeed] = []
+        self.datasbyname: OrderedDict[str, DataFeed] = OrderedDict()
         self.strats: list[tuple[type[Strategy], tuple, dict]] = []
         self.match_mode = match_mode
         self.callback_batch = int(callback_batch)
@@ -48,6 +50,7 @@ class Cerebro:
         self.analyzers: dict[str, tuple[type[Analyzer], dict]] = {}
         self.observers: dict[str, tuple[type[Any], dict]] = {}
         self.writers: list[tuple[type[Any], tuple, dict]] = []
+        self.stores: list[Any] = []
         self.timers: list[tuple[tuple, dict]] = []
         self.calendars: list[Any] = []
         self._runstop = False
@@ -83,6 +86,9 @@ class Cerebro:
         elif name: 
             data._name = name
         self.datas.append(data)
+        data_name = getattr(data, "_name", None)
+        if data_name is not None:
+            self.datasbyname[str(data_name)] = data
         return data
 
     def resampledata(
@@ -132,6 +138,9 @@ class Cerebro:
 
     def addwriter(self, writer: type[Any], *args: Any, **kwargs: Any) -> None:
         self.writers.append((writer, args, kwargs))
+
+    def addstore(self, store: Any) -> None:
+        self.stores.append(store)
 
     def addtimer(self, *args: Any, **kwargs: Any) -> None:
         self.timers.append((args, kwargs))

@@ -90,6 +90,9 @@ class Strategy:
                 return data
         raise KeyError(f"data feed {name!r} not found")
 
+    def getpositionbyname(self, name: str) -> Position:
+        return self.getposition(self.getdatabyname(name))
+
     def setsizer(self, sizer: Any, name: Any = None) -> Any:
         if name is None:
             self._sizer = sizer
