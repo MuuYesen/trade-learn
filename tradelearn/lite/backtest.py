@@ -137,10 +137,14 @@ class Backtest:
         chart = reporter.price_trades_chart()
         return [] if chart is None else [chart]
 
+    def report(self, path: str = "report.html", benchmark=None):
+        """Write a Tradelearn HTML report for the most recent Lite run."""
+        return self._last_reporter().html(path, benchmark=benchmark)
+
     def _last_reporter(self):
         stats = getattr(self, "_last_stats", None)
         if stats is None:
-            raise RuntimeError("run() must be called before plot()")
+            raise RuntimeError("run() must be called before plot() or report()")
         from tradelearn.report import Reporter
 
         return Reporter(stats, market_data=self._report_market_data())

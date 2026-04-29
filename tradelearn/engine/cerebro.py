@@ -217,6 +217,10 @@ class Cerebro:
         chart = reporter.price_trades_chart()
         return [] if chart is None else [chart]
 
+    def report(self, path: str = "report.html", benchmark: Any | None = None) -> Any:
+        """Write a Tradelearn HTML report for the most recent run."""
+        return self._last_reporter().html(path, benchmark=benchmark)
+
     def run(self) -> list[Strategy]:
         if self.mode != "backtest":
             return self._run_event_mode()
@@ -267,7 +271,7 @@ class Cerebro:
     def _last_reporter(self):
         results = getattr(self, "_last_results", None)
         if not results:
-            raise RuntimeError("run() must be called before plot()")
+            raise RuntimeError("run() must be called before plot() or report()")
         stats = getattr(results[0], "stats", None)
         if stats is None:
             raise RuntimeError("last run did not produce stats")
