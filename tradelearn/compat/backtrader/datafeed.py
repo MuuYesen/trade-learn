@@ -1,9 +1,10 @@
 from __future__ import annotations
-import numpy as np
+
 import pandas as pd
-from typing import Any, List
+
 from tradelearn.backtest.data import DataContainer
 from tradelearn.compat.backtrader.base import LineRoot, LineSeries
+
 
 class DataFeed(DataContainer, LineRoot):
     """Backtrader-style DataFeed with LineSeries magic."""

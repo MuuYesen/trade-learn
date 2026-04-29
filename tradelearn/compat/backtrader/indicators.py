@@ -12,16 +12,20 @@ from tradelearn.compat.backtrader.base import (
     split_param_kwargs,
 )
 
+
 def bt_ema(series, period):
-    if len(series) < period: return pd.Series([np.nan]*len(series))
+    if len(series) < period:
+        return pd.Series([np.nan] * len(series))
     res = np.zeros(len(series))
     res[:] = np.nan
     s = series.to_numpy()
     first_idx = pd.Series(s).first_valid_index()
-    if first_idx is None: return pd.Series([np.nan]*len(series))
+    if first_idx is None:
+        return pd.Series([np.nan] * len(series))
     start = first_idx + period
-    if start > len(s): return pd.Series([np.nan]*len(series))
-    
+    if start > len(s):
+        return pd.Series([np.nan] * len(series))
+
     sma = np.mean(s[first_idx:start])
     res[start-1] = sma
     alpha = 2.0 / (period + 1.0)
@@ -30,21 +34,26 @@ def bt_ema(series, period):
             res[i] = res[i-1] + alpha * (s[i] - res[i-1])
     return pd.Series(res, index=series.index)
 
+
 def bt_wilder(series, period):
-    if len(series) < period: return pd.Series([np.nan]*len(series))
+    if len(series) < period:
+        return pd.Series([np.nan] * len(series))
     res = np.zeros(len(series))
     res[:] = np.nan
     s = series.to_numpy()
     first_idx = pd.Series(s).first_valid_index()
-    if first_idx is None: return pd.Series([np.nan]*len(series))
+    if first_idx is None:
+        return pd.Series([np.nan] * len(series))
     start = first_idx + period
-    if start > len(s): return pd.Series([np.nan]*len(series))
-    
+    if start > len(s):
+        return pd.Series([np.nan] * len(series))
+
     res[start-1] = np.mean(s[first_idx:start])
     for i in range(start, len(series)):
         if not np.isnan(s[i]):
             res[i] = (res[i-1] * (period - 1) + s[i]) / period
     return pd.Series(res, index=series.index)
+
 
 class MetaSimple(type):
     def __call__(cls, *args, **kwargs):
@@ -59,7 +68,8 @@ class MetaSimple(type):
         new_args = []
         for a in args:
             if hasattr(a, 'lines') or hasattr(a, '_values'):
-                if data is None: data = a
+                if data is None:
+                    data = a
                 new_args.append(a)
             else:
                 new_args.append(a)
@@ -69,9 +79,15 @@ class MetaSimple(type):
         
         sig = inspect.signature(cls.__init__)
         init_params = list(sig.parameters.values())
-        real_params = init_params[1:] 
+        real_params = init_params[1:]
         takes_var_args = any(p.kind == p.VAR_POSITIONAL for p in real_params)
-        fixed_param_count = len([p for p in real_params if p.kind in (p.POSITIONAL_OR_KEYWORD, p.POSITIONAL_ONLY)])
+        fixed_param_count = len(
+            [
+                p
+                for p in real_params
+                if p.kind in (p.POSITIONAL_OR_KEYWORD, p.POSITIONAL_ONLY)
+            ]
+        )
         
         if not takes_var_args and fixed_param_count == 0 and len(new_args) > 0:
             instance.__init__(**other_kwargs)
@@ -113,8 +129,10 @@ class Indicator(metaclass=MetaSimple):
     def __getattr__(self, name):
         if name in getattr(self, 'lines_def', ()):
             return getattr(self.lines, name)
-        if name == 'l': return self.lines
-        if name == 'p': return self.params
+        if name == 'l':
+            return self.lines
+        if name == 'p':
+            return self.params
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     def __bool__(self):
@@ -131,7 +149,8 @@ class Indicator(metaclass=MetaSimple):
     def __gt__(self, other): return self.lines[0] > other
 
 def _series(data, target_len=None):
-    if data is None: return pd.Series()
+    if data is None:
+        return pd.Series()
     if hasattr(data, 'close'): # Backtrader default
         res = _line_series(data.close)
     elif hasattr(data, 'lines'):
@@ -210,7 +229,8 @@ def _wrap(data, values, min_period=0):
     return obj
 
 def _base_p(data):
-    if hasattr(data, 'min_period'): return data.min_period
+    if hasattr(data, 'min_period'):
+        return data.min_period
     if hasattr(data, 'lines') and hasattr(data.lines[0], 'min_period'):
         return data.lines[0].min_period
     return 0
@@ -285,14 +305,23 @@ class MACD(Indicator):
             self.p.period_me2 = self.p.slow
         if self.p.signal is not None:
             self.p.period_signal = self.p.signal
-        s = _cached_series("bt.series", self.data, lambda close: pd.Series(close), _line_arg(self.data))
+        s = _cached_series(
+            "bt.series",
+            self.data,
+            lambda close: pd.Series(close),
+            _line_arg(self.data),
+        )
         me1 = bt_ema(s, self.p.period_me1)
         me2 = bt_ema(s, self.p.period_me2)
         macd_val = me1 - me2
         signal = bt_ema(macd_val, self.p.period_signal)
         base = _base_p(self.data)
         m_period = base + max(self.p.period_me1, self.p.period_me2) + self.p.period_signal - 2
-        self.lines.macd = _wrap(self.data, macd_val, min_period=base + max(self.p.period_me1, self.p.period_me2))
+        self.lines.macd = _wrap(
+            self.data,
+            macd_val,
+            min_period=base + max(self.p.period_me1, self.p.period_me2),
+        )
         self.lines.signal = _wrap(self.data, signal, min_period=m_period)
         self.lines.histo = _wrap(self.data, macd_val - signal, min_period=m_period)
 
@@ -300,7 +329,12 @@ class RSI(Indicator):
     lines = ('rsi',)
     params = (('period', 14), ('movav', None))
     def __init__(self, *args, **kwargs):
-        s = _cached_series("bt.series", self.data, lambda close: pd.Series(close), _line_arg(self.data))
+        s = _cached_series(
+            "bt.series",
+            self.data,
+            lambda close: pd.Series(close),
+            _line_arg(self.data),
+        )
         delta = s.diff()
         gain = delta.clip(lower=0.0)
         loss = (-delta.clip(upper=0.0))
@@ -314,7 +348,12 @@ class RSI(Indicator):
 
 class RSI_SMA(RSI):
     def __init__(self, *args, **kwargs):
-        s = _cached_series("bt.series", self.data, lambda close: pd.Series(close), _line_arg(self.data))
+        s = _cached_series(
+            "bt.series",
+            self.data,
+            lambda close: pd.Series(close),
+            _line_arg(self.data),
+        )
         delta = s.diff()
         gain = delta.clip(lower=0.0)
         loss = (-delta.clip(upper=0.0))
@@ -330,10 +369,28 @@ class ATR(Indicator):
     lines = ('atr',)
     params = (('period', 14),)
     def __init__(self, *args, **kwargs):
-        h = _cached_series("bt.high", self.data, lambda high: pd.Series(high), _line_arg(self.data, "high"))
-        l = _cached_series("bt.low", self.data, lambda low: pd.Series(low), _line_arg(self.data, "low"))
-        c = _cached_series("bt.close", self.data, lambda close: pd.Series(close), _line_arg(self.data, "close"))
-        tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
+        h = _cached_series(
+            "bt.high",
+            self.data,
+            lambda high: pd.Series(high),
+            _line_arg(self.data, "high"),
+        )
+        low = _cached_series(
+            "bt.low",
+            self.data,
+            lambda low: pd.Series(low),
+            _line_arg(self.data, "low"),
+        )
+        c = _cached_series(
+            "bt.close",
+            self.data,
+            lambda close: pd.Series(close),
+            _line_arg(self.data, "close"),
+        )
+        tr = pd.concat(
+            [h - low, (h - c.shift(1)).abs(), (low - c.shift(1)).abs()],
+            axis=1,
+        ).max(axis=1)
         tr.iloc[0] = np.nan
         atr = bt_wilder(tr, self.p.period)
         base = _base_p(self.data)
@@ -341,10 +398,28 @@ class ATR(Indicator):
 class TrueRange(Indicator):
     lines = ('tr',)
     def __init__(self, *args, **kwargs):
-        h = _cached_series("bt.high", self.data, lambda high: pd.Series(high), _line_arg(self.data, "high"))
-        l = _cached_series("bt.low", self.data, lambda low: pd.Series(low), _line_arg(self.data, "low"))
-        c = _cached_series("bt.close", self.data, lambda close: pd.Series(close), _line_arg(self.data, "close"))
-        tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
+        h = _cached_series(
+            "bt.high",
+            self.data,
+            lambda high: pd.Series(high),
+            _line_arg(self.data, "high"),
+        )
+        low = _cached_series(
+            "bt.low",
+            self.data,
+            lambda low: pd.Series(low),
+            _line_arg(self.data, "low"),
+        )
+        c = _cached_series(
+            "bt.close",
+            self.data,
+            lambda close: pd.Series(close),
+            _line_arg(self.data, "close"),
+        )
+        tr = pd.concat(
+            [h - low, (h - c.shift(1)).abs(), (low - c.shift(1)).abs()],
+            axis=1,
+        ).max(axis=1)
         tr.iloc[0] = np.nan
         self.lines.tr = _wrap(self.data, tr, min_period=_base_p(self.data) + 1)
 
@@ -354,7 +429,12 @@ class BollingerBands(Indicator):
     lines = ('mid', 'top', 'bot')
     params = (('period', 20), ('devfactor', 2.0))
     def __init__(self, *args, **kwargs):
-        s = _cached_series("bt.series", self.data, lambda close: pd.Series(close), _line_arg(self.data))
+        s = _cached_series(
+            "bt.series",
+            self.data,
+            lambda close: pd.Series(close),
+            _line_arg(self.data),
+        )
         mid = s.rolling(self.p.period).mean()
         std = s.rolling(self.p.period).std()
         top = mid + std * self.p.devfactor
@@ -371,10 +451,25 @@ class Stochastic(Indicator):
     lines = ('percK', 'percD')
     params = (('period', 14), ('period_dfast', 3), ('period_dslow', 3))
     def __init__(self, *args, **kwargs):
-        h = _cached_series("bt.high", self.data, lambda high: pd.Series(high), _line_arg(self.data, "high"))
-        l = _cached_series("bt.low", self.data, lambda low: pd.Series(low), _line_arg(self.data, "low"))
-        c = _cached_series("bt.close", self.data, lambda close: pd.Series(close), _line_arg(self.data, "close"))
-        lowest = l.rolling(self.p.period).min()
+        h = _cached_series(
+            "bt.high",
+            self.data,
+            lambda high: pd.Series(high),
+            _line_arg(self.data, "high"),
+        )
+        low = _cached_series(
+            "bt.low",
+            self.data,
+            lambda low: pd.Series(low),
+            _line_arg(self.data, "low"),
+        )
+        c = _cached_series(
+            "bt.close",
+            self.data,
+            lambda close: pd.Series(close),
+            _line_arg(self.data, "close"),
+        )
+        lowest = low.rolling(self.p.period).min()
         highest = h.rolling(self.p.period).max()
         perc_k = 100.0 * (c - lowest) / (highest - lowest).replace(0, np.nan)
         perc_d = perc_k.rolling(self.p.period_dfast).mean()
@@ -469,14 +564,28 @@ class DonchianChannels(Indicator):
     lines = ('upper', 'lower', 'middle')
     params = (('period', 20),)
     def __init__(self, *args, **kwargs):
-        hi = _cached_series("bt.high", self.data, lambda high: pd.Series(high), _line_arg(self.data, "high"))
-        lo = _cached_series("bt.low", self.data, lambda low: pd.Series(low), _line_arg(self.data, "low"))
+        hi = _cached_series(
+            "bt.high",
+            self.data,
+            lambda high: pd.Series(high),
+            _line_arg(self.data, "high"),
+        )
+        lo = _cached_series(
+            "bt.low",
+            self.data,
+            lambda low: pd.Series(low),
+            _line_arg(self.data, "low"),
+        )
         upper = hi.rolling(self.p.period).max()
         lower = lo.rolling(self.p.period).min()
         base = _base_p(self.data)
         self.lines.upper = _wrap(self.data, upper, min_period=base + self.p.period + 2)
         self.lines.lower = _wrap(self.data, lower, min_period=base + self.p.period + 2)
-        self.lines.middle = _wrap(self.data, (upper + lower) / 2.0, min_period=base + self.p.period + 2)
+        self.lines.middle = _wrap(
+            self.data,
+            (upper + lower) / 2.0,
+            min_period=base + self.p.period + 2,
+        )
 
 AverageTrueRange = ATR
 RelativeStrengthIndex = RSI
