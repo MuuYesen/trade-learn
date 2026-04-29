@@ -4,7 +4,6 @@ import importlib
 from typing import Type
 
 import pandas as pd
-import pytest
 
 import tradelearn.engine as bt
 from tradelearn.lite import Backtest as LiteBacktest
@@ -93,43 +92,8 @@ def _run_engine(strategy: type[bt.Strategy], **params) -> tuple[float, int]:
     return float(result.stats.summary["final_value"]), len(result.stats.fills)
 
 
-def _run_original_backtesting(strategy: type, **kwargs) -> tuple[float, int]:
-    backtesting = pytest.importorskip("backtesting")
-    data = _sample_data().copy()
-    data.columns = ["Open", "High", "Low", "Close", "Volume"]
-    stats = backtesting.Backtest(
-        data,
-        strategy,
-        cash=10000.0,
-        commission=0.0,
-        trade_on_close=True,
-    ).run(**kwargs)
-    return float(stats["Equity Final [$]"]), int(stats["# Trades"])
-
-
-def test_tradelearn_1x_sma_example_matches_original_backtesting_and_runs_engine() -> None:
+def test_tradelearn_1x_sma_example_runs_on_lite_and_engine_runtime() -> None:
     lite_strategy = _load_strategy("03_1x_sma_cross", "OneXSmaCross")
-
-    backtesting = pytest.importorskip("backtesting")
-
-    class OriginalSmaCross(backtesting.Strategy):
-        fast = 10
-        slow = 20
-
-        def init(self) -> None:
-            close = pd.Series(self.data.Close)
-            self.ma1 = self.I(lambda arr, n: arr.rolling(n).mean(), close, self.fast)
-            self.ma2 = self.I(lambda arr, n: arr.rolling(n).mean(), close, self.slow)
-
-        def next(self) -> None:
-            crosses_up = self.ma1[-2] < self.ma2[-2] and self.ma1[-1] > self.ma2[-1]
-            crosses_down = self.ma2[-2] < self.ma1[-2] and self.ma2[-1] > self.ma1[-1]
-            if crosses_up:
-                self.position.close()
-                self.buy()
-            elif crosses_down:
-                self.position.close()
-                self.sell()
 
     class EngineSmaCross(bt.Strategy):
         params = (("fast", 10), ("slow", 20))
@@ -151,42 +115,16 @@ def test_tradelearn_1x_sma_example_matches_original_backtesting_and_runs_engine(
                 self.sell()
 
     lite_value, lite_trades = _run_lite(lite_strategy)
-    original_value, original_trades = _run_original_backtesting(OriginalSmaCross)
     engine_value, engine_trades = _run_engine(EngineSmaCross)
 
     assert lite_value > 0
-    assert original_value > 0
     assert lite_trades >= 0
-    assert original_trades >= 0
     assert engine_value > 0
     assert engine_trades >= 0
 
 
-def test_tradelearn_1x_macd_example_matches_original_backtesting_and_runs_engine() -> None:
+def test_tradelearn_1x_macd_example_runs_on_lite_and_engine_runtime() -> None:
     lite_strategy = _load_strategy("05_1x_macd", "OneXMACDCross")
-
-    backtesting = pytest.importorskip("backtesting")
-
-    class OriginalMACDCross(backtesting.Strategy):
-        title = "Long"
-        s = 12
-        l = 26
-        m = 9
-
-        def init(self) -> None:
-            close = pd.Series(self.data.Close)
-            fast = close.ewm(span=self.s, adjust=False).mean()
-            slow = close.ewm(span=self.l, adjust=False).mean()
-            self.dif = self.I(lambda: fast - slow)
-            self.dea = self.I(lambda: (fast - slow).ewm(span=self.m, adjust=False).mean())
-
-        def next(self) -> None:
-            crosses_down = self.dea[-2] < self.dif[-2] and self.dea[-1] > self.dif[-1]
-            crosses_up = self.dif[-2] < self.dea[-2] and self.dif[-1] > self.dea[-1]
-            if crosses_down:
-                self.position.close()
-            if crosses_up:
-                self.buy()
 
     class EngineMACDCross(bt.Strategy):
         params = (("s", 12), ("l", 26), ("m", 9), ("title", "Long"))
@@ -212,13 +150,10 @@ def test_tradelearn_1x_macd_example_matches_original_backtesting_and_runs_engine
                 self.buy()
 
     lite_value, lite_trades = _run_lite(lite_strategy)
-    original_value, original_trades = _run_original_backtesting(OriginalMACDCross)
     engine_value, engine_trades = _run_engine(EngineMACDCross)
 
     assert lite_value > 0
-    assert original_value > 0
     assert lite_trades >= 0
-    assert original_trades >= 0
     assert engine_value > 0
     assert engine_trades >= 0
 
