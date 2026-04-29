@@ -99,11 +99,14 @@ class PositionProxy:
         broker = self._strategy.broker
         if broker is not self._size_getter_broker:
             self._bind_broker_size_getters(broker)
-        cache = getattr(broker, "_rust_state_cache", None)
-        if cache is not None and cache[0] == getattr(broker, "_curr_idx", None):
-            return cache[2] != 0
         rust_state_getter = self._rust_state_getter
         if rust_state_getter is not None:
+            try:
+                cache = broker._rust_state_cache
+            except AttributeError:
+                cache = None
+            if cache is not None and cache[0] == broker._curr_idx:
+                return cache[2] != 0
             return rust_state_getter()[2] != 0
         size_getter = self._size_getter
         if size_getter is not None:
@@ -115,11 +118,14 @@ class PositionProxy:
         broker = self._strategy.broker
         if broker is not self._size_getter_broker:
             self._bind_broker_size_getters(broker)
-        cache = getattr(broker, "_rust_state_cache", None)
-        if cache is not None and cache[0] == getattr(broker, "_curr_idx", None):
-            return cache[2]
         rust_state_getter = self._rust_state_getter
         if rust_state_getter is not None:
+            try:
+                cache = broker._rust_state_cache
+            except AttributeError:
+                cache = None
+            if cache is not None and cache[0] == broker._curr_idx:
+                return cache[2]
             return rust_state_getter()[2]
         size_getter = self._size_getter
         if size_getter is not None:
@@ -146,11 +152,13 @@ class Strategy(CoreStrategy):
         self._indicator_cache = {}
         self._batch_indicator_cache = None
         self._bt_close_array = None
+        self._bt_primary_data = None
 
     def _setup(self):
         """Bind backtesting.py compatibility proxies before init()."""
         if self._bt_data is None:
             data = self.datas[0]
+            self._bt_primary_data = data
             self._bt_data = BacktestingDataProxy(data)
             self.data = self._bt_data
             self._bt_close_array = data.get_array("close")
@@ -221,22 +229,24 @@ class Strategy(CoreStrategy):
         tp: float = None,
     ):
         # backtesting.py size can be pct (0.0 to 1.0)
-        data = data or self.datas[0]
+        data = data or self._bt_primary_data
+        broker = self.broker
         if 0 < size < 1:
-            equity = self.broker.getvalue()
+            equity = broker.getvalue()
             # Use current price adjusted for commission to match original logic
             price = (
                 self._bt_close_array[data._cursor]
-                if data is self.datas[0]
+                if data is self._bt_primary_data
                 else data.get_array("close")[data._cursor]
             )
-            comm_ratio = getattr(self.broker, 'commission_ratio', 0.0)
+            comm_ratio = broker.commission_ratio
             adjusted_price = price * (1 + comm_ratio)
             size = int((equity * size) / adjusted_price)
         
         actual_size = float(abs(size))
-        self._pending_size[data] = self._pending_size.get(data, 0.0) + actual_size
-        return self.broker._submit(
+        pending = self._pending_size
+        pending[data] = pending.get(data, 0.0) + actual_size
+        return broker._submit(
             self,
             data,
             Order.Buy,
@@ -255,22 +265,24 @@ class Strategy(CoreStrategy):
         sl: float = None,
         tp: float = None,
     ):
-        data = data or self.datas[0]
+        data = data or self._bt_primary_data
+        broker = self.broker
         if 0 < size < 1:
-            equity = self.broker.getvalue()
+            equity = broker.getvalue()
             price = (
                 self._bt_close_array[data._cursor]
-                if data is self.datas[0]
+                if data is self._bt_primary_data
                 else data.get_array("close")[data._cursor]
             )
-            comm_ratio = getattr(self.broker, 'commission_ratio', 0.0)
+            comm_ratio = broker.commission_ratio
             # For short, price is effectively lower due to commission
             adjusted_price = price * (1 - comm_ratio)
             size = int((equity * size) / adjusted_price)
             
         actual_size = float(abs(size))
-        self._pending_size[data] = self._pending_size.get(data, 0.0) - actual_size
-        return self.broker._submit(
+        pending = self._pending_size
+        pending[data] = pending.get(data, 0.0) - actual_size
+        return broker._submit(
             self,
             data,
             Order.Sell,

@@ -446,6 +446,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
         observer.start()
     analyzer_bar_callbacks = _build_analyzer_bar_callbacks(strategy)
     observer_nexts = _build_observer_nexts(strategy)
+    has_analyzer_bar_callbacks = bool(analyzer_bar_callbacks)
+    has_observer_nexts = bool(observer_nexts)
 
     limit = cerebro.datas[0].buflen()
     # Calculate min_period from all indicators (mostly for BT facade)
@@ -540,8 +542,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     broker_process_fills(strategy, i)
             else:
                 strategy_next()
-            _analyzer_bar_step(strategy, analyzer_bar_callbacks)
-            _observer_step(observer_nexts)
+            if has_analyzer_bar_callbacks:
+                _analyzer_bar_step(strategy, analyzer_bar_callbacks)
+            if has_observer_nexts:
+                _observer_step(observer_nexts)
         return []
 
     use_multi_data_rust_runner = (
@@ -572,8 +576,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     begin_order_buffering()
                     strategy_next()
                     orders = drain_order_buffer()
-                    _analyzer_bar_step(strategy, analyzer_bar_callbacks)
-                    _observer_step(observer_nexts)
+                    if has_analyzer_bar_callbacks:
+                        _analyzer_bar_step(strategy, analyzer_bar_callbacks)
+                    if has_observer_nexts:
+                        _observer_step(observer_nexts)
                     return orders if orders else None
                 return None
         else:
@@ -600,8 +606,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     begin_order_buffering()
                     strategy_next()
                     orders = drain_order_buffer()
-                    _analyzer_bar_step(strategy, analyzer_bar_callbacks)
-                    _observer_step(observer_nexts)
+                    if has_analyzer_bar_callbacks:
+                        _analyzer_bar_step(strategy, analyzer_bar_callbacks)
+                    if has_observer_nexts:
+                        _observer_step(observer_nexts)
                     return orders if orders else None
                 return None
 
@@ -622,8 +630,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     begin_order_buffering()
                     strategy_next()
                     orders = drain_order_buffer()
-                    _analyzer_bar_step(strategy, analyzer_bar_callbacks)
-                    _observer_step(observer_nexts)
+                    if has_analyzer_bar_callbacks:
+                        _analyzer_bar_step(strategy, analyzer_bar_callbacks)
+                    if has_observer_nexts:
+                        _observer_step(observer_nexts)
                     return orders if orders else None
                 return None
         else:
@@ -642,8 +652,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     begin_order_buffering()
                     strategy_next()
                     orders = drain_order_buffer()
-                    _analyzer_bar_step(strategy, analyzer_bar_callbacks)
-                    _observer_step(observer_nexts)
+                    if has_analyzer_bar_callbacks:
+                        _analyzer_bar_step(strategy, analyzer_bar_callbacks)
+                    if has_observer_nexts:
+                        _observer_step(observer_nexts)
                     return orders if orders else None
                 return None
 
