@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 import numpy as np
 import pandas as pd
-import pandas_ta_classic as pta
 
 
 class Signal:
@@ -24,7 +22,7 @@ class Signal:
 class IndicatorProxy:
     """Gradually revealed indicator/data line used by the Lite facade."""
 
-    __slots__ = ("_data", "_feed", "_length", "_index", "_name", "attrs", "ta")
+    __slots__ = ("_data", "_feed", "_length", "_index", "_name", "attrs")
 
     def __init__(
         self,
@@ -39,7 +37,6 @@ class IndicatorProxy:
         self._index = index
         self._name = name
         self.attrs: dict[str, Any] = {}
-        self.ta = _LineTA(self)
 
     def __array__(self, dtype=None, copy=None) -> np.ndarray:
         cursor = self._feed._cursor
@@ -199,36 +196,6 @@ def _indicator_column_aliases(column: object) -> tuple[str, ...]:
     elif base == "macd":
         aliases.add("macd")
     return tuple(aliases)
-
-
-class _LineTA:
-    """pandas-ta-classic shortcut accessor bound to one Lite line."""
-
-    def __init__(self, line: IndicatorProxy) -> None:
-        self._line = line
-
-    def __getattr__(self, name: str) -> Callable[..., IndicatorProxy]:
-        indicator = getattr(pta, name)
-
-        def call(*args: Any, **kwargs: Any) -> IndicatorProxy:
-            result = indicator(self._line.df, *args, **kwargs)
-            if isinstance(result, pd.DataFrame):
-                if result.shape[1] != 1:
-                    raise ValueError(
-                        f"Line-level ta.{name} returned multiple columns; use data.ta.{name}"
-                    )
-                result = result.iloc[:, 0]
-            values = np.asarray(result, dtype=float)
-            proxy = IndicatorProxy(
-                values,
-                self._line._feed,
-                index=self._line._index,
-                name=getattr(result, "name", None) or name,
-            )
-            proxy.attrs.update({"name": name})
-            return proxy
-
-        return call
 
 
 __all__ = ["IndicatorBundle", "IndicatorProxy", "Signal", "_wrap_indicator_result"]

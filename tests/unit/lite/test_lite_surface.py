@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
+import tradelearn as tl
 from tradelearn.lite import Backtest, Signal, SignalStrategy, Strategy
 
 
@@ -27,7 +27,7 @@ def test_lite_uses_backtrader_bar_indexing_with_1x_position_call() -> None:
     class LiteStrategy(Strategy):
         def init(self) -> None:
             self.line = self.I(pd.Series([1.0, 2.0, 3.0, 4.0, 5.0], index=self.data.index))
-            self.sma = self.data.close.ta.sma(length=2)
+            self.sma = tl.talib.SMA(self.data.close, timeperiod=2)
             self.start_on_bar(2)
 
         def next(self) -> None:
@@ -60,8 +60,18 @@ def test_lite_data_ta_returns_current_bar_line_proxy() -> None:
 
     class LiteStrategy(Strategy):
         def init(self) -> None:
-            self.atr = self.data.ta.atr(length=2)
-            self.macd = self.data.ta.macd(fast=2, slow=3, signal=2)
+            self.atr = tl.talib.ATR(
+                self.data.high,
+                self.data.low,
+                self.data.close,
+                timeperiod=2,
+            )
+            self.macd = tl.talib.MACD(
+                self.data.close,
+                fastperiod=2,
+                slowperiod=3,
+                signalperiod=2,
+            )
             self.start_on_bar(3)
 
         def next(self) -> None:
@@ -260,7 +270,11 @@ def test_lite_modules_do_not_keep_backtesting_py_names() -> None:
         root / "tradelearn" / "lite" / "strategy.py",
     ]
 
-    offenders = [str(path.relative_to(root)) for path in checked if "Backtesting" in path.read_text()]
+    offenders = [
+        str(path.relative_to(root))
+        for path in checked
+        if "Backtesting" in path.read_text()
+    ]
 
     assert offenders == []
 

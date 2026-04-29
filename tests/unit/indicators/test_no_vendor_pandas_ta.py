@@ -13,16 +13,16 @@ def test_legacy_pandas_ta_vendor_tree_is_removed() -> None:
     assert not (repo_root / "tradelearn" / "query" / "tec" / "pandas_ta").exists()
 
 
-def test_lite_util_imports_without_vendor_pandas_ta() -> None:
-    """Lite compatibility code should not import the removed vendor tree."""
-    from tradelearn.lite import util
+def test_lite_no_longer_exports_legacy_ta_util() -> None:
+    """Lite no longer exposes the legacy chain-style data.ta helper."""
+    import tradelearn.lite as lite
 
-    assert util._TA is not None
+    assert not hasattr(lite, "_TA")
 
 
-def test_lite_ta_accessor_delegates_to_pandas_ta_classic() -> None:
-    """Lite data.ta methods should use pandas-ta-classic after vendor removal."""
-    from tradelearn.lite.util import _TA
+def test_talib_namespace_delegates_to_pandas_ta_classic() -> None:
+    """TA-Lib-style namespace should use pandas-ta-classic after vendor removal."""
+    import tradelearn as tl
 
     data = pd.DataFrame(
         {
@@ -34,6 +34,6 @@ def test_lite_ta_accessor_delegates_to_pandas_ta_classic() -> None:
         }
     )
 
-    result = _TA(data).roc(2)
+    result = tl.talib.SMA(data["close"], timeperiod=2)
 
-    pd.testing.assert_series_equal(result, pta.roc(data["close"], length=2))
+    pd.testing.assert_series_equal(result, pta.sma(data["close"], length=2))

@@ -80,11 +80,19 @@ def _timed(
 def run_engine(data: pd.DataFrame, *, trade_on_close: bool = False) -> tuple[float, int, int]:
     import tradelearn.engine as bt
 
+    class SMA(bt.Indicator):
+        lines = ("sma",)
+        params = (("period", 30),)
+
+        def __init__(self) -> None:
+            line = self.data.close if hasattr(self.data, "close") else self.data
+            self.lines.sma = bt.talib.SMA(line, timeperiod=self.p.period)
+
     class EngineSmaCross(bt.Strategy):
         params = (("period", 20),)
 
         def __init__(self) -> None:
-            self.sma = bt.indicators.SMA(self.data.close, period=self.p.period)
+            self.sma = SMA(self.data.close, period=self.p.period)
 
         def next(self) -> None:
             if self.sma[0] != self.sma[0]:
@@ -105,13 +113,14 @@ def run_engine(data: pd.DataFrame, *, trade_on_close: bool = False) -> tuple[flo
 
 
 def run_lite(data: pd.DataFrame, *, trade_on_close: bool = False) -> tuple[float, int, int]:
+    import tradelearn as tl
     from tradelearn.lite import Backtest, Strategy
 
     class LiteSmaCross(Strategy):
         period = 20
 
         def init(self) -> None:
-            self.sma = self.data.close.ta.sma(length=self.period)
+            self.sma = tl.talib.SMA(self.data.close, timeperiod=self.period)
 
         def next(self) -> None:
             if self.sma[0] != self.sma[0]:
@@ -208,7 +217,13 @@ def run_benchmark(
     return results
 
 
-def print_results(results: list[ThroughputResult], *, n_bars: int, repeat: int, warmup: int) -> None:
+def print_results(
+    results: list[ThroughputResult],
+    *,
+    n_bars: int,
+    repeat: int,
+    warmup: int,
+) -> None:
     print("\nThroughput Benchmark")
     print(f"Bars: {n_bars:,} | repeat={repeat} | warmup={warmup}")
     print(

@@ -26,8 +26,6 @@ def __getattr__(name: str) -> Any:
     if name == "cli":
         from tradelearn import cli
         return cli
-    if name in ["ind", "indicators"]:
-        return importlib.import_module("tradelearn.engine.indicators")
     if name == "feeds":
         return importlib.import_module("tradelearn.engine.feeds")
     if name == "analyzers":

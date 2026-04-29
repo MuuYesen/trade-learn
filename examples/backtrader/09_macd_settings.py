@@ -2,7 +2,91 @@
 # Adapted from reference/backtrader-master/samples/macd-settings/macd-settings.py
 # Only imports and class name changed to prove compatibility.
 
+from importlib import import_module
+
 import tradelearn.engine as bt
+
+
+def _bt_indicators():
+    return import_module("backtrader.indicators")
+
+
+class SMA(bt.Indicator):
+    lines = ("sma",)
+    params = (("period", 30),)
+
+    def __init__(self):
+        line = self.data.close if hasattr(self.data, "close") else self.data
+        if hasattr(line, "to_series"):
+            self.lines.sma = bt.talib.SMA(line, timeperiod=self.p.period)
+        else:
+            native = _bt_indicators().SMA(line, period=self.p.period)
+            self.lines.sma = native.lines[0]
+
+
+class ATR(bt.Indicator):
+    lines = ("atr",)
+    params = (("period", 14),)
+
+    def __init__(self):
+        if hasattr(self.data.close, "to_series"):
+            self.lines.atr = bt.talib.ATR(
+                self.data.high,
+                self.data.low,
+                self.data.close,
+                timeperiod=self.p.period,
+            )
+        else:
+            native = _bt_indicators().ATR(self.data, period=self.p.period)
+            self.lines.atr = native.lines[0]
+
+
+class MACD(bt.Indicator):
+    lines = ("macd", "signal", "histo")
+    params = (("period_me1", 12), ("period_me2", 26), ("period_signal", 9))
+
+    def __init__(self):
+        line = self.data.close if hasattr(self.data, "close") else self.data
+        if hasattr(line, "to_series"):
+            values = bt.talib.MACD(
+                line,
+                fastperiod=self.p.period_me1,
+                slowperiod=self.p.period_me2,
+                signalperiod=self.p.period_signal,
+            )
+            self.lines.macd = values.macd
+            self.lines.signal = values.signal
+            self.lines.histo = values.hist
+        else:
+            native = _bt_indicators().MACD(
+                line,
+                period_me1=self.p.period_me1,
+                period_me2=self.p.period_me2,
+                period_signal=self.p.period_signal,
+            )
+            self.lines.macd = native.macd
+            self.lines.signal = native.signal
+            self.lines.histo = native.macd - native.signal
+
+
+class CrossOver(bt.Indicator):
+    lines = ("crossover",)
+
+    def __init__(self, *args):
+        d0, d1 = args if args else (self.data0, self.data1)
+        if hasattr(d0, "to_series"):
+            s0 = d0.to_series()
+            s1 = d1.to_series()
+            diff = s0 - s1
+            prev = diff.shift(1)
+            values = ((diff > 0) & (prev <= 0)).astype(float) - (
+                (diff < 0) & (prev >= 0)
+            ).astype(float)
+            self.lines.crossover = d0.wrap_indicator(values, name="crossover")
+        else:
+            native = _bt_indicators().CrossOver(d0, d1)
+            self.lines.crossover = native.lines[0]
+
 
 class MacdTharp(bt.Strategy):
     '''
@@ -43,19 +127,19 @@ class MacdTharp(bt.Strategy):
             self.order = None  # indicate no order is pending
 
     def __init__(self):
-        self.macd = bt.indicators.MACD(self.data,
-                                       period_me1=self.p.macd1,
-                                       period_me2=self.p.macd2,
-                                       period_signal=self.p.macdsig)
+        self.macd = MACD(self.data,
+                         period_me1=self.p.macd1,
+                         period_me2=self.p.macd2,
+                         period_signal=self.p.macdsig)
 
         # Cross of macd.macd and macd.signal
-        self.mcross = bt.indicators.CrossOver(self.macd.macd, self.macd.signal)
+        self.mcross = CrossOver(self.macd.macd, self.macd.signal)
 
         # To set the stop price
-        self.atr = bt.indicators.ATR(self.data, period=self.p.atrperiod)
+        self.atr = ATR(self.data, period=self.p.atrperiod)
 
         # Control market trend
-        self.sma = bt.indicators.SMA(self.data, period=self.p.smaperiod)
+        self.sma = SMA(self.data, period=self.p.smaperiod)
         self.smadir = self.sma - self.sma(-self.p.dirperiod)
         self.order = None
 

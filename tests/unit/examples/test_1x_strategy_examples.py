@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib
-from typing import Type
 
 import pandas as pd
 
@@ -65,12 +64,12 @@ def _sample_data() -> pd.DataFrame:
     )
 
 
-def _load_strategy(module_name: str, class_name: str) -> Type[LiteStrategy]:
+def _load_strategy(module_name: str, class_name: str) -> type[LiteStrategy]:
     module = importlib.import_module(f"examples.lite.{module_name}")
     return getattr(module, class_name)
 
 
-def _run_lite(strategy: Type[LiteStrategy], **params) -> tuple[float, int]:
+def _run_lite(strategy: type[LiteStrategy], **params) -> tuple[float, int]:
     stats = LiteBacktest(
         _sample_data(),
         strategy,
@@ -95,12 +94,19 @@ def _run_engine(strategy: type[bt.Strategy], **params) -> tuple[float, int]:
 def test_tradelearn_1x_sma_example_runs_on_lite_and_engine_runtime() -> None:
     lite_strategy = _load_strategy("03_1x_sma_cross", "OneXSmaCross")
 
+    class SMA(bt.Indicator):
+        lines = ("sma",)
+        params = (("period", 30),)
+
+        def __init__(self) -> None:
+            self.lines.sma = bt.talib.SMA(self.data, timeperiod=self.p.period)
+
     class EngineSmaCross(bt.Strategy):
         params = (("fast", 10), ("slow", 20))
 
         def __init__(self) -> None:
-            self.ma1 = bt.indicators.SMA(self.data.close, period=self.p.fast)
-            self.ma2 = bt.indicators.SMA(self.data.close, period=self.p.slow)
+            self.ma1 = SMA(self.data.close, period=self.p.fast)
+            self.ma2 = SMA(self.data.close, period=self.p.slow)
 
         def next(self) -> None:
             if len(self.data.close) < 2:
@@ -126,16 +132,25 @@ def test_tradelearn_1x_sma_example_runs_on_lite_and_engine_runtime() -> None:
 def test_tradelearn_1x_macd_example_runs_on_lite_and_engine_runtime() -> None:
     lite_strategy = _load_strategy("05_1x_macd", "OneXMACDCross")
 
+    class MACD(bt.Indicator):
+        lines = ("macd", "signal")
+        params = (("s", 12), ("l", 26), ("m", 9))
+
+        def __init__(self) -> None:
+            values = bt.talib.MACD(
+                self.data.close,
+                fastperiod=self.p.s,
+                slowperiod=self.p.l,
+                signalperiod=self.p.m,
+            )
+            self.lines.macd = values.macd
+            self.lines.signal = values.signal
+
     class EngineMACDCross(bt.Strategy):
         params = (("s", 12), ("l", 26), ("m", 9), ("title", "Long"))
 
         def __init__(self) -> None:
-            self.macd = bt.indicators.MACD(
-                self.data,
-                period_me1=self.p.s,
-                period_me2=self.p.l,
-                period_signal=self.p.m,
-            )
+            self.macd = MACD(self.data, s=self.p.s, l=self.p.l, m=self.p.m)
 
         def next(self) -> None:
             if len(self.data.close) < 2:

@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import tradelearn as tl
 from tradelearn import _rust
 from tradelearn.backtest import broker as broker_module
 from tradelearn.backtest.broker import RustBroker
@@ -12,14 +13,13 @@ from tradelearn.backtest.engine import _build_bar_advancers, _build_data_advance
 from tradelearn.backtest.lines import LineSeries
 from tradelearn.backtest.models import Order, Stats
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
+from tradelearn.core import Fill, OrderRequest
+from tradelearn.engine import Cerebro, DataFeed, Strategy
 from tradelearn.lite.backtest import Backtest
 from tradelearn.lite.data import LiteDataProxy
 from tradelearn.lite.indicator import IndicatorProxy
 from tradelearn.lite.position import PositionProxy
 from tradelearn.lite.strategy import Strategy as LiteStrategy
-from tradelearn.engine import Cerebro, DataFeed, Strategy
-from tradelearn.engine import indicators as btind
-from tradelearn.core import Fill, OrderRequest
 
 
 def _match(
@@ -1423,7 +1423,7 @@ def test_lite_strategy_I_caches_batch_indicator_results() -> None:
     assert CachedIndicatorStrategy.cache_seen is True
 
 
-def test_backtrader_indicators_use_strategy_batch_cache_without_strategy_i_api() -> None:
+def test_engine_vendor_indicators_run_without_strategy_i_api() -> None:
     data = pd.DataFrame(
         {
             "open": [10.0, 11.0, 12.0, 13.0],
@@ -1436,24 +1436,24 @@ def test_backtrader_indicators_use_strategy_batch_cache_without_strategy_i_api()
     )
 
     class CachedBtIndicatorStrategy(Strategy):
-        cache_seen = False
+        values: list[float] = []
 
         def __init__(self) -> None:
             assert not hasattr(type(self), "I")
-            self.first = btind.SMA(self.data.close, period=2)
-            self.second = btind.SMA(self.data.close, period=2)
+            self.first = tl.talib.SMA(self.data.close, timeperiod=2)
+            self.second = tl.talib.SMA(self.data.close, timeperiod=2)
 
         def next(self) -> None:
-            type(self).cache_seen = hasattr(self, "_bt_indicator_batch_cache")
+            type(self).values.append(self.first[0] + self.second[0])
 
-    CachedBtIndicatorStrategy.cache_seen = False
+    CachedBtIndicatorStrategy.values = []
     cerebro = Cerebro()
     cerebro.adddata(DataFeed(data))
     cerebro.addstrategy(CachedBtIndicatorStrategy)
 
     cerebro.run()
 
-    assert CachedBtIndicatorStrategy.cache_seen is True
+    assert CachedBtIndicatorStrategy.values[-1] == 25.0
 
 
 def test_lite_strategy_I_does_not_merge_distinct_lambda_indicators() -> None:

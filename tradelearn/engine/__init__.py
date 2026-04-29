@@ -4,7 +4,7 @@ import importlib
 
 import pandas as pd
 
-from tradelearn.engine import analyzers, feeds, indicators, observers, sizers
+from tradelearn.engine import analyzers, feeds, observers, sizers
 from tradelearn.engine.analyzer import Analyzer
 from tradelearn.engine.base import TimeFrame
 from tradelearn.engine.cerebro import Cerebro
@@ -58,7 +58,6 @@ def date2num(dt):
     return pd.to_datetime(dt).timestamp()
 
 # Aliases for Backtrader compatibility
-ind = indicators
 az = analyzers
 obs = observers
 CommissionInfo = CommInfoBase
@@ -85,8 +84,6 @@ __all__ = [
     "AllInSizer",
     "Analyzer",
     "feeds",
-    "indicators",
-    "ind",
     "analyzers",
     "az",
     "observers",

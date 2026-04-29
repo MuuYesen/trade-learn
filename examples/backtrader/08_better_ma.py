@@ -4,6 +4,51 @@
 
 import tradelearn.engine as bt
 
+
+class SMA(bt.Indicator):
+    lines = ("sma",)
+    params = (("period", 30),)
+
+    def __init__(self):
+        line = self.data.close if hasattr(self.data, "close") else self.data
+        if hasattr(line, "to_series"):
+            values = line.to_series().rolling(self.p.period).mean()
+            self.lines.sma = line.wrap_indicator(values, name="sma")
+        else:
+            self.addminperiod(self.p.period)
+
+    def next(self):
+        line = self.data.close if hasattr(self.data, "close") else self.data
+        if not hasattr(line, "to_series"):
+            self.lines.sma[0] = sum(line.get(size=self.p.period)) / self.p.period
+
+
+class CrossOver(bt.Indicator):
+    lines = ("crossover",)
+
+    def __init__(self, *args):
+        d0, d1 = args if args else (self.data0, self.data1)
+        if hasattr(d0, "to_series"):
+            s0 = d0.to_series()
+            s1 = d1.to_series()
+            diff = s0 - s1
+            prev = diff.shift(1)
+            values = ((diff > 0) & (prev <= 0)).astype(float) - (
+                (diff < 0) & (prev >= 0)
+            ).astype(float)
+            self.lines.crossover = d0.wrap_indicator(values, name="crossover")
+        else:
+            self.data0 = d0
+            self.data1 = d1
+            self.addminperiod(2)
+
+    def next(self):
+        if not hasattr(self.data0, "to_series"):
+            up = self.data0[0] > self.data1[0] and self.data0[-1] <= self.data1[-1]
+            down = self.data0[0] < self.data1[0] and self.data0[-1] >= self.data1[-1]
+            self.lines.crossover[0] = 1.0 if up else -1.0 if down else 0.0
+
+
 class BetterMA(bt.Strategy):
     params = (
         ('fast_sma', 60),
@@ -18,9 +63,9 @@ class BetterMA(bt.Strategy):
         self.datadatetime = self.datas[0].datetime
 
         # 计算指标 - 使用原版语法
-        fast_sma = bt.ind.MovingAverageSimple(period=self.p.fast_sma)
-        slow_sma = bt.ind.MovingAverageSimple(period=self.p.slow_sma)
-        self.crossover = bt.ind.CrossOver(fast_sma, slow_sma)
+        fast_sma = SMA(self.data.close, period=self.p.fast_sma)
+        slow_sma = SMA(self.data.close, period=self.p.slow_sma)
+        self.crossover = CrossOver(fast_sma, slow_sma)
 
         self.buy_price = None
         self.sell_price = None

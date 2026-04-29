@@ -75,3 +75,22 @@ def test_lite_uses_vendor_indicator_namespaces_directly() -> None:
     assert seen["tdx_ma"] == 11.5
     assert math.isfinite(seen["tv_rsi"])
     assert "macd" in seen
+
+
+def test_engine_no_longer_exports_short_ind_alias() -> None:
+    assert not hasattr(bt, "ind")
+    assert "indicators" not in bt.__all__
+
+
+def test_lite_no_longer_exports_chain_ta_accessors() -> None:
+    seen: dict[str, bool] = {}
+
+    class VendorStrategy(LiteStrategy):
+        def init(self) -> None:
+            seen["data_has_ta"] = hasattr(self.data, "ta")
+            seen["close_has_ta"] = hasattr(self.data.close, "ta")
+            self.start_on_bar(2)
+
+    Backtest(_bars(), VendorStrategy, cash=1000.0).run()
+
+    assert seen == {"data_has_ta": False, "close_has_ta": False}

@@ -63,7 +63,7 @@ class SignalStrategy(Strategy):
 
         class MySigStrategy(SignalStrategy):
             def __init__(self):
-                sma = self.data.close.ta.sma(20)
+                sma = bt.talib.SMA(self.data.close, period=20)
                 sig = Signal(sma - self.data.close)
                 self.signal_add(SIGNAL_LONGSHORT, sig)
     """

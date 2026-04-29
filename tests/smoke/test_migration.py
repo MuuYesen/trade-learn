@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 import tradelearn.engine as bt
+from examples.backtrader import MigratedSmaCross
 from tradelearn.backtest import LineSeries
 from tradelearn.factor import FactorAnalyzer
 from tradelearn.ml import CausalSelector, MLStrategy
@@ -29,15 +30,11 @@ MIGRATION_CHECKPOINTS: tuple[MigrationCheckpoint, ...] = (
     MigrationCheckpoint("strategy_init", "Strategy.init", "Strategy.__init__"),
     MigrationCheckpoint("line_current", "self.data.close[-1]", "self.data.close[0]"),
     MigrationCheckpoint("params", "class attributes", "params + self.p"),
-    MigrationCheckpoint("indicator_registration", "self.I(func, ...)", "bt.indicators"),
+    MigrationCheckpoint("indicator_registration", "self.I(func, ...)", "bt.talib / bt.tdx / bt.tv"),
     MigrationCheckpoint("factor_analyzer", "strategy.examine", "tradelearn.factor.FactorAnalyzer"),
     MigrationCheckpoint("reporter", "Evaluate.analysis_report", "tradelearn.report.Reporter"),
     MigrationCheckpoint("ml", "AutoML / CausalGraph", "tradelearn.ml.MLStrategy"),
 )
-
-
-from examples.strategies.migration_sma import MigratedSmaCross
-
 
 def run_migration_smoke() -> dict[str, Any]:
     """Run compact checks that back the migration guide examples.runners."""

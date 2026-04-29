@@ -6,11 +6,20 @@ import pandas as pd
 import tradelearn.engine as bt
 
 
+class SMA(bt.Indicator):
+    lines = ("sma",)
+    params = (("period", 30),)
+
+    def __init__(self):
+        line = self.data.close if hasattr(self.data, "close") else self.data
+        self.lines.sma = bt.talib.SMA(line, timeperiod=self.p.period)
+
+
 class SimpleStrategy(bt.Strategy):
     params = (("period", 20),)
 
     def __init__(self):
-        self.sma = bt.indicators.SimpleMovingAverage(self.data.close, period=self.p.period)
+        self.sma = SMA(self.data.close, period=self.p.period)
 
     def next(self):
         if not self.position:

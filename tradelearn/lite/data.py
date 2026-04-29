@@ -5,8 +5,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from tradelearn.lite.indicator import IndicatorProxy, _wrap_indicator_result
-from tradelearn.lite.util import _TA
+from tradelearn.lite.indicator import IndicatorProxy
 
 
 class LiteDataProxy:
@@ -29,7 +28,6 @@ class LiteDataProxy:
         "low",
         "close",
         "volume",
-        "ta",
         "_extra_line_cache",
     )
 
@@ -59,15 +57,6 @@ class LiteDataProxy:
         self.low = self._low_proxy
         self.close = self._close_proxy
         self.volume = self._volume_proxy
-        self.ta = _TA(
-            frame,
-            wrapper=lambda result, name: _wrap_indicator_result(
-                result,
-                data_feed,
-                frame.index,
-                name,
-            ),
-        )
         self._extra_line_cache: dict[str, tuple[Any, IndicatorProxy]] = {}
 
     def __getattr__(self, name: str) -> Any:
