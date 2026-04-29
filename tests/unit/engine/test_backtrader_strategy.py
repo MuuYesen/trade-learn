@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-import tradelearn.compat.backtrader as bt
-from tradelearn.compat.backtrader import Cerebro
+import tradelearn.engine as bt
+from tradelearn.engine import Cerebro
 
 
 def bars() -> pd.DataFrame:

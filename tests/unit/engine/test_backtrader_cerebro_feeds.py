@@ -3,9 +3,9 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-import tradelearn.compat.backtrader as bt
+import tradelearn.engine as bt
 from tradelearn.backtest import engine
-from tradelearn.compat.backtrader import Analyzer
+from tradelearn.engine import Analyzer
 
 
 def bars() -> pd.DataFrame:

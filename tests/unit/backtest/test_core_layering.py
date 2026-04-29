@@ -31,15 +31,15 @@ def _find_import_offenders(root: Path, forbidden_prefixes: tuple[str, ...]) -> l
 def test_import_boundary_scanner_ignores_comments(tmp_path: Path) -> None:
     module = tmp_path / "module.py"
     module.write_text(
-        "# NOTE: do not import tradelearn.compat here\n"
+        "# NOTE: do not import tradelearn.engine here\n"
         "value = 'tradelearn.backtest appears in plain text'\n"
         "from tradelearn.core import StreamBar\n"
     )
 
-    assert _find_import_offenders(tmp_path, ("tradelearn.compat", "tradelearn.backtest")) == []
+    assert _find_import_offenders(tmp_path, ("tradelearn.engine", "tradelearn.backtest")) == []
 
 
-def test_core_layer_does_not_import_compat() -> None:
+def test_core_layer_does_not_import_facades() -> None:
     root = Path(__file__).parents[3]
     core_roots = [root / "tradelearn" / "backtest", root / "tradelearn" / "core"]
     offenders: list[str] = []
@@ -49,7 +49,7 @@ def test_core_layer_does_not_import_compat() -> None:
             str(core_root / offender)
             for offender in _find_import_offenders(
                 core_root,
-                ("tradelearn.compat", "compat.backtrader"),
+                ("tradelearn.engine", "tradelearn.lite"),
             )
         )
 
@@ -59,7 +59,7 @@ def test_core_layer_does_not_import_compat() -> None:
 def test_platform_core_does_not_import_backtest_or_facades() -> None:
     root = Path(__file__).parents[3]
     platform_core = root / "tradelearn" / "core"
-    offenders = _find_import_offenders(platform_core, ("tradelearn.backtest", "tradelearn.compat"))
+    offenders = _find_import_offenders(platform_core, ("tradelearn.backtest", "tradelearn.engine", "tradelearn.lite"))
 
     assert offenders == []
 

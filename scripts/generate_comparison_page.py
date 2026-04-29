@@ -30,7 +30,7 @@ COMPARISON_PROJECTS: tuple[ComparisonProject, ...] = (
     ComparisonProject(
         "backtrader",
         "成熟的事件驱动回测 API",
-        "trade-learn 提供 compat.backtrader 迁移层,同时接入 MLStrategy 与现代报告体系",
+        "trade-learn 提供 tradelearn.engine 高级事件驱动 API,同时接入 MLStrategy 与现代报告体系",
     ),
     ComparisonProject(
         "nautilus",
@@ -61,7 +61,7 @@ def render_comparison_page(projects: tuple[ComparisonProject, ...] = COMPARISON_
             "",
             "## 1.0 定位",
             "",
-            "- compat.backtrader 承接存量策略",
+            "- tradelearn.engine 承接 Backtrader 风格高级策略",
             "- Rust 事件型撮合核负责回测一致性与性能",
             "- QMT 实盘对接进入 1.1,不拖慢 1.0 发版",
             "",

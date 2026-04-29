@@ -1,7 +1,7 @@
 """Quickstart Example: Minimal SMA strategy."""
 
 from __future__ import annotations
-import tradelearn.compat.backtrader as bt
+import tradelearn.engine as bt
 
 class QuickstartSmaCross(bt.Strategy):
     """Minimal moving-average crossover strategy."""

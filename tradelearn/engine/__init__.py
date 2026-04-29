@@ -2,14 +2,14 @@
 
 import pandas as pd
 
-from tradelearn.compat.backtrader import analyzers, feeds, indicators, observers, sizers
-from tradelearn.compat.backtrader.analyzer import Analyzer
-from tradelearn.compat.backtrader.base import TimeFrame
-from tradelearn.compat.backtrader.cerebro import Cerebro
-from tradelearn.compat.backtrader.grid import GridSearchResult, grid_search
-from tradelearn.compat.backtrader.indicators import Indicator
-from tradelearn.compat.backtrader.sizers import AllInSizer, FixedSize, PercentSizer, Sizer
-from tradelearn.compat.backtrader.strategy import (
+from tradelearn.engine import analyzers, feeds, indicators, observers, sizers
+from tradelearn.engine.analyzer import Analyzer
+from tradelearn.engine.base import TimeFrame
+from tradelearn.engine.cerebro import Cerebro
+from tradelearn.engine.grid import GridSearchResult, grid_search
+from tradelearn.engine.indicators import Indicator
+from tradelearn.engine.sizers import AllInSizer, FixedSize, PercentSizer, Sizer
+from tradelearn.engine.strategy import (
     CommInfoBase,
     DataFeed,
     ExecutedInfo,

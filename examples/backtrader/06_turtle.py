@@ -2,7 +2,7 @@
 # Adapted from reference/backtesting-main/turtle_trading/main.py
 # Only imports are changed to prove compatibility.
 
-import tradelearn.compat.backtrader as bt
+import tradelearn.engine as bt
 import numpy as np
 
 class DonchianChannels(bt.Indicator):

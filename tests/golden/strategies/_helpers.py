@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from statistics import fmean
 
-from tradelearn.compat.backtrader import Strategy
+from tradelearn.engine import Strategy
 
 
 class GoldenAdapterBase(Strategy):

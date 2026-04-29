@@ -21,51 +21,51 @@ def __getattr__(name: str) -> Any:
         from tradelearn import cli
         return cli
     if name in ["ind", "indicators"]:
-        return importlib.import_module("tradelearn.compat.backtrader.indicators")
+        return importlib.import_module("tradelearn.engine.indicators")
     if name == "feeds":
-        return importlib.import_module("tradelearn.compat.backtrader.feeds")
+        return importlib.import_module("tradelearn.engine.feeds")
     if name == "analyzers":
-        from tradelearn.compat.backtrader import analyzers
+        from tradelearn.engine import analyzers
         return analyzers
     if name == "observers":
-        from tradelearn.compat.backtrader import observers
+        from tradelearn.engine import observers
         return observers
     if name == "sizers":
-        from tradelearn.compat.backtrader import sizers
+        from tradelearn.engine import sizers
         return sizers
     if name == "Cerebro":
-        from tradelearn.compat.backtrader import Cerebro
+        from tradelearn.engine import Cerebro
         return Cerebro
     if name == "Strategy":
-        from tradelearn.compat.backtrader import Strategy
+        from tradelearn.engine import Strategy
         return Strategy
     if name == "DataFeed":
-        from tradelearn.compat.backtrader import DataFeed
+        from tradelearn.engine import DataFeed
         return DataFeed
     if name == "Sizer":
-        from tradelearn.compat.backtrader import Sizer
+        from tradelearn.engine import Sizer
         return Sizer
     if name == "FixedSize":
-        from tradelearn.compat.backtrader import FixedSize
+        from tradelearn.engine import FixedSize
         return FixedSize
     if name == "PercentSizer":
-        from tradelearn.compat.backtrader import PercentSizer
+        from tradelearn.engine import PercentSizer
         return PercentSizer
     if name == "AllInSizer":
-        from tradelearn.compat.backtrader import AllInSizer
+        from tradelearn.engine import AllInSizer
         return AllInSizer
     if name == "TimeFrame":
-        from tradelearn.compat.backtrader import TimeFrame
+        from tradelearn.engine import TimeFrame
         return TimeFrame
     if name == "Order":
-        from tradelearn.compat.backtrader import Order
+        from tradelearn.engine import Order
         return Order
     if name == "CommInfoBase":
-        from tradelearn.compat.backtrader import CommInfoBase
+        from tradelearn.engine import CommInfoBase
         return CommInfoBase
     if name == "Analyzer":
-        from tradelearn.compat.backtrader import Analyzer
+        from tradelearn.engine import Analyzer
         return Analyzer
     if name in {"num2date", "date2num"}:
-        return getattr(importlib.import_module("tradelearn.compat.backtrader"), name)
+        return getattr(importlib.import_module("tradelearn.engine"), name)
     raise AttributeError(f"module 'tradelearn' has no attribute {name!r}")

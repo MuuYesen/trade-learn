@@ -2,14 +2,14 @@
 
 The core backtest API already follows backtrader's line convention:
 ``line[0]`` is the current bar and ``line[-1]`` is the previous bar. This
-module exposes that implementation under ``tradelearn.compat.backtrader``.
+module exposes that implementation under ``tradelearn.engine``.
 """
 
 from tradelearn.backtest.models import ExecutedInfo, Order, Position, Trade
 from tradelearn.backtest.strategy import Strategy as _BaseStrategy
-from tradelearn.compat.backtrader.base import _G, LineRoot, LineSeries, Params, set_current_data
-from tradelearn.compat.backtrader.datafeed import DataFeed
-from tradelearn.compat.backtrader.sizers import Sizer
+from tradelearn.engine.base import _G, LineRoot, LineSeries, Params, set_current_data
+from tradelearn.engine.datafeed import DataFeed
+from tradelearn.engine.sizers import Sizer
 
 
 class Strategy(_BaseStrategy, LineRoot):

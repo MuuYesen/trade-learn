@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tradelearn.compat.backtrader.base import Params
+from tradelearn.engine.base import Params
 
 
 class ObserverCollection(dict):

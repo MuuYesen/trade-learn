@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from tradelearn.backtest.data import DataContainer
-from tradelearn.compat.backtrader.base import LineRoot, LineSeries
+from tradelearn.engine.base import LineRoot, LineSeries
 
 
 class DataFeed(DataContainer, LineRoot):

@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from tradelearn.backtest.models import FixedCommission, FixedSlippage
-from tradelearn.compat.backtrader.base import TimeFrame
-from tradelearn.compat.backtrader.datafeed import DataFeed
-from tradelearn.compat.backtrader.observers import ObserverCollection, Value
-from tradelearn.compat.backtrader.sizers import FixedSize
-from tradelearn.compat.backtrader.strategy import Strategy
+from tradelearn.engine.base import TimeFrame
+from tradelearn.engine.datafeed import DataFeed
+from tradelearn.engine.observers import ObserverCollection, Value
+from tradelearn.engine.sizers import FixedSize
+from tradelearn.engine.strategy import Strategy
 
 from .analyzer import Analyzer
 
@@ -171,7 +171,7 @@ class Cerebro:
             strategy.observers[name] = observer
 
     def _prepare_strategy_context(self) -> None:
-        from tradelearn.compat.backtrader.base import (
+        from tradelearn.engine.base import (
             set_current_data,
             set_current_datas,
             set_current_strategy,
@@ -186,12 +186,12 @@ class Cerebro:
         set_current_strategy(None)
 
     def _bind_strategy_context(self, strategy: Any) -> None:
-        from tradelearn.compat.backtrader.base import set_current_strategy
+        from tradelearn.engine.base import set_current_strategy
 
         set_current_strategy(strategy)
 
     def _reset_strategy_context(self) -> None:
-        from tradelearn.compat.backtrader.base import (
+        from tradelearn.engine.base import (
             set_current_data,
             set_current_datas,
             set_current_strategy,

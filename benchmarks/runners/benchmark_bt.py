@@ -63,13 +63,12 @@ def run_strategy_in_process(
         import types
 
         if engine_type == "Tradelearn":
-            import tradelearn.compat.backtrader as bt
+            import tradelearn.engine as bt
         else:
             import backtrader as bt
 
             sys.modules["tradelearn"] = types.ModuleType("tradelearn")
-            sys.modules["tradelearn.compat"] = types.ModuleType("tradelearn.compat")
-            sys.modules["tradelearn.compat.backtrader"] = bt
+            sys.modules["tradelearn.engine"] = bt
 
         module = importlib.import_module(f"examples.backtrader.{mod_name}")
         importlib.reload(module)
@@ -93,7 +92,7 @@ def run_strategy_in_process(
 
         dataframe = pd.read_parquet(DATA_PATH)
         if engine_type == "Tradelearn":
-            from tradelearn.compat.backtrader import DataFeed
+            from tradelearn.engine import DataFeed
         else:
 
             class PandasData(bt.feeds.PandasData):

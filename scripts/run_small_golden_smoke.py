@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.build_golden import dataset_path, load_manifest  # noqa: E402
-from tradelearn.compat.backtrader import Analyzer, Cerebro, Strategy  # noqa: E402
+from tradelearn.engine import Analyzer, Cerebro, Strategy  # noqa: E402
 
 DATASETS_DIR = ROOT / "tests" / "golden" / "datasets"
 

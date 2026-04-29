@@ -14,7 +14,7 @@ from tradelearn.backtest.strategy import Strategy as CoreStrategy
 from tradelearn.lite.util import _TA
 
 
-class BacktestingDataProxy:
+class LiteDataProxy:
     """Tradelearn Lite data view with lower-case OHLCV lines."""
 
     __slots__ = (
@@ -64,13 +64,21 @@ class BacktestingDataProxy:
         self.low = self._low_proxy
         self.close = self._close_proxy
         self.volume = self._volume_proxy
-        self.ta = _TA(_ta_frame(data_feed))
+        self.ta = _TA(
+            _ta_frame(data_feed),
+            wrapper=lambda result, name: _wrap_indicator_result(
+                result,
+                data_feed,
+                frame.index,
+                name,
+            ),
+        )
         self._extra_line_cache: dict[str, tuple[Any, IndicatorProxy]] = {}
 
     def __getattr__(self, name: str) -> Any:
         if name[:1].isupper():
             raise AttributeError(
-                f"Column '{name}' is not available in the Tradelearn 1.x facade; "
+                f"Column '{name}' is not available in the Tradelearn Lite facade; "
                 f"use '{name.lower()}' instead."
             )
         line = self._line_or_array(name)
@@ -117,7 +125,7 @@ class BacktestingDataProxy:
     def the_ticker(self) -> str:
         tickers = self.tickers
         if len(tickers) != 1:
-            raise ValueError("Ticker must explicitly specified for multi-asset backtesting")
+            raise ValueError("Ticker must explicitly specified for multi-asset Lite backtests")
         return tickers[0]
 
     @property
@@ -148,6 +156,10 @@ def _ta_frame(data_feed: Any) -> pd.DataFrame:
             "volume": data_feed.get_array("volume"),
         }
     )
+
+
+BacktestingDataProxy = LiteDataProxy
+
 
 class PositionProxy:
     """Tradelearn Lite position view returned by ``strategy.position()``."""
@@ -280,7 +292,7 @@ class Strategy(CoreStrategy):
         if self._bt_data is None:
             data = self.datas[0]
             self._bt_primary_data = data
-            self._bt_data = BacktestingDataProxy(data)
+            self._bt_data = LiteDataProxy(data)
             self.data = self._bt_data
             self._bt_close_array = data.get_array("close")
         self._storage = getattr(self.broker, "_storage", None)
@@ -411,6 +423,7 @@ class Strategy(CoreStrategy):
         tp: float = None,
         tag: object = None,
     ):
+        _reject_bracket_args(sl, tp)
         assert 0 < size < 1 or round(size) == size, (
             "size must be a positive fraction of equity, or a positive whole number of units"
         )
@@ -461,6 +474,7 @@ class Strategy(CoreStrategy):
         tp: float = None,
         tag: object = None,
     ):
+        _reject_bracket_args(sl, tp)
         assert 0 < size < 1 or round(size) == size, (
             "size must be a positive fraction of equity, or a positive whole number of units"
         )
@@ -650,6 +664,101 @@ class IndicatorProxy:
         series = pd.Series(self._data[:stop], index=index, name=self._name)
         series.attrs.update(self.attrs)
         return series
+
+
+class IndicatorBundle:
+    """Gradually revealed multi-column indicator bundle used by ``data.ta``."""
+
+    __slots__ = ("_lines", "_frame", "attrs")
+
+    def __init__(self, frame: pd.DataFrame, feed: Any, name: str):
+        self._frame = frame
+        self.attrs = {"name": name}
+        self._lines: dict[str, IndicatorProxy] = {}
+        for column in frame.columns:
+            proxy = IndicatorProxy(
+                frame[column].to_numpy(),
+                feed,
+                index=frame.index,
+                name=str(column),
+            )
+            for alias in _indicator_column_aliases(column):
+                self._lines.setdefault(alias, proxy)
+
+    def __getattr__(self, name: str) -> IndicatorProxy:
+        try:
+            return self._lines[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+    def __getitem__(self, key: str) -> IndicatorProxy:
+        return self._lines[key]
+
+    @property
+    def df(self) -> pd.DataFrame:
+        first = next(iter(self._lines.values()))
+        stop = len(first)
+        return self._frame.iloc[:stop]
+
+
+def _wrap_indicator_result(result: Any, feed: Any, index: pd.Index, name: str) -> Any:
+    if isinstance(result, pd.Series):
+        return _series_to_proxy(result, feed, index, name)
+    if isinstance(result, pd.DataFrame):
+        if result.shape[1] == 1:
+            return _series_to_proxy(result.iloc[:, 0], feed, index, name)
+        _validate_indicator_frame(result, index, name)
+        return IndicatorBundle(result, feed, name)
+    return _series_to_proxy(pd.Series(result, index=index, name=name), feed, index, name)
+
+
+def _series_to_proxy(series: pd.Series, feed: Any, index: pd.Index, name: str) -> IndicatorProxy:
+    if not series.index.equals(index):
+        if len(series) != len(index):
+            raise ValueError(
+                "Indicators must have the same length as data "
+                f'(indicator "{name}" shape: {getattr(series, "shape", "")})'
+            )
+        series = pd.Series(series.to_numpy(), index=index, name=series.name)
+    proxy = IndicatorProxy(
+        series.to_numpy(),
+        feed,
+        index=index,
+        name=getattr(series, "name", None) or name,
+    )
+    proxy.attrs.update({"name": name})
+    return proxy
+
+
+def _validate_indicator_frame(frame: pd.DataFrame, index: pd.Index, name: str) -> None:
+    if not frame.index.equals(index):
+        if len(frame) != len(index):
+            raise ValueError(
+                "Indicators must have the same length as data "
+                f'(indicator "{name}" shape: {getattr(frame, "shape", "")})'
+            )
+
+
+def _indicator_column_aliases(column: object) -> tuple[str, ...]:
+    text = str(column)
+    lowered = text.lower()
+    base = lowered.split("_", 1)[0]
+    aliases = {lowered, base}
+    if base == "macds":
+        aliases.add("signal")
+    elif base == "macdh":
+        aliases.update({"hist", "histogram"})
+    elif base == "macd":
+        aliases.add("macd")
+    return tuple(aliases)
+
+
+def _reject_bracket_args(sl: float | None, tp: float | None) -> None:
+    if sl is not None or tp is not None:
+        raise NotImplementedError(
+            "Lite sl/tp bracket orders are not implemented yet; "
+            "manage exits explicitly or use the engine facade."
+        )
 
 
 class Allocation:

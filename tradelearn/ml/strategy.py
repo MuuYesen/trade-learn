@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from tradelearn.compat.backtrader import Strategy
+from tradelearn.engine import Strategy
 from tradelearn.ml.registry import ModelRegistry
 
 FeatureSpec = str | Callable[[Any], float]

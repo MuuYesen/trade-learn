@@ -13,7 +13,7 @@ from tradelearn.backtest.event_runner import (
     PaperDriver,
 )
 from tradelearn.backtest.strategy import Strategy
-from tradelearn.compat.backtrader import Cerebro
+from tradelearn.engine import Cerebro
 from tradelearn.core import BrokerEvent, BrokerEventPump, StreamBar
 
 

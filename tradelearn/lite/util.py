@@ -16,27 +16,31 @@ class _TA:
     _OHLC = {"adx", "atr", "ichimoku", "supertrend"}
     _OHLCV = {"vwap"}
 
-    def __init__(self, data: pd.DataFrame) -> None:
+    def __init__(self, data: pd.DataFrame, wrapper: Callable[[Any, str], Any] | None = None) -> None:
         self._data = data
+        self._wrapper = wrapper
 
     def __getattr__(self, name: str) -> Callable[..., Any]:
         indicator = getattr(pta, name)
 
         def call(*args: Any, **kwargs: Any) -> Any:
             if args and _looks_like_series(args[0]):
-                return indicator(*args, **kwargs)
+                result = indicator(*args, **kwargs)
+                return self._wrap(result, name)
             if name in self._CLOSE_ONLY:
-                return indicator(self._data["close"], *args, **kwargs)
+                result = indicator(self._data["close"], *args, **kwargs)
+                return self._wrap(result, name)
             if name in self._OHLC:
-                return indicator(
+                result = indicator(
                     self._data["high"],
                     self._data["low"],
                     self._data["close"],
                     *args,
                     **kwargs,
                 )
+                return self._wrap(result, name)
             if name in self._OHLCV:
-                return indicator(
+                result = indicator(
                     self._data["high"],
                     self._data["low"],
                     self._data["close"],
@@ -44,9 +48,16 @@ class _TA:
                     *args,
                     **kwargs,
                 )
-            return indicator(*args, **kwargs)
+                return self._wrap(result, name)
+            result = indicator(*args, **kwargs)
+            return self._wrap(result, name)
 
         return call
+
+    def _wrap(self, result: Any, name: str) -> Any:
+        if self._wrapper is None:
+            return result
+        return self._wrapper(result, name)
 
 
 def _looks_like_series(value: Any) -> bool:

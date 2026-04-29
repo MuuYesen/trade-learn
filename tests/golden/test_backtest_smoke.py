@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from tradelearn.compat.backtrader import Analyzer, Cerebro, Strategy
+from tradelearn.engine import Analyzer, Cerebro, Strategy
 
 
 def synthetic_bars() -> pd.DataFrame:

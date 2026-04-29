@@ -4,13 +4,13 @@ import pandas as pd
 
 from tradelearn.backtest.broker import RustBroker
 from tradelearn.backtest.engine import run_backtest
-from tradelearn.compat.backtrader.datafeed import DataFeed
+from tradelearn.engine.datafeed import DataFeed
 
 from .strategy import Strategy
 
 
 class Backtest:
-    """Tradelearn 1.x-style quick backtest facade."""
+    """Tradelearn Lite quick backtest facade."""
 
     def __init__(
         self,
@@ -48,7 +48,7 @@ class Backtest:
         self.strats = [(strategy, (), {})]
         self.match_mode = match_mode
         self.stats_mode = "lazy"
-        from tradelearn.compat.backtrader.sizers import FixedSize
+        from tradelearn.engine.sizers import FixedSize
         self._sizer_spec = (FixedSize, {})
         self.broker = RustBroker(cash=cash, commission=commission, match_mode=match_mode)
         self.broker._storage = self._storage
@@ -107,11 +107,18 @@ class Backtest:
             wins = sum(1 for trade in trades if getattr(trade, "pnl", 0) > 0)
         win_rate = (wins / trade_count * 100) if trade_count else 0.0
 
+        records = {
+            key: value.copy()
+            for key, value in getattr(strategy_instance, "_records", {}).items()
+        }
+
         return pd.Series({
             "Equity Final [$]": final_value,
             "Return [%]": (final_value / self._cash - 1) * 100,
             "# Trades": trade_count,
-            "Win Rate [%]": win_rate
+            "Win Rate [%]": win_rate,
+            "_strategy": strategy_instance,
+            "_records": records,
         })
 
     def optimize(self, **kwargs) -> pd.Series:

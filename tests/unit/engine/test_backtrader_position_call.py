@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-import tradelearn.compat.backtrader as bt
+import tradelearn.engine as bt
 
 
 def test_backtrader_position_object_is_callable_extension() -> None:

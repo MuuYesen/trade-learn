@@ -2,7 +2,7 @@
 # Adapted from reference/backtesting-main/RSI_backtest/main.py
 # Only imports are changed to prove compatibility.
 
-import tradelearn.compat.backtrader as bt
+import tradelearn.engine as bt
 import datetime
 
 class FurCommInfo(bt.CommInfoBase):

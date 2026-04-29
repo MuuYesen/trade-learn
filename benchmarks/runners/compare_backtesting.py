@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
-import tradelearn.compat.backtesting as tl_bt
+import tradelearn.lite as tl_bt
 
 
 def load_original_backtesting():
@@ -33,8 +33,8 @@ DATA_DIR = ROOT / "benchmarks" / "data" / "backtesting"
 DEFAULT_SYMBOLS = ("BTCUSDT", "ETHUSDT")
 
 
-# 3. Define the Strategy (same code for both)
-def get_strategy_class(BaseClass):
+# 3. Define equivalent strategies for both APIs.
+def get_original_strategy_class(BaseClass):
     class EMA_Cross_Strategy(BaseClass):
         ema_fast = 9
         ema_slow = 21
@@ -67,6 +67,49 @@ def get_strategy_class(BaseClass):
 
                 if ema9_prev >= ema21_prev and ema9 < ema21:
                     self.position.close()
+                    self.highest_since_entry = 0
+                    return
+            else:
+                if ema9_prev <= ema21_prev and ema9 > ema21:
+                    self.buy(size=self.position_pct)
+                    self.highest_since_entry = price
+
+    return EMA_Cross_Strategy
+
+
+def get_lite_strategy_class(BaseClass):
+    class EMA_Cross_Strategy(BaseClass):
+        ema_fast = 9
+        ema_slow = 21
+        trailing_pct = 0.03
+        position_pct = 0.95
+
+        def init(self):
+            close = self.data.close.df
+            self.ema9_ind = self.I(lambda: close.ewm(span=self.ema_fast, adjust=False).mean())
+            self.ema21_ind = self.I(lambda: close.ewm(span=self.ema_slow, adjust=False).mean())
+            self.highest_since_entry = 0
+
+        def next(self):
+            price = self.data.close[0]
+            ema9 = self.ema9_ind[0]
+            ema21 = self.ema21_ind[0]
+            ema9_prev = self.ema9_ind[-1] if len(self.ema9_ind) > 1 else ema9
+            ema21_prev = self.ema21_ind[-1] if len(self.ema21_ind) > 1 else ema21
+
+            if self.position():
+                if price > self.highest_since_entry:
+                    self.highest_since_entry = price
+
+                trailing_stop = self.highest_since_entry * (1 - self.trailing_pct)
+
+                if price < trailing_stop:
+                    self.position().close()
+                    self.highest_since_entry = 0
+                    return
+
+                if ema9_prev >= ema21_prev and ema9 < ema21:
+                    self.position().close()
                     self.highest_since_entry = 0
                     return
             else:
@@ -129,7 +172,7 @@ def run_comparison(symbol, *, warmup: int = 0, repeat: int = 1):
 
     # Load Original backtesting.py
     bt_orig = load_original_backtesting()
-    orig_strat_cls = get_strategy_class(bt_orig.Strategy)
+    orig_strat_cls = get_original_strategy_class(bt_orig.Strategy)
 
     print("Running Original backtesting.py...")
 
@@ -146,7 +189,7 @@ def run_comparison(symbol, *, warmup: int = 0, repeat: int = 1):
     stats_orig, orig_duration = _timed_run(run_original, warmup=warmup, repeat=repeat)
 
     # Run Tradelearn
-    tl_strat_cls = get_strategy_class(tl_bt.Strategy)
+    tl_strat_cls = get_lite_strategy_class(tl_bt.Strategy)
 
     print("Running Tradelearn Facade...")
 

@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-import tradelearn.compat.backtrader as bt
+import tradelearn.engine as bt
 from tradelearn.backtest import LineSeries
 from tradelearn.factor import FactorAnalyzer
 from tradelearn.ml import CausalSelector, MLStrategy

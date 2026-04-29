@@ -45,7 +45,7 @@ def strategy_adapter_ready(
     if not path.exists():
         return False, "missing strategy script"
     namespace = runpy.run_path(str(path))
-    from tradelearn.compat.backtrader import Strategy
+    from tradelearn.engine import Strategy
 
     strategy_classes = [
         value

@@ -23,16 +23,16 @@ trade-learn 是一个基于 alphalens、backtesting.py、pyfolio 和 quantstats 
 
 trade-learn 提供两个用户面 API,两者底层共享同一套 Rust 回测引擎,回测结果在数值上一致,按使用者经验深度选择:
 
-- **入门 / 快速验证**:`tradelearn.compat.backtesting`
-  风格对齐 backtesting.py。API 极简:`Strategy.init/next` + `self.buy/sell` + `self.I(...)`。
+- **入门 / 快速验证**:`tradelearn.lite`
+  风格对齐 Tradelearn 1.x Lite 语义。API 极简:`Strategy.init/next` + `self.buy/sell` + `self.I(...)`。
   适合策略原型、教学、单 data 场景、`pd.Series` 风格的快速指标输出。
 
-- **资深 / 工程化**:`tradelearn.compat.backtrader`
+- **资深 / 工程化**:`tradelearn.engine`
   风格对齐 Backtrader。API 完整:Analyzer / Observer / Sizer / Indicator / CommInfo / bracket orders / 多 data / multi-strategy 优化 / event 驱动 paper/live。
   适合复杂策略、组合、生产化部署、未来接入实盘。
 
 > `tradelearn.backtest.*` 与 `tradelearn.core.*` 是上述两个 facade 的共享实现层与中性契约层,**不是**面向用户的公开 API,请勿直接 import。
-> 未来 paper/live adapter 接入点在 `compat.backtrader` 一侧,与现有 `Cerebro.run(mode="paper"|"live")` 路径一致。
+> 未来 paper/live adapter 接入点在 `tradelearn.engine` 一侧,与现有 `Cerebro.run(mode="paper"|"live")` 路径一致。
 
 ## 下载方法
 需科学上网：
@@ -47,7 +47,7 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 ## 使用模板
 ```python
 import pandas as pd
-from tradelearn.compat.backtrader import Cerebro, Strategy
+from tradelearn.engine import Cerebro, Strategy
 from tradelearn import ta
 
 if __name__ == '__main__':

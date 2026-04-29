@@ -5,8 +5,8 @@ import math
 import pandas as pd
 import pytest
 
-import tradelearn.compat.backtrader as bt
-from tests.unit.compat.backtrader.gold_strategies import STRATEGIES
+import tradelearn.engine as bt
+from .gold_strategies import STRATEGIES
 
 
 def bars() -> pd.DataFrame:

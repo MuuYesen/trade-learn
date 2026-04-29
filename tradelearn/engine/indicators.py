@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from tradelearn.backtest.indicator_cache import BatchIndicatorCache
-from tradelearn.compat.backtrader.base import (
+from tradelearn.engine.base import (
     Params,
     collect_param_defaults,
     split_param_kwargs,
@@ -216,7 +216,7 @@ def _cached_series(name, data, func, *args, **kwargs):
     return pd.Series(cache.precompute(name, func, *args, **kwargs)._values)
 
 def _wrap(data, values, min_period=0):
-    from tradelearn.compat.backtrader.strategy import LineSeries
+    from tradelearn.engine.strategy import LineSeries
     obj = LineSeries(values.to_numpy())
     source = data
     while hasattr(source, "_source"):

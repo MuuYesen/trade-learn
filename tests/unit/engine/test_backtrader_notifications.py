@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-import tradelearn.compat.backtrader as bt
+import tradelearn.engine as bt
 
 
 def bars() -> pd.DataFrame:

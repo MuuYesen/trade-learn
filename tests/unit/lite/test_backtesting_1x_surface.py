@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from tradelearn.compat.backtesting import Backtest, Strategy
+from tradelearn.lite import Backtest, Strategy
 
 
 def _data() -> pd.DataFrame:

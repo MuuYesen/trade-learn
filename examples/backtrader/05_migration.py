@@ -1,7 +1,7 @@
 """Migration Example: Legacy SMA strategy migrated to 2.0 API."""
 
 from __future__ import annotations
-import tradelearn.compat.backtrader as bt
+import tradelearn.engine as bt
 
 class MigratedSmaCross(bt.Strategy):
     """Backtrader-style replacement for a legacy moving-average strategy."""

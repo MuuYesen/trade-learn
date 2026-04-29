@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-import tradelearn.compat.backtrader as bt
+import tradelearn.engine as bt
 from examples.backtrader import RandomForestRotation
 
 

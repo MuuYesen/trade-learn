@@ -2,7 +2,7 @@
 # Adapted from reference/backtesting-main/better_ma/main.py
 # Only imports are changed to prove compatibility.
 
-import tradelearn.compat.backtrader as bt
+import tradelearn.engine as bt
 
 class BetterMA(bt.Strategy):
     params = (

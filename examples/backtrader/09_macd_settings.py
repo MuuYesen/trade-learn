@@ -2,7 +2,7 @@
 # Adapted from reference/backtrader-master/samples/macd-settings/macd-settings.py
 # Only imports and class name changed to prove compatibility.
 
-import tradelearn.compat.backtrader as bt
+import tradelearn.engine as bt
 
 class MacdTharp(bt.Strategy):
     '''

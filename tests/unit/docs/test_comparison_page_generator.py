@@ -24,7 +24,7 @@ def test_render_comparison_page_states_tradelearn_positioning() -> None:
 
     assert "Python 量化研究框架" in rendered
     assert "传统策略与 ML 策略共用 API" in rendered
-    assert "compat.backtrader" in rendered
+    assert "tradelearn.engine" in rendered
     assert "Rust 事件型撮合核" in rendered
     assert "QMT" in rendered
 
@@ -32,6 +32,6 @@ def test_render_comparison_page_states_tradelearn_positioning() -> None:
 def test_write_comparison_page_creates_expected_markdown(tmp_path) -> None:
     output = write_comparison_page(tmp_path)
 
-    assert output == tmp_path / "comparison.md"
+    assert output == tmp_path / "release" / "evaluation.md"
     assert output.exists()
     assert output.read_text(encoding="utf-8").startswith("# Comparison")

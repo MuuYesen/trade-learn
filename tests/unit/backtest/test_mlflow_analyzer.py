@@ -5,8 +5,8 @@ from contextlib import contextmanager
 
 import pandas as pd
 
-from tradelearn.compat.backtrader import Cerebro, Strategy, grid_search
-from tradelearn.compat.backtrader.analyzers import MLflowAnalyzer
+from tradelearn.engine import Cerebro, Strategy, grid_search
+from tradelearn.engine.analyzers import MLflowAnalyzer
 
 
 def bars() -> pd.DataFrame:

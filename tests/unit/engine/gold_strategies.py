@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import tradelearn.compat.backtrader as bt
+import tradelearn.engine as bt
 
 
 class SmaCross(bt.Strategy):

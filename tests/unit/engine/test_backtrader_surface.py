@@ -39,7 +39,7 @@ def test_backtrader_facade_exports_common_surface() -> None:
 
 
 def test_root_timeframe_alias_points_to_backtrader_facade() -> None:
-    from tradelearn.compat.backtrader import TimeFrame
+    from tradelearn.engine import TimeFrame
 
     assert bt.TimeFrame is TimeFrame
 

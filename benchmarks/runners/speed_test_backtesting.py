@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-import tradelearn.compat.backtesting as tl_bt
+import tradelearn.lite as tl_bt
 from tradelearn.backtest.broker import RustBroker
 from tradelearn.backtest.data import DataContainer
 from tradelearn.backtest.engine import run_backtest
@@ -25,8 +25,8 @@ def load_original_backtesting():
     return bt_orig
 
 
-# 2. Strategy Definition for backtesting.py / Facade
-def get_bt_strategy(BaseClass):
+# 2. Strategy Definitions for backtesting.py and Lite.
+def get_original_strategy(BaseClass):
     class EMA_Cross_Strategy(BaseClass):
         ema_fast = 9
         ema_slow = 21
@@ -51,6 +51,37 @@ def get_bt_strategy(BaseClass):
                 self.buy()
             elif crosses_down:
                 self.position.close()
+
+    return EMA_Cross_Strategy
+
+
+def get_lite_strategy(BaseClass):
+    class EMA_Cross_Strategy(BaseClass):
+        ema_fast = 9
+        ema_slow = 21
+
+        def init(self):
+            close = self.data.close.df
+            self.ema9 = self.I(lambda: close.ewm(span=self.ema_fast, adjust=False).mean())
+            self.ema21 = self.I(lambda: close.ewm(span=self.ema_slow, adjust=False).mean())
+
+        def next(self):
+            if len(self.ema9) < 2:
+                return
+            crosses_up = (
+                not self.position()
+                and self.ema9[-1] <= self.ema21[-1]
+                and self.ema9[0] > self.ema21[0]
+            )
+            crosses_down = (
+                self.position()
+                and self.ema9[-1] >= self.ema21[-1]
+                and self.ema9[0] < self.ema21[0]
+            )
+            if crosses_up:
+                self.buy()
+            elif crosses_down:
+                self.position().close()
 
     return EMA_Cross_Strategy
 
@@ -105,7 +136,7 @@ def run_test():
 
     # --- 1. Original backtesting.py ---
     bt_orig = load_original_backtesting()
-    strat_orig = get_bt_strategy(bt_orig.Strategy)
+    strat_orig = get_original_strategy(bt_orig.Strategy)
     print("\nRunning Original backtesting.py...")
     start = time.time()
     bt = bt_orig.Backtest(data, strat_orig, cash=100000)
@@ -113,9 +144,9 @@ def run_test():
     t_orig = time.time() - start
     print(f"Time: {t_orig:.4f}s")
 
-    # --- 2. Tradelearn Facade (Compatibility) ---
-    strat_facade = get_bt_strategy(tl_bt.Strategy)
-    print("\nRunning Tradelearn Facade (Compatibility)...")
+    # --- 2. Tradelearn Lite ---
+    strat_facade = get_lite_strategy(tl_bt.Strategy)
+    print("\nRunning Tradelearn Lite...")
     start = time.time()
     bt_tl = tl_bt.Backtest(data, strat_facade, cash=100000)
     bt_tl.run()
@@ -132,7 +163,7 @@ def run_test():
             self.strats = [(strategy_cls, (), {})]
             self.broker = RustBroker(cash=100000)
             self.match_mode = "smart"
-            from tradelearn.compat.backtrader.sizers import FixedSize
+            from tradelearn.engine.sizers import FixedSize
 
             self._sizer_spec = (FixedSize, {})
             self.analyzers = {}
@@ -152,8 +183,8 @@ def run_test():
     print(f"{'Engine':<25} | {'Time [s]':<10} | {'Relative'}")
     print("-" * 50)
     print(f"{'backtesting.py (Orig)':<25} | {t_orig:>10.4f} | 1.00x")
-    print(f"{'Tradelearn (Facade)':<25} | {t_facade:>10.4f} | {t_facade / t_orig:>9.2f}x (Slower)")
-    print(f"{'Tradelearn (Core)':<25} | {t_core:>10.4f} | {t_core / t_orig:>9.2f}x (FASTER!)")
+    print(f"{'Tradelearn Lite':<25} | {t_facade:>10.4f} | {t_orig / t_facade:>9.2f}x")
+    print(f"{'Tradelearn Core':<25} | {t_core:>10.4f} | {t_orig / t_core:>9.2f}x")
     print("=" * 40)
 
 

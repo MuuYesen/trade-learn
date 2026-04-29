@@ -5,7 +5,7 @@ import pstats
 import numpy as np
 import pandas as pd
 
-import tradelearn.compat.backtrader as bt
+import tradelearn.engine as bt
 
 
 class SimpleStrategy(bt.Strategy):

@@ -199,7 +199,7 @@ def _starter_config() -> str:
 
 def _starter_strategy() -> str:
     return (
-        "from tradelearn.compat.backtrader import Strategy\n\n\n"
+        "from tradelearn.engine import Strategy\n\n\n"
         "class DemoStrategy(Strategy):\n"
         "    params = ((\"size\", 1),)\n\n"
         "    def next(self) -> None:\n"

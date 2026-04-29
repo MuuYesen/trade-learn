@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 
 import pandas as pd
-from backtesting import Backtest, Strategy
+from tradelearn.lite import Backtest, Strategy
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "benchmarks" / "data" / "backtesting"
@@ -28,20 +28,20 @@ class EMA_Cross_Strategy(Strategy):
     position_pct = 0.95  # 95% del equity
     
     def init(self):
-        close = pd.Series(self.data.Close)
+        close = self.data.close.df
         self.ema9_ind = self.I(lambda: close.ewm(span=self.ema_fast, adjust=False).mean())
         self.ema21_ind = self.I(lambda: close.ewm(span=self.ema_slow, adjust=False).mean())
         self.highest_since_entry = 0
         
     def next(self):
-        price = self.data.Close[-1]
-        ema9 = self.ema9_ind[-1]
-        ema21 = self.ema21_ind[-1]
-        ema9_prev = self.ema9_ind[-2] if len(self.ema9_ind) > 1 else ema9
-        ema21_prev = self.ema21_ind[-2] if len(self.ema21_ind) > 1 else ema21
+        price = self.data.close[0]
+        ema9 = self.ema9_ind[0]
+        ema21 = self.ema21_ind[0]
+        ema9_prev = self.ema9_ind[-1] if len(self.ema9_ind) > 1 else ema9
+        ema21_prev = self.ema21_ind[-1] if len(self.ema21_ind) > 1 else ema21
         
         # Si estamos en posición, manejar trailing stop
-        if self.position:
+        if self.position():
             # Actualizar máximo alcanzado
             if price > self.highest_since_entry:
                 self.highest_since_entry = price
@@ -51,13 +51,13 @@ class EMA_Cross_Strategy(Strategy):
             
             # Cerrar si el precio cae por debajo del trailing stop
             if price < trailing_stop:
-                self.position.close()
+                self.position().close()
                 self.highest_since_entry = 0
                 return
             
             # Cerrar si hay cruce bajista (ema9 cruza por debajo de ema21)
             if ema9_prev >= ema21_prev and ema9 < ema21:
-                self.position.close()
+                self.position().close()
                 self.highest_since_entry = 0
                 return
         
@@ -123,13 +123,13 @@ def run_backtest(symbol):
         'symbol': symbol,
         'strategy': 'EMA_Cross_9_21',
         'return_pct': stats['Return [%]'],
-        'return_ann_pct': stats['Return (Ann.) [%]'],
-        'sharpe_ratio': stats['Sharpe Ratio'],
-        'max_drawdown_pct': stats['Max. Drawdown [%]'],
+        'return_ann_pct': stats.get('Return (Ann.) [%]', 0.0),
+        'sharpe_ratio': stats.get('Sharpe Ratio', 0.0),
+        'max_drawdown_pct': stats.get('Max. Drawdown [%]', 0.0),
         'win_rate_pct': stats['Win Rate [%]'],
         'total_trades': stats['# Trades'],
         'profit_factor': stats.get('Profit Factor', 0),
-        'avg_trade_pct': stats['Avg. Trade [%]'],
+        'avg_trade_pct': stats.get('Avg. Trade [%]', 0.0),
         'equity_final': stats['Equity Final [$]']
     }
 

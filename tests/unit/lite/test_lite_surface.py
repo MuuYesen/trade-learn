@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
+import pytest
 
 from tradelearn.lite import Backtest, Strategy
 
@@ -50,3 +53,74 @@ def test_lite_uses_backtrader_bar_indexing_with_1x_position_call() -> None:
         "line_prev": 2.0,
         "sma_now": 11.5,
     }
+
+
+def test_lite_data_ta_returns_current_bar_line_proxy() -> None:
+    seen: dict[str, float] = {}
+
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.atr = self.data.ta.atr(length=2)
+            self.macd = self.data.ta.macd(fast=2, slow=3, signal=2)
+            self.start_on_bar(3)
+
+        def next(self) -> None:
+            seen["atr_now"] = self.atr[0]
+            seen["atr_prev"] = self.atr[-1]
+            seen["macd_now"] = self.macd.macd[0]
+            seen["macd_prev"] = self.macd.macd[-1]
+
+    Backtest(_data(), LiteStrategy, cash=1000.0).run()
+
+    assert seen["atr_now"] == 2.0
+    assert seen["atr_prev"] == 2.0
+    assert "macd_now" in seen
+    assert "macd_prev" in seen
+
+
+def test_lite_records_are_exposed_from_run_result() -> None:
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(2)
+
+        def next(self) -> None:
+            self.record(signal=self.data.close[0])
+
+    stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
+
+    records = stats["_records"]
+    assert records["signal"].dropna().tolist() == [12.0, 13.0, 14.0]
+
+
+def test_lite_rejects_sl_tp_until_bracket_orders_are_implemented() -> None:
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(1)
+
+        def next(self) -> None:
+            self.buy(size=1, sl=9.0)
+
+    with pytest.raises(NotImplementedError, match="sl/tp"):
+        Backtest(_data(), LiteStrategy, cash=1000.0).run()
+
+
+def test_lite_examples_do_not_use_backtesting_py_surface() -> None:
+    root = Path(__file__).parents[3]
+    checked_paths = [root / "examples" / "backtesting"]
+    forbidden = [
+        "from backtesting import",
+        "self.data.Close",
+        "self.data.Open",
+        "self.data.High",
+        "self.data.Low",
+        "self.data.Volume",
+        "self.position.close()",
+    ]
+    offenders: list[str] = []
+    for checked_path in checked_paths:
+        for path in checked_path.glob("*.py"):
+            text = path.read_text()
+            if any(token in text for token in forbidden):
+                offenders.append(str(path.relative_to(root)))
+
+    assert offenders == []

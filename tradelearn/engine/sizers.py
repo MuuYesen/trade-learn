@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from tradelearn.backtest.sizer import Sizer as CoreSizer
-from tradelearn.compat.backtrader.base import Params
+from tradelearn.engine.base import Params
 
 
 class Sizer(CoreSizer):

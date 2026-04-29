@@ -26,16 +26,16 @@ Summary of visualizations:
 
 trade-learn ships two user-facing APIs. Both are backed by the same Rust backtesting engine and produce numerically identical results — pick the one that matches your experience level:
 
-- **Beginner / quick validation**: `tradelearn.compat.backtesting`
-  Aligned with backtesting.py. Minimal surface: `Strategy.init/next` + `self.buy/sell` + `self.I(...)`.
+- **Beginner / quick validation**: `tradelearn.lite`
+  Aligned with Tradelearn 1.x-style Lite semantics. Minimal surface: `Strategy.init/next` + `self.buy/sell` + `self.I(...)`.
   Good for strategy prototyping, teaching, single-data setups, and `pd.Series` style stat output.
 
-- **Advanced / production**: `tradelearn.compat.backtrader`
+- **Advanced / production**: `tradelearn.engine`
   Aligned with Backtrader. Full surface: Analyzer / Observer / Sizer / Indicator / CommInfo / bracket orders / multi-data / multi-strategy optimization / event-driven paper & live modes.
   Good for complex strategies, portfolios, productionization, and future broker adapter integration.
 
 > `tradelearn.backtest.*` and `tradelearn.core.*` are the shared implementation layer and neutral contracts for the two facades — **not** a public user API. Please do not import them directly.
-> Future paper/live adapters plug into the `compat.backtrader` side, consistent with the existing `Cerebro.run(mode="paper"|"live")` path.
+> Future paper/live adapters plug into the `tradelearn.engine` side, consistent with the existing `Cerebro.run(mode="paper"|"live")` path.
 
 ## Download
 Requires VPN:
@@ -50,7 +50,7 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 ## Usage Template
 ```python
 import pandas as pd
-from tradelearn.compat.backtrader import Cerebro, Strategy
+from tradelearn.engine import Cerebro, Strategy
 from tradelearn import ta
 
 if __name__ == '__main__':
