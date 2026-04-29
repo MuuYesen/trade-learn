@@ -214,7 +214,7 @@ class Cerebro:
 
     def plot(self, *args: Any, **kwargs: Any) -> list[Any]:
         reporter = self._last_reporter()
-        chart = reporter.price_trades_chart()
+        chart = reporter.market_replay_chart()
         return [] if chart is None else [chart]
 
     def report(self, path: str = "report.html", benchmark: Any | None = None) -> Any:

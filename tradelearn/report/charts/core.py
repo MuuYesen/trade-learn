@@ -3,8 +3,188 @@
 from __future__ import annotations
 
 import pandas as pd
+from bokeh.layouts import gridplot
+from bokeh.models import ColumnDataSource, HoverTool, Span
 from bokeh.plotting import figure
 from bokeh.transform import linear_cmap
+
+
+def market_replay(
+    market_data: pd.DataFrame,
+    fills: pd.DataFrame | None = None,
+    equity: pd.Series | None = None,
+):
+    """Return a 1.x-style market replay grid with equity, P/L, OHLC, and volume."""
+    frame = _market_frame(market_data)
+    if frame.empty:
+        return price_trades(market_data, fills)
+
+    replay_range = None
+    plots = []
+
+    if equity is not None and not equity.empty:
+        equity_frame = _plot_frame(equity, "equity").dropna()
+        if not equity_frame.empty:
+            equity_plot = figure(
+                title="Equity",
+                x_axis_type="datetime",
+                height=140,
+                sizing_mode="stretch_width",
+                tools="xpan,xwheel_zoom,box_zoom,reset,save",
+                active_drag="xpan",
+                active_scroll="xwheel_zoom",
+            )
+            equity_plot.line(
+                equity_frame["date"],
+                equity_frame["equity"] / equity_frame["equity"].iloc[0],
+                line_width=2,
+                color="#1f77b4",
+                legend_label="Strategy",
+            )
+            equity_plot.yaxis.axis_label = "Relative Equity"
+            replay_range = equity_plot.x_range
+            plots.append(equity_plot)
+
+    fills_frame = (
+        _fills_plot_frame(fills)
+        if fills is not None and not fills.empty and {"datetime", "price"}.issubset(fills.columns)
+        else pd.DataFrame()
+    )
+    closed_fills = pd.DataFrame()
+    if not fills_frame.empty and "trade_closed" in fills_frame:
+        closed_fills = fills_frame[fills_frame["trade_closed"].astype(bool)]
+    if not closed_fills.empty and "pnl" in closed_fills:
+        pl_plot = _linked_figure(
+            "Profit / Loss",
+            height=100,
+            x_range=replay_range,
+        )
+        pl_plot.add_layout(
+            Span(location=0, dimension="width", line_dash="dashed", line_color="#666666")
+        )
+        colors = ["#2ca02c" if pnl >= 0 else "#d62728" for pnl in closed_fills["pnl"]]
+        pl_plot.scatter(
+            closed_fills["date"],
+            closed_fills["pnl"],
+            size=9,
+            color=colors,
+            legend_label="Closed P/L",
+        )
+        pl_plot.yaxis.axis_label = "P/L"
+        replay_range = pl_plot.x_range
+        plots.append(pl_plot)
+
+    price_plot = _linked_figure(
+        "OHLC / Trades",
+        height=360,
+        x_range=replay_range,
+    )
+    source = ColumnDataSource(frame)
+    has_ohlc = {"open", "high", "low", "close"}.issubset(frame.columns)
+    if has_ohlc:
+        inc = frame["close"] >= frame["open"]
+        width = _bar_width_ms(frame["date"])
+        price_plot.segment(
+            "date",
+            "high",
+            "date",
+            "low",
+            source=source,
+            color="#2f3b45",
+            line_width=1,
+        )
+        price_plot.vbar(
+            frame.loc[inc, "date"],
+            width,
+            frame.loc[inc, "open"],
+            frame.loc[inc, "close"],
+            fill_color="#3aa76d",
+            line_color="#2f3b45",
+            alpha=0.82,
+            legend_label="Up",
+        )
+        price_plot.vbar(
+            frame.loc[~inc, "date"],
+            width,
+            frame.loc[~inc, "open"],
+            frame.loc[~inc, "close"],
+            fill_color="#d65f5f",
+            line_color="#2f3b45",
+            alpha=0.82,
+            legend_label="Down",
+        )
+        renderers = price_plot.renderers[-3:]
+    else:
+        renderer = price_plot.line(
+            "date",
+            "close",
+            source=source,
+            line_width=2,
+            color="#1f77b4",
+            legend_label="Close",
+        )
+        renderers = [renderer]
+    if not fills_frame.empty:
+        buys = fills_frame[fills_frame["side"].str.lower().eq("buy")]
+        sells = fills_frame[fills_frame["side"].str.lower().eq("sell")]
+        if not buys.empty:
+            price_plot.scatter(
+                buys["date"],
+                buys["price"],
+                marker="triangle",
+                size=11,
+                color="#169c5a",
+                line_color="#0f5f39",
+                legend_label="Buy",
+            )
+        if not sells.empty:
+            price_plot.scatter(
+                sells["date"],
+                sells["price"],
+                marker="inverted_triangle",
+                size=11,
+                color="#c43c39",
+                line_color="#7f2524",
+                legend_label="Sell",
+            )
+    price_plot.yaxis.axis_label = "Price"
+    if has_ohlc:
+        _add_ohlc_hover(price_plot, renderers)
+    else:
+        _add_close_hover(price_plot, renderers)
+    replay_range = price_plot.x_range
+    plots.append(price_plot)
+
+    if "volume" in frame and frame["volume"].notna().any():
+        volume_plot = _linked_figure(
+            "Volume",
+            height=110,
+            x_range=replay_range,
+        )
+        volume_plot.vbar(
+            frame["date"],
+            _bar_width_ms(frame["date"]),
+            frame["volume"],
+            color="#8aa1b2",
+            alpha=0.72,
+        )
+        volume_plot.yaxis.axis_label = "Volume"
+        plots.append(volume_plot)
+
+    for plot in plots[:-1]:
+        plot.xaxis.visible = False
+    for plot in plots:
+        plot.toolbar.logo = None
+        if plot.legend:
+            plot.legend.location = "top_left"
+            plot.legend.click_policy = "hide"
+    return gridplot(
+        plots,
+        ncols=1,
+        sizing_mode="stretch_width",
+        toolbar_location="right",
+        merge_tools=True,
+    )
 
 
 def price_trades(market_data: pd.DataFrame, fills: pd.DataFrame | None = None):
@@ -419,3 +599,61 @@ def _fills_plot_frame(fills: pd.DataFrame) -> pd.DataFrame:
     if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
         frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
     return frame.dropna(subset=["date", "price"])
+
+
+def _linked_figure(title: str, *, height: int, x_range=None):
+    """Return a linked market replay figure."""
+    kwargs = {"x_range": x_range} if x_range is not None else {}
+    return figure(
+        title=title,
+        x_axis_type="datetime",
+        height=height,
+        sizing_mode="stretch_width",
+        tools="xpan,xwheel_zoom,box_zoom,reset,save",
+        active_drag="xpan",
+        active_scroll="xwheel_zoom",
+        **kwargs,
+    )
+
+
+def _bar_width_ms(dates: pd.Series) -> float:
+    """Return a candle width in milliseconds from adjacent timestamps."""
+    numeric = pd.to_datetime(dates).astype("int64") // 1_000_000
+    diffs = pd.Series(numeric).diff().dropna()
+    if diffs.empty:
+        return 24 * 60 * 60 * 1000 * 0.7
+    return float(diffs.median() * 0.7)
+
+
+def _add_ohlc_hover(plot, renderers) -> None:
+    """Attach OHLC hover tool to the main market replay plot."""
+    plot.add_tools(
+        HoverTool(
+            renderers=list(renderers),
+            mode="vline",
+            formatters={"@date": "datetime"},
+            tooltips=[
+                ("Date", "@date{%F %T}"),
+                ("Open", "@open{0,0.0000}"),
+                ("High", "@high{0,0.0000}"),
+                ("Low", "@low{0,0.0000}"),
+                ("Close", "@close{0,0.0000}"),
+                ("Volume", "@volume{0,0}"),
+            ],
+        )
+    )
+
+
+def _add_close_hover(plot, renderers) -> None:
+    """Attach close-price hover tool to the main market replay plot."""
+    plot.add_tools(
+        HoverTool(
+            renderers=list(renderers),
+            mode="vline",
+            formatters={"@date": "datetime"},
+            tooltips=[
+                ("Date", "@date{%F %T}"),
+                ("Close", "@close{0,0.0000}"),
+            ],
+        )
+    )

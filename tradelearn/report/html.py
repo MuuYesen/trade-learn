@@ -175,7 +175,14 @@ def _write_artifacts(
 
 def _has_glyph_renderers(plot: Any) -> bool:
     """Return True when a Bokeh figure has actual plotted glyphs."""
-    return bool(getattr(plot, "renderers", ()))
+    if getattr(plot, "renderers", ()):
+        return True
+    children = getattr(plot, "children", ())
+    for child in children:
+        item = child[0] if isinstance(child, tuple) else child
+        if _has_glyph_renderers(item):
+            return True
+    return False
 
 
 def _render_html(

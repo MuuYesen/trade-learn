@@ -134,7 +134,7 @@ class Backtest:
     def plot(self, *args, **kwargs):
         """Return market replay charts for the most recent Lite run."""
         reporter = self._last_reporter()
-        chart = reporter.price_trades_chart()
+        chart = reporter.market_replay_chart()
         return [] if chart is None else [chart]
 
     def report(self, path: str = "report.html", benchmark=None):

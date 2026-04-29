@@ -184,11 +184,19 @@ class Reporter:
         """Return a Bokeh trade distribution chart."""
         return charts.trade_distribution(self.trade_distribution(bins=bins))
 
-    def price_trades_chart(self):
-        """Return a Bokeh price chart with fill markers when market data exists."""
+    def market_replay_chart(self):
+        """Return a 1.x-style market replay chart when market data exists."""
         if self.market_data is None:
             return None
-        return charts.price_trades(self.market_data, self._get("fills", default=pd.DataFrame()))
+        return charts.market_replay(
+            self.market_data,
+            self._get("fills", default=pd.DataFrame()),
+            self._get("equity", default=pd.Series(dtype="float64")),
+        )
+
+    def price_trades_chart(self):
+        """Return the market replay chart; kept as an internal compatibility alias."""
+        return self.market_replay_chart()
 
     def exposure_chart(self):
         """Return a Bokeh exposure chart."""
