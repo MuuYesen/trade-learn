@@ -115,6 +115,32 @@ def test_cerebro_addstore_keeps_store_reference() -> None:
     assert cerebro.stores == [store]
 
 
+def test_cerebro_writer_query_surface_aggregates_registered_writers() -> None:
+    class Writer:
+        def __init__(self, prefix: str) -> None:
+            self.prefix = prefix
+
+        def getheaders(self) -> list[str]:
+            return [f"{self.prefix}-header"]
+
+        def getinfo(self) -> dict[str, str]:
+            return {"writer": self.prefix}
+
+        def getvalues(self) -> list[str]:
+            return [f"{self.prefix}-value"]
+
+    cerebro = bt.Cerebro()
+    assert cerebro.getwriterheaders() == []
+    assert cerebro.getwriterinfo() == []
+    assert cerebro.getwritervalues() == []
+
+    cerebro.addwriter(Writer, "run")
+
+    assert cerebro.getwriterheaders() == ["run-header"]
+    assert cerebro.getwriterinfo() == [{"writer": "run"}]
+    assert cerebro.getwritervalues() == ["run-value"]
+
+
 def test_broker_order_history_and_open_orders_surface() -> None:
     class SubmitOnce(bt.Strategy):
         def next(self) -> None:

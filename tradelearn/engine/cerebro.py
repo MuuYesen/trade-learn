@@ -159,6 +159,29 @@ class Cerebro:
     def addwriter(self, writer: type[Any], *args: Any, **kwargs: Any) -> None:
         self.writers.append((writer, args, kwargs))
 
+    def _writer_results(self, method: str) -> list[Any]:
+        results: list[Any] = []
+        for writer_cls, args, kwargs in self.writers:
+            writer = writer_cls(*args, **kwargs)
+            callback = getattr(writer, method, None)
+            if not callable(callback):
+                continue
+            value = callback()
+            if isinstance(value, list):
+                results.extend(value)
+            elif value is not None:
+                results.append(value)
+        return results
+
+    def getwriterheaders(self) -> list[Any]:
+        return self._writer_results("getheaders")
+
+    def getwriterinfo(self) -> list[Any]:
+        return self._writer_results("getinfo")
+
+    def getwritervalues(self) -> list[Any]:
+        return self._writer_results("getvalues")
+
     def addstore(self, store: Any) -> None:
         self.stores.append(store)
 
