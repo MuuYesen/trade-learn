@@ -11,7 +11,6 @@ from typing import Any
 
 import pandas as pd
 from bokeh.embed import components
-from bokeh.layouts import column
 from bokeh.resources import INLINE
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -49,35 +48,38 @@ def write_html_report(
     config = reporter._get("config", default={}) or {}
     metadata = _metadata(summary, returns, config)
     top_drawdowns = reporter.top_drawdowns(limit=10)
-    plots = [
-        charts.equity_curve(
+    plots = {
+        "Equity Curve": charts.equity_curve(
             reporter.equity_curve(),
             benchmark_returns,
             drawdowns=top_drawdowns.head(5),
         ),
-        charts.drawdown(reporter.drawdown()),
-        charts.monthly_heatmap(reporter.monthly_heatmap()),
-        charts.rolling_sharpe(reporter.rolling_sharpe()),
-        charts.trade_distribution(reporter.trade_distribution()),
-    ]
+        "Drawdown": charts.drawdown(reporter.drawdown()),
+        "Monthly Returns Heatmap": charts.monthly_heatmap(reporter.monthly_heatmap()),
+        "Rolling Sharpe": charts.rolling_sharpe(reporter.rolling_sharpe()),
+        "Trade Distribution": charts.trade_distribution(reporter.trade_distribution()),
+    }
     if not rolling_beta.empty:
-        plots.append(charts.rolling_beta(rolling_beta))
+        plots["Rolling Beta"] = charts.rolling_beta(rolling_beta)
     if _has_multi_asset_exposure(exposure):
-        plots.append(charts.correlation_matrix(correlation))
-        plots.append(charts.exposure(exposure))
+        plots["Correlation Matrix"] = charts.correlation_matrix(correlation)
+        plots["Exposure Chart"] = charts.exposure(exposure)
     if not factor_ic.empty:
-        plots.append(charts.factor_ic(factor_ic))
+        plots["Factor IC"] = charts.factor_ic(factor_ic)
     if not factor_rank_ic.empty:
-        plots.append(charts.factor_rank_ic(factor_rank_ic))
+        plots["Factor Rank IC"] = charts.factor_rank_ic(factor_rank_ic)
     if not factor_turnover.empty or not factor_autocorrelation.empty:
-        plots.append(charts.factor_turnover(factor_turnover, factor_autocorrelation))
+        plots["Factor Turnover"] = charts.factor_turnover(
+            factor_turnover,
+            factor_autocorrelation,
+        )
     if not factor_long_short_returns.empty:
-        plots.append(charts.factor_long_short_returns(factor_long_short_returns))
+        plots["Factor Long-Short Returns"] = charts.factor_long_short_returns(
+            factor_long_short_returns
+        )
     if not factor_quantile_returns.empty:
-        plots.append(charts.quantile_returns(factor_quantile_returns))
-    script, chart_components = components(
-        column(*plots)
-    )
+        plots["Factor Quantile Returns"] = charts.quantile_returns(factor_quantile_returns)
+    script, chart_components = components(plots)
     output.write_text(
         _render_html(
             summary=summary,

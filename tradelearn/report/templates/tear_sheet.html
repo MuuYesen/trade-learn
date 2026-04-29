@@ -5,34 +5,77 @@
   <title>Tradelearn Report</title>
   {{ bokeh_resources | safe }}
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 32px; }
-    table { border-collapse: collapse; width: 100%; margin: 12px 0 24px; }
-    th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
-    th { background: #f6f8fa; }
-    section { margin-bottom: 28px; }
+    :root {
+      --ink: #1f2d33;
+      --muted: #66757f;
+      --line: #d9e1e6;
+      --panel: #f7fafc;
+      --accent: #54717b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #eef3f5;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+      line-height: 1.5;
+    }
+    .shell {
+      max-width: 1180px;
+      margin: 32px auto;
+      padding: 0 24px;
+    }
+    header, section, footer {
+      width: 100%;
+      margin: 0 0 28px;
+      padding: 24px 28px;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(31, 45, 51, 0.04);
+    }
+    header {
+      border-top: 5px solid var(--accent);
+    }
+    h1, h2 {
+      margin: 0 0 16px;
+      line-height: 1.2;
+    }
+    h1 { font-size: 34px; }
+    h2 { font-size: 24px; }
+    p { margin: 4px 0; color: var(--muted); }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0 0; }
+    th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; }
+    th { background: var(--panel); font-weight: 700; }
+    .chart {
+      overflow: hidden;
+    }
+    .chart > div,
+    .chart .bk-root,
+    .chart .bk-root > div {
+      width: 100% !important;
+      max-width: 100% !important;
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>{{ metadata.strategy_name }}</h1>
-    <p>Run ID: {{ metadata.run_id }}</p>
-    <p>Period: {{ metadata.start }} to {{ metadata.end }}</p>
-    <p>Generated: {{ metadata.generated_at }}</p>
-    <p>Rows: returns={{ returns_count }}, trades={{ trades_count }}</p>
-  </header>
-  <section>
-    <h2>Summary Stats</h2>
-    {{ summary_table | safe }}
-  </section>
-  {{ benchmark_section | safe }}
-  <section>
-    <h2>Equity Curve</h2>
-    <h2>Drawdown</h2>
+  <main class="shell">
+    <header>
+      <h1>{{ metadata.strategy_name }}</h1>
+      <p>Run ID: {{ metadata.run_id }}</p>
+      <p>Period: {{ metadata.start }} to {{ metadata.end }}</p>
+      <p>Generated: {{ metadata.generated_at }}</p>
+      <p>Rows: returns={{ returns_count }}, trades={{ trades_count }}</p>
+    </header>
+    <section>
+      <h2>Summary Stats</h2>
+      {{ summary_table | safe }}
+    </section>
+    {{ benchmark_section | safe }}
+    <section>
     <h2>Top 10 Drawdowns</h2>
     {{ drawdowns_table | safe }}
-    <h2>Monthly Returns Heatmap</h2>
-    <h2>Rolling Sharpe</h2>
-    <h2>Trade Distribution</h2>
+    </section>
     {{ correlation_section | safe }}
     {{ exposure_section | safe }}
     {{ factor_ic_section | safe }}
@@ -40,15 +83,20 @@
     {{ factor_turnover_section | safe }}
     {{ factor_long_short_section | safe }}
     {{ factor_section | safe }}
-    {{ charts | safe }}
+    {% for title, chart in charts.items() %}
+    <section class="chart">
+      <h2>{{ title }}</h2>
+      {{ chart | safe }}
+    </section>
+    {% endfor %}
     {{ script | safe }}
-  </section>
-  <section>
-    <h2>Configuration</h2>
-    {{ config_table | safe }}
-  </section>
-  <footer>
-    <p>Tradelearn {{ metadata.version }} | Generated: {{ metadata.generated_at }}</p>
-  </footer>
+    <section>
+      <h2>Configuration</h2>
+      {{ config_table | safe }}
+    </section>
+    <footer>
+      <p>Tradelearn {{ metadata.version }} | Generated: {{ metadata.generated_at }}</p>
+    </footer>
+  </main>
 </body>
 </html>
