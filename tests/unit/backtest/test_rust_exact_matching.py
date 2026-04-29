@@ -559,7 +559,7 @@ def test_stats_lazy_artifacts_materialize_once() -> None:
     assert calls == {"fills": 1, "returns": 1}
 
 
-def test_backtesting_strategy_uses_basic_submit_fast_path() -> None:
+def test_backtesting_strategy_uses_public_basic_submit_fast_path() -> None:
     class FakeData:
         _cursor = 0
 
@@ -575,12 +575,12 @@ def test_backtesting_strategy_uses_basic_submit_fast_path() -> None:
         def getvalue(self) -> float:
             return 1000.0
 
-        def _submit_basic(self, *args):
+        def submit_basic(self, *args):
             self.basic_calls.append(args)
             return "order"
 
         def _submit(self, *args, **kwargs):
-            raise AssertionError("backtesting facade should use _submit_basic when available")
+            raise AssertionError("backtesting facade should use submit_basic when available")
 
     strategy = BacktestingStrategy()
     data = FakeData()
@@ -636,7 +636,7 @@ def test_broker_submit_paths_preserve_submitted_and_accepted_notifications() -> 
         def notify_order(self, order) -> None:
             self.statuses.append(order.status)
 
-    for submit_name in ("_submit", "_submit_basic"):
+    for submit_name in ("_submit", "_submit_basic", "submit_basic"):
         owner = Owner()
         broker = RustBroker(match_mode="exact")
         submit = getattr(broker, submit_name)

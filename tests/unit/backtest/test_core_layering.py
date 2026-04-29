@@ -173,3 +173,20 @@ def test_root_namespace_does_not_import_facade_only_classes_from_backtest_models
     text = (root / "tradelearn" / "__init__.py").read_text()
 
     assert "from tradelearn.backtest.models import TimeFrame" not in text
+
+
+def test_backtest_public_namespace_excludes_facade_apis() -> None:
+    import tradelearn.backtest as backtest
+
+    forbidden = {
+        "Analyzer",
+        "Cerebro",
+        "Strategy",
+        "Params",
+        "TimeFrame",
+        "BaseAnalyzer",
+        "BaseSizer",
+        "BaseBroker",
+    }
+
+    assert forbidden.isdisjoint(set(backtest.__all__))

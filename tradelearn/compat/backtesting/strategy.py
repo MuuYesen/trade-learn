@@ -226,7 +226,7 @@ class Strategy(CoreStrategy):
         actual_size = float(abs(size))
         pending = self._pending_size
         pending[data] = pending.get(data, 0.0) + actual_size
-        submit = getattr(broker, "_submit_basic", broker._submit)
+        submit = getattr(broker, "submit_basic", broker._submit)
         return submit(
             self,
             data,
@@ -263,7 +263,7 @@ class Strategy(CoreStrategy):
         actual_size = float(abs(size))
         pending = self._pending_size
         pending[data] = pending.get(data, 0.0) - actual_size
-        submit = getattr(broker, "_submit_basic", broker._submit)
+        submit = getattr(broker, "submit_basic", broker._submit)
         return submit(
             self,
             data,

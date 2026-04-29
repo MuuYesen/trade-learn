@@ -25,8 +25,8 @@ _ORDER_TYPE_TO_RUST = {
 }
 
 
-class CommInfo:
-    """Helper to simulate Backtrader's commission info."""
+class _LegacyCommInfo:
+    """Facade-only fallback for Backtrader-style commission info."""
 
     def __init__(self, ratio: float):
         self.p = self.params = type("Params", (), {"commission": ratio})()
@@ -300,10 +300,10 @@ class RustBroker:
     def get_mult(self, data: Any = None) -> float:
         return self._mult
 
-    def getcommissioninfo(self, data: Any) -> CommInfo:
+    def getcommissioninfo(self, data: Any) -> _LegacyCommInfo:
         if self._comminfo is not None:
             return self._comminfo
-        return CommInfo(self.commission_ratio)
+        return _LegacyCommInfo(self.commission_ratio)
 
     def begin_order_buffering(self) -> None:
         """Delay Rust order submission until callbacks return."""
@@ -478,6 +478,18 @@ class RustBroker:
         self._register_and_route_order(owner, order, is_buy, actual_size, price)
 
         return order
+
+    def submit_basic(
+        self,
+        owner: Strategy,
+        data: Any,
+        side: int,
+        size: float,
+        price: float | None,
+        exectype: Any,
+    ) -> Order:
+        """Public fast path for facade orders without optional metadata."""
+        return self._submit_basic(owner, data, side, size, price, exectype)
 
     def _register_and_route_order(
         self,

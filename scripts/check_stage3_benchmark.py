@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from tradelearn.backtest import Cerebro, Strategy
+from tradelearn.compat.backtrader import Cerebro, Strategy
 
 
 @dataclass(frozen=True)
