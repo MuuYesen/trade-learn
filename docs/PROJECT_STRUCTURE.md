@@ -7,6 +7,10 @@
 - `compat` 只放迁移层,分别维护 Backtrader 和 backtesting.py 的专属行为。
 - runner、benchmark、golden、example、archive 与本地 scratch 必须和运行时代码分开。
 
+## 实操原则
+
+Tradelearn 的实操原则是:以事件驱动为核心,Rust 只承担撮合、bar loop、订单推进、portfolio 等高性能回测内核;指标计算不下沉 Rust,而是通过 pandas-ta-classic、TDX、TradingView 等 Python 生态工具做批量缓存或 rolling 计算;Python 保持清晰的策略、指标和兼容层边界,`core` 只放跨 backtest/paper/live 的中性契约,`backtest` 只放公共回测 runtime,Backtrader/backtesting.py 专属语义各自留在 `compat`;所有优化都必须在不破坏结果对齐、策略 API 和未来实盘扩展边界的前提下推进;性能优化服务于事件驱动架构,不为了极限跑分牺牲策略 API 清晰度。
+
 ## 运行时代码
 
 ### `tradelearn/backtest/`
