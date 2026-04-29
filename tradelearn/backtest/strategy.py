@@ -102,6 +102,9 @@ class Strategy:
             sizer._set(self, self.broker)
         return sizer
 
+    def getsizer(self) -> Any:
+        return self._sizer
+
     def getsizing(self, data: Any = None, isbuy: bool = True) -> float:
         data = self._resolve_data(data)
         sizer = self._sizers.get(data, self._sizer)

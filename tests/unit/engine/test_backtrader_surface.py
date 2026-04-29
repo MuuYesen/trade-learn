@@ -138,6 +138,20 @@ def test_cerebro_tracks_datas_by_name() -> None:
     assert cerebro.datasbyname["asset0"] is data
 
 
+def test_cerebro_chaindata_and_rolloverdata_register_feeds() -> None:
+    cerebro = bt.Cerebro()
+    first = bt.DataFeed(_ohlcv(4), name="first")
+    second = bt.DataFeed(_ohlcv(5), name="second")
+
+    assert cerebro.chaindata(first, second) is first
+    rolled = cerebro.rolloverdata(_ohlcv(6), name="rolled")
+
+    assert cerebro.datas == [first, second, rolled]
+    assert cerebro.datasbyname["first"] is first
+    assert cerebro.datasbyname["second"] is second
+    assert cerebro.datasbyname["rolled"] is rolled
+
+
 def test_strategy_getpositionbyname_resolves_named_data() -> None:
     class BuyNamed(bt.Strategy):
         def next(self) -> None:
@@ -253,6 +267,7 @@ def test_sizer_observer_and_analyzer_attribute_access() -> None:
     class BuyOnce(bt.Strategy):
         def next(self) -> None:
             if len(self) == 1:
+                self.bound_sizer = self.getsizer()
                 self.buy()
 
     cerebro = bt.Cerebro()
@@ -265,6 +280,7 @@ def test_sizer_observer_and_analyzer_attribute_access() -> None:
     strategy = cerebro.run()[0]
 
     assert abs(strategy.broker.fills_frame().iloc[0]["size"]) == 7
+    assert isinstance(strategy.bound_sizer, bt.FixedSize)
     assert "value" in strategy.observers
     assert strategy.observers.value.get_analysis()["value"]
     assert strategy.analyzers.returns.get_analysis()

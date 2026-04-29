@@ -91,6 +91,26 @@ class Cerebro:
             self.datasbyname[str(data_name)] = data
         return data
 
+    def chaindata(self, *args: Any, **kwargs: Any) -> Any:
+        if not args:
+            raise ValueError("chaindata requires at least one data feed")
+        first = None
+        for data in args:
+            added = self.adddata(data, name=kwargs.get("name") if len(args) == 1 else None)
+            if first is None:
+                first = added
+        return first
+
+    def rolloverdata(self, *args: Any, **kwargs: Any) -> Any:
+        if not args:
+            raise ValueError("rolloverdata requires at least one data feed")
+        first = None
+        for data in args:
+            added = self.adddata(data, name=kwargs.get("name") if len(args) == 1 else None)
+            if first is None:
+                first = added
+        return first
+
     def resampledata(
         self,
         data: Any,
