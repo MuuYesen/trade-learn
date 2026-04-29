@@ -6,6 +6,8 @@ from scripts.generate_api_reference import (
     render_engine_api_guide,
     render_lite_api_guide,
     render_module_reference,
+    render_strategy_writing_guide,
+    write_api_guides,
     write_api_reference,
     write_api_reference_pages,
 )
@@ -19,6 +21,7 @@ def test_render_api_reference_is_readable_overview_not_module_dump() -> None:
     assert "| 模块 | 用途 | 常用入口 | 完整 Reference |" in rendered
     assert "[Engine API Guide](engine.md)" in rendered
     assert "[Lite API Guide](lite.md)" in rendered
+    assert "[Strategy Writing Guide](strategy.md)" in rendered
     assert "[`tradelearn.engine`](reference/engine.md)" in rendered
     assert "## Public Symbols by Module" in rendered
     assert "`Cerebro`" in rendered
@@ -57,6 +60,16 @@ def test_write_api_reference_pages_creates_module_pages(tmp_path) -> None:
     assert (tmp_path / "api" / "reference" / "engine.md").exists()
 
 
+def test_write_api_guides_creates_strategy_writing_guide(tmp_path) -> None:
+    outputs = write_api_guides(tmp_path)
+
+    assert tmp_path / "api" / "strategy.md" in outputs
+    text = (tmp_path / "api" / "strategy.md").read_text(encoding="utf-8")
+    assert "# Strategy Writing Guide" in text
+    assert "Engine Strategy" in text
+    assert "Lite Strategy" in text
+
+
 def test_render_engine_api_guide_includes_code_signatures_and_parameter_tables() -> None:
     rendered = render_engine_api_guide()
 
@@ -86,3 +99,14 @@ def test_render_lite_api_guide_includes_code_signatures_and_parameter_tables() -
     assert "| `Strategy.orders` | property |" in rendered
     assert "| `LiteDataProxy.df` | property |" in rendered
     assert "| `PositionProxy.pl_pct` | property |" in rendered
+
+
+def test_render_strategy_writing_guide_explains_strategy_workflow() -> None:
+    rendered = render_strategy_writing_guide()
+
+    assert "## Engine Strategy" in rendered
+    assert "class SmaCross(bt.Strategy)" in rendered
+    assert "## Lite Strategy" in rendered
+    assert "class SmaCross(Strategy)" in rendered
+    assert "`line[0]` 是当前 bar" in rendered
+    assert "uv run python benchmarks/runners/benchmark_bt.py" in rendered

@@ -661,6 +661,7 @@ def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE
         "| 编写 Backtrader 风格事件策略、Analyzer、Observer、Sizer | "
         "[Engine API Guide](engine.md) |",
         "| 编写 Tradelearn 1.x 风格轻量策略 | [Lite API Guide](lite.md) |",
+        "| 从零编写策略并理解两种入口差异 | [Strategy Writing Guide](strategy.md) |",
         "| 查询精确类/函数签名和完整 docstring | 下方模块 Reference 链接 |",
         "",
         "## 公开模块",
@@ -702,11 +703,193 @@ def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE
             "",
             "- [Engine API Guide](engine.md)",
             "- [Lite API Guide](lite.md)",
+            "- [Strategy Writing Guide](strategy.md)",
         ]
     )
     for module in modules:
         slug = _module_slug(module)
         parts.append(f"- [`{module.import_path}`](reference/{slug}.md)")
+    return "\n".join(parts).rstrip() + "\n"
+
+
+def render_strategy_writing_guide() -> str:
+    """Render a practical guide for writing Engine and Lite strategies."""
+    parts = [
+        "# Strategy Writing Guide",
+        "",
+        "本页由 `scripts/generate_api_reference.py` 自动生成,用于回答“策略到底怎么写”。",
+        "",
+        "Tradelearn 当前有两个用户入口:",
+        "",
+        (
+            "- `tradelearn.engine`: Backtrader 风格高级 API,适合复杂事件策略、"
+            "Analyzer、Observer、Sizer、多数据和参数优化。"
+        ),
+        (
+            "- `tradelearn.lite`: Tradelearn 1.x 风格轻量 API,"
+            "适合快速写单文件策略和研究原型。"
+        ),
+        "",
+        (
+            "两者共享同一套 `tradelearn.backtest` runtime 和 Rust 撮合内核。"
+            "区别应该只在语法翻译层,不应该各自维护不同的业务逻辑。"
+        ),
+        "",
+        "## 基本规则",
+        "",
+        "- `line[0]` 是当前 bar,`line[-1]` 是前一根 bar。",
+        (
+            "- 指标不下沉 Rust;使用 `pandas-ta-classic`、TDX、TradingView "
+            "或 `tradelearn.ta` 生态批量计算。"
+        ),
+        (
+            "- Engine 是 Backtrader 数值对齐主入口;修改撮合、订单、broker、"
+            "生命周期后必须跑 Backtrader 对齐测试。"
+        ),
+        (
+            "- Lite 只验证语法层是否正确接入同一 runtime;"
+            "底层正确性仍以 Engine/Backtrader 对齐为主。"
+        ),
+        "",
+        "## Engine Strategy",
+        "",
+        (
+            "Engine 策略继承 `tradelearn.engine.Strategy`,"
+            "通常在 `__init__()` 声明指标,在 `next()` 写交易逻辑。"
+        ),
+        "",
+        "```python",
+        "import pandas as pd",
+        "import tradelearn.engine as bt",
+        "",
+        "",
+        "class SmaCross(bt.Strategy):",
+        "    params = (",
+        "        ('fast', 10),",
+        "        ('slow', 30),",
+        "    )",
+        "",
+        "    def __init__(self):",
+        "        self.fast = bt.ind.SMA(self.data.close, period=self.p.fast)",
+        "        self.slow = bt.ind.SMA(self.data.close, period=self.p.slow)",
+        "",
+        "    def next(self):",
+        "        if not self.position and self.fast[0] > self.slow[0]:",
+        "            self.buy(size=1)",
+        "        elif self.position and self.fast[0] < self.slow[0]:",
+        "            self.close()",
+        "",
+        "",
+        "data = pd.read_csv('bars.csv', parse_dates=True, index_col=0)",
+        "cerebro = bt.Cerebro(match_mode='exact')",
+        "cerebro.adddata(data, name='BTCUSDT')",
+        "cerebro.addstrategy(SmaCross, fast=10, slow=30)",
+        "cerebro.broker.setcash(100_000)",
+        "strategy = cerebro.run()[0]",
+        "print(strategy.broker.getvalue())",
+        "```",
+        "",
+        "Engine 常用写法:",
+        "",
+        "| 需求 | 写法 |",
+        "|---|---|",
+        "| 当前价格 | `self.data.close[0]` |",
+        "| 前一根价格 | `self.data.close[-1]` |",
+        "| 当前持仓 | `self.position` 或 `self.getposition(data)` |",
+        "| 买入/卖出 | `self.buy(size=...)` / `self.sell(size=...)` |",
+        "| 平仓 | `self.close()` |",
+        "| 目标仓位 | `self.order_target_size(...)` / `self.order_target_percent(...)` |",
+        "| bracket | `self.buy_bracket(...)` / `self.sell_bracket(...)` |",
+        "| 多数据查询 | `self.getdatabyname('BTCUSDT')` |",
+        "| 订单通知 | `notify_order(self, order)` |",
+        "| 交易通知 | `notify_trade(self, trade)` |",
+        "",
+        "## Lite Strategy",
+        "",
+        (
+            "Lite 策略继承 `tradelearn.lite.Strategy`,"
+            "通常在 `init()` 声明指标,在 `next()` 写交易逻辑。"
+        ),
+        "",
+        "```python",
+        "import pandas as pd",
+        "from tradelearn import ta",
+        "from tradelearn.lite import Backtest, Strategy",
+        "",
+        "",
+        "class SmaCross(Strategy):",
+        "    fast = 10",
+        "    slow = 30",
+        "",
+        "    def init(self):",
+        "        self.fast_sma = self.I(ta.sma, self.data.close, period=self.fast)",
+        "        self.slow_sma = self.I(ta.sma, self.data.close, period=self.slow)",
+        "",
+        "    def next(self):",
+        "        if not self.position() and self.fast_sma[0] > self.slow_sma[0]:",
+        "            self.buy(size=1)",
+        "        elif self.position() and self.fast_sma[0] < self.slow_sma[0]:",
+        "            self.position().close()",
+        "",
+        "",
+        "data = pd.read_csv('bars.csv', parse_dates=True, index_col=0)",
+        "stats = Backtest(data, SmaCross, cash=100_000, match_mode='exact').run()",
+        "print(stats['Equity Final [$]'])",
+        "```",
+        "",
+        "Lite 常用写法:",
+        "",
+        "| 需求 | 写法 |",
+        "|---|---|",
+        "| 当前价格 | `self.data.close[0]` |",
+        "| 指标声明 | `self.I(ta.sma, self.data.close, period=20)` |",
+        "| 当前持仓 | `self.position()` |",
+        "| 指定 ticker 持仓 | `self.position('BTCUSDT')` |",
+        "| 买入/卖出 | `self.buy(size=...)` / `self.sell(size=...)` |",
+        "| 权益比例下单 | `self.buy(size=0.5)` |",
+        "| 止损止盈 | `self.buy(sl=..., tp=...)` |",
+        "| 记录序列 | `self.record(signal=value)` |",
+        "| 当前权益 | `self.equity` |",
+        "| 运行存储 | `self.storage` |",
+        "",
+        "## 指标写法",
+        "",
+        "Engine 使用 Backtrader 风格 line 指标:",
+        "",
+        "```python",
+        "self.sma = bt.ind.SMA(self.data.close, period=20)",
+        "self.rsi = bt.ind.RSI(self.data, period=14)",
+        "```",
+        "",
+        "Lite 使用 `self.I(...)` 做批量指标缓存和渐进揭示:",
+        "",
+        "```python",
+        "self.sma = self.I(ta.sma, self.data.close, period=20)",
+        "self.macd = self.I(ta.macd, self.data.close)",
+        "```",
+        "",
+        "TDX / TradingView 指标保留在 Python 生态中,不要写成 Rust 指标:",
+        "",
+        "```python",
+        "self.tdx_sma = self.I(ta.tdx.sma, self.data.close, n=20)",
+        "self.tv_rsi = self.I(ta.tv.rsi, self.data.close, length=14)",
+        "```",
+        "",
+        "## 测试验收",
+        "",
+        "底层撮合和订单正确性以 Engine/Backtrader 对齐为主:",
+        "",
+        "```bash",
+        "uv run python benchmarks/runners/benchmark_bt.py",
+        "```",
+        "",
+        (
+            "Lite 策略测试重点是语法层能否跑通并接入同一 runtime,"
+            "例如 `self.I(...)`、`position()`、`data.close[0]`、"
+            "`record()`、`sl/tp`。"
+        ),
+        "",
+    ]
     return "\n".join(parts).rstrip() + "\n"
 
 
@@ -757,15 +940,17 @@ def write_api_reference(docs_dir: Path | str = Path("docs")) -> Path:
     return output
 
 
-def write_api_guides(docs_dir: Path | str = Path("docs")) -> tuple[Path, Path]:
-    """Write generated Engine and Lite API guide pages under ``docs_dir/api``."""
+def write_api_guides(docs_dir: Path | str = Path("docs")) -> tuple[Path, Path, Path]:
+    """Write generated API guide pages under ``docs_dir/api``."""
     api_dir = Path(docs_dir) / "api"
     api_dir.mkdir(parents=True, exist_ok=True)
     engine_output = api_dir / "engine.md"
     lite_output = api_dir / "lite.md"
+    strategy_output = api_dir / "strategy.md"
     engine_output.write_text(render_engine_api_guide(), encoding="utf-8")
     lite_output.write_text(render_lite_api_guide(), encoding="utf-8")
-    return engine_output, lite_output
+    strategy_output.write_text(render_strategy_writing_guide(), encoding="utf-8")
+    return engine_output, lite_output, strategy_output
 
 
 def write_api_docs(docs_dir: Path | str = Path("docs")) -> tuple[Path, ...]:
