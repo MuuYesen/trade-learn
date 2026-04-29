@@ -201,3 +201,4 @@ reference/
 # tracked, but new ad-hoc probes should stay local unless promoted explicitly.
 scratch/*.py
 scratch_doc.txt
+/demo/
