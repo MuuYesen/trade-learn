@@ -75,11 +75,11 @@ def test_cli_lab_and_mcp_support_dry_run(tmp_path) -> None:
 
     assert lab.exit_code == 0
     assert "jupyter" in lab.output.lower()
-    assert "tradelearn mcp --dry-run" in lab.output
+    assert "tradelearn mcp --transport streamable-http" in lab.output
     assert "http://mlflow.local" in lab.output
     assert "--port=9999" in lab.output
     assert mcp.exit_code == 0
-    assert "mcp" in mcp.output.lower()
+    assert "tradelearn mcp --transport stdio" in mcp.output
 
 
 def test_cli_doctor_reports_lab_dependency_status(tmp_path) -> None:

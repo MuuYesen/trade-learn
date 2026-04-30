@@ -38,8 +38,18 @@ def test_build_lab_plan_sets_commands_and_mlflow_environment(tmp_path: Path) -> 
     assert f"--notebook-dir={tmp_path}" in plan.jupyter.args
     assert "--no-browser" in plan.jupyter.args
     assert plan.jupyter.env["MLFLOW_TRACKING_URI"] == "http://mlflow.local"
-    assert plan.mcp.args == ("tradelearn", "mcp", "--dry-run")
+    assert plan.mcp.args == (
+        "tradelearn",
+        "mcp",
+        "--transport",
+        "streamable-http",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8765",
+    )
     assert plan.mcp.env["MLFLOW_TRACKING_URI"] == "http://mlflow.local"
+    assert plan.mcp.env["TRADELEARN_LOG_LEVEL"] == "INFO"
 
 
 def test_start_lab_stack_starts_mcp_then_jupyter() -> None:
@@ -69,6 +79,6 @@ def test_start_lab_stack_starts_mcp_then_jupyter() -> None:
     exit_code = start_lab_stack(plan, popen=fake_popen)
 
     assert exit_code == 0
-    assert started[0] == ("tradelearn", "mcp", "--dry-run")
+    assert started[0][:5] == ("tradelearn", "mcp", "--transport", "streamable-http", "--host")
     assert started[1][:3] == ("python", "-m", "jupyterlab")
-    assert terminated == [("tradelearn", "mcp", "--dry-run")]
+    assert terminated == [started[0]]

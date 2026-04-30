@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import typer
 
 from tradelearn import __version__
 from tradelearn.core.config import TradelearnConfig, load_config
 from tradelearn.lab import build_lab_plan, check_lab_dependencies, start_lab_stack
+from tradelearn.mcp import run_server
 
 app = typer.Typer(help="trade-learn research workflow CLI.", no_args_is_help=True)
 
@@ -123,6 +124,13 @@ def lab(
 
 @app.command()
 def mcp(
+    config: Annotated[Path | None, typer.Option("--config", help="Config file path.")] = None,
+    transport: Annotated[
+        Literal["stdio", "sse", "streamable-http"],
+        typer.Option("--transport", help="MCP transport."),
+    ] = "stdio",
+    host: Annotated[str, typer.Option("--host", help="MCP HTTP bind host.")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port", help="MCP HTTP port.")] = 8765,
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Print command without starting."),
@@ -130,10 +138,20 @@ def mcp(
 ) -> None:
     """Start the MCP server entrypoint."""
 
-    if not dry_run:
-        typer.echo("MCP server implementation is scheduled for Stage 7; use --dry-run in Stage 4.")
-        raise typer.Exit(2)
-    typer.echo("Would start tradelearn mcp server")
+    if dry_run:
+        typer.echo(
+            "tradelearn mcp "
+            f"--transport {transport} --host {host} --port {port}"
+            + (f" --config {config}" if config else "")
+        )
+        return
+    run_server(
+        transport=transport,
+        host=host,
+        port=port,
+        project_dir=Path.cwd(),
+        config_path=config,
+    )
 
 
 @app.command()

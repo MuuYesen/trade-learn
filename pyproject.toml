@@ -35,7 +35,7 @@ dependencies = [
     "bokeh",
     "causal-learn",
     "mlflow",
-    "mcp",
+    "mcp>=1.8.0",
     "httpx",
     "tqdm",
     "typer",
