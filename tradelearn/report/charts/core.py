@@ -231,7 +231,7 @@ def market_replay(
                 x=[float("nan")],
                 y=[float("nan")],
                 marker="square",
-                size=11,
+                size=9,
                 fill_color=MARKET_UP,
                 line_color=MARKET_UP_LINE,
                 legend_label="Up",
@@ -241,7 +241,7 @@ def market_replay(
                 x=[float("nan")],
                 y=[float("nan")],
                 marker="square",
-                size=11,
+                size=9,
                 fill_color=MARKET_DOWN,
                 line_color=MARKET_DOWN_LINE,
                 legend_label="Down",
@@ -944,12 +944,12 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
         legend.border_line_color = "#d7e0e7"
         legend.background_fill_color = "white"
         legend.background_fill_alpha = 0.88
-        legend.padding = 4 if compact else 6
-        legend.spacing = 1
-        legend.margin = 3 if compact else 4
+        legend.padding = 3 if compact else 6
+        legend.spacing = 0 if compact else 1
+        legend.margin = 2 if compact else 4
         if compact and large_glyphs:
-            legend.glyph_width = 34
-            legend.glyph_height = 24
+            legend.glyph_width = 26
+            legend.glyph_height = 18
         else:
             legend.glyph_width = 18 if compact else (34 if large_glyphs else 28)
             legend.glyph_height = 12 if compact else (22 if large_glyphs else 18)
