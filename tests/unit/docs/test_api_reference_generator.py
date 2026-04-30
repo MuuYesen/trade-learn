@@ -40,7 +40,7 @@ def test_render_module_reference_contains_single_mkdocstrings_directive() -> Non
     assert rendered.startswith("# Engine Reference")
     assert "::: tradelearn.engine" in rendered
     assert "::: tradelearn.lite" not in rendered
-    assert "show_source: true" in rendered
+    assert "show_source: false" in rendered
 
 
 def test_write_api_reference_creates_expected_page(tmp_path) -> None:
@@ -95,7 +95,8 @@ def test_render_lite_api_guide_includes_code_signatures_and_parameter_tables() -
     assert "| `ticker` | `str` | `None` |" in rendered
     assert "| `sl` | `float` | `None` |" in rendered
     assert "## Complete Lite Surface" in rendered
-    assert "| `Strategy.rebalance` | method |" in rendered
+    assert "| `Strategy.target_weights` | method |" in rendered
+    assert "| `Strategy.close_all` | method |" in rendered
     assert "| `Strategy.orders` | property |" in rendered
     assert "| `LiteDataProxy.df` | property |" in rendered
     assert "| `PositionProxy.pl_pct` | property |" in rendered
