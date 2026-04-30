@@ -40,6 +40,9 @@ def __getattr__(name: str) -> Any:
     if name == "Cerebro":
         from tradelearn.engine import Cerebro
         return Cerebro
+    if name == "OptReturn":
+        from tradelearn.engine import OptReturn
+        return OptReturn
     if name == "Strategy":
         from tradelearn.engine import Strategy
         return Strategy

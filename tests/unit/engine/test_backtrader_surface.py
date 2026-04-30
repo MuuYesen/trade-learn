@@ -22,6 +22,7 @@ def _ohlcv(rows: int = 12) -> pd.DataFrame:
 def test_backtrader_facade_exports_common_surface() -> None:
     for name in [
         "Cerebro",
+        "OptReturn",
         "DataFeed",
         "Strategy",
         "Order",
@@ -54,6 +55,7 @@ def test_cerebro_exposes_runtime_compat_methods() -> None:
         "addobserver",
         "addwriter",
         "optstrategy",
+        "optcallback",
         "runstop",
         "plot",
         "set_coc",
@@ -273,6 +275,44 @@ def test_optstrategy_runs_parameter_grid() -> None:
         (2, 3),
         (2, 4),
     ]
+
+
+def test_optstrategy_can_return_backtrader_style_optreturn() -> None:
+    class ParamStrategy(bt.Strategy):
+        params = (("fast", 1),)
+
+        def next(self) -> None:
+            pass
+
+    cerebro = bt.Cerebro()
+    cerebro.adddata(_ohlcv())
+    cerebro.optstrategy(ParamStrategy, fast=[1, 2])
+
+    results = cerebro.run(optreturn=True)
+
+    assert [result.p.fast for result in results] == [1, 2]
+    assert [result.params.fast for result in results] == [1, 2]
+    assert [result.strategycls for result in results] == [ParamStrategy, ParamStrategy]
+    assert all(result.analyzers is not None for result in results)
+
+
+def test_optcallback_receives_full_strategy_instances() -> None:
+    class ParamStrategy(bt.Strategy):
+        params = (("fast", 1),)
+
+        def next(self) -> None:
+            pass
+
+    seen: list[int] = []
+    cerebro = bt.Cerebro()
+    cerebro.adddata(_ohlcv())
+    cerebro.optstrategy(ParamStrategy, fast=[3, 5])
+    cerebro.optcallback(lambda strategy: seen.append(strategy.p.fast))
+
+    results = cerebro.run()
+
+    assert [strategy.p.fast for strategy in results] == [3, 5]
+    assert seen == [3, 5]
 
 
 def test_runstop_stops_later_strategy_callbacks() -> None:

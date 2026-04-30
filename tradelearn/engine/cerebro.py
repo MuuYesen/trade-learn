@@ -13,6 +13,15 @@ from tradelearn.engine.strategy import Strategy
 from .analyzer import Analyzer
 
 
+class OptReturn:
+    """Lightweight optimization result returned by ``Cerebro.run(optreturn=True)``."""
+
+    def __init__(self, params: Any, **kwargs: Any) -> None:
+        self.p = self.params = params
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+
 class Cerebro:
     """Main orchestrator for backtesting (Backtrader facade)."""
     def __init__(
@@ -38,6 +47,7 @@ class Cerebro:
         if mode not in {"backtest", "paper", "live"}:
             raise ValueError("mode must be one of 'backtest', 'paper', or 'live'")
         self.mode = mode
+        self.optreturn = bool(kwargs.pop("optreturn", False))
         self.kwargs = kwargs
         from tradelearn.backtest.broker import RustBroker
         self.broker = RustBroker(match_mode=match_mode)
@@ -58,6 +68,8 @@ class Cerebro:
         self._signal_strat: tuple[type, tuple, dict] | None = None
         self._signal_concurrent: bool = False
         self._signal_accumulate: bool = False
+        self._dooptimize = False
+        self.optcbs: list[Any] = []
 
     def setcash(self, cash: float) -> None:
         self.broker.setcash(cash)
@@ -138,15 +150,20 @@ class Cerebro:
     def optstrategy(self, strategy: type[Strategy], *args: Any, **kwargs: Any) -> None:
         from itertools import product
 
-        grid_keys = [key for key, value in kwargs.items() if isinstance(value, (list, tuple))]
-        if not grid_keys:
-            self.addstrategy(strategy, *args, **kwargs)
+        self._dooptimize = True
+        if not kwargs:
+            self.addstrategy(strategy, *args)
             return
-        fixed_kwargs = {key: value for key, value in kwargs.items() if key not in grid_keys}
-        for values in product(*(kwargs[key] for key in grid_keys)):
-            combo = dict(fixed_kwargs)
-            combo.update(dict(zip(grid_keys, values, strict=True)))
+        opt_items = {
+            key: value if isinstance(value, (list, tuple, range)) else (value,)
+            for key, value in kwargs.items()
+        }
+        for values in product(*opt_items.values()):
+            combo = dict(zip(opt_items.keys(), values, strict=True))
             self.addstrategy(strategy, *args, **combo)
+
+    def optcallback(self, cb: Any) -> None:
+        self.optcbs.append(cb)
 
     def addanalyzer(self, analyzer: type[Analyzer], *args: Any, _name=None, **kwargs: Any) -> None:
         name = _name or kwargs.pop("name", None) or analyzer.__name__.lower()
@@ -268,11 +285,13 @@ class Cerebro:
                 self._reset_strategy_context()
         self.strats = original_strats
         self._last_results = results
-        return results
+        return self._format_run_results(results)
 
     def _apply_run_kwargs(self, kwargs: dict[str, Any]) -> None:
         if not kwargs:
             return
+        if "optreturn" in kwargs:
+            self.optreturn = bool(kwargs["optreturn"])
         if "exactbars" in kwargs:
             self.exactbars = bool(kwargs["exactbars"])
         if "stdstats" in kwargs:
@@ -281,6 +300,23 @@ class Cerebro:
             self.set_coc(bool(kwargs["cheat_on_close"]))
         if "trade_on_close" in kwargs:
             self.set_coc(bool(kwargs["trade_on_close"]))
+
+    def _format_run_results(self, results: list[Strategy]) -> list[Any]:
+        if not self._dooptimize:
+            return results
+        for strategy in results:
+            for callback in self.optcbs:
+                callback(strategy)
+        if not self.optreturn:
+            return results
+        return [
+            OptReturn(
+                strategy.params,
+                analyzers=getattr(strategy, "analyzers", None),
+                strategycls=type(strategy),
+            )
+            for strategy in results
+        ]
 
     def _last_reporter(self):
         results = getattr(self, "_last_results", None)

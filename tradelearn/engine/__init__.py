@@ -7,7 +7,7 @@ import pandas as pd
 from tradelearn.engine import analyzers, feeds, observers, sizers
 from tradelearn.engine.analyzer import Analyzer
 from tradelearn.engine.base import TimeFrame
-from tradelearn.engine.cerebro import Cerebro
+from tradelearn.engine.cerebro import Cerebro, OptReturn
 from tradelearn.engine.grid import GridSearchResult, grid_search
 from tradelearn.engine.indicators import Indicator
 from tradelearn.engine.observers import Observer
@@ -67,6 +67,7 @@ tv = importlib.import_module("tradelearn.indicators.tv")
 
 __all__ = [
     "Cerebro",
+    "OptReturn",
     "DataFeed",
     "CommInfoBase",
     "ExecutedInfo",
