@@ -50,3 +50,16 @@ def test_build_data_feeds_preserves_default_copy_semantics_on_fast_path() -> Non
 
     assert feed._frame is not frame
     assert feed.get_array("close")[0] == 10.5
+
+
+def test_build_data_feeds_shares_datetime_array_for_common_index() -> None:
+    frame = _normalized_frame()
+    other = frame.copy()
+
+    first, second = build_data_feeds(
+        {"AAA": frame, "BBB": other},
+        assume_normalized=True,
+    )
+
+    assert first._datetime is second._datetime
+    assert first.datetime[0] == second.datetime[0]

@@ -88,7 +88,14 @@ class RollingBarBuffer:
 class DataContainer:
     """Core data storage for OHLCV and extra columns."""
 
-    def __init__(self, data: pd.DataFrame, name: str | None = None, *, copy: bool = True) -> None:
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        name: str | None = None,
+        *,
+        copy: bool = True,
+        datetime_array: np.ndarray | None = None,
+    ) -> None:
         self._name = name
         self._frame = data.copy() if copy else data
         self._cursor = -1
@@ -105,7 +112,9 @@ class DataContainer:
             return np.full(len(df), default_val, dtype=np.float64)
 
         frame = self._frame
-        if isinstance(frame.index, pd.DatetimeIndex):
+        if datetime_array is not None:
+            self._datetime = datetime_array
+        elif isinstance(frame.index, pd.DatetimeIndex):
             self._datetime = frame.index.values.astype("datetime64[s]").view(np.int64)
         else:
             self._datetime = frame.index.to_numpy()

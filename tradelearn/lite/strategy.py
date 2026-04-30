@@ -597,26 +597,31 @@ class Strategy(CoreStrategy):
 
         ``cash`` is accepted as a reserved key and is not translated into an order.
         """
-        targets = pd.Series(dict(weights), dtype="float64")
-        if (targets < 0).any():
+        requested: dict[str, float] = {
+            str(ticker): float(target)
+            for ticker, target in (
+                weights.items() if hasattr(weights, "items") else dict(weights).items()
+            )
+        }
+        if any(target < 0 for target in requested.values()):
             raise ValueError("target weights must be non-negative")
 
-        cash_weight = float(targets.pop("cash")) if "cash" in targets else 0.0
+        cash_weight = float(requested.pop("cash", 0.0))
         if cash_weight < 0:
             raise ValueError("cash target weight must be non-negative")
-        if float(targets.sum() + cash_weight) > 1.000000000000001:
+        if float(sum(requested.values()) + cash_weight) > 1.000000000000001:
             raise ValueError("target weights plus cash must sum to <= 1")
 
         data_by_ticker = self._target_weight_data_map()
         known = set(data_by_ticker)
-        unknown = sorted(str(ticker) for ticker in targets.index if str(ticker) not in known)
+        unknown = sorted(ticker for ticker in requested if ticker not in known)
         if unknown:
             raise ValueError(f"Unknown ticker(s): {unknown}")
 
         equity = self._portfolio_equity_snapshot()
         snapshots = self._target_weight_snapshots(data_by_ticker)
         intents = self._target_weight_order_requests(
-            targets,
+            requested,
             data_by_ticker,
             snapshots,
             equity,
@@ -632,13 +637,12 @@ class Strategy(CoreStrategy):
 
     def _target_weight_order_requests(
         self,
-        targets: pd.Series,
+        requested: Mapping[str, float],
         data_by_ticker: dict[str, Any],
         snapshots: _TargetWeightSnapshots,
         equity: float,
         close_missing: bool,
     ) -> list[tuple[OrderRequest, Any]]:
-        requested = {str(ticker): float(target) for ticker, target in targets.items()}
         target_by_ticker = dict(requested)
         if close_missing:
             for ticker in data_by_ticker.keys() - requested.keys():

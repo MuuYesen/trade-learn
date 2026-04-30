@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from tradelearn.backtest.data import DataContainer
@@ -60,10 +61,17 @@ class RuntimeDataFeed(DataContainer):
         *,
         assume_normalized: bool = False,
         copy: bool = True,
+        datetime_array: np.ndarray | None = None,
         **_kwargs: Any,
     ) -> None:
         frame = data if assume_normalized else normalize_ohlcv_frame(data)
-        DataContainer.__init__(self, frame, name=name, copy=copy)
+        DataContainer.__init__(
+            self,
+            frame,
+            name=name,
+            copy=copy,
+            datetime_array=datetime_array,
+        )
         buffer = self.shared_bar_buffer()
 
         self.datetime = LineSeries(
@@ -104,12 +112,14 @@ def build_data_feeds(
     if isinstance(data, Mapping):
         if not data:
             raise ValueError("data dict must contain at least one ticker")
+        shared_datetime = _shared_datetime_array(data.values()) if assume_normalized else None
         return [
             feed_cls(
                 frame,
                 name=str(name),
                 assume_normalized=assume_normalized,
                 copy=copy,
+                datetime_array=shared_datetime,
             )
             for name, frame in data.items()
         ]
@@ -121,3 +131,18 @@ def build_data_feeds(
             copy=copy,
         )
     ]
+
+
+def _shared_datetime_array(frames: Any) -> np.ndarray | None:
+    iterator = iter(frames)
+    try:
+        first = next(iterator)
+    except StopIteration:
+        return None
+    if not isinstance(first.index, pd.DatetimeIndex):
+        return None
+    first_index = first.index
+    for frame in iterator:
+        if not isinstance(frame.index, pd.DatetimeIndex) or not frame.index.equals(first_index):
+            return None
+    return first_index.values.astype("datetime64[s]").view(np.int64)
