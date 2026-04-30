@@ -36,6 +36,16 @@ STRATEGY_CLASSES = {
     "10_order_execution": "OrderExecutionStrategy",
 }
 
+PORTFOLIO_STRATEGY_CLASSES = {
+    "11_target_percent_portfolio": "TargetPercentPortfolioStrategy",
+    "12_asset_class_portfolios": [
+        "AssetClassTargetPortfolioStrategy",
+        "UniformAssetClassPortfolioStrategy",
+        "TrendFilteredPortfolioStrategy",
+        "InverseVolatilityPortfolioStrategy",
+    ],
+}
+
 PREVIOUS_TL_MS = {
     "QuickstartSmaCross": 6.4,
     "SmaCross": 5.6,
@@ -46,6 +56,37 @@ PREVIOUS_TL_MS = {
     "MacdTharp": 7.0,
     "OrderExecutionStrategy": 7.4,
 }
+
+
+def make_portfolio_data() -> dict[str, pd.DataFrame]:
+    index = pd.date_range("2024-01-01", periods=90, freq="D", tz="UTC")
+    specs = {
+        "GLD": (80.0, 0.03),
+        "DBC": (25.0, 0.01),
+        "SPY": (100.0, 0.08),
+        "TLT": (60.0, 0.04),
+        "IEF": (55.0, 0.02),
+    }
+    frames = {}
+    for name, (base, drift) in specs.items():
+        close = [
+            base + drift * i + ((i % 9) - 4) * 0.05
+            for i in range(len(index))
+        ]
+        frames[name] = pd.DataFrame(
+            {
+                "open": close,
+                "high": [value + 0.2 for value in close],
+                "low": [value - 0.2 for value in close],
+                "close": close,
+                "volume": [1000.0 + i for i in range(len(index))],
+            },
+            index=index,
+        )
+    return frames
+
+
+PORTFOLIO_BAR_COUNT = sum(len(frame) for frame in make_portfolio_data().values())
 
 
 def run_strategy_in_process(
@@ -157,11 +198,105 @@ def run_strategy_in_process(
         queue.put({"status": "error", "error": str(e), "traceback": traceback.format_exc()})
 
 
+def run_portfolio_strategy_in_process(
+    engine_type,
+    mod_name,
+    cls_name,
+    queue,
+    match_mode="exact",
+    repeats=1,
+    warmup=0,
+):
+    try:
+        import contextlib
+        import io
+        import time
+        import types
+
+        if engine_type == "Tradelearn":
+            import tradelearn.engine as bt
+        else:
+            import backtrader as bt
+
+            sys.modules["tradelearn"] = types.ModuleType("tradelearn")
+            sys.modules["tradelearn.engine"] = bt
+
+        module = importlib.import_module(f"examples.backtrader.{mod_name}")
+        importlib.reload(module)
+        strategy_cls = getattr(module, cls_name)
+
+        if engine_type != "Tradelearn":
+
+            class PandasData(bt.feeds.PandasData):
+                params = (
+                    ("datetime", None),
+                    ("open", "open"),
+                    ("high", "high"),
+                    ("low", "low"),
+                    ("close", "close"),
+                    ("volume", "volume"),
+                    ("openinterest", None),
+                )
+
+        repeats = max(1, int(repeats))
+        warmup = max(0, int(warmup))
+        suppress_run_output = warmup > 0 or repeats > 1
+        timings = []
+        final_value = None
+        order_count = None
+        target_count = None
+        for run_idx in range(warmup + repeats):
+            if engine_type == "Tradelearn":
+                cerebro = bt.Cerebro(match_mode=match_mode, trade_on_close=True)
+            else:
+                cerebro = bt.Cerebro()
+                cerebro.broker.set_coc(True)
+            cerebro.broker.setcash(100000.0)
+            cerebro.broker.setcommission(commission=0.0)
+            for name, dataframe in make_portfolio_data().items():
+                if engine_type == "Tradelearn":
+                    data = bt.feeds.PandasData(dataname=dataframe, name=name)
+                else:
+                    data = PandasData(dataname=dataframe, name=name)
+                cerebro.adddata(data)
+            cerebro.addstrategy(strategy_cls, rebalance_bars=15, lookback=10)
+
+            start_time = time.perf_counter()
+            if suppress_run_output:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    strats = cerebro.run()
+            else:
+                strats = cerebro.run()
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            if run_idx >= warmup:
+                timings.append(elapsed_ms)
+                final_value = cerebro.broker.getvalue()
+                strategy = strats[0]
+                order_count = len(getattr(strategy, "order_history", []))
+                target_count = len(getattr(strategy, "target_history", []))
+
+        queue.put(
+            {
+                "status": "success",
+                "final_value": final_value,
+                "elapsed_ms": statistics.median(timings),
+                "order_count": order_count,
+                "target_count": target_count,
+                "timings_ms": timings,
+            }
+        )
+    except Exception as e:
+        import traceback
+
+        queue.put({"status": "error", "error": str(e), "traceback": traceback.format_exc()})
+
+
 def run_benchmark(
     match_mode="smart",
     repeats: int = 1,
     warmup: int = 0,
     min_speedup: float = 0.0,
+    include_portfolio: bool = False,
 ) -> bool:
     print(f"\n{'=' * 80}")
     timing_label = "median" if repeats > 1 else "single run"
@@ -261,12 +396,100 @@ def run_benchmark(
                 f"{improvement_text:>11} | {status:<10}"
             )
     print(f"{'=' * 162}\n")
+    portfolio_results = {}
+    if include_portfolio:
+        portfolio_results = run_portfolio_benchmark(match_mode, repeats=repeats, warmup=warmup)
     if not comparable_to_previous:
         print(
             "* Warm/repeated runs are not directly comparable with the saved single-run "
             "previous TL baseline.\n"
         )
-    return _benchmark_passed(final_results, min_speedup=min_speedup)
+    single_data_ok = _benchmark_passed(final_results, min_speedup=min_speedup)
+    portfolio_ok = not include_portfolio or _benchmark_passed(portfolio_results)
+    return single_data_ok and portfolio_ok
+
+
+def _iter_portfolio_strategies() -> list[tuple[str, str]]:
+    strategies = []
+    for mod_name, class_names in PORTFOLIO_STRATEGY_CLASSES.items():
+        if isinstance(class_names, str):
+            strategies.append((mod_name, class_names))
+        else:
+            strategies.extend((mod_name, class_name) for class_name in class_names)
+    return strategies
+
+
+def run_portfolio_benchmark(
+    match_mode="smart",
+    repeats: int = 1,
+    warmup: int = 0,
+) -> dict:
+    print(f"\n{'=' * 120}")
+    print(
+        "MULTI-DATA PORTFOLIO AUDIT: Tradelearn "
+        f"({match_mode}) vs Backtrader [total data bars={PORTFOLIO_BAR_COUNT}]"
+    )
+    print(f"{'=' * 120}")
+
+    final_results = {}
+    for mod_name, cls_name in _iter_portfolio_strategies():
+        print(f"\nAudit {cls_name} ...")
+        results = {}
+        for engine in ["Tradelearn", "Backtrader"]:
+            queue = Queue()
+            mode = match_mode if engine == "Tradelearn" else "exact"
+            p = Process(
+                target=run_portfolio_strategy_in_process,
+                args=(engine, mod_name, cls_name, queue, mode, repeats, warmup),
+            )
+            p.start()
+            res = queue.get()
+            p.join()
+            if res["status"] == "success":
+                results[engine] = res
+            else:
+                print(f"  [{engine}] FAILED: {res['error']}")
+                results[engine] = None
+
+        tl, bt_res = results.get("Tradelearn"), results.get("Backtrader")
+        if tl and bt_res:
+            diff = tl["final_value"] - bt_res["final_value"]
+            status = "✅ EXACT" if abs(diff) < EXACT_TOLERANCE else f"❌ DIFF: {diff:.4f}"
+            print(f"  Result: {tl['final_value']:.2f} vs {bt_res['final_value']:.2f} | {status}")
+            if abs(diff) >= EXACT_TOLERANCE:
+                print(
+                    "  Portfolio trace: "
+                    f"TL orders={tl['order_count']}, BT orders={bt_res['order_count']}, "
+                    f"TL targets={tl['target_count']}, BT targets={bt_res['target_count']}"
+                )
+        final_results[cls_name] = results
+
+    print(f"\n{'=' * 120}")
+    print(
+        f"{'Portfolio Strategy':<40} | {'TL Value':<12} | {'BT Value':<12} | "
+        f"{'TL Time':<10} | {'BT Time':<10} | {'TL Bars/s':<11} | "
+        f"{'BT Bars/s':<11} | {'Speedup':<10} | {'Orders':<15} | {'Status':<10}"
+    )
+    print(f"{'-' * 154}")
+    for cls_name, res in final_results.items():
+        tl, bt_res = res.get("Tradelearn"), res.get("Backtrader")
+        if tl and bt_res:
+            diff = tl["final_value"] - bt_res["final_value"]
+            t_tl, t_bt = tl["elapsed_ms"], bt_res["elapsed_ms"]
+            tl_bars_per_sec = PORTFOLIO_BAR_COUNT / (t_tl / 1000) if t_tl > 0 else 0
+            bt_bars_per_sec = PORTFOLIO_BAR_COUNT / (t_bt / 1000) if t_bt > 0 else 0
+            speedup = t_bt / t_tl if t_tl > 0 else 0
+            status = "✅ EXACT" if abs(diff) < EXACT_TOLERANCE else "❌ DIFF"
+            orders = f"{tl['order_count']}/{bt_res['order_count']}"
+            print(
+                f"{cls_name:<40} | {tl['final_value']:<12.2f} | "
+                f"{bt_res['final_value']:<12.2f} | {t_tl:>7.1f}ms | "
+                f"{t_bt:>7.1f}ms | {tl_bars_per_sec:>9,.0f} | "
+                f"{bt_bars_per_sec:>9,.0f} | {speedup:>8.1f}x | "
+                f"{orders:<15} | {status:<10}"
+            )
+    print(f"{'=' * 154}\n")
+    return final_results
 
 
 def _benchmark_passed(final_results: dict, min_speedup: float = 0.0) -> bool:
@@ -287,11 +510,17 @@ if __name__ == "__main__":
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--warmup", type=int, default=0)
     parser.add_argument("--min-speedup", type=float, default=0.0)
+    parser.add_argument(
+        "--include-portfolio",
+        action="store_true",
+        help="also audit multi-data portfolio examples; currently gates exactness separately",
+    )
     args = parser.parse_args()
     ok = run_benchmark(
         args.mode,
         repeats=args.repeat,
         warmup=args.warmup,
         min_speedup=args.min_speedup,
+        include_portfolio=args.include_portfolio,
     )
     raise SystemExit(0 if ok else 1)
