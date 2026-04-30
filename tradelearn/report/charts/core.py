@@ -960,14 +960,15 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
 
 def _add_line_hover(plot, renderers, tooltips, *, vline: bool = True) -> None:
     """Attach a shared hover tool."""
-    plot.add_tools(
+    _add_passive_hover(
+        plot,
         HoverTool(
             point_policy="follow_mouse",
             renderers=list(renderers),
             formatters={"@date": "datetime", "@exit_datetime": "datetime"},
             tooltips=list(tooltips),
             mode="vline" if vline else "mouse",
-        )
+        ),
     )
 
 
@@ -1020,7 +1021,8 @@ def _bar_width_ms(dates: pd.Series) -> float:
 
 def _add_ohlc_hover(plot, renderers) -> None:
     """Attach OHLC hover tool to the main market replay plot."""
-    plot.add_tools(
+    _add_passive_hover(
+        plot,
         HoverTool(
             renderers=list(renderers),
             mode="vline",
@@ -1033,13 +1035,14 @@ def _add_ohlc_hover(plot, renderers) -> None:
                 ("Close", "@close{0,0.0000}"),
                 ("Volume", "@volume{0,0}"),
             ],
-        )
+        ),
     )
 
 
 def _add_close_hover(plot, renderers) -> None:
     """Attach close-price hover tool to the main market replay plot."""
-    plot.add_tools(
+    _add_passive_hover(
+        plot,
         HoverTool(
             renderers=list(renderers),
             mode="vline",
@@ -1048,5 +1051,12 @@ def _add_close_hover(plot, renderers) -> None:
                 ("Date", "@date{%F %T}"),
                 ("Close", "@close{0,0.0000}"),
             ],
-        )
+        ),
     )
+
+
+def _add_passive_hover(plot, hover: HoverTool) -> None:
+    """Attach hover behavior without adding repeated hover buttons to the toolbar."""
+    plot.add_tools(hover)
+    if hover in plot.toolbar.tools:
+        plot.toolbar.tools.remove(hover)
