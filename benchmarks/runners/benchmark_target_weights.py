@@ -16,6 +16,16 @@ class StageTiming:
     seconds: float
 
 
+@dataclass
+class TargetWeightsProfile:
+    signal_rank_seconds: float = 0.0
+    target_weights_seconds: float = 0.0
+    order_submit_seconds: float = 0.0
+    stats_read_seconds: float = 0.0
+    rebalance_count: int = 0
+    order_count: int = 0
+
+
 def _make_panel(symbols: int, bars: int, seed: int) -> dict[str, pd.DataFrame]:
     rng = np.random.default_rng(seed)
     index = pd.date_range("2020-01-01", periods=bars, freq="D", tz="UTC")
@@ -42,7 +52,10 @@ def _make_panel(symbols: int, bars: int, seed: int) -> dict[str, pd.DataFrame]:
 
 def _top_equal_weights(strategy: Strategy, count: int) -> dict[str, float]:
     scores: list[tuple[float, str]] = []
-    for ticker in strategy.data.tickers:
+    tickers = getattr(strategy, "_bt_data_by_ticker", None) or {
+        strategy.data.the_ticker: strategy._bt_primary_data
+    }
+    for ticker in tickers:
         data = strategy._resolve_ticker_data(ticker)
         close = data.get_array("close")
         cursor = data._cursor
@@ -57,7 +70,39 @@ def _top_equal_weights(strategy: Strategy, count: int) -> dict[str, float]:
     return {ticker: weight for ticker in selected}
 
 
-def _strategy_cls(rebalance_every: int, holdings: int) -> type[Strategy]:
+def _measure_order_submit(strategy: Strategy, profile: TargetWeightsProfile) -> dict[str, object]:
+    broker = strategy.broker
+    originals: dict[str, object] = {}
+
+    for name in ("submit_basic", "_submit"):
+        method = getattr(broker, name, None)
+        if not callable(method):
+            continue
+        originals[name] = method
+
+        def _wrapped(*args, _method=method, **kwargs):
+            start = time.perf_counter()
+            try:
+                return _method(*args, **kwargs)
+            finally:
+                profile.order_submit_seconds += time.perf_counter() - start
+                profile.order_count += 1
+
+        setattr(broker, name, _wrapped)
+
+    return originals
+
+
+def _restore_order_submit(strategy: Strategy, originals: dict[str, object]) -> None:
+    for name, method in originals.items():
+        setattr(strategy.broker, name, method)
+
+
+def _strategy_cls(
+    rebalance_every: int,
+    holdings: int,
+    profile: TargetWeightsProfile,
+) -> type[Strategy]:
     class TargetWeightsBenchmarkStrategy(Strategy):
         def init(self) -> None:
             self.start_on_bar(20)
@@ -65,10 +110,22 @@ def _strategy_cls(rebalance_every: int, holdings: int) -> type[Strategy]:
         def next(self) -> None:
             if (len(self.data) - 1) % rebalance_every:
                 return
-            self.target_weights(
-                _top_equal_weights(self, holdings),
-                close_missing=True,
-            )
+            profile.rebalance_count += 1
+
+            start = time.perf_counter()
+            weights = _top_equal_weights(self, holdings)
+            profile.signal_rank_seconds += time.perf_counter() - start
+
+            originals = _measure_order_submit(self, profile)
+            start = time.perf_counter()
+            try:
+                self.target_weights(
+                    weights,
+                    close_missing=True,
+                )
+            finally:
+                profile.target_weights_seconds += time.perf_counter() - start
+                _restore_order_submit(self, originals)
 
     return TargetWeightsBenchmarkStrategy
 
@@ -81,7 +138,8 @@ def run_benchmark(
     rebalance_every: int,
     cash: float,
     seed: int,
-) -> tuple[list[StageTiming], pd.Series]:
+) -> tuple[list[StageTiming], pd.Series, TargetWeightsProfile]:
+    profile = TargetWeightsProfile()
     start = time.perf_counter()
     panel = _make_panel(symbols, bars, seed)
     data_seconds = time.perf_counter() - start
@@ -89,7 +147,7 @@ def run_benchmark(
     start = time.perf_counter()
     backtest = Backtest(
         panel,
-        _strategy_cls(rebalance_every=rebalance_every, holdings=holdings),
+        _strategy_cls(rebalance_every=rebalance_every, holdings=holdings, profile=profile),
         cash=cash,
         match_mode="exact",
     )
@@ -99,12 +157,22 @@ def run_benchmark(
     stats = backtest.run()
     run_seconds = time.perf_counter() - start
 
+    start = time.perf_counter()
+    _ = float(stats["Equity Final [$]"])
+    _ = int(stats["# Trades"])
+    _ = stats["_strategy"]
+    profile.stats_read_seconds = time.perf_counter() - start
+
     return [
         StageTiming("data_generate", data_seconds),
         StageTiming("init_runner_feed", init_seconds),
         StageTiming("run_loop", run_seconds),
-        StageTiming("total", data_seconds + init_seconds + run_seconds),
-    ], stats
+        StageTiming("stats_read", profile.stats_read_seconds),
+        StageTiming(
+            "total",
+            data_seconds + init_seconds + run_seconds + profile.stats_read_seconds,
+        ),
+    ], stats, profile
 
 
 def main() -> None:
@@ -117,7 +185,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=7)
     args = parser.parse_args()
 
-    timings, stats = run_benchmark(
+    timings, stats, profile = run_benchmark(
         symbols=args.symbols,
         bars=args.bars,
         holdings=args.holdings,
@@ -133,6 +201,13 @@ def main() -> None:
     print(f"rebalance_every={args.rebalance_every} total_data_bars={total_data_bars:,}")
     for timing in timings:
         print(f"{timing.name:>16}: {timing.seconds:.4f}s")
+    print("Profile")
+    print(f"{'rebalance_count':>16}: {profile.rebalance_count:,}")
+    print(f"{'signal_rank':>16}: {profile.signal_rank_seconds:.6f}s")
+    print(f"{'target_weights':>16}: {profile.target_weights_seconds:.6f}s")
+    print(f"{'order_submit':>16}: {profile.order_submit_seconds:.6f}s")
+    print(f"{'stats_read':>16}: {profile.stats_read_seconds:.6f}s")
+    print(f"{'profiled_orders':>16}: {profile.order_count:,}")
     print(f"{'bars/s':>16}: {total_data_bars / total:,.0f}")
     print(f"{'final_value':>16}: {float(stats['Equity Final [$]']):,.2f}")
     print(f"{'trades':>16}: {int(stats['# Trades'])}")

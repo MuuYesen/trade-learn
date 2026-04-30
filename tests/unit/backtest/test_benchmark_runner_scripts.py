@@ -5,6 +5,9 @@ import sys
 from pathlib import Path
 
 from benchmarks.runners.benchmark_bt import _benchmark_passed
+from benchmarks.runners.benchmark_target_weights import (
+    run_benchmark as run_target_weights_benchmark,
+)
 from benchmarks.runners.benchmark_throughput import make_data, run_benchmark, run_engine, run_lite
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -112,3 +115,22 @@ def test_throughput_benchmark_uses_same_default_semantics_for_all_runners() -> N
     assert max(values) - min(values) < 1e-4
     assert len(fills) == 1
     assert len(closed_trades) == 1
+
+
+def test_target_weights_benchmark_reports_profile_segments() -> None:
+    timings, stats, profile = run_target_weights_benchmark(
+        symbols=10,
+        bars=45,
+        holdings=3,
+        rebalance_every=7,
+        cash=100_000.0,
+        seed=3,
+    )
+
+    timing_names = {timing.name for timing in timings}
+    assert {"data_generate", "init_runner_feed", "run_loop", "stats_read", "total"} <= timing_names
+    assert profile.rebalance_count > 0
+    assert profile.signal_rank_seconds >= 0.0
+    assert profile.target_weights_seconds >= profile.order_submit_seconds >= 0.0
+    assert profile.order_count >= 3
+    assert float(stats["Equity Final [$]"]) > 0.0
