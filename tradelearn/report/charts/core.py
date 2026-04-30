@@ -8,7 +8,6 @@ from bokeh.models import (
     ColumnDataSource,
     CrosshairTool,
     HoverTool,
-    Legend,
     NumeralTickFormatter,
     Range1d,
     Span,
@@ -321,7 +320,7 @@ def market_replay(
         plots,
         ncols=1,
         sizing_mode="stretch_width",
-        toolbar_location="right",
+        toolbar_location=None,
         merge_tools=True,
     )
 
@@ -897,31 +896,8 @@ def _style_market_section(plot) -> None:
     plot.toolbar.logo = None
     plot.add_tools(CrosshairTool(dimensions="both"))
     if plot.legend:
-        _dock_legend(plot)
-
-
-def _dock_legend(plot) -> None:
-    """Move legends outside the plot area so they never cover market data."""
-    legends = list(plot.legend)
-    for legend in legends:
-        plot.center.remove(legend)
-    items = [item for legend in legends for item in legend.items]
-    if not items:
-        return
-    docked = Legend(items=items)
-    docked.orientation = "horizontal"
-    docked.location = "center"
-    docked.border_line_width = 0
-    docked.background_fill_color = None
-    docked.padding = 2
-    docked.spacing = 12
-    docked.margin = 2
-    docked.label_text_color = "#33424f"
-    docked.label_text_font_size = "8pt"
-    docked.glyph_width = 14
-    docked.glyph_height = 10
-    docked.click_policy = "hide"
-    plot.add_layout(docked, "above")
+        for legend in list(plot.legend):
+            legend.visible = False
 
 
 def _add_line_hover(plot, renderers, tooltips, *, vline: bool = True) -> None:

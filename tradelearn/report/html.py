@@ -52,17 +52,20 @@ def write_html_report(
     price_plot = reporter.price_trades_chart()
     if price_plot is not None:
         plots["Price / Trades"] = price_plot
-    plots.update({
-        "Equity Curve": charts.equity_curve(
+    if price_plot is None:
+        plots["Equity Curve"] = charts.equity_curve(
             reporter.equity_curve(),
             benchmark_returns,
             drawdowns=top_drawdowns.head(5),
-        ),
-        "Drawdown": charts.drawdown(reporter.drawdown()),
-        "Monthly Returns Heatmap": charts.monthly_heatmap(reporter.monthly_heatmap()),
-        "Rolling Sharpe": charts.rolling_sharpe(reporter.rolling_sharpe()),
-        "Trade Distribution": charts.trade_distribution(reporter.trade_distribution()),
-    })
+        )
+    plots.update(
+        {
+            "Drawdown": charts.drawdown(reporter.drawdown()),
+            "Monthly Returns Heatmap": charts.monthly_heatmap(reporter.monthly_heatmap()),
+            "Rolling Sharpe": charts.rolling_sharpe(reporter.rolling_sharpe()),
+            "Trade Distribution": charts.trade_distribution(reporter.trade_distribution()),
+        }
+    )
     if not rolling_beta.empty:
         plots["Rolling Beta"] = charts.rolling_beta(rolling_beta)
     if _has_multi_asset_exposure(exposure):

@@ -71,6 +71,7 @@ def test_reporter_html_adds_price_trades_chart_when_market_data_exists(tmp_path)
     assert "Price / Trades" in html
     assert "Buy" in html
     assert "Sell" in html
+    assert "Equity Curve" not in html
 
 
 def test_reporter_html_accepts_mapping_stats(tmp_path) -> None:
