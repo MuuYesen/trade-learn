@@ -394,6 +394,7 @@ def price_trades(market_data: pd.DataFrame, fills: pd.DataFrame | None = None):
                 legend_label="Sell",
             )
     plot.legend.location = "top_left"
+    _make_static_chart(plot)
     return plot
 
 
@@ -423,6 +424,7 @@ def equity_curve(
         )
     if drawdowns is not None and not drawdowns.empty:
         _add_drawdown_markers(plot, equity, drawdowns)
+    _make_static_chart(plot)
     return plot
 
 
@@ -437,6 +439,7 @@ def drawdown(drawdown_series: pd.Series):
     )
     plot.varea(frame["date"], y1=0, y2=frame["drawdown"], color="#d62728", alpha=0.35)
     plot.line(frame["date"], frame["drawdown"], line_width=2, color="#d62728")
+    _make_static_chart(plot)
     return plot
 
 
@@ -474,6 +477,7 @@ def monthly_heatmap(monthly: pd.DataFrame):
         fill_color=mapper,
         line_color="white",
     )
+    _make_static_chart(plot)
     return plot
 
 
@@ -488,6 +492,7 @@ def rolling_sharpe(rolling: pd.Series):
     )
     if not frame.empty:
         plot.line(frame["date"], frame["rolling_sharpe"], line_width=2, color="#9467bd")
+    _make_static_chart(plot)
     return plot
 
 
@@ -502,6 +507,7 @@ def rolling_beta(rolling: pd.Series):
     )
     if not frame.empty:
         plot.line(frame["date"], frame["rolling_beta"], line_width=2, color="#17becf")
+    _make_static_chart(plot)
     return plot
 
 
@@ -525,6 +531,7 @@ def trade_distribution(distribution: pd.DataFrame):
         plot.line([mean, mean], [0, distribution["count"].max()], color="#1f77b4", line_width=2)
     if pd.notna(median):
         plot.line([median, median], [0, distribution["count"].max()], color="#ff7f0e", line_width=2)
+    _make_static_chart(plot)
     return plot
 
 
@@ -550,6 +557,7 @@ def exposure(exposure_frame: pd.DataFrame):
             color=colors[index % len(colors)],
             legend_label=str(symbol),
         )
+    _make_static_chart(plot)
     return plot
 
 
@@ -585,6 +593,7 @@ def correlation_matrix(correlation: pd.DataFrame):
         fill_color=mapper,
         line_color="white",
     )
+    _make_static_chart(plot)
     return plot
 
 
@@ -608,6 +617,7 @@ def quantile_returns(returns: pd.DataFrame):
             color=colors[index % len(colors)],
             legend_label=f"Q{column}",
         )
+    _make_static_chart(plot)
     return plot
 
 
@@ -635,6 +645,7 @@ def factor_long_short_returns(returns: pd.DataFrame):
             color=colors.get(str(column), "#9467bd"),
             legend_label=str(column),
         )
+    _make_static_chart(plot)
     return plot
 
 
@@ -656,6 +667,7 @@ def factor_ic(ic: pd.Series):
             color="#ff7f0e",
             legend_label="Expanding Mean",
         )
+    _make_static_chart(plot)
     return plot
 
 
@@ -677,6 +689,7 @@ def factor_rank_ic(rank_ic: pd.Series):
             color="#ff7f0e",
             legend_label="Expanding Mean",
         )
+    _make_static_chart(plot)
     return plot
 
 
@@ -706,6 +719,7 @@ def factor_turnover(turnover: pd.Series, autocorrelation: pd.Series):
             color="#ff7f0e",
             legend_label="Autocorrelation",
         )
+    _make_static_chart(plot)
     return plot
 
 
@@ -956,6 +970,16 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
         legend.label_text_color = "#33424f"
         legend.label_text_font_size = "8pt" if compact else "9pt"
         legend.click_policy = "hide"
+
+
+def _make_static_chart(plot) -> None:
+    """Render report support charts without visible interactive controls."""
+    plot.toolbar_location = None
+    plot.toolbar.tools = []
+    plot.toolbar.logo = None
+    plot.toolbar.active_drag = None
+    plot.toolbar.active_scroll = None
+    plot.toolbar.active_inspect = None
 
 
 def _add_line_hover(plot, renderers, tooltips, *, vline: bool = True) -> None:

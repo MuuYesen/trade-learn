@@ -12,6 +12,7 @@ from tradelearn.report.charts import (
     factor_long_short_returns,
     factor_rank_ic,
     factor_turnover,
+    market_replay,
     monthly_heatmap,
     quantile_returns,
     rolling_beta,
@@ -54,6 +55,17 @@ def test_equity_curve_marks_top_drawdown_peak_and_valley() -> None:
 
     assert any(renderer.name == "drawdown_peak" for renderer in plot.renderers)
     assert any(renderer.name == "drawdown_valley" for renderer in plot.renderers)
+
+
+def test_support_charts_are_static_but_market_replay_keeps_toolbar() -> None:
+    """Only the market replay chart keeps visible interactive controls in reports."""
+    static_plot = equity_curve(_series("equity"))
+    replay = market_replay(_market_data(), fills=_fills(), equity=_series("equity"))
+
+    assert static_plot.toolbar_location is None
+    assert static_plot.toolbar.tools == []
+    assert replay.toolbar_location == "right"
+    assert replay.toolbar.tools
 
 
 def _series(name: str) -> pd.Series:
@@ -101,4 +113,27 @@ def _long_short_returns() -> pd.DataFrame:
             "spread": [0.02, 0.06],
         },
         index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+    )
+
+
+def _market_data() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "open": [10.0, 10.5, 11.0],
+            "high": [10.8, 11.2, 11.7],
+            "low": [9.8, 10.2, 10.8],
+            "close": [10.6, 11.0, 11.5],
+            "volume": [100.0, 110.0, 120.0],
+        },
+        index=pd.date_range("2024-01-01", periods=3, tz="UTC"),
+    )
+
+
+def _fills() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "datetime": pd.date_range("2024-01-01", periods=2, tz="UTC"),
+            "side": ["buy", "sell"],
+            "price": [10.6, 11.0],
+        }
     )
