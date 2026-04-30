@@ -268,7 +268,7 @@ def market_replay(
                 "price",
                 source=ColumnDataSource(buys),
                 marker="triangle",
-                size=13,
+                size=17,
                 color=MARKET_UP,
                 line_color="white",
                 legend_label="Buy",
@@ -279,7 +279,7 @@ def market_replay(
                 "price",
                 source=ColumnDataSource(sells),
                 marker="inverted_triangle",
-                size=13,
+                size=17,
                 color=MARKET_DOWN,
                 line_color="white",
                 legend_label="Sell",
@@ -322,9 +322,9 @@ def market_replay(
         plot.xaxis.visible = False
     for plot in plots:
         _style_market_section(plot)
-    _style_market_legend(equity_plot)
+    _style_market_legend(equity_plot, compact=True)
     _style_market_legend(pl_plot if not trades_frame.empty else None)
-    _style_market_legend(price_plot)
+    _style_market_legend(price_plot, large_glyphs=True)
 
     return gridplot(
         plots,
@@ -914,7 +914,7 @@ def _hide_market_legend(plot) -> None:
             legend.visible = False
 
 
-def _style_market_legend(plot) -> None:
+def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = False) -> None:
     if plot is None or not plot.legend:
         return
     for legend in list(plot.legend):
@@ -925,13 +925,13 @@ def _style_market_legend(plot) -> None:
         legend.border_line_color = "#d7e0e7"
         legend.background_fill_color = "white"
         legend.background_fill_alpha = 0.88
-        legend.padding = 6
+        legend.padding = 4 if compact else 6
         legend.spacing = 1
-        legend.margin = 4
-        legend.glyph_width = 28
-        legend.glyph_height = 18
+        legend.margin = 3 if compact else 4
+        legend.glyph_width = 18 if compact else (34 if large_glyphs else 28)
+        legend.glyph_height = 12 if compact else (22 if large_glyphs else 18)
         legend.label_text_color = "#33424f"
-        legend.label_text_font_size = "9pt"
+        legend.label_text_font_size = "8pt" if compact else "9pt"
         legend.click_policy = "hide"
 
 
