@@ -257,7 +257,7 @@ def test_rust_broker_can_drain_buffer_without_reentering_engine() -> None:
 
     drained = broker.drain_order_buffer()
 
-    assert drained == [(1, "sell", "stop", 3.0, None, 8.0)]
+    assert drained == [(1, "data0", "sell", "stop", 3.0, None, 8.0)]
     assert order.ref == 1
     assert broker._orders_by_ref[1] is order
 
@@ -757,8 +757,8 @@ def test_rust_bar_loop_submits_drained_orders_after_python_callback() -> None:
         seen.append((cursor, fills))
         if cursor == 0:
             return [
-                (99, "buy", "market", 1.0, None, None),
-                (100, "buy", "limit", 1.0, 10.5, None),
+                (99, "data0", "buy", "market", 1.0, None, None),
+                (100, "data0", "buy", "limit", 1.0, 10.5, None),
             ]
         return []
 

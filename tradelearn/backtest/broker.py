@@ -187,11 +187,16 @@ class RustBroker:
             if (
                 self._rust_state_cache is not None
                 and self._rust_state_cache[0] == self._curr_idx
-                and len(self._active_datas) <= 1
             ):
                 _, cash, size, _price = self._rust_state_cache
-                if size != 0 and self._close_prices is not None:
+                if len(self._active_datas) <= 1 and size != 0 and self._close_prices is not None:
                     return float(cash + size * self._close_prices[self._curr_idx] * self._mult)
+                if len(self._active_datas) > 1:
+                    value = float(cash)
+                    for data, position in self._positions.items():
+                        if position.size:
+                            value += position.size * self._current_close(data) * self._mult
+                    return value
                 return float(cash)
             if (
                 self._buffer_order_submissions
@@ -556,6 +561,7 @@ class RustBroker:
     def _submit_to_rust_engine(
         self,
         order: Order,
+        symbol: str,
         side_str: str,
         ot_str: str,
         actual_size: float,
@@ -563,7 +569,7 @@ class RustBroker:
         stop_price: float | None,
     ) -> None:
         order_id = self._submit_payload_to_engine(
-            self._rust_symbol(order.data),
+            symbol,
             side_str,
             ot_str,
             actual_size,

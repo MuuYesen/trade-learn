@@ -5,7 +5,9 @@ from contextlib import contextmanager
 
 import pandas as pd
 
+from tradelearn.core import BrokerEvent, StreamBar
 from tradelearn.engine import Cerebro, Strategy, grid_search
+from tradelearn.engine.analyzer import Analyzer
 from tradelearn.engine.analyzers import MLflowAnalyzer
 
 
@@ -144,6 +146,90 @@ def test_mlflow_analyzer_uses_env_uri_and_warns_without_interrupt(monkeypatch, c
 
     assert strategy.analyzer_results["mlflow"]["status"] == "warning"
     assert "mlflow down" in caplog.text
+
+
+def test_mlflow_analyzer_records_live_broker_event_fields() -> None:
+    analyzer = MLflowAnalyzer()
+    analyzer.on_broker_event(
+        BrokerEvent(
+            "status",
+            order_id="A1",
+            status="pending_confirmation",
+            replay=True,
+            requires_confirmation=True,
+            max_notional=5000.0,
+            risk_tags=("daily-limit", "manual-confirm"),
+        )
+    )
+    analyzer.on_broker_event(
+        BrokerEvent("partial", order_id="A1", payload={"filled": 40, "remaining": 60})
+    )
+
+    payload = analyzer.live_event_summary()
+
+    assert payload["total"] == 2
+    assert payload["by_kind"] == {"partial": 1, "status": 1}
+    assert payload["replay"] == 1
+    assert payload["requires_confirmation"] == 1
+    assert payload["max_notional"] == 5000.0
+    assert payload["risk_tags"] == ["daily-limit", "manual-confirm"]
+    assert payload["last_status"] == "pending_confirmation"
+    assert payload["last_order_id"] == "A1"
+
+
+def test_cerebro_event_mode_dispatches_broker_events_to_analyzers() -> None:
+    class CountingStrategy(Strategy):
+        def __init__(self) -> None:
+            super().__init__()
+            self.closes: list[float] = []
+
+        def next(self) -> None:
+            self.closes.append(self.data.close[0])
+
+    class EventRecorder(Analyzer):
+        def __init__(self) -> None:
+            super().__init__()
+            self.events: list[BrokerEvent] = []
+            self.stats: dict[str, object] = {}
+
+        def on_broker_event(self, event: BrokerEvent) -> None:
+            self.events.append(event)
+
+        def on_end(self, stats) -> None:
+            self.stats = dict(stats)
+
+        def get_analysis(self) -> dict[str, object]:
+            return {
+                "events": len(self.events),
+                "broker_events": self.stats.get("broker_events"),
+                "mode": self.stats.get("mode"),
+            }
+
+    bars_ = [
+        StreamBar(
+            ts=pd.Timestamp("2026-01-01", tz="UTC"),
+            symbol="AAPL",
+            open=1.0,
+            high=1.0,
+            low=1.0,
+            close=1.5,
+            volume=1.0,
+        )
+    ]
+    events = [BrokerEvent("status", order_id="A1", status="accepted")]
+
+    cerebro = Cerebro(mode="live", live_poller=lambda: bars_, broker_event_poller=lambda: events)
+    cerebro.addstrategy(CountingStrategy)
+    cerebro.addanalyzer(EventRecorder, name="events")
+
+    [strategy] = cerebro.run()
+
+    assert strategy.closes == [1.5]
+    assert strategy.analyzer_results["events"] == {
+        "events": 1,
+        "broker_events": 1,
+        "mode": "live",
+    }
 
 
 def test_grid_search_runs_nested_mlflow_runs(monkeypatch) -> None:

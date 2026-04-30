@@ -70,6 +70,40 @@ def test_broker_event_pump_dispatches_status_partial_and_replay_events() -> None
     assert partials == [{"size": 10, "filled": 4}]
 
 
+def test_broker_event_pump_can_return_dispatched_event_snapshot() -> None:
+    events = [
+        {"kind": "status", "order_id": 1, "status": "accepted", "replay": True},
+        BrokerEvent("fill", order_id=1, payload={"price": 10.0}),
+    ]
+    fills: list[object] = []
+
+    pump = BrokerEventPump(lambda: events)
+    pump.on_fill(fills.append)
+
+    dispatched = pump.poll_events()
+
+    assert [event.kind for event in dispatched] == ["status", "fill"]
+    assert dispatched[0].status == "accepted"
+    assert dispatched[0].replay is True
+    assert fills == [{"price": 10.0}]
+    assert pump.poll_once() == 2
+
+
+def test_broker_event_pump_can_broadcast_all_normalized_events() -> None:
+    events = [
+        {"kind": "status", "order_id": 1, "status": "accepted"},
+        BrokerEvent("partial", order_id=1, payload={"filled": 5}),
+    ]
+    observed: list[BrokerEvent] = []
+
+    pump = BrokerEventPump(lambda: events)
+    pump.on_event(observed.append)
+
+    assert pump.poll_once() == 2
+    assert [event.kind for event in observed] == ["status", "partial"]
+    assert observed[0].status == "accepted"
+
+
 def test_broker_event_carries_live_risk_and_confirmation_fields() -> None:
     event = BrokerEvent(
         "status",

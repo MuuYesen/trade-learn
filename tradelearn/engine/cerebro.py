@@ -4,6 +4,7 @@ from collections import OrderedDict
 from typing import Any
 
 from tradelearn.backtest.models import FixedCommission, FixedSlippage
+from tradelearn.engine.analyzer import AnalyzerCollection
 from tradelearn.engine.base import TimeFrame
 from tradelearn.engine.datafeed import DataFeed
 from tradelearn.engine.observers import ObserverCollection, Value
@@ -344,6 +345,48 @@ class Cerebro:
             observer._set(strategy)
             strategy.observers[name] = observer
 
+    def _attach_analyzers(self, strategy: Any) -> None:
+        strategy.analyzers = AnalyzerCollection()
+        for name, ana_spec in self.analyzers.items():
+            if len(ana_spec) == 3:
+                ana_cls, ana_args, ana_kwargs = ana_spec
+            else:
+                ana_cls, ana_kwargs = ana_spec
+                ana_args = ()
+            analyzer = ana_cls(*ana_args, **ana_kwargs)
+            analyzer.strategy = strategy
+            strategy.analyzers[name] = analyzer
+
+    def _start_analyzers(self, strategy: Any) -> None:
+        for analyzer in getattr(strategy, "analyzers", {}).values():
+            on_start = getattr(analyzer, "on_start", None)
+            if callable(on_start):
+                on_start()
+            start = getattr(analyzer, "start", None)
+            if callable(start):
+                start()
+
+    def _finish_event_analyzers(self, strategy: Any, snapshots: list[Any]) -> None:
+        stats = {
+            "bars": len(snapshots),
+            "broker_events": sum(snapshot.dispatched_events for snapshot in snapshots),
+            "mode": self.mode,
+        }
+        for analyzer in getattr(strategy, "analyzers", {}).values():
+            on_end = getattr(analyzer, "on_end", None)
+            if callable(on_end):
+                on_end(stats)
+        analyzer_results = {
+            name: analyzer.get_analysis()
+            for name, analyzer in getattr(strategy, "analyzers", {}).items()
+        }
+        strategy.analyzer_results = analyzer_results
+        self.analyzer_results = analyzer_results
+        for analyzer in getattr(strategy, "analyzers", {}).values():
+            stop = getattr(analyzer, "stop", None)
+            if callable(stop):
+                stop()
+
     def _prepare_strategy_context(self) -> None:
         from tradelearn.engine.base import (
             set_current_data,
@@ -387,12 +430,18 @@ class Cerebro:
             strategy.broker = self.broker
             sizer_cls, sizer_kwargs = self._sizer_spec
             strategy.setsizer(sizer_cls(**sizer_kwargs))
+            self._attach_analyzers(strategy)
+            self._start_analyzers(strategy)
             strategy.start()
 
             pump = self.kwargs.get("broker_event_pump")
             if pump is None:
                 poller = self.kwargs.get("broker_event_poller", lambda: ())
                 pump = BrokerEventPump(poller)
+            for analyzer in strategy.analyzers.values():
+                on_broker_event = getattr(analyzer, "on_broker_event", None)
+                if callable(on_broker_event):
+                    pump.on_event(on_broker_event)
             runner = EventRunner(
                 strategy=strategy,
                 broker_event_pump=pump,
@@ -400,13 +449,14 @@ class Cerebro:
             )
             if self.mode == "paper":
                 bars = self.kwargs.get("event_bars", ())
-                PaperDriver(runner, bars).run_once()
+                snapshots = PaperDriver(runner, bars).run_once()
             else:
                 poller = self.kwargs.get("live_poller")
                 if poller is None:
                     raise ValueError("live mode requires live_poller")
-                LiveDriver(runner, poller).poll_once()
+                snapshots = LiveDriver(runner, poller).poll_once()
             strategy.stop()
+            self._finish_event_analyzers(strategy, snapshots)
             return [strategy]
         finally:
             self._reset_strategy_context()

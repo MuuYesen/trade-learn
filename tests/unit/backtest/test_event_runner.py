@@ -13,8 +13,8 @@ from tradelearn.backtest.event_runner import (
     PaperDriver,
 )
 from tradelearn.backtest.strategy import Strategy
-from tradelearn.engine import Cerebro
 from tradelearn.core import BrokerEvent, BrokerEventPump, StreamBar
+from tradelearn.engine import Cerebro
 
 
 def test_event_runner_drives_single_live_bar_and_broker_events() -> None:
@@ -48,6 +48,8 @@ def test_event_runner_drives_single_live_bar_and_broker_events() -> None:
 
     assert snapshot.cursor == 0
     assert snapshot.dispatched_events == 1
+    assert [event.kind for event in snapshot.events] == ["fill"]
+    assert snapshot.bar.symbol == "AAPL"
     assert fills == [{"price": 10.5}]
     assert strategy.rows == [(pd.Timestamp("2026-01-01", tz="UTC"), 10.5)]
 

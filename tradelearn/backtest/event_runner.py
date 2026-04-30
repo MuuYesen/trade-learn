@@ -17,6 +17,8 @@ class EventSnapshot:
 
     cursor: int
     dispatched_events: int = 0
+    events: tuple[BrokerEvent, ...] = ()
+    bar: StreamBar | None = None
     orders: tuple[Any, ...] = ()
 
 
@@ -63,22 +65,28 @@ class EventRunner:
         self._bind_strategy_data()
 
     def on_bar(self, bar: StreamBar | dict[str, Any]) -> EventSnapshot:
-        self.buffer.append(bar)
+        stream_bar = _coerce_stream_bar(bar)
+        self.buffer.append(stream_bar)
         cursor = self.buffer.cursor
         self.data._advance(cursor)
-        dispatched = self.poll_broker_events()
+        events = self.poll_broker_events()
         self.strategy._pre_next(cursor)
         self.strategy.next()
-        return EventSnapshot(cursor=cursor, dispatched_events=dispatched)
+        return EventSnapshot(
+            cursor=cursor,
+            dispatched_events=len(events),
+            events=events,
+            bar=stream_bar,
+        )
 
     def on_broker_event(self, event: BrokerEvent | dict[str, Any]) -> None:
         if self.broker_event_pump is not None:
-            self.broker_event_pump.dispatch(self.broker_event_pump._coerce_event(event))
+            self.broker_event_pump.dispatch(BrokerEvent.coerce(event))
 
-    def poll_broker_events(self) -> int:
+    def poll_broker_events(self) -> tuple[BrokerEvent, ...]:
         if self.broker_event_pump is None:
-            return 0
-        return self.broker_event_pump.poll_once()
+            return ()
+        return self.broker_event_pump.poll_events()
 
     def _bind_strategy_data(self) -> None:
         self.strategy.datas = [self.data]
@@ -140,3 +148,26 @@ class LiveDriver:
 
     def poll_once(self) -> list[EventSnapshot]:
         return [self.runner.on_bar(bar) for bar in self.poller()]
+
+
+def _coerce_stream_bar(bar: StreamBar | dict[str, Any]) -> StreamBar:
+    if isinstance(bar, StreamBar):
+        return bar
+    values = dict(bar)
+    timestamp = values.get("ts", values.get("datetime"))
+    if timestamp is None:
+        raise ValueError("bar dict requires 'ts' or 'datetime'")
+    timestamp = pd.Timestamp(timestamp)
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.tz_localize("UTC")
+    else:
+        timestamp = timestamp.tz_convert("UTC")
+    return StreamBar(
+        ts=timestamp,
+        symbol=str(values.get("symbol", "data0")),
+        open=float(values["open"]),
+        high=float(values["high"]),
+        low=float(values["low"]),
+        close=float(values["close"]),
+        volume=float(values.get("volume", 0.0)),
+    )
