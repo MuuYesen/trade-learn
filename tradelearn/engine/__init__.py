@@ -9,6 +9,7 @@ from tradelearn.engine.analyzer import Analyzer
 from tradelearn.engine.base import TimeFrame
 from tradelearn.engine.cerebro import Cerebro, OptReturn
 from tradelearn.engine.grid import GridSearchResult, grid_search
+from tradelearn.engine.index_enhance import IndexEnhanceStrategy
 from tradelearn.engine.indicators import Indicator
 from tradelearn.engine.observers import Observer
 from tradelearn.engine.signal import (
@@ -79,6 +80,7 @@ __all__ = [
     "Strategy",
     "Trade",
     "Indicator",
+    "IndexEnhanceStrategy",
     "TimeFrame",
     "FixedSize",
     "PercentSizer",

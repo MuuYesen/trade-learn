@@ -275,6 +275,57 @@ def _factor_and_forward_returns() -> tuple[pd.Series, pd.Series]:
     return factor, forward
 
 
+def test_factor_analyzer_monotonicity_detects_ordered_quantiles() -> None:
+    """monotonicity() returns spearman_rho=1 when quantiles are perfectly ordered."""
+    factor = _series(
+        [
+            ("2024-01-01", "AAA", 1.0),
+            ("2024-01-01", "BBB", 2.0),
+            ("2024-01-01", "CCC", 3.0),
+        ]
+    )
+    forward = _series(
+        [
+            ("2024-01-01", "AAA", 0.01),
+            ("2024-01-01", "BBB", 0.02),
+            ("2024-01-01", "CCC", 0.03),
+        ]
+    )
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=3)
+
+    result = analyzer.monotonicity()
+
+    assert "spearman_rho" in result
+    assert "is_monotone" in result
+    assert isinstance(result["spearman_rho"], float)
+    assert isinstance(result["is_monotone"], bool)
+
+
+def test_factor_analyzer_plot_returns_bokeh_layout() -> None:
+    """plot() returns a Bokeh layout when data is available."""
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
+
+    layout = analyzer.plot()
+
+    assert layout is not None
+
+
+def test_factor_analyzer_html_writes_file(tmp_path) -> None:
+    """html() writes a standalone HTML file and returns its path."""
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
+    output = tmp_path / "factor_report.html"
+
+    result = analyzer.html(str(output))
+
+    assert result == output
+    assert output.exists()
+    assert output.stat().st_size > 0
+    content = output.read_text()
+    assert "<html" in content.lower()
+
+
 def _series(rows: list[tuple[str, str, float]]) -> pd.Series:
     dates = pd.to_datetime([row[0] for row in rows])
     symbols = [row[1] for row in rows]

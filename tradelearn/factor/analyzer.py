@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import pandas as pd
 
@@ -150,6 +151,63 @@ class FactorAnalyzer:
             "turnover_mean": float(turnover_values.mean()),
             "autocorrelation_mean": float(autocorrelation_values.mean()),
         }
+
+    def monotonicity(self) -> dict[str, float]:
+        """Return monotonicity diagnostics for the factor quantile returns.
+
+        Checks whether mean returns increase monotonically from Q1 to Q(n).
+        Returns Spearman rank correlation between quantile rank and mean return,
+        and a boolean flag indicating perfect monotonicity.
+        """
+        qr = self.quantile_returns()
+        means = qr.mean()
+        n = len(means)
+        if n < 2:
+            return {"spearman_rho": float("nan"), "is_monotone": False}
+        ranks = pd.Series(range(1, n + 1), index=means.index, dtype="float64")
+        rho = float(means.rank().corr(ranks, method="spearman"))
+        diffs = means.diff().dropna()
+        is_monotone = bool((diffs > 0).all() or (diffs < 0).all())
+        return {"spearman_rho": rho, "is_monotone": is_monotone}
+
+    def plot(self):
+        """Return a Bokeh grid of factor diagnostic charts."""
+        from bokeh.layouts import column as bk_column
+
+        from tradelearn.report import charts
+
+        items = []
+        qr = self.quantile_cumulative_returns()
+        if not qr.empty:
+            items.append(charts.quantile_returns(qr))
+        ls = self.long_short_cumulative_returns()
+        if not ls.empty:
+            items.append(charts.factor_long_short_returns(ls))
+        ic_series = self.ic()
+        if not ic_series.empty:
+            items.append(charts.factor_ic(ic_series))
+        ric_series = self.rank_ic()
+        if not ric_series.empty:
+            items.append(charts.factor_rank_ic(ric_series))
+        t = self.turnover()
+        ac = self.autocorrelation()
+        if not t.empty or not ac.empty:
+            items.append(charts.factor_turnover(t, ac))
+        return bk_column(*items, sizing_mode="stretch_width") if items else None
+
+    def html(self, path: str) -> Path:
+        """Write a standalone HTML factor report and return the output path."""
+        from bokeh.embed import file_html
+        from bokeh.resources import INLINE
+
+        grid = self.plot()
+        if grid is None:
+            raise ValueError("FactorAnalyzer has no data to plot")
+        html_content = file_html(grid, INLINE, title="Factor Analysis Report")
+        output = Path(path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(html_content, encoding="utf-8")
+        return output
 
     def _forward_returns(self) -> pd.Series:
         """Return configured or price-derived forward returns."""
