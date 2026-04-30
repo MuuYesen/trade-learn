@@ -918,14 +918,14 @@ def _style_market_legend(plot) -> None:
         legend.border_line_width = 1
         legend.border_line_color = "#d7e0e7"
         legend.background_fill_color = "white"
-        legend.background_fill_alpha = 0.72
-        legend.padding = 4
+        legend.background_fill_alpha = 0.88
+        legend.padding = 6
         legend.spacing = 1
-        legend.margin = 3
-        legend.glyph_width = 12
-        legend.glyph_height = 8
+        legend.margin = 4
+        legend.glyph_width = 20
+        legend.glyph_height = 14
         legend.label_text_color = "#33424f"
-        legend.label_text_font_size = "8pt"
+        legend.label_text_font_size = "9pt"
         legend.click_policy = "hide"
 
 
