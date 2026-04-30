@@ -256,15 +256,18 @@ def _summary_table(values: dict[str, Any]) -> str:
 
 
 def _summary_cards(values: dict[str, Any]) -> str:
-    """Render summary values as a compact multi-column metric grid."""
-    cards = "".join(
-        "<div class=\"metric-card\">"
-        f"<div class=\"metric-name\">{escape(str(key))}</div>"
-        f"<div class=\"metric-number\">{escape(_format_value(value))}</div>"
-        "</div>"
-        for key, value in values.items()
-    )
-    return f"<div class=\"metric-grid\">{cards}</div>"
+    """Render summary values as a compact multi-column table."""
+    items = list(values.items())
+    columns = 3
+    rows = []
+    for start in range(0, len(items), columns):
+        cells = []
+        for key, value in items[start : start + columns]:
+            cells.append(f"<th>{escape(str(key))}</th><td>{escape(_format_value(value))}</td>")
+        missing = columns - len(cells)
+        cells.extend("<th></th><td></td>" for _ in range(missing))
+        rows.append(f"<tr>{''.join(cells)}</tr>")
+    return f"<table class=\"summary-table\"><tbody>{''.join(rows)}</tbody></table>"
 
 
 def _frame_table(frame: pd.DataFrame) -> str:
