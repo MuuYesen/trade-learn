@@ -44,9 +44,46 @@
     h1 { font-size: 34px; }
     h2 { font-size: 24px; }
     p { margin: 4px 0; color: var(--muted); }
+    .eyebrow {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      margin: 0 0 6px;
+      text-transform: uppercase;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .meta-item {
+      padding: 10px 12px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+    .meta-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .meta-value {
+      margin-top: 3px;
+      color: var(--ink);
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
     table { border-collapse: collapse; width: 100%; margin: 12px 0 0; }
     th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; }
     th { background: var(--panel); font-weight: 700; }
+    .section-note {
+      margin: -6px 0 10px;
+      color: var(--muted);
+      font-size: 14px;
+    }
     .summary-table th {
       width: 18%;
       color: var(--muted);
@@ -78,14 +115,35 @@
 <body>
   <main class="shell">
     <header>
+      <p class="eyebrow">Tradelearn Backtest Report</p>
       <h1>{{ metadata.strategy_name }}</h1>
-      <p>Run ID: {{ metadata.run_id }}</p>
-      <p>Period: {{ metadata.start }} to {{ metadata.end }}</p>
-      <p>Generated: {{ metadata.generated_at }}</p>
-      <p>Rows: returns={{ returns_count }}, trades={{ trades_count }}</p>
+      <div class="meta-grid">
+        <div class="meta-item">
+          <div class="meta-label">Run ID</div>
+          <div class="meta-value">{{ metadata.run_id }}</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">Period</div>
+          <div class="meta-value">{{ metadata.start }} to {{ metadata.end }}</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">Generated</div>
+          <div class="meta-value">{{ metadata.generated_at }}</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">Rows</div>
+          <div class="meta-value">returns={{ returns_count }}, trades={{ trades_count }}</div>
+        </div>
+      </div>
     </header>
     <section>
+      <h2>Experiment Parameters</h2>
+      <p class="section-note">Strategy inputs, run identifiers, and execution configuration used for this report.</p>
+      {{ config_table | safe }}
+    </section>
+    <section>
       <h2>Summary Stats</h2>
+      <p class="section-note">Key performance and accounting metrics for the run.</p>
       {{ summary_table | safe }}
     </section>
     {{ benchmark_section | safe }}
@@ -107,10 +165,6 @@
     </section>
     {% endfor %}
     {{ script | safe }}
-    <section>
-      <h2>Configuration</h2>
-      {{ config_table | safe }}
-    </section>
     <footer>
       <p>Tradelearn {{ metadata.version }} | Generated: {{ metadata.generated_at }}</p>
     </footer>

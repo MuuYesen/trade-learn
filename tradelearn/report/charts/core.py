@@ -944,12 +944,12 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
         legend.border_line_color = "#d7e0e7"
         legend.background_fill_color = "white"
         legend.background_fill_alpha = 0.88
-        legend.padding = 4 if compact else 6
-        legend.spacing = 1
-        legend.margin = 3 if compact else 4
+        legend.padding = 5 if compact else 6
+        legend.spacing = 2 if compact else 1
+        legend.margin = 4
         if compact and large_glyphs:
-            legend.glyph_width = 30
-            legend.glyph_height = 20
+            legend.glyph_width = 32
+            legend.glyph_height = 22
         else:
             legend.glyph_width = 18 if compact else (34 if large_glyphs else 28)
             legend.glyph_height = 12 if compact else (22 if large_glyphs else 18)
