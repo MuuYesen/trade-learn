@@ -20,4 +20,4 @@ def _atr(
     return pta.atr(high, low, close, length=length)
 
 
-atr = FunctionIndicator("atr", _atr, {"length": 14})
+atr = FunctionIndicator("atr", _atr, {"length": 14}, bar_columns=("high", "low", "close"))

@@ -297,11 +297,13 @@ class RustBroker:
         lows: list[float] = []
         closes: list[float] = []
         volumes: list[float] = []
+        single_data = len(datas) <= 1
         for index, data in enumerate(datas):
             cursor = getattr(data, "_cursor", -1)
             if cursor < 0:
                 continue
-            symbols.append(str(getattr(data, "_name", None) or f"data{index}"))
+            symbol = "data0" if single_data else str(getattr(data, "_name", None) or f"data{index}")
+            symbols.append(symbol)
             timestamps.append(int(data._datetime[cursor]))
             opens.append(float(data._open[cursor]))
             highs.append(float(data._high[cursor]))
@@ -326,7 +328,9 @@ class RustBroker:
             if not frame.empty and "datetime" in frame.columns:
                 datetimes = frame["datetime"]
                 if pd.api.types.is_numeric_dtype(datetimes):
-                    frame["datetime"] = pd.to_datetime(datetimes, unit="s")
+                    frame["datetime"] = pd.to_datetime(datetimes, unit="s", utc=True)
+                else:
+                    frame["datetime"] = pd.to_datetime(datetimes, utc=True)
             self._fills_frame_cache = frame
             self._fills_frame_cache_len = len(self._fills)
         return self._fills_frame_cache

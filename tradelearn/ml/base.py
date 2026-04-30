@@ -46,7 +46,11 @@ class MLStrategyMixin:
         if training_data is None:
             training_data = self._default_training_data()
         if training_data is not None and self.target is not None and hasattr(self.model_, "fit"):
-            X, y = self._training_matrix(pd.DataFrame(training_data))
+            frame = pd.DataFrame(training_data)
+            if self._has_custom_feature_vector():
+                X, y = self._training_matrix_from_feature_vector(frame)
+            else:
+                X, y = self._training_matrix(frame)
             if X and y:
                 self.model_.fit(X, y)
 
@@ -85,6 +89,59 @@ class MLStrategyMixin:
                 self.sell(size=size)
         elif position:
             self.close()
+
+    def _has_custom_feature_vector(self) -> bool:
+        return type(self).feature_vector is not MLStrategyMixin.feature_vector
+
+    def _ml_get_cursor(self) -> int:
+        data = self.data
+        if hasattr(data, "_cursor"):
+            return int(data._cursor)
+        close = getattr(data, "close", None)
+        if close is not None:
+            source = getattr(close, "_cursor_source", None)
+            if source is not None:
+                return int(source._cursor)
+            return int(getattr(close, "_cursor", 0))
+        return 0
+
+    def _ml_advance_cursor(self, pos: int) -> None:
+        data = self.data
+        if hasattr(data, "_advance"):
+            data._advance(pos)
+        elif hasattr(data, "_cursor"):
+            data._cursor = pos
+
+    def _training_matrix_from_feature_vector(
+        self, frame: pd.DataFrame
+    ) -> tuple[list[list[float]], list[float]]:
+        """Build training matrix by replaying cursor and calling feature_vector()."""
+        target_series = self._target_series(frame)
+        n = len(frame)
+        orig_cursor = self._ml_get_cursor()
+        X: list[list[float]] = []
+        y: list[float] = []
+        try:
+            for i in range(n):
+                self._ml_advance_cursor(i)
+                yi = target_series.iloc[i]
+                if yi != yi:  # NaN target
+                    continue
+                try:
+                    vec = self.feature_vector()
+                except (IndexError, KeyError, AttributeError):
+                    continue
+                if isinstance(vec, dict):
+                    row = list(vec.values())
+                else:
+                    row = list(vec)
+                if any(v != v for v in row):  # NaN feature
+                    continue
+                X.append([float(v) for v in row])
+                y.append(float(yi))
+        finally:
+            self._ml_advance_cursor(orig_cursor)
+        return X, y
 
     def _ml_param(self, name: str) -> Any:
         params = getattr(self, "p", None)

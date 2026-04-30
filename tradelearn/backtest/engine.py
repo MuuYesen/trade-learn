@@ -97,6 +97,71 @@ def _fills_frame(broker: Any) -> pd.DataFrame:
     return rows
 
 
+def _trades_frame(fills: pd.DataFrame) -> pd.DataFrame:
+    columns = [
+        "datetime",
+        "data",
+        "size",
+        "price",
+        "value",
+        "commission",
+        "pnl",
+        "pnlcomm",
+        "isopen",
+        "isclosed",
+    ]
+    if fills.empty:
+        return pd.DataFrame(columns=columns)
+
+    position_size = 0.0
+    avg_price = 0.0
+    rows: list[dict[str, Any]] = []
+    for fill in fills.to_dict("records"):
+        signed_size = float(fill.get("size", 0.0))
+        price = float(fill.get("price", 0.0))
+        comm = float(fill.get("commission", 0.0))
+        old_size = position_size
+        new_size = old_size + signed_size
+        if old_size == 0.0 and abs(new_size) > 1e-9:
+            avg_price = price
+            rows.append(
+                {
+                    "datetime": fill.get("datetime"),
+                    "data": fill.get("data"),
+                    "size": new_size,
+                    "price": price,
+                    "value": abs(new_size) * price,
+                    "commission": comm,
+                    "pnl": 0.0,
+                    "pnlcomm": -comm,
+                    "isopen": True,
+                    "isclosed": False,
+                }
+            )
+        elif old_size * new_size <= 0:
+            pnl = (price - avg_price) * old_size
+            rows.append(
+                {
+                    "datetime": fill.get("datetime"),
+                    "data": fill.get("data"),
+                    "size": 0.0 if abs(new_size) < 1e-9 else new_size,
+                    "price": price,
+                    "value": abs(new_size) * price,
+                    "commission": comm,
+                    "pnl": pnl,
+                    "pnlcomm": pnl - comm,
+                    "isopen": False,
+                    "isclosed": True,
+                }
+            )
+            avg_price = price if abs(new_size) > 1e-9 else 0.0
+        elif old_size * signed_size > 0:
+            total_abs = abs(old_size) + abs(signed_size)
+            avg_price = (abs(old_size) * avg_price + abs(signed_size) * price) / total_abs
+        position_size = 0.0 if abs(new_size) < 1e-9 else new_size
+    return pd.DataFrame(rows, columns=columns)
+
+
 def _positions_frame(strategy: Any, fills: pd.DataFrame, index: pd.Index) -> pd.DataFrame:
     columns = [
         "datetime",
@@ -172,7 +237,56 @@ def _positions_frame(strategy: Any, fills: pd.DataFrame, index: pd.Index) -> pd.
     return pd.DataFrame(rows, columns=columns)
 
 
-def _build_equity_returns(strategy: Any, index: pd.Index) -> tuple[pd.Series, pd.Series]:
+def _build_equity_from_fills(
+    strategy: Any,
+    index: pd.Index,
+    fills: pd.DataFrame,
+) -> pd.Series | None:
+    if fills.empty or len(index) == 0:
+        return None
+    frame = getattr(getattr(strategy, "data", None), "_frame", None)
+    if not isinstance(frame, pd.DataFrame) or "close" not in frame.columns:
+        return None
+
+    aligned_fills = fills.copy()
+    aligned_fills["datetime"] = pd.to_datetime(aligned_fills["datetime"], utc=True)
+    bar_index = pd.DatetimeIndex(index)
+    if bar_index.tz is None:
+        bar_index = bar_index.tz_localize("UTC")
+    else:
+        bar_index = bar_index.tz_convert("UTC")
+
+    fills_by_time: dict[pd.Timestamp, list[dict[str, Any]]] = {}
+    for fill in aligned_fills.to_dict("records"):
+        ts = pd.Timestamp(fill["datetime"]).tz_convert("UTC")
+        fills_by_time.setdefault(ts, []).append(fill)
+
+    cash = float(getattr(strategy.broker, "_cash", strategy.broker.getcash()))
+    position_size = 0.0
+    values: list[float] = []
+    for ts, close in zip(bar_index, frame["close"].to_numpy(dtype=float), strict=False):
+        for fill in fills_by_time.get(pd.Timestamp(ts), ()):
+            signed_size = float(fill.get("size", 0.0))
+            price = float(fill.get("price", 0.0))
+            commission = float(fill.get("commission", 0.0))
+            cash -= signed_size * price + commission
+            position_size += signed_size
+        values.append(cash + position_size * float(close))
+    return pd.Series(values, index=index, name="equity", dtype=float)
+
+
+def _build_equity_returns(
+    strategy: Any,
+    index: pd.Index,
+    fills: pd.DataFrame | None = None,
+) -> tuple[pd.Series, pd.Series]:
+    if fills is not None:
+        fill_equity = _build_equity_from_fills(strategy, index, fills)
+        if fill_equity is not None:
+            returns = fill_equity.pct_change().fillna(0.0)
+            returns.name = "returns"
+            return fill_equity, returns
+
     values = []
     observers_get = getattr(
         getattr(strategy, "observers", {}),
@@ -223,13 +337,16 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
         total_trades = float(trade_summary()[0]) if callable(trade_summary) else 0.0
 
         def equity_factory() -> pd.Series:
-            return _build_equity_returns(strategy, index)[0]
+            return _build_equity_returns(strategy, index, fills_factory())[0]
 
         def returns_factory() -> pd.Series:
-            return _build_equity_returns(strategy, index)[1]
+            return _build_equity_returns(strategy, index, fills_factory())[1]
 
         def fills_factory() -> pd.DataFrame:
             return _fills_frame(strategy.broker)
+
+        def trades_factory() -> pd.DataFrame:
+            return _trades_frame(fills_factory())
 
         def positions_factory() -> pd.DataFrame:
             return _positions_frame(strategy, fills_factory(), index)
@@ -237,7 +354,7 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
         return Stats(
             returns=returns_factory,
             equity=equity_factory,
-            trades=lambda: pd.DataFrame(),
+            trades=trades_factory,
             positions=positions_factory,
             orders=lambda: _orders_frame(strategy.broker),
             summary={
@@ -258,9 +375,10 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
             fills=fills_factory,
         )
 
-    equity, returns = _build_equity_returns(strategy, index)
-    drawdowns = (equity.cummax() - equity) / equity.cummax().replace(0, np.nan)
     fills = _fills_frame(strategy.broker)
+    equity, returns = _build_equity_returns(strategy, index, fills)
+    drawdowns = (equity.cummax() - equity) / equity.cummax().replace(0, np.nan)
+    trades = _trades_frame(fills)
     orders = _orders_frame(strategy.broker)
     positions = _positions_frame(strategy, fills, index)
     summary = {
@@ -272,14 +390,14 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
         "final_margin_used": 0.0,
         "max_drawdown": float(drawdowns.fillna(0.0).max()) if not drawdowns.empty else 0.0,
         "sharpe": float("nan"),
-        "total_trades": 0.0,
+        "total_trades": float(len(trades)),
         "total_orders": float(len(orders)),
         "total_fills": float(len(fills)),
     }
     return Stats(
         returns=returns,
         equity=equity,
-        trades=pd.DataFrame(),
+        trades=trades,
         positions=positions,
         orders=orders,
         summary=summary,
@@ -456,6 +574,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
 
     limit = cerebro.datas[0].buflen()
     # Calculate min_period from all indicators (mostly for BT facade)
+    strategy_min_period = getattr(type(strategy), "min_period", 0)
+    if callable(strategy_min_period):
+        strategy_min_period = strategy_min_period(strategy)
+    explicit_strategy_min_period = int(strategy_min_period or 0)
     min_period = int(getattr(strategy, "_manual_min_period", 0))
     for ind in indicators + indicators_bt:
         if hasattr(ind, "min_period"):
@@ -525,7 +647,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
         and hasattr(broker._engine, "run_bar_loop")
         and not bool(getattr(cerebro, "trade_on_close", False))
     )
-    min_start = min_period - 1
+    min_start = max(min_period - 1, explicit_strategy_min_period)
 
     class _RunStopped(Exception):
         """Internal sentinel used to break out of Rust callback-driven loops."""

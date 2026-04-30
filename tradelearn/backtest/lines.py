@@ -70,6 +70,21 @@ class LineSeries:
             self._series_cache = cached
         return cached
 
+    def get(self, ago: int = 0, size: int = 1) -> np.ndarray:
+        """Return a Backtrader-style trailing window ending at ``ago``.
+
+        ``line.get(size=n)`` follows Backtrader's strategy helper semantics and
+        returns a trailing window ending at the addressed cursor.
+        Missing leading values are omitted.
+        """
+        cursor_source = getattr(self, "_cursor_source", None)
+        cursor = cursor_source._cursor if cursor_source is not None else self._cursor
+        end = cursor + int(ago) + 1
+        start = max(0, end - int(size))
+        if end <= 0:
+            return np.asarray([], dtype=np.float64)
+        return self._values[start:end]
+
     def wrap_indicator(self, values: Any, name: str | None = None) -> Any:
         """Wrap vector indicator output back into Engine line objects."""
         if isinstance(values, pd.DataFrame):

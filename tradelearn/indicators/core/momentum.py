@@ -15,4 +15,4 @@ def _rsi(close: pd.Series, length: int = 14) -> pd.Series:
     return pta.rsi(close, length=length)
 
 
-rsi = FunctionIndicator("rsi", _rsi, {"length": 14})
+rsi = FunctionIndicator("rsi", _rsi, {"length": 14}, bar_columns=("close",))

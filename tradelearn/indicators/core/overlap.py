@@ -35,6 +35,6 @@ def _bbands(close: pd.Series, length: int = 20, std: float = 2.0) -> pd.DataFram
     return result
 
 
-sma = FunctionIndicator("sma", _sma, {"period": 20})
-ema = FunctionIndicator("ema", _ema, {"length": 20})
-bbands = FunctionIndicator("bbands", _bbands, {"length": 20, "std": 2.0})
+sma = FunctionIndicator("sma", _sma, {"period": 20}, bar_columns=("close",))
+ema = FunctionIndicator("ema", _ema, {"length": 20}, bar_columns=("close",))
+bbands = FunctionIndicator("bbands", _bbands, {"length": 20, "std": 2.0}, bar_columns=("close",))

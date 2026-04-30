@@ -79,3 +79,34 @@ def test_mlstrategy_negative_prediction_closes_long_position() -> None:
     assert strategy.stats is not None
     assert strategy.stats.summary["total_fills"] == 2
     assert strategy.stats.positions.iloc[-1]["size"] == 0.0
+
+
+def test_mlstrategy_feature_vector_override_used_for_training() -> None:
+    """feature_vector() override drives both training and inference."""
+    model = RecordingModel([0.8, 0.8, 0.8, 0.8])
+
+    class OverrideMLStrategy(MLStrategy):
+        target = "target"
+
+        def __init__(self) -> None:
+            # Use close line directly as feature
+            pass
+
+        def feature_vector(self) -> list[float]:
+            return [float(self.data.close[0])]
+
+    OverrideMLStrategy.model = model
+
+    cerebro = Cerebro(trade_on_close=True)
+    cerebro.adddata(_bars(), name="demo")
+    cerebro.addstrategy(OverrideMLStrategy, threshold=0.5, size=1)
+    [strategy] = cerebro.run()
+
+    fitted_model = strategy.model_
+    # Training X should contain close prices [10.5, 11.5, 12.5, 13.5]
+    assert fitted_model.fit_X is not None
+    assert len(fitted_model.fit_X) == 4
+    assert fitted_model.fit_X[0] == [10.5]
+    assert fitted_model.fit_X[3] == [13.5]
+    # Inference X matches training feature
+    assert fitted_model.predict_X[0] == [10.5]

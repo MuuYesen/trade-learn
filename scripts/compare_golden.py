@@ -218,4 +218,12 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    code = main()
+    sys.stdout.flush()
+    sys.stderr.flush()
+    # PyArrow can occasionally block during interpreter shutdown while tearing
+    # down its global thread pool after parquet reads in subprocess-heavy tests.
+    # This script has no cleanup side effects after emitting its payload.
+    import os
+
+    os._exit(code)

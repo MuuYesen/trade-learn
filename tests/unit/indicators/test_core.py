@@ -1,7 +1,10 @@
 """Tests for generic indicator wrappers."""
 
+from typing import Any
+
 import pandas as pd
 import pandas_ta_classic as pta
+import pytest
 
 from tradelearn import ta
 
@@ -77,18 +80,61 @@ def test_atr_adx_vwap_match_pandas_ta_classic() -> None:
 
 
 def test_indicator_wrapper_exposes_compute_and_on_bar_error() -> None:
-    """Function-style indicators also expose the Indicator shape."""
-    close = _close()
+    """Function-style indicators without bar_columns still raise NotImplementedError."""
+    from tradelearn.indicators.base import FunctionIndicator
 
-    result = ta.sma.compute(close, period=3)
+    def _dummy(close: Any) -> Any:
+        return close
 
-    pd.testing.assert_series_equal(result, ta.sma(close, period=3))
+    no_stream = FunctionIndicator("dummy", _dummy)
     try:
-        ta.sma.on_bar(object())
+        no_stream.on_bar(object())
     except NotImplementedError as exc:
         assert "streaming" in str(exc)
     else:
-        raise AssertionError("on_bar should raise until streaming mode is implemented")
+        raise AssertionError("on_bar should raise when bar_columns is not set")
+
+
+def test_sma_on_bar_streaming() -> None:
+    """ta.sma.on_bar accumulates a buffer and returns the current SMA value."""
+    from tradelearn.indicators.base import FunctionIndicator
+
+    sma_stream = FunctionIndicator("sma", ta.sma._func, {"period": 3}, bar_columns=("close",))
+
+    class _Bar:
+        def __init__(self, close: float) -> None:
+            self.close = close
+
+    prices = [10.0, 11.0, 12.0, 13.0]
+    results = [sma_stream.on_bar(_Bar(p)) for p in prices]
+
+    # After 3 bars: SMA(3) of [10, 11, 12] = 11.0
+    assert results[2] == pytest.approx(11.0)
+    # After 4 bars: SMA(3) of [10, 11, 12, 13] → last value = (11+12+13)/3 = 12.0
+    assert results[3] == pytest.approx(12.0)
+    sma_stream.reset()
+    assert sma_stream._bar_buffers is None
+
+
+def test_atr_on_bar_streaming() -> None:
+    """ta.atr.on_bar works with multi-column StreamBar-style objects."""
+    from dataclasses import dataclass
+
+    from tradelearn.indicators.base import FunctionIndicator
+
+    atr_stream = FunctionIndicator(
+        "atr", ta.atr._func, {"length": 2}, bar_columns=("high", "low", "close")
+    )
+
+    @dataclass
+    class _Bar:
+        high: float
+        low: float
+        close: float
+
+    bars = [_Bar(11, 9, 10), _Bar(12, 10, 11), _Bar(13, 11, 12)]
+    results = [atr_stream.on_bar(b) for b in bars]
+    assert results[-1] == results[-1]  # not NaN after warmup
 
 
 def _close() -> pd.Series:

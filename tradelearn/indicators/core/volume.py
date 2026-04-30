@@ -20,4 +20,4 @@ def _vwap(
     return pta.vwap(high, low, close, volume)
 
 
-vwap = FunctionIndicator("vwap", _vwap, {})
+vwap = FunctionIndicator("vwap", _vwap, {}, bar_columns=("high", "low", "close", "volume"))
