@@ -599,13 +599,19 @@ class Strategy(CoreStrategy):
         if float(targets.sum() + cash_weight) > 1.000000000000001:
             raise ValueError("target weights plus cash must sum to <= 1")
 
-        known = set(self._bt_data_by_ticker) or set(self.data.tickers)
+        data_by_ticker = self._target_weight_data_map()
+        known = set(data_by_ticker)
         unknown = sorted(str(ticker) for ticker in targets.index if str(ticker) not in known)
         if unknown:
             raise ValueError(f"Unknown ticker(s): {unknown}")
 
         equity = self._portfolio_equity_snapshot()
-        intents = self._target_weight_order_requests(targets, known, equity, close_missing)
+        intents = self._target_weight_order_requests(
+            targets,
+            data_by_ticker,
+            equity,
+            close_missing,
+        )
         orders: list[Any] = []
         for request, data in intents:
             side = Order.Buy if request.side == "buy" else Order.Sell
@@ -617,19 +623,19 @@ class Strategy(CoreStrategy):
     def _target_weight_order_requests(
         self,
         targets: pd.Series,
-        known: set[str],
+        data_by_ticker: dict[str, Any],
         equity: float,
         close_missing: bool,
     ) -> list[tuple[OrderRequest, Any]]:
         requested = {str(ticker): float(target) for ticker, target in targets.items()}
         target_by_ticker = dict(requested)
         if close_missing:
-            for ticker in known.difference(requested):
+            for ticker in data_by_ticker.keys() - requested.keys():
                 target_by_ticker[ticker] = 0.0
 
         requests: list[tuple[OrderRequest, Any]] = []
         for ticker, target in target_by_ticker.items():
-            data = self._resolve_ticker_data(ticker)
+            data = data_by_ticker[ticker]
             price = self._current_price(data)
             mult = self._position_mult(data)
             if price <= 0 or mult <= 0:
@@ -652,6 +658,11 @@ class Strategy(CoreStrategy):
             )
         requests.sort(key=lambda item: (item[0].side == "buy", item[0].symbol))
         return requests
+
+    def _target_weight_data_map(self) -> dict[str, Any]:
+        if self._bt_data_by_ticker:
+            return self._bt_data_by_ticker
+        return {self.data.the_ticker: self._bt_primary_data}
 
     def target_equal(
         self,

@@ -35,13 +35,35 @@ def normalize_ohlcv_frame(data: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
+def is_normalized_ohlcv_frame(data: pd.DataFrame) -> bool:
+    """Return whether an OHLCV frame can skip normalization work."""
+    if isinstance(data.columns, pd.MultiIndex):
+        return False
+    columns = {str(column) for column in data.columns}
+    required = {"open", "high", "low", "close", "volume"}
+    if not required.issubset(columns):
+        return False
+    if not isinstance(data.index, pd.DatetimeIndex):
+        return False
+    return bool(data.index.is_monotonic_increasing)
+
+
 class RuntimeDataFeed(DataContainer):
     """Shared runtime data feed with OHLCV LineSeries views."""
 
     lines = ("datetime", "open", "high", "low", "close", "volume")
 
-    def __init__(self, data: pd.DataFrame, name: str | None = None, **_kwargs: Any) -> None:
-        DataContainer.__init__(self, normalize_ohlcv_frame(data), name=name)
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        name: str | None = None,
+        *,
+        assume_normalized: bool = False,
+        copy: bool = True,
+        **_kwargs: Any,
+    ) -> None:
+        frame = data if assume_normalized else normalize_ohlcv_frame(data)
+        DataContainer.__init__(self, frame, name=name, copy=copy)
         buffer = self.shared_bar_buffer()
 
         self.datetime = LineSeries(
@@ -75,10 +97,27 @@ def build_data_feeds(
     *,
     feed_cls: type[RuntimeDataFeed] = RuntimeDataFeed,
     default_name: str = "Asset",
+    assume_normalized: bool = False,
+    copy: bool = True,
 ) -> list[RuntimeDataFeed]:
     """Build runtime feeds from a single DataFrame or a ticker->DataFrame mapping."""
     if isinstance(data, Mapping):
         if not data:
             raise ValueError("data dict must contain at least one ticker")
-        return [feed_cls(frame, name=str(name)) for name, frame in data.items()]
-    return [feed_cls(data, name=default_name)]
+        return [
+            feed_cls(
+                frame,
+                name=str(name),
+                assume_normalized=assume_normalized,
+                copy=copy,
+            )
+            for name, frame in data.items()
+        ]
+    return [
+        feed_cls(
+            data,
+            name=default_name,
+            assume_normalized=assume_normalized,
+            copy=copy,
+        )
+    ]

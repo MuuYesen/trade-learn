@@ -6,6 +6,7 @@ import pandas as pd
 
 import tradelearn as tl
 from tradelearn.lite import Backtest, MLStrategy, Signal, SignalStrategy, Strategy
+from tradelearn.lite.backtest import _can_skip_normalize_data
 
 
 def _data() -> pd.DataFrame:
@@ -19,6 +20,11 @@ def _data() -> pd.DataFrame:
         },
         index=pd.date_range("2026-01-01", periods=5, freq="D", tz="UTC"),
     )
+
+
+def test_lite_backtest_detects_normalized_data_for_feed_fast_path() -> None:
+    assert _can_skip_normalize_data(_data())
+    assert not _can_skip_normalize_data(_data().rename(columns={"open": "Open"}))
 
 
 def test_lite_uses_backtrader_bar_indexing_with_1x_position_call() -> None:

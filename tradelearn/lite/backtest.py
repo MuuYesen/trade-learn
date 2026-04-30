@@ -4,7 +4,11 @@ import pandas as pd
 
 from tradelearn.backtest.broker import RustBroker
 from tradelearn.backtest.engine import run_backtest
-from tradelearn.backtest.feed import build_data_feeds, normalize_ohlcv_frame
+from tradelearn.backtest.feed import (
+    build_data_feeds,
+    is_normalized_ohlcv_frame,
+    normalize_ohlcv_frame,
+)
 
 from .strategy import Strategy
 
@@ -44,7 +48,10 @@ class Backtest:
         self._storage = storage if storage is not None else {}
 
         # Internal state to match the shared backtest runtime expectations.
-        self.datas = build_data_feeds(data)
+        self.datas = build_data_feeds(
+            data,
+            assume_normalized=_can_skip_normalize_data(data),
+        )
         self.strats = [(strategy, (), {})]
         self.match_mode = match_mode
         self.stats_mode = "lazy"
@@ -159,3 +166,9 @@ def _optimize_worker(data, strategy_cls, cash, commission, match_mode, keys, par
     params = dict(zip(keys, params_values, strict=False))
     bt = Backtest(data, strategy_cls, cash=cash, commission=commission, match_mode=match_mode)
     return bt.run(**params), params
+
+
+def _can_skip_normalize_data(data: pd.DataFrame | dict[str, pd.DataFrame]) -> bool:
+    if isinstance(data, dict):
+        return bool(data) and all(is_normalized_ohlcv_frame(frame) for frame in data.values())
+    return is_normalized_ohlcv_frame(data)
