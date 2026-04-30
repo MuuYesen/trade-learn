@@ -164,8 +164,9 @@ def market_replay(
         min_ret = float(trades_frame["return_pct"].min())
         max_ret = float(trades_frame["return_pct"].max())
         ret_span = max(max_ret - min_ret, 0.01)
-        pl_plot.y_range.start = min(min_ret - ret_span * 0.35, -0.002)
-        pl_plot.y_range.end = max(max_ret + ret_span * 0.35, 0.002)
+        marker_pad = max(ret_span * 0.75, 0.01)
+        pl_plot.y_range.start = min(min_ret - marker_pad, -0.002)
+        pl_plot.y_range.end = max(max_ret + marker_pad, 0.002)
         hidden = pl_plot.scatter(
             "exit_bar",
             "return_pct",
@@ -929,8 +930,8 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
         legend.spacing = 1
         legend.margin = 3 if compact else 4
         if compact and large_glyphs:
-            legend.glyph_width = 28
-            legend.glyph_height = 20
+            legend.glyph_width = 34
+            legend.glyph_height = 24
         else:
             legend.glyph_width = 18 if compact else (34 if large_glyphs else 28)
             legend.glyph_height = 12 if compact else (22 if large_glyphs else 18)
