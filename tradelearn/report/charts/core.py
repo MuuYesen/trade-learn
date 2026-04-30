@@ -693,6 +693,44 @@ def factor_rank_ic(rank_ic: pd.Series):
     return plot
 
 
+def factor_monthly_ic_heatmap(monthly_ic: pd.DataFrame):
+    """Return a monthly IC heatmap figure."""
+    values = monthly_ic.dropna(axis=0, how="all").dropna(axis=1, how="all")
+    months = [int(column) for column in values.columns]
+    years = [str(year) for year in values.index]
+    data = {"month": [], "year": [], "ic": []}
+    for year in values.index:
+        for month in months:
+            data["month"].append(str(month))
+            data["year"].append(str(year))
+            data["ic"].append(values.loc[year, month])
+    plot = figure(
+        title="Monthly IC Heatmap",
+        x_range=[str(month) for month in months],
+        y_range=years,
+        height=240,
+        sizing_mode="stretch_width",
+        toolbar_location=None,
+    )
+    mapper = linear_cmap(
+        "ic",
+        palette=["#d65a5a", "#f7f7f7", "#2ca36c"],
+        low=-1.0,
+        high=1.0,
+    )
+    plot.rect(
+        "month",
+        "year",
+        width=0.95,
+        height=0.95,
+        source=data,
+        fill_color=mapper,
+        line_color="white",
+    )
+    _make_static_chart(plot)
+    return plot
+
+
 def factor_turnover(turnover: pd.Series, autocorrelation: pd.Series):
     """Return a factor turnover and autocorrelation figure."""
     turnover_frame = _plot_frame(turnover, "turnover").dropna()

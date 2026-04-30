@@ -4,7 +4,7 @@ import math
 
 import pandas as pd
 
-from tradelearn.factor import FactorAnalyzer
+from tradelearn.factor import FactorAnalyzer, clean_factor_and_forward_returns
 from tradelearn.metrics import factor as factor_metrics
 
 
@@ -324,6 +324,132 @@ def test_factor_analyzer_html_writes_file(tmp_path) -> None:
     assert output.stat().st_size > 0
     content = output.read_text()
     assert "<html" in content.lower()
+
+
+def test_clean_factor_and_forward_returns_builds_alphalens_style_frame() -> None:
+    factor = _series(
+        [
+            ("2024-01-01", "AAA", 1.0),
+            ("2024-01-01", "BBB", 2.0),
+            ("2024-01-02", "AAA", 3.0),
+            ("2024-01-02", "BBB", 4.0),
+        ]
+    )
+    prices = _series(
+        [
+            ("2024-01-01", "AAA", 100.0),
+            ("2024-01-01", "BBB", 100.0),
+            ("2024-01-02", "AAA", 110.0),
+            ("2024-01-02", "BBB", 90.0),
+            ("2024-01-03", "AAA", 121.0),
+            ("2024-01-03", "BBB", 99.0),
+        ]
+    )
+    groups = pd.Series(
+        ["tech", "finance", "tech", "finance"],
+        index=factor.index,
+        name="group",
+    )
+
+    clean = clean_factor_and_forward_returns(
+        factor,
+        prices,
+        periods=(1,),
+        quantiles=2,
+        groupby=groups,
+    )
+
+    assert list(clean.columns) == ["factor", "forward_return_1", "factor_quantile", "group"]
+    assert math.isclose(
+        clean.loc[(pd.Timestamp("2024-01-01"), "AAA"), "forward_return_1"],
+        0.10,
+        rel_tol=1e-12,
+    )
+    assert clean.loc[(pd.Timestamp("2024-01-01"), "AAA"), "factor_quantile"] == 1
+    assert clean.loc[(pd.Timestamp("2024-01-01"), "BBB"), "factor_quantile"] == 2
+    assert clean.loc[(pd.Timestamp("2024-01-01"), "BBB"), "group"] == "finance"
+
+
+def test_factor_analyzer_group_ic_and_group_neutral_returns() -> None:
+    factor = _series(
+        [
+            ("2024-01-01", "AAA", 1.0),
+            ("2024-01-01", "BBB", 2.0),
+            ("2024-01-01", "CCC", 1.0),
+            ("2024-01-01", "DDD", 2.0),
+            ("2024-01-02", "AAA", 1.0),
+            ("2024-01-02", "BBB", 2.0),
+            ("2024-01-02", "CCC", 1.0),
+            ("2024-01-02", "DDD", 2.0),
+        ]
+    )
+    forward = _series(
+        [
+            ("2024-01-01", "AAA", 0.01),
+            ("2024-01-01", "BBB", 0.03),
+            ("2024-01-01", "CCC", -0.02),
+            ("2024-01-01", "DDD", 0.00),
+            ("2024-01-02", "AAA", 0.02),
+            ("2024-01-02", "BBB", 0.04),
+            ("2024-01-02", "CCC", -0.01),
+            ("2024-01-02", "DDD", 0.01),
+        ]
+    )
+    groups = pd.Series(
+        ["tech", "tech", "finance", "finance"] * 2,
+        index=factor.index,
+        name="group",
+    )
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, groups=groups, quantiles=2)
+
+    by_group = analyzer.ic(by_group=True)
+    neutral = analyzer.quantile_returns(group_neutral=True)
+
+    assert set(by_group.columns) == {"finance", "tech"}
+    assert list(neutral.columns) == [1, 2]
+    assert abs(float(neutral.mean().mean())) < 0.03
+
+
+def test_factor_analyzer_monthly_ic_heatmap_and_event_returns() -> None:
+    factor = _series(
+        [
+            ("2024-01-01", "AAA", 1.0),
+            ("2024-01-01", "BBB", 2.0),
+            ("2024-02-01", "AAA", 1.0),
+            ("2024-02-01", "BBB", 2.0),
+        ]
+    )
+    forward = _series(
+        [
+            ("2024-01-01", "AAA", 0.01),
+            ("2024-01-01", "BBB", 0.02),
+            ("2024-02-01", "AAA", 0.03),
+            ("2024-02-01", "BBB", 0.01),
+        ]
+    )
+    prices = _series(
+        [
+            ("2024-01-01", "AAA", 100.0),
+            ("2024-01-02", "AAA", 101.0),
+            ("2024-01-03", "AAA", 103.02),
+            ("2024-01-01", "BBB", 100.0),
+            ("2024-01-02", "BBB", 99.0),
+            ("2024-01-03", "BBB", 98.01),
+        ]
+    )
+    events = pd.MultiIndex.from_tuples(
+        [(pd.Timestamp("2024-01-02"), "AAA"), (pd.Timestamp("2024-01-02"), "BBB")],
+        names=["date", "symbol"],
+    )
+    analyzer = FactorAnalyzer(factor, forward_returns=forward)
+
+    heatmap = analyzer.monthly_ic_heatmap()
+    event = FactorAnalyzer.event_returns(prices, events, before=1, after=1)
+
+    assert 2024 in heatmap.index
+    assert {1, 2}.issubset(set(heatmap.columns))
+    assert list(event.index) == [-1, 0, 1]
+    assert event.loc[0, "mean"] == 0.0
 
 
 def _series(rows: list[tuple[str, str, float]]) -> pd.Series:

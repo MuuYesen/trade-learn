@@ -17,27 +17,46 @@ class FactorAnalyzer:
     factor: pd.Series
     forward_returns: pd.Series | None = None
     prices: pd.Series | None = None
+    groups: pd.Series | None = None
     periods: int = 252
     quantiles: int = 5
 
-    def ic(self) -> pd.Series:
-        """Return per-date Pearson information coefficient."""
-        return factor_metrics.ic(self.factor, self._forward_returns())
+    def ic(self, by_group: bool = False) -> pd.Series | pd.DataFrame:
+        """Return per-date Pearson information coefficient.
 
-    def rank_ic(self) -> pd.Series:
-        """Return per-date Spearman rank information coefficient."""
-        return factor_metrics.rank_ic(self.factor, self._forward_returns())
+        When ``by_group=True``, returns a date x group frame.
+        """
+        return factor_metrics.ic(
+            self.factor,
+            self._forward_returns(),
+            groupby=self.groups,
+            by_group=by_group,
+        )
+
+    def rank_ic(self, by_group: bool = False) -> pd.Series | pd.DataFrame:
+        """Return per-date Spearman rank information coefficient.
+
+        When ``by_group=True``, returns a date x group frame.
+        """
+        return factor_metrics.rank_ic(
+            self.factor,
+            self._forward_returns(),
+            groupby=self.groups,
+            by_group=by_group,
+        )
 
     def ic_ir(self) -> float:
         """Return annualized IC information ratio."""
         return factor_metrics.ic_ir(self.ic(), periods=self.periods)
 
-    def quantile_returns(self) -> pd.DataFrame:
+    def quantile_returns(self, group_neutral: bool = False) -> pd.DataFrame:
         """Return mean forward returns by factor quantile."""
         return factor_metrics.quantile_returns(
             self.factor,
             self._forward_returns(),
             quantiles=self.quantiles,
+            groupby=self.groups if group_neutral else None,
+            group_neutral=group_neutral,
         )
 
     def quantile_stats(self) -> pd.DataFrame:
@@ -124,6 +143,20 @@ class FactorAnalyzer:
             quantiles=self.quantiles,
         )
 
+    def monthly_ic_heatmap(self, by_group: bool = False) -> pd.DataFrame:
+        """Return mean IC by year and month."""
+        return factor_metrics.mean_monthly_ic(self.ic(by_group=by_group))
+
+    @staticmethod
+    def event_returns(
+        prices: pd.Series,
+        events: pd.MultiIndex,
+        before: int = 5,
+        after: int = 5,
+    ) -> pd.DataFrame:
+        """Return average event-window returns around ``(date, symbol)`` events."""
+        return factor_metrics.event_returns(prices, events, before=before, after=after)
+
     def turnover(self) -> pd.Series:
         """Return factor rank turnover."""
         return factor_metrics.turnover(self.factor)
@@ -189,6 +222,9 @@ class FactorAnalyzer:
         ric_series = self.rank_ic()
         if not ric_series.empty:
             items.append(charts.factor_rank_ic(ric_series))
+        monthly_ic = self.monthly_ic_heatmap()
+        if not monthly_ic.empty:
+            items.append(charts.factor_monthly_ic_heatmap(monthly_ic))
         t = self.turnover()
         ac = self.autocorrelation()
         if not t.empty or not ac.empty:
