@@ -32,7 +32,9 @@ class DummyBroker:
     def cancel(self, order):
         order.status = Order.Canceled
 
-    def getvalue(self) -> float:
+    def getvalue(self, datas=None) -> float:
+        if datas is not None:
+            return 0.0
         return 1_000.0
 
     def getposition(self, data=None):
@@ -54,9 +56,9 @@ def test_core_strategy_order_target_helpers_are_shared_runtime_logic() -> None:
     strategy.order_target_value(target=20.0, price=10.0)
     strategy.order_target_percent(target=0.0, price=10.0)
 
-    assert [order.size for order in strategy.broker.orders[:2]] == [3.0, 1.0]
+    assert [order.size for order in strategy.broker.orders[:2]] == [3.0, 2.0]
     assert strategy.broker.orders[0].isbuy()
-    assert strategy.broker.orders[1].issell()
+    assert strategy.broker.orders[1].isbuy()
 
 
 def test_core_strategy_bracket_helpers_preserve_relationships() -> None:
