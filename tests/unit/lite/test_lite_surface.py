@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 import tradelearn as tl
-from tradelearn.lite import Backtest, Signal, SignalStrategy, Strategy
+from tradelearn.lite import Backtest, MLStrategy, Signal, SignalStrategy, Strategy
 
 
 def _data() -> pd.DataFrame:
@@ -202,6 +202,40 @@ def test_lite_exports_signal_strategy_names() -> None:
     assert SignalStrategy is Strategy
     wrapped = Signal([0.0, 1.0])
     assert wrapped[1] == 1.0
+
+
+def test_lite_exports_mlstrategy_with_shared_ml_runtime() -> None:
+    class RecordingModel:
+        def __init__(self) -> None:
+            self.fit_X = None
+            self.fit_y = None
+            self.predict_X = []
+
+        def fit(self, X, y):
+            self.fit_X = X
+            self.fit_y = y
+            return self
+
+        def predict(self, X):
+            self.predict_X.extend(X)
+            return [1.0]
+
+    class LiteML(MLStrategy):
+        model = RecordingModel()
+        features = ("close",)
+
+        @staticmethod
+        def target(data: pd.DataFrame) -> pd.Series:
+            return (data["close"].shift(-1) > data["close"]).astype(float)
+
+    stats = Backtest(_data(), LiteML, cash=1000.0, trade_on_close=True).run()
+    strategy = stats["_strategy"]
+
+    assert strategy.model_.fit_X == [[10.0], [11.0], [12.0], [13.0], [14.0]]
+    assert strategy.model_.fit_y == [1.0, 1.0, 1.0, 1.0, 0.0]
+    assert strategy.model_.predict_X == [[10.0], [11.0], [12.0], [13.0], [14.0]]
+    assert len(strategy.orders) == 1
+    assert strategy.orders[0].isbuy()
 
 
 def test_lite_accepts_dict_data_and_ticker_orders() -> None:

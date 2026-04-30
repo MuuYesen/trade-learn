@@ -71,6 +71,7 @@ class RustBroker:
         self._fills_frame_cache: Any = None
         self._fills_frame_cache_len = -1
         self._pending_orders: list[Order] = []
+        self._deferred_child_orders: dict[int, list[tuple[Order, bool, float, float | None]]] = {}
         self._order_count = 0
         self._closed_trade_count = 0
         self._winning_trade_count = 0
@@ -533,6 +534,24 @@ class RustBroker:
         self._orders_by_ref[order.ref] = order
         self._notify_order_event(owner, order)
 
+        if order.parent is not None and order.parent.status != Order.Completed:
+            self._deferred_child_orders.setdefault(id(order.parent), []).append(
+                (order, is_buy, actual_size, price)
+            )
+            order.status = Order.Accepted
+            self._notify_order_event(owner, order)
+            return
+
+        self._route_accepted_order_to_matcher(order, is_buy, actual_size, price)
+        self._notify_order_event(owner, order)
+
+    def _route_accepted_order_to_matcher(
+        self,
+        order: Order,
+        is_buy: bool,
+        actual_size: float,
+        price: float | None,
+    ) -> None:
         if self._engine is not None:
             side_str = "buy" if is_buy else "sell"
             payload = self._rust_order_payload(order, side_str, actual_size, price)
@@ -544,14 +563,42 @@ class RustBroker:
         else:
             order.status = Order.Accepted
             self._pending_orders.append(order)
-        self._notify_order_event(owner, order)
 
     def cancel(self, order: Order) -> None:
         """Cancel an order in the Python mirror and pending queue."""
+        self._cancel_order_mirror(order)
+
+    def _cancel_order_mirror(self, order: Order, owner: Strategy | None = None) -> bool:
+        """Cancel one Python-side order mirror and notify when an owner is available."""
         if order.status in (Order.Completed, Order.Canceled, Order.Expired):
-            return
+            return False
         order.status = Order.Canceled
         self._pending_orders = [pending for pending in self._pending_orders if pending is not order]
+        if owner is not None:
+            self._notify_order_event(owner, order)
+        return True
+
+    def _cancel_oco_siblings(self, owner: Strategy, completed: Order) -> None:
+        """Cancel live OCO siblings after one order in the OCO pair fills."""
+        for candidate in self._orders:
+            if candidate is completed or not candidate.alive():
+                continue
+            if completed.oco is candidate or candidate.oco is completed:
+                self._cancel_order_mirror(candidate, owner)
+
+    def _activate_child_orders(self, owner: Strategy, parent: Order) -> None:
+        """Route deferred bracket child orders once the parent has filled."""
+        children = self._deferred_child_orders.pop(id(parent), ())
+        for child, is_buy, actual_size, price in children:
+            if child.alive():
+                if self._engine is not None and hasattr(self._engine, "run_bar_loop"):
+                    side_str = "buy" if is_buy else "sell"
+                    payload = self._rust_order_payload(child, side_str, actual_size, price)
+                    self._order_submit_buffer.append((child.ref, *payload))
+                    child.status = Order.Accepted
+                else:
+                    self._route_accepted_order_to_matcher(child, is_buy, actual_size, price)
+                self._notify_order_event(owner, child)
 
     def buy(
         self,
@@ -692,3 +739,5 @@ class RustBroker:
             )
             self._notify_fill_event(strategy, order, signed_size, price, comm)
             self._notify_order_event(strategy, order)
+            self._activate_child_orders(strategy, order)
+            self._cancel_oco_siblings(strategy, order)

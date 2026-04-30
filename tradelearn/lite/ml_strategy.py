@@ -1,13 +1,13 @@
-"""Engine ML strategy facade."""
+"""Lite ML strategy facade."""
 
 from __future__ import annotations
 
-from tradelearn.engine import Strategy
+from tradelearn.lite.strategy import Strategy
 from tradelearn.ml.base import MLStrategyMixin
 
 
 class MLStrategy(MLStrategyMixin, Strategy):
-    """Engine-facing ML strategy base class."""
+    """Lite-facing ML strategy base class using the shared ML runtime."""
 
 
 __all__ = ["MLStrategy"]
