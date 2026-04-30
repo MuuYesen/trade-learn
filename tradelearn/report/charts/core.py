@@ -128,6 +128,8 @@ def market_replay(
                 [("Date", "@date{%F %T}"), ("Equity", "@relative_equity{0,0.[00]%}")],
             )
             plots.append(equity_plot)
+    else:
+        equity_plot = None
 
     if not trades_frame.empty:
         pl_plot = _market_section("Profit / Loss", height=120, x_range=x_range)
@@ -211,6 +213,7 @@ def market_replay(
                 fill_color=MARKET_UP,
                 line_color=MARKET_UP_LINE,
                 fill_alpha=0.82,
+                legend_label="Up",
             )
         if not down.empty:
             price_plot.vbar(
@@ -222,6 +225,7 @@ def market_replay(
                 fill_color=MARKET_DOWN,
                 line_color=MARKET_DOWN_LINE,
                 fill_alpha=0.82,
+                legend_label="Down",
             )
         price_renderer = price_plot.scatter(
             "bar_index",
@@ -318,6 +322,7 @@ def market_replay(
         plot.xaxis.visible = False
     for plot in plots:
         _style_market_section(plot)
+    _style_market_legend(equity_plot)
     _style_market_legend(pl_plot if not trades_frame.empty else None)
     _style_market_legend(price_plot)
 
