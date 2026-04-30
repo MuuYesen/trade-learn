@@ -69,6 +69,9 @@ docs = [
     "mkdocs-material",
     "mkdocstrings-python",
 ]
+duckdb = [
+    "duckdb",
+]
 
 [dependency-groups]
 oracle = [

@@ -422,8 +422,13 @@ def run_backtest(cerebro: Any) -> list[Any]:
     indicators_bt = getattr(strategy, "_indicators_bt", [])
 
     strategy.analyzers = _AttrDict()
-    for name, (ana_cls, ana_kwargs) in cerebro.analyzers.items():
-        ana_inst = ana_cls(**ana_kwargs)
+    for name, ana_spec in cerebro.analyzers.items():
+        if len(ana_spec) == 3:
+            ana_cls, ana_args, ana_kwargs = ana_spec
+        else:
+            ana_cls, ana_kwargs = ana_spec
+            ana_args = ()
+        ana_inst = ana_cls(*ana_args, **ana_kwargs)
         ana_inst.strategy = strategy
         strategy.analyzers[name] = ana_inst
 

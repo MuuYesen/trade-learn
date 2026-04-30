@@ -141,6 +141,55 @@ def test_cerebro_writer_query_surface_aggregates_registered_writers() -> None:
     assert cerebro.getwritervalues() == ["run-value"]
 
 
+def test_cerebro_run_accepts_backtrader_runtime_kwargs() -> None:
+    class CountBars(bt.Strategy):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def next(self) -> None:
+            self.calls += 1
+
+    cerebro = bt.Cerebro()
+    cerebro.adddata(_ohlcv(4))
+    cerebro.addstrategy(CountBars)
+
+    [strategy] = cerebro.run(
+        runonce=False,
+        preload=False,
+        maxcpus=1,
+        optreturn=False,
+        exactbars=True,
+        stdstats=False,
+        cheat_on_close=True,
+    )
+
+    assert strategy.calls == 4
+    assert cerebro.exactbars is True
+    assert cerebro.stdstats is False
+    assert cerebro.trade_on_close is True
+    assert cerebro.broker._trade_on_close is True
+
+
+def test_addanalyzer_preserves_positional_arguments() -> None:
+    class NamedAnalyzer(bt.Analyzer):
+        def __init__(self, prefix: str, suffix: str = "") -> None:
+            self.prefix = prefix
+            self.suffix = suffix
+
+        def get_analysis(self) -> dict[str, str]:
+            return {"name": f"{self.prefix}{self.suffix}"}
+
+    cerebro = bt.Cerebro()
+    cerebro.adddata(_ohlcv(3))
+    cerebro.addstrategy(bt.Strategy)
+    cerebro.addanalyzer(NamedAnalyzer, "run", suffix="-ok", _name="named")
+
+    [strategy] = cerebro.run()
+
+    assert strategy.analyzers.named.get_analysis() == {"name": "run-ok"}
+    assert strategy.stats.analyzers["named"] == {"name": "run-ok"}
+
+
 def test_broker_order_history_and_open_orders_surface() -> None:
     class SubmitOnce(bt.Strategy):
         def next(self) -> None:

@@ -2,6 +2,7 @@
 
 from tradelearn.data.bars import bars_fingerprint, normalize_bars
 from tradelearn.data.cache import BarsCache, CacheEntry, CacheExpiredError, CacheMissError
+from tradelearn.data.duckdb_backend import DuckDBBarsBackend
 from tradelearn.data.providers import DataProvider, OpenTdxProvider, infer_tdx_market
 from tradelearn.data.resampler import resample_frame
 
@@ -11,6 +12,7 @@ __all__ = [
     "CacheExpiredError",
     "CacheMissError",
     "DataProvider",
+    "DuckDBBarsBackend",
     "OpenTdxProvider",
     "bars_fingerprint",
     "infer_tdx_market",

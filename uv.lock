@@ -5919,6 +5919,9 @@ docs = [
     { name = "mkdocs-material" },
     { name = "mkdocstrings-python" },
 ]
+duckdb = [
+    { name = "duckdb" },
+]
 lab = [
     { name = "ipywidgets" },
     { name = "jupyter-ai" },
@@ -5940,6 +5943,7 @@ requires-dist = [
     { name = "bokeh" },
     { name = "causal-learn" },
     { name = "cibuildwheel", marker = "extra == 'dev'" },
+    { name = "duckdb", marker = "extra == 'duckdb'" },
     { name = "httpx" },
     { name = "interrogate", marker = "extra == 'dev'" },
     { name = "ipywidgets", marker = "extra == 'lab'" },
@@ -5970,7 +5974,7 @@ requires-dist = [
     { name = "typer" },
     { name = "xlsxwriter" },
 ]
-provides-extras = ["lab", "dev", "docs"]
+provides-extras = ["lab", "dev", "docs", "duckdb"]
 
 [package.metadata.requires-dev]
 oracle = [

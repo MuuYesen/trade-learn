@@ -47,7 +47,7 @@ class Cerebro:
             commission=commission or FixedCommission(),
         )
         self._sizer_spec = (FixedSize, {})
-        self.analyzers: dict[str, tuple[type[Analyzer], dict]] = {}
+        self.analyzers: dict[str, tuple[type[Analyzer], tuple[Any, ...], dict[str, Any]]] = {}
         self.observers: dict[str, tuple[type[Any], dict]] = {}
         self.writers: list[tuple[type[Any], tuple, dict]] = []
         self.stores: list[Any] = []
@@ -148,9 +148,9 @@ class Cerebro:
             combo.update(dict(zip(grid_keys, values, strict=True)))
             self.addstrategy(strategy, *args, **combo)
 
-    def addanalyzer(self, analyzer: type[Analyzer], *args, _name=None, **kwargs) -> None:
+    def addanalyzer(self, analyzer: type[Analyzer], *args: Any, _name=None, **kwargs: Any) -> None:
         name = _name or kwargs.pop("name", None) or analyzer.__name__.lower()
-        self.analyzers[name] = (analyzer, kwargs)
+        self.analyzers[name] = (analyzer, args, kwargs)
 
     def addobserver(self, observer: type[Any], *args: Any, _name=None, **kwargs: Any) -> None:
         name = _name or kwargs.pop("name", None) or observer.__name__.lower()
@@ -222,7 +222,8 @@ class Cerebro:
         """Write a Tradelearn HTML report for the most recent run."""
         return self._last_reporter().html(path, benchmark=benchmark)
 
-    def run(self) -> list[Strategy]:
+    def run(self, **kwargs: Any) -> list[Strategy]:
+        self._apply_run_kwargs(kwargs)
         if self.mode != "backtest":
             return self._run_event_mode()
         specs = list(self.strats)
@@ -268,6 +269,18 @@ class Cerebro:
         self.strats = original_strats
         self._last_results = results
         return results
+
+    def _apply_run_kwargs(self, kwargs: dict[str, Any]) -> None:
+        if not kwargs:
+            return
+        if "exactbars" in kwargs:
+            self.exactbars = bool(kwargs["exactbars"])
+        if "stdstats" in kwargs:
+            self.stdstats = bool(kwargs["stdstats"])
+        if "cheat_on_close" in kwargs:
+            self.set_coc(bool(kwargs["cheat_on_close"]))
+        if "trade_on_close" in kwargs:
+            self.set_coc(bool(kwargs["trade_on_close"]))
 
     def _last_reporter(self):
         results = getattr(self, "_last_results", None)
