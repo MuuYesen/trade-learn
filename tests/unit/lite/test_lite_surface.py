@@ -27,6 +27,38 @@ def test_lite_backtest_detects_normalized_data_for_feed_fast_path() -> None:
     assert not _can_skip_normalize_data(_data().rename(columns={"open": "Open"}))
 
 
+def test_lite_target_weight_snapshots_batch_prices_and_positions() -> None:
+    seen: dict[str, dict[str, float]] = {}
+    panel = {
+        "AAA": _data(),
+        "BBB": _data().assign(
+            open=[20.0, 21.0, 22.0, 23.0, 24.0],
+            high=[21.0, 22.0, 23.0, 24.0, 25.0],
+            low=[19.0, 20.0, 21.0, 22.0, 23.0],
+            close=[20.0, 21.0, 22.0, 23.0, 24.0],
+        ),
+    }
+
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(1)
+
+        def next(self) -> None:
+            if len(self.data) == 2:
+                snapshots = self._target_weight_snapshots(self._target_weight_data_map())
+                seen["prices"] = snapshots.prices
+                seen["sizes"] = snapshots.sizes
+                seen["mults"] = snapshots.mults
+
+    Backtest(panel, LiteStrategy, cash=1000.0).run()
+
+    assert seen == {
+        "prices": {"AAA": 11.0, "BBB": 21.0},
+        "sizes": {"AAA": 0.0, "BBB": 0.0},
+        "mults": {"AAA": 1.0, "BBB": 1.0},
+    }
+
+
 def test_lite_uses_backtrader_bar_indexing_with_1x_position_call() -> None:
     seen: dict[str, float] = {}
 

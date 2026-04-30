@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -14,6 +15,13 @@ from tradelearn.core import OrderRequest
 from tradelearn.lite.data import LiteDataProxy, _ta_frame
 from tradelearn.lite.indicator import IndicatorBundle, IndicatorProxy
 from tradelearn.lite.position import PositionProxy
+
+
+@dataclass(frozen=True)
+class _TargetWeightSnapshots:
+    prices: dict[str, float]
+    sizes: dict[str, float]
+    mults: dict[str, float]
 
 
 class Strategy(CoreStrategy):
@@ -606,9 +614,11 @@ class Strategy(CoreStrategy):
             raise ValueError(f"Unknown ticker(s): {unknown}")
 
         equity = self._portfolio_equity_snapshot()
+        snapshots = self._target_weight_snapshots(data_by_ticker)
         intents = self._target_weight_order_requests(
             targets,
             data_by_ticker,
+            snapshots,
             equity,
             close_missing,
         )
@@ -624,6 +634,7 @@ class Strategy(CoreStrategy):
         self,
         targets: pd.Series,
         data_by_ticker: dict[str, Any],
+        snapshots: _TargetWeightSnapshots,
         equity: float,
         close_missing: bool,
     ) -> list[tuple[OrderRequest, Any]]:
@@ -636,11 +647,11 @@ class Strategy(CoreStrategy):
         requests: list[tuple[OrderRequest, Any]] = []
         for ticker, target in target_by_ticker.items():
             data = data_by_ticker[ticker]
-            price = self._current_price(data)
-            mult = self._position_mult(data)
+            price = snapshots.prices[ticker]
+            mult = snapshots.mults[ticker]
             if price <= 0 or mult <= 0:
                 continue
-            current_size = self._lite_position_size(data)
+            current_size = snapshots.sizes[ticker]
             current_value = current_size * price * mult
             target_value = float(target) * equity
             delta_value = target_value - current_value
@@ -663,6 +674,30 @@ class Strategy(CoreStrategy):
         if self._bt_data_by_ticker:
             return self._bt_data_by_ticker
         return {self.data.the_ticker: self._bt_primary_data}
+
+    def _target_weight_snapshots(self, data_by_ticker: dict[str, Any]) -> _TargetWeightSnapshots:
+        prices: dict[str, float] = {}
+        sizes: dict[str, float] = {}
+        mults: dict[str, float] = {}
+        target_sizes = self._lite_target_size_by_data
+        pending = self._pending_size
+        buffering = bool(getattr(self.broker, "_buffer_order_submissions", False))
+        broker_positions = getattr(self.broker, "_positions", {}) if buffering else {}
+        comminfo = getattr(self.broker, "_comminfo", None)
+        default_mult = float(getattr(self.broker, "_mult", 1.0))
+        for ticker, data in data_by_ticker.items():
+            close = data.get_array("close")
+            prices[ticker] = float(close[data._cursor])
+            mults[ticker] = self._position_mult(data) if comminfo is not None else default_mult
+            if data in target_sizes:
+                sizes[ticker] = float(target_sizes[data])
+            elif buffering:
+                position = broker_positions.get(data)
+                base_size = float(getattr(position, "size", 0.0)) if position is not None else 0.0
+                sizes[ticker] = base_size + float(pending.get(data, 0.0))
+            else:
+                sizes[ticker] = float(self.getposition(data).size + pending.get(data, 0.0))
+        return _TargetWeightSnapshots(prices=prices, sizes=sizes, mults=mults)
 
     def target_equal(
         self,

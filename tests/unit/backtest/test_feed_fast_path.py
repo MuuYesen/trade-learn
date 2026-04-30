@@ -35,7 +35,11 @@ def test_runtime_data_feed_can_use_internal_no_copy_fast_path() -> None:
     feed = RuntimeDataFeed(frame, assume_normalized=True, copy=False)
 
     assert feed._frame is frame
+    assert np.shares_memory(feed.get_array("open"), frame["open"].to_numpy())
+    assert np.shares_memory(feed.get_array("high"), frame["high"].to_numpy())
+    assert np.shares_memory(feed.get_array("low"), frame["low"].to_numpy())
     assert np.shares_memory(feed.get_array("close"), frame["close"].to_numpy())
+    assert np.shares_memory(feed.get_array("volume"), frame["volume"].to_numpy())
 
 
 def test_build_data_feeds_preserves_default_copy_semantics_on_fast_path() -> None:

@@ -97,11 +97,11 @@ class DataContainer:
         def _get_col(df, names, default_val=0.0):
             for n in names:
                 if n in df.columns:
-                    return df[n].to_numpy(dtype=np.float64)
+                    return self._float64_array(df[n])
                 if n.lower() in df.columns:
-                    return df[n.lower()].to_numpy(dtype=np.float64)
+                    return self._float64_array(df[n.lower()])
                 if n.capitalize() in df.columns:
-                    return df[n.capitalize()].to_numpy(dtype=np.float64)
+                    return self._float64_array(df[n.capitalize()])
             return np.full(len(df), default_val, dtype=np.float64)
 
         frame = self._frame
@@ -129,8 +129,15 @@ class DataContainer:
         # Add extra columns
         for col in frame.columns:
             if col not in self._arrays:
-                self._arrays[col] = frame[col].to_numpy(dtype=np.float64)
+                self._arrays[col] = self._float64_array(frame[col])
         self._bar_buffer = SharedBarBuffer(self, self._arrays)
+
+    @staticmethod
+    def _float64_array(series: pd.Series) -> np.ndarray:
+        array = series.to_numpy(copy=False)
+        if array.dtype == np.float64:
+            return array
+        return np.asarray(array, dtype=np.float64)
 
     def __len__(self) -> int:
         return self._cursor + 1
