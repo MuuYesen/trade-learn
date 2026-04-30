@@ -47,6 +47,32 @@
     table { border-collapse: collapse; width: 100%; margin: 12px 0 0; }
     th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; }
     th { background: var(--panel); font-weight: 700; }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .metric-card {
+      padding: 10px 12px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+    .metric-name {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .metric-number {
+      margin-top: 4px;
+      color: var(--ink);
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
     .chart {
       overflow: hidden;
     }

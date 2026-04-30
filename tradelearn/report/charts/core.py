@@ -159,6 +159,11 @@ def market_replay(
                 size="marker_size",
                 legend_label="Losing Trades",
             )
+        min_ret = float(trades_frame["return_pct"].min())
+        max_ret = float(trades_frame["return_pct"].max())
+        ret_span = max(max_ret - min_ret, 0.01)
+        pl_plot.y_range.start = min(min_ret - ret_span * 0.35, -0.002)
+        pl_plot.y_range.end = max(max_ret + ret_span * 0.35, 0.002)
         hidden = pl_plot.scatter(
             "exit_bar",
             "return_pct",
@@ -206,7 +211,6 @@ def market_replay(
                 fill_color=MARKET_UP,
                 line_color=MARKET_UP_LINE,
                 fill_alpha=0.82,
-                legend_label="Up",
             )
         if not down.empty:
             price_plot.vbar(
@@ -218,7 +222,6 @@ def market_replay(
                 fill_color=MARKET_DOWN,
                 line_color=MARKET_DOWN_LINE,
                 fill_alpha=0.82,
-                legend_label="Down",
             )
         price_renderer = price_plot.scatter(
             "bar_index",
@@ -315,6 +318,8 @@ def market_replay(
         plot.xaxis.visible = False
     for plot in plots:
         _style_market_section(plot)
+    _style_market_legend(pl_plot if not trades_frame.empty else None)
+    _style_market_legend(price_plot)
 
     return gridplot(
         plots,
@@ -895,9 +900,33 @@ def _style_market_section(plot) -> None:
     plot.title.text_font_style = "bold"
     plot.toolbar.logo = None
     plot.add_tools(CrosshairTool(dimensions="both"))
+    _hide_market_legend(plot)
+
+
+def _hide_market_legend(plot) -> None:
     if plot.legend:
         for legend in list(plot.legend):
             legend.visible = False
+
+
+def _style_market_legend(plot) -> None:
+    if plot is None or not plot.legend:
+        return
+    for legend in list(plot.legend):
+        legend.visible = True
+        legend.location = "top_left"
+        legend.border_line_width = 1
+        legend.border_line_color = "#d7e0e7"
+        legend.background_fill_color = "white"
+        legend.background_fill_alpha = 0.72
+        legend.padding = 4
+        legend.spacing = 1
+        legend.margin = 3
+        legend.glyph_width = 12
+        legend.glyph_height = 8
+        legend.label_text_color = "#33424f"
+        legend.label_text_font_size = "8pt"
+        legend.click_policy = "hide"
 
 
 def _add_line_hover(plot, renderers, tooltips, *, vline: bool = True) -> None:

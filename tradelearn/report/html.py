@@ -230,7 +230,7 @@ def _render_html(
         metadata={key: escape(value) for key, value in metadata.items()},
         returns_count=len(returns),
         script=script,
-        summary_table=_summary_table(summary),
+        summary_table=_summary_cards(summary),
         trades_count=len(trades),
     )
 
@@ -253,6 +253,18 @@ def _summary_table(values: dict[str, Any]) -> str:
         "<table><thead><tr><th>metric</th><th>value</th></tr></thead>"
         f"<tbody>{rows}</tbody></table>"
     )
+
+
+def _summary_cards(values: dict[str, Any]) -> str:
+    """Render summary values as a compact multi-column metric grid."""
+    cards = "".join(
+        "<div class=\"metric-card\">"
+        f"<div class=\"metric-name\">{escape(str(key))}</div>"
+        f"<div class=\"metric-number\">{escape(_format_value(value))}</div>"
+        "</div>"
+        for key, value in values.items()
+    )
+    return f"<div class=\"metric-grid\">{cards}</div>"
 
 
 def _frame_table(frame: pd.DataFrame) -> str:
