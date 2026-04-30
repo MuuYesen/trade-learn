@@ -268,7 +268,7 @@ def market_replay(
                 "price",
                 source=ColumnDataSource(buys),
                 marker="triangle",
-                size=11,
+                size=13,
                 color=MARKET_UP,
                 line_color="white",
                 legend_label="Buy",
@@ -279,7 +279,7 @@ def market_replay(
                 "price",
                 source=ColumnDataSource(sells),
                 marker="inverted_triangle",
-                size=11,
+                size=13,
                 color=MARKET_DOWN,
                 line_color="white",
                 legend_label="Sell",
@@ -920,6 +920,7 @@ def _style_market_legend(plot) -> None:
     for legend in list(plot.legend):
         legend.visible = True
         legend.location = "top_left"
+        legend.ncols = 2
         legend.border_line_width = 1
         legend.border_line_color = "#d7e0e7"
         legend.background_fill_color = "white"
@@ -927,8 +928,8 @@ def _style_market_legend(plot) -> None:
         legend.padding = 6
         legend.spacing = 1
         legend.margin = 4
-        legend.glyph_width = 20
-        legend.glyph_height = 14
+        legend.glyph_width = 28
+        legend.glyph_height = 18
         legend.label_text_color = "#33424f"
         legend.label_text_font_size = "9pt"
         legend.click_policy = "hide"
