@@ -4,8 +4,10 @@ import importlib
 import math
 
 import pandas as pd
+import pytest
 
 import tradelearn.engine as bt
+from benchmarks.runners import benchmark_bt
 
 
 def _portfolio_data() -> dict[str, pd.DataFrame]:
@@ -65,3 +67,19 @@ def test_portfolio_strategy_examples_export_and_run() -> None:
         assert final_value > 0
         assert strategy.target_history
         assert strategy.order_history
+
+
+def test_portfolio_benchmark_examples_align_with_backtrader() -> None:
+    results = benchmark_bt.run_portfolio_benchmark()
+
+    for strategy_name, result in results.items():
+        tradelearn = result["Tradelearn"]
+        backtrader = result["Backtrader"]
+
+        assert tradelearn is not None, strategy_name
+        assert backtrader is not None, strategy_name
+        assert tradelearn["final_value"] == pytest.approx(
+            backtrader["final_value"],
+            abs=benchmark_bt.EXACT_TOLERANCE,
+        )
+        assert tradelearn["order_count"] == backtrader["order_count"]

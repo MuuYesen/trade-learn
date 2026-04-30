@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::matching::{
     fill_from_raw_price, is_exit_fill, is_exit_order_for_position, match_order, match_order_smart,
@@ -179,11 +179,18 @@ impl BacktestEngine {
         }
 
         for order in current_pending {
+            if order.symbol != bar.symbol {
+                remaining.push(order);
+                continue;
+            }
             if let Some(fill_event) = if options.smart_matching {
                 match_order_smart(&order, bar, options)
             } else {
                 match_order(&order, bar, options)
             } {
+                if !self.can_apply_fill(&fill_event, options.mult) {
+                    continue;
+                }
                 let position = self.portfolio.position(&order.symbol);
                 let old_size = position.map(|p| p.size).unwrap_or(0.0);
                 let old_price = position.map(|p| p.avg_price).unwrap_or(0.0);
@@ -227,6 +234,9 @@ impl BacktestEngine {
         let mut candidates = Vec::new();
 
         for (idx, order) in current_pending.iter().enumerate() {
+            if order.symbol != bar.symbol {
+                continue;
+            }
             if let Some((rank, raw_price)) = smart_match_price(order, bar, options) {
                 let fill_event = fill_from_raw_price(order, raw_price, bar, options);
                 candidates.push((rank, smart_order_priority(order), idx, fill_event));
@@ -246,6 +256,10 @@ impl BacktestEngine {
                 continue;
             }
             let order = &current_pending[idx];
+            if !self.can_apply_fill(&fill_event, options.mult) {
+                filled.insert(idx);
+                continue;
+            }
             let position = self.portfolio.position(&order.symbol);
             let old_size = position.map(|p| p.size).unwrap_or(0.0);
             let old_price = position.map(|p| p.avg_price).unwrap_or(0.0);
@@ -306,9 +320,103 @@ impl BacktestEngine {
         fills
     }
 
+    fn can_apply_fill(&self, fill: &FillEvent, mult: f64) -> bool {
+        if fill.size <= 0.0 {
+            return true;
+        }
+        let required_cash = fill.price * fill.size * mult + fill.commission;
+        self.portfolio.cash() + 1e-9 >= required_cash
+    }
+
+    pub fn step_open_bars(&mut self, bars: Vec<BarEvent>) -> Vec<FillRecord> {
+        self.step_bars_with_trade_on_close(bars, false)
+    }
+
+    pub fn step_close_bars(&mut self, bars: Vec<BarEvent>) -> Vec<FillRecord> {
+        self.step_bars_with_trade_on_close(bars, true)
+    }
+
+    fn step_bars_with_trade_on_close(
+        &mut self,
+        bars: Vec<BarEvent>,
+        trade_on_close: bool,
+    ) -> Vec<FillRecord> {
+        let mut options = self.options;
+        options.trade_on_close = trade_on_close;
+        let all_fills = self.match_all_pending_against_bars(&bars, &options);
+        self.portfolio.mark_to_market(&bars, self.options.mult);
+        if let Some(primary) = bars.first() {
+            self.results.equity.push(EquityRecord {
+                ts: primary.ts,
+                cash: self.portfolio.cash(),
+                value: self.portfolio.equity(self.options.mult),
+            });
+        }
+        all_fills
+    }
+
+    fn match_all_pending_against_bars(
+        &mut self,
+        bars: &[BarEvent],
+        options: &ExecutionOptions,
+    ) -> Vec<FillRecord> {
+        let mut fills = Vec::new();
+        let mut remaining = Vec::new();
+        let bars_by_symbol: HashMap<&str, &BarEvent> =
+            bars.iter().map(|bar| (bar.symbol.as_str(), bar)).collect();
+        let current_pending = std::mem::take(&mut self.pending);
+
+        for order in current_pending {
+            let Some(bar) = bars_by_symbol.get(order.symbol.as_str()) else {
+                remaining.push(order);
+                continue;
+            };
+            let matched = if options.smart_matching {
+                match_order_smart(&order, bar, options)
+            } else {
+                match_order(&order, bar, options)
+            };
+            if let Some(fill_event) = matched {
+                if !self.can_apply_fill(&fill_event, options.mult) {
+                    continue;
+                }
+                let position = self.portfolio.position(&order.symbol);
+                let old_size = position.map(|p| p.size).unwrap_or(0.0);
+                let old_price = position.map(|p| p.avg_price).unwrap_or(0.0);
+                let pnl = realized_pnl(
+                    old_size,
+                    old_price,
+                    fill_event.size,
+                    fill_event.price,
+                    options.mult,
+                );
+
+                self.portfolio.apply_fill(&fill_event, options.mult);
+
+                let record = FillRecord {
+                    order_id: fill_event.order_id,
+                    ts: fill_event.ts,
+                    side: order.side,
+                    size: fill_event.size,
+                    price: fill_event.price,
+                    commission: fill_event.commission,
+                    slippage: fill_event.slippage,
+                    pnl,
+                };
+                self.results.fills.push(record.clone());
+                fills.push(record);
+            } else {
+                remaining.push(order);
+            }
+        }
+        self.pending = remaining;
+        fills
+    }
+
     /// Submit a new order (called from Python's strategy.buy()/sell()).
     pub fn submit_order(
         &mut self,
+        symbol: String,
         side: OrderSide,
         order_type: OrderType,
         size: f64,
@@ -319,7 +427,7 @@ impl BacktestEngine {
         self.next_order_id += 1;
         self.pending.push(OrderEvent {
             order_id,
-            symbol: "data0".to_string(),
+            symbol,
             side,
             order_type,
             size: size.abs(),
@@ -331,8 +439,12 @@ impl BacktestEngine {
     }
 
     pub fn get_position(&self) -> (f64, f64) {
+        self.get_position_for_symbol("data0")
+    }
+
+    pub fn get_position_for_symbol(&self, symbol: &str) -> (f64, f64) {
         self.portfolio
-            .position("data0")
+            .position(symbol)
             .map(|p| (p.size, p.avg_price))
             .unwrap_or((0.0, 0.0))
     }

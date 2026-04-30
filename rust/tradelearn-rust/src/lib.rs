@@ -239,14 +239,17 @@ impl RustBarRunner {
             if drained.is_none(py) {
                 continue;
             }
-            let orders: Vec<(u64, String, String, f64, Option<f64>, Option<f64>)> =
+            let orders: Vec<(u64, String, String, String, f64, Option<f64>, Option<f64>)> =
                 drained.extract(py)?;
             let mut bindings: Vec<(u64, u64)> = Vec::with_capacity(orders.len());
 
-            for (provisional_ref, side, order_type, order_size, limit_price, stop_price) in orders {
+            for (provisional_ref, symbol, side, order_type, order_size, limit_price, stop_price) in
+                orders
+            {
                 let side = parse_order_side(&side)?;
                 let order_type = parse_order_type(&order_type)?;
                 let order_id = engine.inner.submit_order(
+                    symbol,
                     side,
                     order_type,
                     order_size,
@@ -362,6 +365,44 @@ impl RustBacktestEngine {
         (fills, cash, size, price)
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn step_open_bars_compact(
+        &mut self,
+        symbols: Vec<String>,
+        timestamps: Vec<i64>,
+        opens: Vec<f64>,
+        highs: Vec<f64>,
+        lows: Vec<f64>,
+        closes: Vec<f64>,
+        volumes: Vec<f64>,
+    ) -> (Option<CompactFills>, f64, f64, f64) {
+        let bars = build_bars(symbols, timestamps, opens, highs, lows, closes, volumes);
+        let fill_records = self.inner.step_open_bars(bars);
+        let fills = self.map_fills_compact(fill_records);
+        let cash = self.inner.get_cash();
+        let (size, price) = self.inner.get_position();
+        (fills, cash, size, price)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn step_close_bars_compact(
+        &mut self,
+        symbols: Vec<String>,
+        timestamps: Vec<i64>,
+        opens: Vec<f64>,
+        highs: Vec<f64>,
+        lows: Vec<f64>,
+        closes: Vec<f64>,
+        volumes: Vec<f64>,
+    ) -> (Option<CompactFills>, f64, f64, f64) {
+        let bars = build_bars(symbols, timestamps, opens, highs, lows, closes, volumes);
+        let fill_records = self.inner.step_close_bars(bars);
+        let fills = self.map_fills_compact(fill_records);
+        let cash = self.inner.get_cash();
+        let (size, price) = self.inner.get_position();
+        (fills, cash, size, price)
+    }
+
     fn run_bar_loop(
         &mut self,
         py: Python<'_>,
@@ -380,16 +421,23 @@ impl RustBacktestEngine {
             if drained.is_none(py) {
                 continue;
             }
-            let orders: Vec<(u64, String, String, f64, Option<f64>, Option<f64>)> =
+            let orders: Vec<(u64, String, String, String, f64, Option<f64>, Option<f64>)> =
                 drained.extract(py)?;
             let mut bindings: Vec<(u64, u64)> = Vec::with_capacity(orders.len());
 
-            for (provisional_ref, side, order_type, order_size, limit_price, stop_price) in orders {
+            for (provisional_ref, symbol, side, order_type, order_size, limit_price, stop_price) in
+                orders
+            {
                 let side = parse_order_side(&side)?;
                 let order_type = parse_order_type(&order_type)?;
-                let order_id =
-                    self.inner
-                        .submit_order(side, order_type, order_size, limit_price, stop_price);
+                let order_id = self.inner.submit_order(
+                    symbol,
+                    side,
+                    order_type,
+                    order_size,
+                    limit_price,
+                    stop_price,
+                );
                 bindings.push((provisional_ref, order_id));
             }
             if !bindings.is_empty() {
@@ -397,6 +445,23 @@ impl RustBacktestEngine {
             }
         }
         Ok(())
+    }
+
+    #[pyo3(signature = (symbol, side, order_type, size, limit_price=None, stop_price=None))]
+    fn submit_order_for_symbol(
+        &mut self,
+        symbol: String,
+        side: &str,
+        order_type: &str,
+        size: f64,
+        limit_price: Option<f64>,
+        stop_price: Option<f64>,
+    ) -> PyResult<u64> {
+        let side = parse_order_side(side)?;
+        let order_type = parse_order_type(order_type)?;
+        Ok(self
+            .inner
+            .submit_order(symbol, side, order_type, size, limit_price, stop_price))
     }
 
     #[pyo3(signature = (side, order_type, size, limit_price=None, stop_price=None))]
@@ -408,33 +473,22 @@ impl RustBacktestEngine {
         limit_price: Option<f64>,
         stop_price: Option<f64>,
     ) -> PyResult<u64> {
-        let side = match side {
-            "buy" => OrderSide::Buy,
-            "sell" => OrderSide::Sell,
-            other => {
-                return Err(PyValueError::new_err(format!(
-                    "unsupported order side: {other}"
-                )));
-            }
-        };
-        let order_type = match order_type {
-            "market" => OrderType::Market,
-            "limit" => OrderType::Limit,
-            "stop" => OrderType::Stop,
-            "stop_limit" => OrderType::StopLimit,
-            other => {
-                return Err(PyValueError::new_err(format!(
-                    "unsupported order type: {other}"
-                )));
-            }
-        };
-        Ok(self
-            .inner
-            .submit_order(side, order_type, size, limit_price, stop_price))
+        self.submit_order_for_symbol(
+            "data0".to_string(),
+            side,
+            order_type,
+            size,
+            limit_price,
+            stop_price,
+        )
     }
 
     fn get_position(&self) -> (f64, f64) {
         self.inner.get_position()
+    }
+
+    fn get_position_for_symbol(&self, symbol: &str) -> (f64, f64) {
+        self.inner.get_position_for_symbol(symbol)
     }
 
     fn get_cash(&self) -> f64 {
@@ -545,6 +599,38 @@ fn parse_order_type(order_type: &str) -> PyResult<OrderType> {
             "unsupported order type: {other}"
         ))),
     }
+}
+
+fn build_bars(
+    symbols: Vec<String>,
+    timestamps: Vec<i64>,
+    opens: Vec<f64>,
+    highs: Vec<f64>,
+    lows: Vec<f64>,
+    closes: Vec<f64>,
+    volumes: Vec<f64>,
+) -> Vec<BarEvent> {
+    let len = symbols
+        .len()
+        .min(timestamps.len())
+        .min(opens.len())
+        .min(highs.len())
+        .min(lows.len())
+        .min(closes.len())
+        .min(volumes.len());
+    let mut bars = Vec::with_capacity(len);
+    for index in 0..len {
+        bars.push(BarEvent {
+            ts: timestamps[index],
+            symbol: symbols[index].clone(),
+            open: opens[index],
+            high: highs[index],
+            low: lows[index],
+            close: closes[index],
+            volume: volumes[index],
+        });
+    }
+    bars
 }
 
 type CompactFills = (Vec<u64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>);

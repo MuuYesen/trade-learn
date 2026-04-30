@@ -12,7 +12,7 @@ from tradelearn.core import BrokerEventPump
 if TYPE_CHECKING:
     from tradelearn.backtest.strategy import Strategy
 
-OrderPayload = tuple[int, str, str, float, float | None, float | None]
+OrderPayload = tuple[int, str, str, str, float, float | None, float | None]
 _EMPTY_ORDER_BUFFER: tuple[()] = ()
 CompactFillBatch = tuple[list[int], list[float], list[float], list[float], list[float], list[float]]
 _ORDER_TYPE_TO_RUST = {
@@ -61,6 +61,8 @@ class RustBroker:
         self._step_open_collect_compact = None
         self._step_close = None
         self._step_close_compact = None
+        self._step_open_bars_compact = None
+        self._step_close_bars_compact = None
         self._get_new_fills = None
         self._get_new_fills_compact = None
         self._close_prices = None
@@ -78,12 +80,14 @@ class RustBroker:
         self._last_fill_idx = 0
         self._rust_state_cache: tuple[int, float, float, float] | None = None
         self._step_fills_from_collect: list[Any] | CompactFillBatch | None = None
+        self._active_datas: list[Any] = []
         self._buffer_order_submissions = False
         self._order_submit_buffer: list[OrderPayload] = []
         self._proxy_events: list[Any] = []
         self._trade_on_close = False
         # For 'bt' mode, we maintain state in Python
         self._pos = Position(size=0.0, price=0.0)
+        self._positions: dict[Any, Position] = {}
         self._active_cash = cash
         self._comminfo: Any = None
         self._slippage_model: Any = None
@@ -123,6 +127,8 @@ class RustBroker:
         self._step_open_collect_compact = getattr(engine, "step_open_collect_compact", None)
         self._step_close = getattr(engine, "step_close", None)
         self._step_close_compact = getattr(engine, "step_close_compact", None)
+        self._step_open_bars_compact = getattr(engine, "step_open_bars_compact", None)
+        self._step_close_bars_compact = getattr(engine, "step_close_bars_compact", None)
         self._get_new_fills = getattr(engine, "get_new_fills", None)
         self._get_new_fills_compact = getattr(engine, "get_new_fills_compact", None)
 
@@ -158,8 +164,30 @@ class RustBroker:
     def get_cash(self) -> float:
         return self.getcash()
 
-    def getvalue(self) -> float:
+    def getvalue(self, datas: list[Any] | tuple[Any, ...] | None = None) -> float:
+        if datas is not None:
+            values = []
+            for data in datas:
+                position = self.getposition(data)
+                if position.size == 0:
+                    values.append(0.0)
+                    continue
+                values.append(position.size * self._current_close(data) * self._mult)
+            return float(sum(values))
+
         if self._engine is not None:
+            if (
+                self._rust_state_cache is not None
+                and self._rust_state_cache[0] == self._curr_idx
+                and len(self._active_datas) <= 1
+            ):
+                _, cash, size, _price = self._rust_state_cache
+                if size != 0 and self._close_prices is not None:
+                    return float(cash + size * self._close_prices[self._curr_idx] * self._mult)
+                return float(cash)
+            get_equity = getattr(self._engine, "get_equity", None)
+            if callable(get_equity):
+                return float(get_equity())
             _, cash, size, _price = self._get_rust_state()
             val = cash
             if size != 0 and self._close_prices is not None:
@@ -180,9 +208,22 @@ class RustBroker:
 
     def getposition(self, data: Any = None) -> Position:
         if self._engine is not None:
+            if (
+                self._rust_state_cache is not None
+                and self._rust_state_cache[0] == self._curr_idx
+                and len(self._active_datas) <= 1
+            ):
+                _, _cash, size, price = self._rust_state_cache
+                return Position(size=size, price=price)
+            get_position_for_symbol = getattr(self._engine, "get_position_for_symbol", None)
+            if callable(get_position_for_symbol):
+                size, price = get_position_for_symbol(self._rust_symbol(data))
+                return Position(size=size, price=price)
             _, _cash, size, price = self._get_rust_state()
             return Position(size=size, price=price)
-        return self._pos
+        if data is None:
+            return self._pos
+        return self._positions.setdefault(data, Position(size=0.0, price=0.0))
 
     def get_position_size(self) -> float:
         if self._engine is not None:
@@ -192,6 +233,53 @@ class RustBroker:
 
     def current_position_size(self) -> float:
         return self.get_position_size()
+
+    def bind_datas(self, datas: list[Any]) -> None:
+        self._active_datas = list(datas)
+
+    def _rust_symbol(self, data: Any = None) -> str:
+        if data is None or len(self._active_datas) <= 1:
+            return "data0"
+        return str(getattr(data, "_name", None) or "data0")
+
+    @staticmethod
+    def _current_close(data: Any) -> float:
+        close = getattr(data, "close", None)
+        if close is not None:
+            return float(close[0])
+        return float(data.get_array("close")[data._cursor])
+
+    @staticmethod
+    def _current_bar_vectors(
+        datas: list[Any],
+    ) -> tuple[
+        list[str],
+        list[int],
+        list[float],
+        list[float],
+        list[float],
+        list[float],
+        list[float],
+    ]:
+        symbols: list[str] = []
+        timestamps: list[int] = []
+        opens: list[float] = []
+        highs: list[float] = []
+        lows: list[float] = []
+        closes: list[float] = []
+        volumes: list[float] = []
+        for index, data in enumerate(datas):
+            cursor = getattr(data, "_cursor", -1)
+            if cursor < 0:
+                continue
+            symbols.append(str(getattr(data, "_name", None) or f"data{index}"))
+            timestamps.append(int(data._datetime[cursor]))
+            opens.append(float(data._open[cursor]))
+            highs.append(float(data._high[cursor]))
+            lows.append(float(data._low[cursor]))
+            closes.append(float(data._close[cursor]))
+            volumes.append(float(data._volume[cursor]))
+        return symbols, timestamps, opens, highs, lows, closes, volumes
 
     def drain_proxy_events(self) -> list[Any]:
         events = self._proxy_events
@@ -344,18 +432,15 @@ class RustBroker:
         submitted = False
         for (
             provisional_ref,
+            symbol,
             side_str,
             ot_str,
             actual_size,
             limit_price,
             stop_price,
         ) in self.drain_order_buffer():
-            order_id = self._engine.submit_order(
-                side_str,
-                ot_str,
-                actual_size,
-                limit_price,
-                stop_price,
+            order_id = self._submit_payload_to_engine(
+                symbol, side_str, ot_str, actual_size, limit_price, stop_price
             )
             self.bind_rust_order_ref(provisional_ref, order_id)
             submitted = True
@@ -363,11 +448,16 @@ class RustBroker:
             submitted
             and self._trade_on_close
             and self._engine is not None
-            and self._step_close is not None
         ):
-            if self._step_close_compact is not None:
+            if self._active_datas and self._step_close_bars_compact is not None:
+                fills, cash, size, price = self._step_close_bars_compact(
+                    *self._current_bar_vectors(self._active_datas)
+                )
+                self._step_fills_from_collect = fills
+                self._rust_state_cache = (self._curr_idx, cash, size, price)
+            elif self._step_close_compact is not None:
                 self._step_fills_from_collect = self._step_close_compact(self._curr_idx)
-            else:
+            elif self._step_close is not None:
                 self._step_fills_from_collect = self._step_close(self._curr_idx)
 
     def drain_order_buffer(self) -> list[OrderPayload] | tuple[()]:
@@ -400,15 +490,38 @@ class RustBroker:
         stop_price: float | None,
     ) -> int:
         """Submit one drained order payload through Python's engine handle."""
-        order_id = self._engine.submit_order(
+        order_id = self._submit_payload_to_engine(
+            "data0", side_str, ot_str, actual_size, limit_price, stop_price
+        )
+        self.bind_rust_order_ref(provisional_ref, order_id)
+        return order_id
+
+    def _submit_payload_to_engine(
+        self,
+        symbol: str,
+        side_str: str,
+        ot_str: str,
+        actual_size: float,
+        limit_price: float | None,
+        stop_price: float | None,
+    ) -> int:
+        submit_for_symbol = getattr(self._engine, "submit_order_for_symbol", None)
+        if callable(submit_for_symbol):
+            return submit_for_symbol(
+                symbol,
+                side_str,
+                ot_str,
+                actual_size,
+                limit_price,
+                stop_price,
+            )
+        return self._engine.submit_order(
             side_str,
             ot_str,
             actual_size,
             limit_price,
             stop_price,
         )
-        self.bind_rust_order_ref(provisional_ref, order_id)
-        return order_id
 
     def _submit_to_rust_engine(
         self,
@@ -419,7 +532,8 @@ class RustBroker:
         limit_price: float | None,
         stop_price: float | None,
     ) -> None:
-        order_id = self._engine.submit_order(
+        order_id = self._submit_payload_to_engine(
+            self._rust_symbol(order.data),
             side_str,
             ot_str,
             actual_size,
@@ -434,7 +548,8 @@ class RustBroker:
         side_str: str,
         actual_size: float,
         price: float | None,
-    ) -> tuple[str, str, float, float | None, float | None]:
+    ) -> tuple[str, str, str, float, float | None, float | None]:
+        symbol = self._rust_symbol(order.data)
         ot_str = _ORDER_TYPE_TO_RUST.get(order.exectype, "market")
         limit_price = None
         stop_price = None
@@ -445,7 +560,7 @@ class RustBroker:
         elif order.exectype == Order.StopLimit:
             stop_price = price
             limit_price = order.pricelimit
-        return side_str, ot_str, actual_size, limit_price, stop_price
+        return symbol, side_str, ot_str, actual_size, limit_price, stop_price
 
     def _submit(
         self,
@@ -627,7 +742,13 @@ class RustBroker:
         self._rust_state_cache = None
         self._step_fills_from_collect = None
         if self._engine is not None:
-            if self._step_open_collect_compact is not None:
+            if self._active_datas and self._step_open_bars_compact is not None:
+                fills, cash, size, price = self._step_open_bars_compact(
+                    *self._current_bar_vectors(self._active_datas)
+                )
+                self._step_fills_from_collect = fills
+                self._rust_state_cache = (self._curr_idx, cash, size, price)
+            elif self._step_open_collect_compact is not None:
                 fills, cash, size, price = self._step_open_collect_compact(
                     i,
                     self._last_fill_idx,
@@ -685,7 +806,6 @@ class RustBroker:
         """Synchronize a batch of Rust fills while preserving notification order."""
         orders_by_ref_get = self._orders_by_ref.get
         pending_size = strategy._pending_size
-        pos = self._pos
         mult = self._mult
         wants_trade_event = self._wants_trade_event(strategy)
 
@@ -707,8 +827,11 @@ class RustBroker:
             pending = pending_size.get(data, 0.0) - signed_size
             pending_size[data] = 0.0 if abs(pending) < 1e-9 else pending
 
+            pos = self._positions.setdefault(data, Position(size=0.0, price=0.0))
             old_size = pos.size
             pos.update(signed_size, price)
+            if data is None:
+                self._pos = pos
             new_size = pos.size
 
             trade_closed = old_size != 0 and old_size * new_size <= 0

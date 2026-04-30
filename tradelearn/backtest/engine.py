@@ -406,6 +406,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
             cerebro.broker.match_mode == "smart",
         )
         cerebro.broker.bind_engine(rust_engine)
+        if hasattr(cerebro.broker, "bind_datas"):
+            cerebro.broker.bind_datas(cerebro.datas)
         cerebro.broker._open_prices = opens
         cerebro.broker._high_prices = highs
         cerebro.broker._low_prices = lows
@@ -555,9 +557,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 _observer_step(observer_nexts)
         return []
 
-    use_multi_data_rust_runner = (
-        use_rust_bar_loop and data_advance_plan is not None and hasattr(data_advance_plan, "run")
-    )
+    use_multi_data_rust_runner = False
 
     if use_multi_data_rust_runner:
         if notify_cashvalue is None:

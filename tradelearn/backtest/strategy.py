@@ -219,9 +219,11 @@ class Strategy:
     ):
         data = self._resolve_data(data)
         possize = self.getposition(data).size + self._pending_size.get(data, 0.0)
+        if not target and possize:
+            return self.close(data=data, price=price, **kwargs)
         price = float(price if price is not None else self._current_price(data))
         mult = self._position_mult(data)
-        current_value = float(possize) * price * mult
+        current_value = float(self.broker.getvalue(datas=[data]))
         delta = float(target) - current_value
         if abs(delta) < 1e-12:
             return None
