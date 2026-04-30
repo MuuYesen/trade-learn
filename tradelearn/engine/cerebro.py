@@ -388,19 +388,16 @@ class Cerebro:
                 stop()
 
     def _prepare_strategy_context(self) -> None:
-        from tradelearn.engine.base import (
-            set_current_data,
-            set_current_datas,
-            set_current_strategy,
-        )
+        from tradelearn.engine.base import engine_context
 
         if self.datas:
-            set_current_data(self.datas[0])
-            set_current_datas(self.datas)
+            data = self.datas[0]
+            datas = self.datas
         else:
-            set_current_data(None)
-            set_current_datas([])
-        set_current_strategy(None)
+            data = None
+            datas = []
+        self._strategy_context = engine_context(data=data, datas=datas, strategy=None)
+        self._strategy_context.__enter__()
 
     def _bind_strategy_context(self, strategy: Any) -> None:
         from tradelearn.engine.base import set_current_strategy
@@ -408,11 +405,12 @@ class Cerebro:
         set_current_strategy(strategy)
 
     def _reset_strategy_context(self) -> None:
-        from tradelearn.engine.base import (
-            set_current_data,
-            set_current_datas,
-            set_current_strategy,
-        )
+        context = getattr(self, "_strategy_context", None)
+        if context is not None:
+            context.__exit__(None, None, None)
+            self._strategy_context = None
+            return
+        from tradelearn.engine.base import set_current_data, set_current_datas, set_current_strategy
 
         set_current_strategy(None)
         set_current_data(None)

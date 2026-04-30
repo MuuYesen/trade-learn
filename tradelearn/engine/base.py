@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from contextlib import contextmanager
 from typing import Any
 
 from tradelearn.backtest.lines import DelayedLine, IndicatorLine, Lines, LineSeries
@@ -22,6 +23,7 @@ __all__ = [
     "_G",
     "_notify_order",
     "collect_param_defaults",
+    "engine_context",
     "set_current_data",
     "set_current_datas",
     "set_current_strategy",
@@ -144,6 +146,7 @@ class _GlobalContext:
         self.current_strategy = None
 
 _G = _GlobalContext()
+_MISSING = object()
 
 def set_current_data(data: Any) -> None:
     _G.current_data = data
@@ -153,6 +156,31 @@ def set_current_datas(datas: list[Any]) -> None:
 
 def set_current_strategy(strategy: Any) -> None:
     _G.current_strategy = strategy
+
+
+@contextmanager
+def engine_context(
+    *,
+    data: Any = _MISSING,
+    datas: Any = _MISSING,
+    strategy: Any = _MISSING,
+):
+    """Temporarily bind engine construction context and restore it reliably."""
+    prev_data = _G.current_data
+    prev_datas = list(_G.current_datas)
+    prev_strategy = _G.current_strategy
+    try:
+        if data is not _MISSING:
+            set_current_data(data)
+        if datas is not _MISSING:
+            set_current_datas(list(datas or []))
+        if strategy is not _MISSING:
+            set_current_strategy(strategy)
+        yield
+    finally:
+        set_current_data(prev_data)
+        set_current_datas(prev_datas)
+        set_current_strategy(prev_strategy)
 
 
 def collect_param_defaults(cls: type) -> tuple[list[str], list[tuple[str, Any]]]:
@@ -223,14 +251,16 @@ class MetaParams(type):
 
         # 6. User Init with context management
         prev_strat = _G.current_strategy
-        prev_data = _G.current_data
         
-        try:
-            if not prev_strat and hasattr(instance, 'next'): # Likely a strategy
-                set_current_strategy(instance)
-                if hasattr(instance, 'data'):
-                    set_current_data(instance.data)
+        context_kwargs = {}
+        if not prev_strat and hasattr(instance, 'next'): # Likely a strategy
+            context_kwargs["strategy"] = instance
+            if hasattr(instance, 'data'):
+                context_kwargs["data"] = instance.data
+            if getattr(instance, "datas", None) is not None:
+                context_kwargs["datas"] = instance.datas
 
+        with engine_context(**context_kwargs):
             sig = inspect.signature(cls.__init__)
             params = list(sig.parameters.values())[1:] # Skip 'self'
             
@@ -242,9 +272,6 @@ class MetaParams(type):
                     p for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
                 ]
                 instance.__init__(*args[:len(pos_params)], **other_kwargs)
-        finally:
-            set_current_strategy(prev_strat)
-            set_current_data(prev_data)
             
         if prev_strat is not None and not isinstance(instance, prev_strat.__class__):
             if hasattr(instance, 'lines') and hasattr(prev_strat, '_register_indicator'):

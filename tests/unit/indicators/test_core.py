@@ -116,6 +116,55 @@ def test_sma_on_bar_streaming() -> None:
     assert sma_stream._bar_buffers is None
 
 
+def test_function_indicator_streaming_state_is_isolated() -> None:
+    """Independent streaming states do not share singleton indicator buffers."""
+    from tradelearn.indicators.base import FunctionIndicator
+
+    sma_stream = FunctionIndicator("sma", ta.sma._func, {"period": 2}, bar_columns=("close",))
+    left = sma_stream.new_state()
+    right = sma_stream.new_state()
+
+    class _Bar:
+        def __init__(self, close: float) -> None:
+            self.close = close
+
+    assert sma_stream.on_bar(_Bar(10.0), state=left) != sma_stream.on_bar(_Bar(100.0), state=right)
+    assert sma_stream.on_bar(_Bar(12.0), state=left) == pytest.approx(11.0)
+    assert sma_stream.on_bar(_Bar(104.0), state=right) == pytest.approx(102.0)
+
+    sma_stream.reset(state=left)
+    assert sma_stream.on_bar(_Bar(20.0), state=left) != pytest.approx(11.0)
+    assert sma_stream.on_bar(_Bar(106.0), state=right) == pytest.approx(105.0)
+
+
+def test_function_indicator_can_use_incremental_stream_func() -> None:
+    """Hot streaming indicators can bypass full-history batch recomputation."""
+    from tradelearn.indicators.base import FunctionIndicator
+
+    calls = {"batch": 0}
+
+    def _batch(close: pd.Series) -> pd.Series:
+        calls["batch"] += 1
+        return close
+
+    def _stream(
+        buffers: dict[str, list[float]],
+        _state: dict[str, Any],
+        _params: dict[str, Any],
+    ) -> float:
+        return buffers["close"][-1] * 2
+
+    indicator = FunctionIndicator(
+        "fast",
+        _batch,
+        bar_columns=("close",),
+        stream_func=_stream,
+    )
+
+    assert indicator.on_bar({"close": 7.0}) == 14.0
+    assert calls["batch"] == 0
+
+
 def test_atr_on_bar_streaming() -> None:
     """ta.atr.on_bar works with multi-column StreamBar-style objects."""
     from dataclasses import dataclass

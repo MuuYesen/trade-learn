@@ -35,6 +35,28 @@ def _bbands(close: pd.Series, length: int = 20, std: float = 2.0) -> pd.DataFram
     return result
 
 
-sma = FunctionIndicator("sma", _sma, {"period": 20}, bar_columns=("close",))
+def _stream_sma(
+    buffers: dict[str, list[float]],
+    state: dict[str, float],
+    params: dict[str, object],
+) -> float:
+    period = int(params.get("period", 20))
+    close = buffers["close"]
+    running_sum = float(state.get("sum", 0.0)) + close[-1]
+    if len(close) > period:
+        running_sum -= close[-period - 1]
+    state["sum"] = running_sum
+    if len(close) < period:
+        return float("nan")
+    return running_sum / period
+
+
+sma = FunctionIndicator(
+    "sma",
+    _sma,
+    {"period": 20},
+    bar_columns=("close",),
+    stream_func=_stream_sma,
+)
 ema = FunctionIndicator("ema", _ema, {"length": 20}, bar_columns=("close",))
 bbands = FunctionIndicator("bbands", _bbands, {"length": 20, "std": 2.0}, bar_columns=("close",))
