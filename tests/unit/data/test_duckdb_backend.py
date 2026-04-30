@@ -114,3 +114,56 @@ def test_duckdb_backend_requires_duckdb_when_connection_not_injected(
 
     with pytest.raises(ImportError, match="pip install trade-learn\\[duckdb\\]"):
         DuckDBBarsBackend("stage11.duckdb")
+
+
+def test_duckdb_backend_reads_cross_section_by_timestamp() -> None:
+    frame = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(["2024-01-02", "2024-01-02"], utc=True),
+            "symbol": ["AAA", "BBB"],
+            "close": [11.5, 21.5],
+            "volume": [120.0, 220.0],
+        }
+    )
+    conn = _FakeConnection(frame)
+    backend = DuckDBBarsBackend(conn=conn)
+
+    result = backend.read_cross_section(
+        "2024-01-02",
+        symbols=["BBB", "AAA"],
+        columns=["close", "volume"],
+    )
+
+    sql, params = conn.calls[-1]
+    assert "timestamp >= ?" in sql
+    assert "timestamp <= ?" in sql
+    assert params[-2:] == [
+        pd.Timestamp("2024-01-02T00:00:00Z"),
+        pd.Timestamp("2024-01-02T00:00:00Z"),
+    ]
+    assert result.index.name == "symbol"
+    assert result.loc["AAA", "close"] == 11.5
+    assert result.loc["BBB", "volume"] == 220.0
+    assert result.attrs["asof"] == pd.Timestamp("2024-01-02T00:00:00Z")
+
+
+def test_duckdb_backend_read_panel_aliases_bars_contract_read() -> None:
+    frame = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(["2024-01-01", "2024-01-02"], utc=True),
+            "symbol": ["AAA", "BBB"],
+            "close": [10.5, 21.5],
+        }
+    )
+    conn = _FakeConnection(frame)
+    backend = DuckDBBarsBackend(conn=conn)
+
+    result = backend.read_panel(
+        symbols=["AAA", "BBB"],
+        start="2024-01-01",
+        end="2024-01-31",
+        columns=["close"],
+    )
+
+    assert result.index.names == ["timestamp", "symbol"]
+    assert result["close"].tolist() == [10.5, 21.5]

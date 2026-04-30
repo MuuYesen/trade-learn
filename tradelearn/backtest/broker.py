@@ -159,6 +159,12 @@ class RustBroker:
 
     def getcash(self) -> float:
         if self._engine is not None:
+            if (
+                self._buffer_order_submissions
+                and self._rust_state_cache is not None
+                and self._rust_state_cache[0] == self._curr_idx
+            ):
+                return float(self._rust_state_cache[1])
             _, cash, _, _ = self._get_rust_state()
             return cash
         return self._active_cash
@@ -187,6 +193,16 @@ class RustBroker:
                 if size != 0 and self._close_prices is not None:
                     return float(cash + size * self._close_prices[self._curr_idx] * self._mult)
                 return float(cash)
+            if (
+                self._buffer_order_submissions
+                and self._rust_state_cache is not None
+                and self._rust_state_cache[0] == self._curr_idx
+            ):
+                value = float(self._rust_state_cache[1])
+                for data, position in self._positions.items():
+                    if position.size:
+                        value += position.size * self._current_close(data) * self._mult
+                return value
             get_equity = getattr(self._engine, "get_equity", None)
             if callable(get_equity):
                 return float(get_equity())

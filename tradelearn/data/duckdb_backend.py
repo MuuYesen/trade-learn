@@ -140,6 +140,55 @@ class DuckDBBarsBackend:
             result.attrs["freq"] = freq
         return result
 
+    def read_cross_section(
+        self,
+        timestamp: str | pd.Timestamp,
+        *,
+        symbols: str | list[str] | tuple[str, ...] | None = None,
+        columns: list[str] | tuple[str, ...] | None = None,
+        market: str | None = None,
+        freq: str | None = None,
+    ) -> pd.DataFrame:
+        """Read one timestamp as a symbol-indexed cross section."""
+        asof = _utc_timestamp(timestamp)
+        frame = self.read(
+            symbols=symbols,
+            start=asof,
+            end=asof,
+            columns=columns,
+            market=market,
+            freq=freq,
+        )
+        if frame.empty:
+            result = pd.DataFrame(columns=frame.columns)
+            result.index = pd.Index([], name="symbol")
+        else:
+            result = frame.reset_index(level="timestamp", drop=True).sort_index()
+            result.index.name = "symbol"
+        result.attrs.update(frame.attrs)
+        result.attrs["asof"] = asof
+        return result
+
+    def read_panel(
+        self,
+        *,
+        symbols: str | list[str] | tuple[str, ...] | None = None,
+        start: str | pd.Timestamp | None = None,
+        end: str | pd.Timestamp | None = None,
+        columns: list[str] | tuple[str, ...] | None = None,
+        market: str | None = None,
+        freq: str | None = None,
+    ) -> pd.DataFrame:
+        """Read a timestamp/symbol indexed Bars panel."""
+        return self.read(
+            symbols=symbols,
+            start=start,
+            end=end,
+            columns=columns,
+            market=market,
+            freq=freq,
+        )
+
 
 def _selected_columns(columns: list[str] | tuple[str, ...] | None) -> list[str]:
     if columns is None:

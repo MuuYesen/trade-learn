@@ -260,6 +260,44 @@ def test_lite_accepts_dict_data_and_ticker_orders() -> None:
     assert seen["bbb_size"] == 2
 
 
+def test_lite_target_weights_batches_equity_and_orders_reductions_first() -> None:
+    data = {
+        "AAA": _data().assign(close=[10.0, 10.0, 10.0, 10.0, 10.0]),
+        "BBB": _data().assign(close=[20.0, 20.0, 20.0, 20.0, 20.0]),
+        "CCC": _data().assign(close=[30.0, 30.0, 30.0, 30.0, 30.0]),
+    }
+    seen: dict[str, object] = {}
+
+    class PortfolioLite(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(1)
+
+        def next(self) -> None:
+            if len(self.data) == 2:
+                self.buy(ticker="CCC", size=3)
+            elif len(self.data) == 3:
+                original_getvalue = self.broker.getvalue
+                calls = {"count": 0}
+
+                def counted_getvalue(*args, **kwargs):
+                    calls["count"] += 1
+                    return original_getvalue(*args, **kwargs)
+
+                self.broker.getvalue = counted_getvalue
+                before = len(self.orders)
+                self.target_weights({"AAA": 0.2, "BBB": 0.2}, close_missing=True)
+                new_orders = self.orders[before:]
+                seen["getvalue_calls"] = calls["count"]
+                seen["sides"] = ["buy" if order.isbuy() else "sell" for order in new_orders]
+                seen["tickers"] = [getattr(order.data, "_name", None) for order in new_orders]
+
+    Backtest(data, PortfolioLite, cash=1000.0).run()
+
+    assert seen["getvalue_calls"] == 1
+    assert seen["sides"][0] == "sell"
+    assert seen["tickers"][0] == "CCC"
+
+
 def test_lite_target_weights_targets_multi_asset_weights() -> None:
     data = {
         "AAA": _data(),

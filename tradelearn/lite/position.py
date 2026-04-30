@@ -29,6 +29,10 @@ class PositionProxy:
         return self._strategy.position(ticker)
 
     def __bool__(self) -> bool:
+        data = self._data or getattr(self._strategy, "_bt_primary_data", None)
+        lite_size = getattr(self._strategy, "_lite_position_size", None)
+        if callable(lite_size):
+            return lite_size(data) != 0
         broker = self._strategy.broker
         if broker is not self._size_getter_broker:
             self._bind_broker_size_getters(broker)
@@ -42,6 +46,9 @@ class PositionProxy:
     def size(self) -> float:
         primary_data = getattr(self._strategy, "_bt_primary_data", None)
         data = self._data or primary_data
+        lite_size = getattr(self._strategy, "_lite_position_size", None)
+        if callable(lite_size):
+            return lite_size(data)
         broker = self._strategy.broker
         if broker is not self._size_getter_broker:
             self._bind_broker_size_getters(broker)

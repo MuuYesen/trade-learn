@@ -10,6 +10,7 @@ import pandas as pd
 from tradelearn.backtest.indicator_cache import BatchIndicatorCache
 from tradelearn.backtest.models import Order
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
+from tradelearn.core import OrderRequest
 from tradelearn.lite.data import LiteDataProxy, _ta_frame
 from tradelearn.lite.indicator import IndicatorBundle, IndicatorProxy
 from tradelearn.lite.position import PositionProxy
@@ -384,7 +385,33 @@ class Strategy(CoreStrategy):
     def _lite_position_size(self, data: Any) -> float:
         if data in self._lite_target_size_by_data:
             return float(self._lite_target_size_by_data[data])
+        if bool(getattr(self.broker, "_buffer_order_submissions", False)):
+            positions = getattr(self.broker, "_positions", {})
+            position = positions.get(data)
+            if position is not None:
+                return float(position.size + self._pending_size.get(data, 0.0))
+            return float(self._pending_size.get(data, 0.0))
         return float(self.getposition(data).size + self._pending_size.get(data, 0.0))
+
+    def _portfolio_equity_snapshot(self) -> float:
+        equity = float(self.broker.getvalue())
+        if not bool(getattr(self.broker, "_buffer_order_submissions", False)):
+            return equity
+        rust_state_cache = getattr(self.broker, "_rust_state_cache", None)
+        current_idx = getattr(self.broker, "_curr_idx", None)
+        if rust_state_cache is None or rust_state_cache[0] != current_idx:
+            return equity
+        value = float(rust_state_cache[1])
+        seen: set[Any] = set()
+        for data, size in self._lite_target_size_by_data.items():
+            if size:
+                value += float(size) * self._current_price(data) * self._position_mult(data)
+            seen.add(data)
+        for data, position in getattr(self.broker, "_positions", {}).items():
+            if data in seen or not position.size:
+                continue
+            value += position.size * self._current_price(data) * self._position_mult(data)
+        return value
 
     def order_target_size(self, *, ticker: str = None, target: float = 0, **kwargs: Any):
         data = self._resolve_ticker_data(ticker)
@@ -577,18 +604,54 @@ class Strategy(CoreStrategy):
         if unknown:
             raise ValueError(f"Unknown ticker(s): {unknown}")
 
+        equity = self._portfolio_equity_snapshot()
+        intents = self._target_weight_order_requests(targets, known, equity, close_missing)
         orders: list[Any] = []
-        if close_missing:
-            for ticker in sorted(known.difference(str(ticker) for ticker in targets.index)):
-                order = self.target_percent(ticker, 0.0)
-                if order is not None:
-                    orders.append(order)
-
-        for ticker, target in targets.sort_values().items():
-            order = self.target_percent(str(ticker), float(target))
+        for request, data in intents:
+            side = Order.Buy if request.side == "buy" else Order.Sell
+            order = self._submit_1x_order(side, data, request.qty, None, None, None)
             if order is not None:
                 orders.append(order)
         return orders
+
+    def _target_weight_order_requests(
+        self,
+        targets: pd.Series,
+        known: set[str],
+        equity: float,
+        close_missing: bool,
+    ) -> list[tuple[OrderRequest, Any]]:
+        requested = {str(ticker): float(target) for ticker, target in targets.items()}
+        target_by_ticker = dict(requested)
+        if close_missing:
+            for ticker in known.difference(requested):
+                target_by_ticker[ticker] = 0.0
+
+        requests: list[tuple[OrderRequest, Any]] = []
+        for ticker, target in target_by_ticker.items():
+            data = self._resolve_ticker_data(ticker)
+            price = self._current_price(data)
+            mult = self._position_mult(data)
+            if price <= 0 or mult <= 0:
+                continue
+            current_size = self._lite_position_size(data)
+            current_value = current_size * price * mult
+            target_value = float(target) * equity
+            delta_value = target_value - current_value
+            if abs(delta_value) < 1e-12:
+                continue
+            qty = int(abs(delta_value) / (price * mult))
+            if not qty:
+                continue
+            side = "buy" if delta_value > 0 else "sell"
+            requests.append(
+                (
+                    OrderRequest(symbol=ticker, side=side, qty=float(qty)),
+                    data,
+                )
+            )
+        requests.sort(key=lambda item: (item[0].side == "buy", item[0].symbol))
+        return requests
 
     def target_equal(
         self,
