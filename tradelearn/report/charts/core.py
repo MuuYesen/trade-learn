@@ -349,7 +349,7 @@ def market_replay(
         plots,
         ncols=1,
         sizing_mode="stretch_width",
-        toolbar_location=None,
+        toolbar_location="right",
         merge_tools=True,
     )
 
