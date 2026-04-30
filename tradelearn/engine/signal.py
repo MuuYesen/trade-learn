@@ -38,13 +38,13 @@ class Signal(Indicator):
     def signal_value(self) -> float:
         try:
             return float(self._signal_data[0])
-        except (IndexError, TypeError):
+        except (IndexError, TypeError, ValueError):
             return 0.0
 
     def __getitem__(self, index: int) -> float:
         try:
             return float(self._signal_data[index])
-        except (IndexError, TypeError):
+        except (IndexError, TypeError, ValueError):
             return 0.0
 
 
@@ -144,7 +144,7 @@ class SignalStrategy(Strategy):
             return sig.signal_value
         try:
             return float(sig[0])
-        except (IndexError, TypeError):
+        except (IndexError, TypeError, ValueError):
             return 0.0
 
     def _next_signal(self) -> None:
@@ -194,12 +194,10 @@ class SignalStrategy(Strategy):
         l_leave = not self._has_longexit and (
             _all_neg(sigs[SIGNAL_LONG])
             or _all_pos(sigs[SIGNAL_LONG_INV])
-            or _all_nonzero(sigs[SIGNAL_LONG_ANY])
         )
         s_leave = not self._has_shortexit and (
             _all_pos(sigs[SIGNAL_SHORT])
             or _all_neg(sigs[SIGNAL_SHORT_INV])
-            or _all_nonzero(sigs[SIGNAL_SHORT_ANY])
         )
 
         size = self.getposition(self._dtarget).size if self._dtarget else 0

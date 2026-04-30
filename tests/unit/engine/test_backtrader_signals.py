@@ -37,6 +37,16 @@ class LongSignal:
         return 1.0
 
 
+class ShortSignal:
+    def __getitem__(self, index: int) -> float:
+        return -1.0
+
+
+class InvalidSignal:
+    def __getitem__(self, index: int) -> str:
+        return "invalid"
+
+
 def test_signal_strategy_does_not_trade_on_zero_signal() -> None:
     cerebro, strategy = _run_with_signal(bt.SIGNAL_LONG, ZeroSignal)
 
@@ -49,6 +59,27 @@ def test_signal_strategy_trades_on_positive_long_signal() -> None:
 
     assert len(strategy.stats.fills) > 0
     assert strategy.position.size > 0
+
+
+def test_signal_long_any_holds_while_signal_stays_nonzero() -> None:
+    _cerebro, strategy = _run_with_signal(bt.SIGNAL_LONG_ANY, LongSignal)
+
+    assert len(strategy.stats.fills) == 1
+    assert strategy.position.size > 0
+
+
+def test_signal_short_any_holds_while_signal_stays_nonzero() -> None:
+    _cerebro, strategy = _run_with_signal(bt.SIGNAL_SHORT_ANY, ShortSignal)
+
+    assert len(strategy.stats.fills) == 1
+    assert strategy.position.size < 0
+
+
+def test_signal_strategy_treats_invalid_signal_values_as_neutral() -> None:
+    cerebro, strategy = _run_with_signal(bt.SIGNAL_LONG, InvalidSignal)
+
+    assert len(strategy.stats.fills) == 0
+    assert cerebro.broker.getvalue() == 100000.0
 
 
 def test_add_signal_uses_signal_strategy_when_regular_strategy_exists() -> None:

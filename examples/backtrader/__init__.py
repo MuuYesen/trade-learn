@@ -25,6 +25,26 @@ EnhancedRSI = _import_strategy("07_rsi_enhanced", "EnhancedRSI")
 BetterMA = _import_strategy("08_better_ma", "BetterMA")
 MacdTharp = _import_strategy("09_macd_settings", "MacdTharp")
 OrderExecutionStrategy = _import_strategy("10_order_execution", "OrderExecutionStrategy")
+TargetPercentPortfolioStrategy = _import_strategy(
+    "11_target_percent_portfolio",
+    "TargetPercentPortfolioStrategy",
+)
+AssetClassTargetPortfolioStrategy = _import_strategy(
+    "12_asset_class_portfolios",
+    "AssetClassTargetPortfolioStrategy",
+)
+UniformAssetClassPortfolioStrategy = _import_strategy(
+    "12_asset_class_portfolios",
+    "UniformAssetClassPortfolioStrategy",
+)
+TrendFilteredPortfolioStrategy = _import_strategy(
+    "12_asset_class_portfolios",
+    "TrendFilteredPortfolioStrategy",
+)
+InverseVolatilityPortfolioStrategy = _import_strategy(
+    "12_asset_class_portfolios",
+    "InverseVolatilityPortfolioStrategy",
+)
 
 __all__ = [
     "SmaCross",
@@ -37,4 +57,9 @@ __all__ = [
     "BetterMA",
     "MacdTharp",
     "OrderExecutionStrategy",
+    "TargetPercentPortfolioStrategy",
+    "AssetClassTargetPortfolioStrategy",
+    "UniformAssetClassPortfolioStrategy",
+    "TrendFilteredPortfolioStrategy",
+    "InverseVolatilityPortfolioStrategy",
 ]
