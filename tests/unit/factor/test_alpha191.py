@@ -526,25 +526,20 @@ def test_alpha191_v2_facade_avoids_future_warning_for_missing_values() -> None:
 
 
 def test_alpha191_documents_skipped_legacy_formulas() -> None:
-    """Intentionally skipped formulas are visible and fail with reasons."""
+    """All Alpha191 formulas are executable in v2."""
     alpha191_module = importlib.import_module("tradelearn.factor.alpha.alpha191")
-    expected_skipped = {
-        "alpha030": "requires external MKT/SMB/HML regression inputs",
-        "alpha143": "legacy formula is commented placeholder",
-        "alpha149": "requires benchmark filter input",
-        "alpha190": "legacy formula is commented placeholder",
+    formerly_skipped = {"alpha030", "alpha143", "alpha149", "alpha190"}
+
+    assert alpha191_module.ALPHA191_SKIPPED == {}
+    assert formerly_skipped.issubset(alpha191_module.ALPHA191_SUPPORTED)
+
+    result = alpha191(_stock_data(), _bench_data(), names=sorted(formerly_skipped))
+
+    assert set(result.columns) == {
+        "date",
+        "code",
+        *(f"{name}_191" for name in formerly_skipped),
     }
-
-    assert alpha191_module.ALPHA191_SKIPPED == expected_skipped
-    assert set(expected_skipped).isdisjoint(alpha191_module.ALPHA191_SUPPORTED)
-
-    with pytest.raises(ValueError) as exc_info:
-        alpha191(_stock_data(), _bench_data(), names=sorted(expected_skipped))
-
-    message = str(exc_info.value)
-    for name, reason in expected_skipped.items():
-        assert name in message
-        assert reason in message
 
 
 def test_alpha191_skipped_formulas_are_exported_from_package() -> None:

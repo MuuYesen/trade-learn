@@ -212,40 +212,40 @@ def test_query_alphas101_delegates_supported_formulas_to_v2_facade() -> None:
 
 
 def test_alpha101_documents_skipped_legacy_formulas() -> None:
-    """Intentionally skipped formulas are visible and fail with reasons."""
+    """All Alpha101 formulas are executable in v2."""
     alpha101_module = importlib.import_module("tradelearn.factor.alpha.alpha101")
-    expected_skipped = {
-        "alpha048": "requires industry neutralization input",
-        "alpha056": "requires cap input",
-        "alpha058": "requires industry neutralization input",
-        "alpha059": "requires industry neutralization input",
-        "alpha063": "requires industry neutralization input",
-        "alpha067": "requires industry neutralization input",
-        "alpha069": "requires industry neutralization input",
-        "alpha070": "requires industry neutralization input",
-        "alpha076": "requires industry neutralization input",
-        "alpha079": "requires industry neutralization input",
-        "alpha080": "requires industry neutralization input",
-        "alpha082": "requires industry neutralization input",
-        "alpha087": "requires industry neutralization input",
-        "alpha089": "requires industry neutralization input",
-        "alpha090": "requires industry neutralization input",
-        "alpha091": "requires industry neutralization input",
-        "alpha093": "requires industry neutralization input",
-        "alpha097": "requires industry neutralization input",
-        "alpha100": "requires subindustry neutralization input",
+    formerly_skipped = {
+        "alpha048",
+        "alpha056",
+        "alpha058",
+        "alpha059",
+        "alpha063",
+        "alpha067",
+        "alpha069",
+        "alpha070",
+        "alpha076",
+        "alpha079",
+        "alpha080",
+        "alpha082",
+        "alpha087",
+        "alpha089",
+        "alpha090",
+        "alpha091",
+        "alpha093",
+        "alpha097",
+        "alpha100",
     }
 
-    assert alpha101_module.ALPHA101_SKIPPED == expected_skipped
-    assert set(expected_skipped).isdisjoint(alpha101_module.ALPHA101_SUPPORTED)
+    assert alpha101_module.ALPHA101_SKIPPED == {}
+    assert formerly_skipped.issubset(alpha101_module.ALPHA101_SUPPORTED)
 
-    with pytest.raises(ValueError) as exc_info:
-        alpha101(_stock_data(), names=sorted(expected_skipped))
+    result = alpha101(_stock_data(), names=sorted(formerly_skipped))
 
-    message = str(exc_info.value)
-    for name, reason in expected_skipped.items():
-        assert name in message
-        assert reason in message
+    assert set(result.columns) == {
+        "date",
+        "code",
+        *(f"{name}_101" for name in formerly_skipped),
+    }
 
 
 def test_alpha101_skipped_formulas_are_exported_from_package() -> None:

@@ -8,204 +8,9 @@ import numpy as np
 import pandas as pd
 from scipy.stats import rankdata
 
-ALPHA191_SUPPORTED = frozenset(
-    {
-        "alpha001",
-        "alpha002",
-        "alpha003",
-        "alpha004",
-        "alpha005",
-        "alpha006",
-        "alpha007",
-        "alpha008",
-        "alpha009",
-        "alpha010",
-        "alpha011",
-        "alpha012",
-        "alpha013",
-        "alpha014",
-        "alpha015",
-        "alpha016",
-        "alpha017",
-        "alpha018",
-        "alpha019",
-        "alpha020",
-        "alpha021",
-        "alpha022",
-        "alpha023",
-        "alpha024",
-        "alpha025",
-        "alpha026",
-        "alpha027",
-        "alpha028",
-        "alpha029",
-        "alpha031",
-        "alpha032",
-        "alpha033",
-        "alpha034",
-        "alpha035",
-        "alpha036",
-        "alpha037",
-        "alpha038",
-        "alpha039",
-        "alpha040",
-        "alpha041",
-        "alpha042",
-        "alpha043",
-        "alpha044",
-        "alpha045",
-        "alpha046",
-        "alpha047",
-        "alpha048",
-        "alpha049",
-        "alpha050",
-        "alpha051",
-        "alpha052",
-        "alpha053",
-        "alpha054",
-        "alpha055",
-        "alpha056",
-        "alpha057",
-        "alpha058",
-        "alpha059",
-        "alpha060",
-        "alpha061",
-        "alpha062",
-        "alpha063",
-        "alpha064",
-        "alpha065",
-        "alpha066",
-        "alpha067",
-        "alpha068",
-        "alpha069",
-        "alpha070",
-        "alpha071",
-        "alpha072",
-        "alpha073",
-        "alpha074",
-        "alpha075",
-        "alpha076",
-        "alpha077",
-        "alpha078",
-        "alpha079",
-        "alpha080",
-        "alpha081",
-        "alpha082",
-        "alpha083",
-        "alpha084",
-        "alpha085",
-        "alpha086",
-        "alpha087",
-        "alpha088",
-        "alpha089",
-        "alpha090",
-        "alpha091",
-        "alpha092",
-        "alpha093",
-        "alpha094",
-        "alpha095",
-        "alpha096",
-        "alpha097",
-        "alpha098",
-        "alpha099",
-        "alpha100",
-        "alpha101",
-        "alpha102",
-        "alpha103",
-        "alpha104",
-        "alpha105",
-        "alpha106",
-        "alpha107",
-        "alpha108",
-        "alpha109",
-        "alpha110",
-        "alpha111",
-        "alpha112",
-        "alpha113",
-        "alpha114",
-        "alpha115",
-        "alpha116",
-        "alpha117",
-        "alpha118",
-        "alpha119",
-        "alpha120",
-        "alpha121",
-        "alpha122",
-        "alpha123",
-        "alpha124",
-        "alpha125",
-        "alpha126",
-        "alpha127",
-        "alpha128",
-        "alpha129",
-        "alpha130",
-        "alpha131",
-        "alpha132",
-        "alpha133",
-        "alpha134",
-        "alpha135",
-        "alpha136",
-        "alpha137",
-        "alpha138",
-        "alpha139",
-        "alpha140",
-        "alpha141",
-        "alpha142",
-        "alpha144",
-        "alpha145",
-        "alpha146",
-        "alpha147",
-        "alpha148",
-        "alpha150",
-        "alpha151",
-        "alpha152",
-        "alpha153",
-        "alpha154",
-        "alpha155",
-        "alpha156",
-        "alpha157",
-        "alpha158",
-        "alpha159",
-        "alpha160",
-        "alpha161",
-        "alpha162",
-        "alpha163",
-        "alpha164",
-        "alpha165",
-        "alpha166",
-        "alpha167",
-        "alpha168",
-        "alpha169",
-        "alpha170",
-        "alpha171",
-        "alpha172",
-        "alpha173",
-        "alpha174",
-        "alpha175",
-        "alpha176",
-        "alpha177",
-        "alpha178",
-        "alpha179",
-        "alpha180",
-        "alpha181",
-        "alpha182",
-        "alpha183",
-        "alpha184",
-        "alpha185",
-        "alpha186",
-        "alpha187",
-        "alpha188",
-        "alpha189",
-        "alpha191",
-    }
-)
+ALPHA191_SUPPORTED = frozenset(f"alpha{index:03d}" for index in range(1, 192))
 
-ALPHA191_SKIPPED = {
-    "alpha030": "requires external MKT/SMB/HML regression inputs",
-    "alpha143": "legacy formula is commented placeholder",
-    "alpha149": "requires benchmark filter input",
-    "alpha190": "legacy formula is commented placeholder",
-}
+ALPHA191_SKIPPED: dict[str, str] = {}
 
 
 def alpha191(
@@ -490,6 +295,13 @@ class Alpha191Factors:
         """Return Alpha#29."""
         delayed_close = _delay(self.close, 6)
         return (self.close - delayed_close) / delayed_close * self.volume
+
+    def alpha030(self) -> pd.DataFrame:
+        """Return Alpha#30."""
+        returns = self.close / _delay(self.close, 1) - 1
+        benchmark_returns = self.benchmark_close / self.benchmark_close.shift(1) - 1
+        beta = _rolling_beta(returns, benchmark_returns, 60)
+        return _wma(beta.pow(2), 20)
 
     def alpha031(self) -> pd.DataFrame:
         """Return Alpha#31."""
@@ -1509,6 +1321,17 @@ class Alpha191Factors:
             * _rank(_ts_rank(self.volume / _mean(self.volume, 20), 5))
         )
 
+    def alpha143(self) -> pd.DataFrame:
+        """Return Alpha#143."""
+        returns = self.close / _delay(self.close, 1) - 1
+        result = pd.DataFrame(1.0, index=self.close.index, columns=self.close.columns)
+        cond = self.close > _delay(self.close, 1)
+        for row_idx in range(1, len(result.index)):
+            previous = result.iloc[row_idx - 1]
+            current_returns = returns.iloc[row_idx]
+            result.iloc[row_idx] = previous.where(~cond.iloc[row_idx], previous * current_returns)
+        return result
+
     def alpha144(self) -> pd.DataFrame:
         """Return Alpha#144."""
         cond = self.close < _delay(self.close, 1)
@@ -1543,6 +1366,15 @@ class Alpha191Factors:
         part[cond] = -1
         part[~cond] = 0
         return part
+
+    def alpha149(self) -> pd.DataFrame:
+        """Return Alpha#149."""
+        returns = self.close / _delay(self.close, 1) - 1
+        benchmark_returns = self.benchmark_close / self.benchmark_close.shift(1) - 1
+        benchmark_down = self.benchmark_close < self.benchmark_close.shift(1)
+        filtered_returns = returns.where(benchmark_down, np.nan)
+        filtered_benchmark = benchmark_returns.where(benchmark_down, np.nan)
+        return _rolling_beta(filtered_returns, filtered_benchmark, 252)
 
     def alpha150(self) -> pd.DataFrame:
         """Return Alpha#150."""
@@ -1899,6 +1731,17 @@ class Alpha191Factors:
         """Return Alpha#189."""
         return _mean((self.close - _mean(self.close, 6)).abs(), 6)
 
+    def alpha190(self) -> pd.DataFrame:
+        """Return Alpha#190."""
+        returns = self.close / _delay(self.close, 1)
+        expected = (self.close / _delay(self.close, 19)).pow(1 / 20) - 1
+        spread = self.close / _delay(self.close, 1) - expected
+        above = returns > expected
+        below = returns < expected
+        numerator = (_count(above, 20) - 1) * _sumif(spread.pow(2), 20, below)
+        denominator = _count(below, 20) * _sumif(spread.pow(2), 20, above)
+        return np.log(numerator / denominator)
+
     def alpha191(self) -> pd.DataFrame:
         """Return Alpha#191."""
         return _correlation(_mean(self.volume, 20), self.low, 5) + (
@@ -2033,6 +1876,14 @@ def _regbeta(frame: pd.DataFrame, x_values: np.ndarray) -> pd.DataFrame:
     """Return rolling linear-regression slope against ``x_values``."""
     window = len(x_values)
     return frame.rolling(window).apply(lambda values: np.polyfit(x_values, values, 1)[0])
+
+
+def _rolling_beta(frame: pd.DataFrame, benchmark: pd.Series, window: int) -> pd.DataFrame:
+    """Return rolling regression beta against a benchmark series."""
+    aligned = benchmark.reindex(frame.index)
+    covariance = frame.rolling(window).cov(aligned)
+    variance = aligned.rolling(window).var()
+    return covariance.div(variance, axis=0)
 
 
 def _decay_linear(frame: pd.DataFrame, window: int) -> pd.DataFrame:

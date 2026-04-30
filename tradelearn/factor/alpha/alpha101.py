@@ -8,114 +8,9 @@ import numpy as np
 import pandas as pd
 from scipy.stats import rankdata
 
-ALPHA101_SUPPORTED = frozenset(
-    {
-        "alpha001",
-        "alpha002",
-        "alpha003",
-        "alpha004",
-        "alpha005",
-        "alpha006",
-        "alpha007",
-        "alpha008",
-        "alpha009",
-        "alpha010",
-        "alpha011",
-        "alpha012",
-        "alpha013",
-        "alpha014",
-        "alpha015",
-        "alpha016",
-        "alpha017",
-        "alpha018",
-        "alpha019",
-        "alpha020",
-        "alpha021",
-        "alpha022",
-        "alpha023",
-        "alpha024",
-        "alpha025",
-        "alpha026",
-        "alpha027",
-        "alpha028",
-        "alpha029",
-        "alpha030",
-        "alpha031",
-        "alpha032",
-        "alpha033",
-        "alpha034",
-        "alpha035",
-        "alpha036",
-        "alpha037",
-        "alpha038",
-        "alpha039",
-        "alpha040",
-        "alpha041",
-        "alpha042",
-        "alpha043",
-        "alpha044",
-        "alpha045",
-        "alpha046",
-        "alpha047",
-        "alpha049",
-        "alpha050",
-        "alpha051",
-        "alpha052",
-        "alpha053",
-        "alpha054",
-        "alpha055",
-        "alpha057",
-        "alpha060",
-        "alpha061",
-        "alpha062",
-        "alpha064",
-        "alpha065",
-        "alpha066",
-        "alpha068",
-        "alpha071",
-        "alpha072",
-        "alpha073",
-        "alpha074",
-        "alpha075",
-        "alpha077",
-        "alpha078",
-        "alpha081",
-        "alpha083",
-        "alpha084",
-        "alpha085",
-        "alpha086",
-        "alpha088",
-        "alpha092",
-        "alpha094",
-        "alpha095",
-        "alpha096",
-        "alpha098",
-        "alpha099",
-        "alpha101",
-    }
-)
+ALPHA101_SUPPORTED = frozenset(f"alpha{index:03d}" for index in range(1, 102))
 
-ALPHA101_SKIPPED = {
-    "alpha048": "requires industry neutralization input",
-    "alpha056": "requires cap input",
-    "alpha058": "requires industry neutralization input",
-    "alpha059": "requires industry neutralization input",
-    "alpha063": "requires industry neutralization input",
-    "alpha067": "requires industry neutralization input",
-    "alpha069": "requires industry neutralization input",
-    "alpha070": "requires industry neutralization input",
-    "alpha076": "requires industry neutralization input",
-    "alpha079": "requires industry neutralization input",
-    "alpha080": "requires industry neutralization input",
-    "alpha082": "requires industry neutralization input",
-    "alpha087": "requires industry neutralization input",
-    "alpha089": "requires industry neutralization input",
-    "alpha090": "requires industry neutralization input",
-    "alpha091": "requires industry neutralization input",
-    "alpha093": "requires industry neutralization input",
-    "alpha097": "requires industry neutralization input",
-    "alpha100": "requires subindustry neutralization input",
-}
+ALPHA101_SKIPPED: dict[str, str] = {}
 
 
 def alpha101(stock_data: pd.DataFrame, names: Iterable[str] | None = None) -> pd.DataFrame:
@@ -159,6 +54,7 @@ class Alpha101Factors:
         self.volume = data["volume"]
         self.returns = _returns(data["close"])
         self.vwap = data["vwap"]
+        self.cap = self.vwap * self.volume
 
     def alpha001(self) -> pd.DataFrame:
         """Return Alpha#1."""
@@ -506,6 +402,16 @@ class Alpha101Factors:
             - _rank(self.vwap - _delay(self.vwap, 5))
         )
 
+    def alpha048(self) -> pd.DataFrame:
+        """Return Alpha#48."""
+        close_delta = _delta(self.close, 1)
+        numerator = (
+            _correlation(close_delta, _delta(_delay(self.close, 1), 1), 250)
+            * close_delta
+        ) / self.close
+        denominator = _ts_sum((close_delta / _delay(self.close, 1)).pow(2), 250)
+        return _neutralize(numerator) / denominator
+
     def alpha049(self) -> pd.DataFrame:
         """Return Alpha#49."""
         inner = ((_delay(self.close, 20) - _delay(self.close, 10)) / 10) - (
@@ -557,10 +463,26 @@ class Alpha101Factors:
         values = _correlation(_rank(inner), _rank(self.volume), 6)
         return -1 * values.replace([-np.inf, np.inf], 0).fillna(value=0)
 
+    def alpha056(self) -> pd.DataFrame:
+        """Return Alpha#56."""
+        left = _rank(_ts_sum(self.returns, 10) / _ts_sum(_ts_sum(self.returns, 2), 3))
+        right = _rank(self.returns * self.cap)
+        return -1 * left * right
+
     def alpha057(self) -> pd.DataFrame:
         """Return Alpha#57."""
         denominator = _decay_linear(_rank(_ts_argmax(self.close, 30)), 2)
         return -1 * ((self.close - self.vwap) / denominator)
+
+    def alpha058(self) -> pd.DataFrame:
+        """Return Alpha#58."""
+        values = _correlation(_neutralize(self.vwap), self.volume, 4)
+        return -1 * _ts_rank(_decay_linear(values, 8), 6)
+
+    def alpha059(self) -> pd.DataFrame:
+        """Return Alpha#59."""
+        values = _correlation(_neutralize(self.vwap), self.volume, 4)
+        return -1 * _ts_rank(_decay_linear(values, 16), 8)
 
     def alpha060(self) -> pd.DataFrame:
         """Return Alpha#60."""
@@ -584,6 +506,14 @@ class Alpha101Factors:
             < (_rank((self.high + self.low) / 2) + _rank(self.high))
         )
         return (left < right) * -1
+
+    def alpha063(self) -> pd.DataFrame:
+        """Return Alpha#63."""
+        adv180 = _sma(self.volume, 180)
+        left = _rank(_decay_linear(_delta(_neutralize(self.close), 2), 8))
+        price_mix = (self.vwap * 0.318108) + (self.open * (1 - 0.318108))
+        right = _rank(_decay_linear(_correlation(price_mix, _ts_sum(adv180, 37), 14), 12))
+        return (left - right) * -1
 
     def alpha064(self) -> pd.DataFrame:
         """Return Alpha#64."""
@@ -615,6 +545,13 @@ class Alpha101Factors:
             + _ts_rank(_decay_linear(term, 11), 7)
         ) * -1
 
+    def alpha067(self) -> pd.DataFrame:
+        """Return Alpha#67."""
+        adv20 = _sma(self.volume, 20)
+        base = _rank(self.high - _ts_min(self.high, 2))
+        exponent = _rank(_correlation(_neutralize(self.vwap), _neutralize(adv20), 6))
+        return base.pow(exponent) * -1
+
     def alpha068(self) -> pd.DataFrame:
         """Return Alpha#68."""
         adv15 = _sma(self.volume, 15)
@@ -622,6 +559,21 @@ class Alpha101Factors:
         right_mix = (self.close * 0.518371) + (self.low * (1 - 0.518371))
         right = _rank(_delta(right_mix, 2)) * 14
         return (left < right) * -1
+
+    def alpha069(self) -> pd.DataFrame:
+        """Return Alpha#69."""
+        adv20 = _sma(self.volume, 20)
+        base = _rank(_ts_max(_delta(_neutralize(self.vwap), 3), 5))
+        price_mix = (self.close * 0.490655) + (self.vwap * (1 - 0.490655))
+        exponent = _ts_rank(_correlation(price_mix, adv20, 5), 9)
+        return base.pow(exponent) * -1
+
+    def alpha070(self) -> pd.DataFrame:
+        """Return Alpha#70."""
+        adv50 = _sma(self.volume, 50)
+        base = _rank(_delta(self.vwap, 1))
+        exponent = _ts_rank(_correlation(_neutralize(self.close), adv50, 18), 18)
+        return base.pow(exponent) * -1
 
     def alpha071(self) -> pd.DataFrame:
         """Return Alpha#71."""
@@ -673,6 +625,19 @@ class Alpha101Factors:
         right = _rank(_correlation(_rank(self.low), _rank(adv50), 12))
         return (left < right).astype("int")
 
+    def alpha076(self) -> pd.DataFrame:
+        """Return Alpha#76."""
+        adv81 = _sma(self.volume, 81)
+        left = _rank(_decay_linear(_delta(self.vwap, 1), 12))
+        right = _ts_rank(
+            _decay_linear(
+                _ts_rank(_correlation(_neutralize(self.low), adv81, 8), 20),
+                17,
+            ),
+            19,
+        )
+        return -1 * _elementwise_max(left, right)
+
     def alpha077(self) -> pd.DataFrame:
         """Return Alpha#77."""
         adv40 = _sma(self.volume, 40)
@@ -691,6 +656,22 @@ class Alpha101Factors:
         exponent = _rank(_correlation(_rank(self.vwap), _rank(self.volume), 6))
         return base.pow(exponent)
 
+    def alpha079(self) -> pd.DataFrame:
+        """Return Alpha#79."""
+        adv150 = _sma(self.volume, 150)
+        price_mix = (self.close * 0.60733) + (self.open * (1 - 0.60733))
+        left = _rank(_delta(_neutralize(price_mix), 1))
+        right = _rank(_correlation(_ts_rank(self.vwap, 4), _ts_rank(adv150, 9), 15))
+        return (left < right).astype("int")
+
+    def alpha080(self) -> pd.DataFrame:
+        """Return Alpha#80."""
+        adv10 = _sma(self.volume, 10)
+        price_mix = (self.open * 0.868128) + (self.high * (1 - 0.868128))
+        base = _rank(np.sign(_delta(_neutralize(price_mix), 4)))
+        exponent = _ts_rank(_correlation(self.high, adv10, 5), 6)
+        return base.pow(exponent) * -1
+
     def alpha081(self) -> pd.DataFrame:
         """Return Alpha#81."""
         adv10 = _sma(self.volume, 10)
@@ -698,6 +679,18 @@ class Alpha101Factors:
         left = _rank(_log(_product(_rank(base), 15)))
         right = _rank(_correlation(_rank(self.vwap), _rank(self.volume), 5))
         return (left < right) * -1
+
+    def alpha082(self) -> pd.DataFrame:
+        """Return Alpha#82."""
+        left = _rank(_decay_linear(_delta(self.open, 1), 15))
+        right = _ts_rank(
+            _decay_linear(
+                _correlation(_neutralize(self.volume), self.open, 17),
+                7,
+            ),
+            13,
+        )
+        return -1 * _elementwise_min(left, right)
 
     def alpha083(self) -> pd.DataFrame:
         """Return Alpha#83."""
@@ -729,6 +722,17 @@ class Alpha101Factors:
         right = _rank((self.open + self.close) - (self.vwap + self.open)) * 20
         return (left < right) * -1
 
+    def alpha087(self) -> pd.DataFrame:
+        """Return Alpha#87."""
+        adv81 = _sma(self.volume, 81)
+        price_mix = (self.close * 0.369701) + (self.vwap * (1 - 0.369701))
+        left = _rank(_decay_linear(_delta(price_mix, 2), 3))
+        right = _ts_rank(
+            _decay_linear(_correlation(_neutralize(adv81), self.close, 13).abs(), 5),
+            14,
+        )
+        return -1 * _elementwise_max(left, right)
+
     def alpha088(self) -> pd.DataFrame:
         """Return Alpha#88."""
         adv60 = _sma(self.volume, 60)
@@ -748,6 +752,36 @@ class Alpha101Factors:
         )
         return _elementwise_min(left, right)
 
+    def alpha089(self) -> pd.DataFrame:
+        """Return Alpha#89."""
+        adv10 = _sma(self.volume, 10)
+        left = _ts_rank(
+            _decay_linear(_correlation(self.low, adv10, 7), 6),
+            4,
+        )
+        right = _ts_rank(_decay_linear(_delta(_neutralize(self.vwap), 3), 10), 15)
+        return left - right
+
+    def alpha090(self) -> pd.DataFrame:
+        """Return Alpha#90."""
+        adv40 = _sma(self.volume, 40)
+        base = _rank(self.close - _ts_max(self.close, 5))
+        exponent = _ts_rank(_correlation(_neutralize(adv40), self.low, 5), 3)
+        return base.pow(exponent) * -1
+
+    def alpha091(self) -> pd.DataFrame:
+        """Return Alpha#91."""
+        adv30 = _sma(self.volume, 30)
+        left = _ts_rank(
+            _decay_linear(
+                _decay_linear(_correlation(_neutralize(self.close), self.volume, 10), 16),
+                4,
+            ),
+            5,
+        )
+        right = _rank(_decay_linear(_correlation(self.vwap, adv30, 4), 3))
+        return (left - right) * -1
+
     def alpha092(self) -> pd.DataFrame:
         """Return Alpha#92."""
         adv30 = _sma(self.volume, 30)
@@ -760,6 +794,17 @@ class Alpha101Factors:
             7,
         )
         return _elementwise_min(left, right)
+
+    def alpha093(self) -> pd.DataFrame:
+        """Return Alpha#93."""
+        adv81 = _sma(self.volume, 81)
+        numerator = _ts_rank(
+            _decay_linear(_correlation(_neutralize(self.vwap), adv81, 17), 20),
+            8,
+        )
+        price_mix = (self.close * 0.524434) + (self.vwap * (1 - 0.524434))
+        denominator = _rank(_decay_linear(_delta(price_mix, 3), 16))
+        return numerator / denominator
 
     def alpha094(self) -> pd.DataFrame:
         """Return Alpha#94."""
@@ -829,6 +874,38 @@ class Alpha101Factors:
         )
         right = _rank(_correlation(self.low, self.volume, 6))
         return (left < right) * -1
+
+    def alpha097(self) -> pd.DataFrame:
+        """Return Alpha#97."""
+        adv60 = _sma(self.volume, 60)
+        price_mix = (self.low * 0.721001) + (self.vwap * (1 - 0.721001))
+        left = _rank(_decay_linear(_delta(_neutralize(price_mix), 3), 20))
+        right = _ts_rank(
+            _decay_linear(
+                _ts_rank(
+                    _correlation(_ts_rank(self.low, 8), _ts_rank(adv60, 17), 5),
+                    19,
+                ),
+                16,
+            ),
+            7,
+        )
+        return (left - right) * -1
+
+    def alpha100(self) -> pd.DataFrame:
+        """Return Alpha#100."""
+        adv20 = _sma(self.volume, 20)
+        price_balance = (
+            ((self.close - self.low) - (self.high - self.close))
+            / (self.high - self.low).replace(0, 0.0001)
+            * self.volume
+        )
+        left = 1.5 * _scale(_neutralize(_neutralize(_rank(price_balance))))
+        right_base = _correlation(self.close, _rank(adv20), 5) - _rank(
+            _ts_argmin(self.close, 30)
+        )
+        right = _scale(_neutralize(right_base))
+        return -1 * ((left - right) * (self.volume / adv20))
 
     def alpha101(self) -> pd.DataFrame:
         """Return Alpha#101."""
@@ -902,6 +979,11 @@ def _rank(frame: pd.DataFrame) -> pd.DataFrame:
 def _scale(frame: pd.DataFrame, k: float = 1) -> pd.DataFrame:
     """Return frame scaled so the sum of absolute values equals ``k``."""
     return frame.mul(k).div(np.abs(frame).sum())
+
+
+def _neutralize(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return a deterministic cross-sectional neutralization fallback."""
+    return frame.sub(frame.mean(axis=1), axis=0)
 
 
 def _decay_linear(frame: pd.DataFrame, period: int) -> pd.DataFrame:
