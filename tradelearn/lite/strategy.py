@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable
-from numbers import Number
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -51,6 +50,7 @@ class Strategy(CoreStrategy):
         self._lite_signals: list[tuple[str, Any, str | None]] = []
         self._lite_signal_sentinel: Any = None
         self._lite_signal_state: dict[str | None, int] = {}
+        self._lite_target_size_by_data: dict[Any, float] = {}
 
     def _check_params(self, params: dict[str, Any]) -> dict[str, Any]:
         for key, value in params.items():
@@ -303,7 +303,9 @@ class Strategy(CoreStrategy):
         actual_size = float(abs(size))
         pending = self._pending_size
         pending_delta = actual_size if side == Order.Buy else -actual_size
+        next_target_size = self._lite_position_size(data) + pending_delta
         pending[data] = pending.get(data, 0.0) + pending_delta
+        self._lite_target_size_by_data[data] = next_target_size
         exectype = Order.Limit if limit else Order.Stop if stop else Order.Market
         if tag is None and not order_kwargs:
             submit = getattr(broker, "submit_basic", broker._submit)
@@ -379,12 +381,19 @@ class Strategy(CoreStrategy):
     def _current_price(self, data: Any) -> float:
         return float(data.get_array("close")[data._cursor])
 
+    def _lite_position_size(self, data: Any) -> float:
+        if data in self._lite_target_size_by_data:
+            return float(self._lite_target_size_by_data[data])
+        return float(self.getposition(data).size + self._pending_size.get(data, 0.0))
+
     def order_target_size(self, *, ticker: str = None, target: float = 0, **kwargs: Any):
-        return super().order_target_size(
-            data=self._resolve_ticker_data(ticker),
-            target=target,
-            **kwargs,
-        )
+        data = self._resolve_ticker_data(ticker)
+        delta = float(target) - self._lite_position_size(data)
+        if delta > 0:
+            return self._buy_data(data=data, size=delta, **kwargs)
+        if delta < 0:
+            return self._sell_data(data=data, size=abs(delta), **kwargs)
+        return None
 
     def order_target_value(
         self,
@@ -394,16 +403,23 @@ class Strategy(CoreStrategy):
         price: float | None = None,
         **kwargs: Any,
     ):
-        return super().order_target_value(
-            data=self._resolve_ticker_data(ticker),
-            target=target,
-            price=price,
-            **kwargs,
-        )
+        data = self._resolve_ticker_data(ticker)
+        price = float(price if price is not None else self._current_price(data))
+        mult = self._position_mult(data)
+        current_value = self._lite_position_size(data) * price * mult
+        delta = float(target) - current_value
+        if abs(delta) < 1e-12:
+            return None
+        size = int(abs(delta) / (price * mult))
+        if not size:
+            return None
+        if delta > 0:
+            return self._buy_data(data=data, size=size, **kwargs)
+        return self._sell_data(data=data, size=size, **kwargs)
 
     def order_target_percent(self, *, ticker: str = None, target: float = 0.0, **kwargs: Any):
-        return super().order_target_value(
-            data=self._resolve_ticker_data(ticker),
+        return self.order_target_value(
+            ticker=ticker,
             target=float(target) * float(self.broker.getvalue()),
             **kwargs,
         )
@@ -532,74 +548,72 @@ class Strategy(CoreStrategy):
     def closed_trades(self) -> tuple[Any, ...]:
         return tuple(getattr(self, "_closed_trades", ()))
 
-    @property
-    def alloc(self) -> Any:
-        if not hasattr(self, "_alloc"):
-            tickers = list(self._bt_data_by_ticker) or self.data.tickers
-            self._alloc = Allocation(tickers)
-        return self._alloc
+    def target_percent(self, ticker: str, target: float):
+        """Move one ticker toward a target portfolio weight."""
+        return self.order_target_percent(ticker=ticker, target=float(target))
 
-    def rebalance(
+    def target_weights(
         self,
-        force: bool = False,
-        rtol: float = 0.01,
-        atol: int = 0,
-        cash_reserve: float = 0.1,
-    ):
-        """Rebalance positions according to ``self.alloc`` target weights."""
-        if not 0 <= cash_reserve < 1:
-            raise AssertionError("cash_reserve should be between 0 and 1")
-        if not 0 <= rtol < 1:
-            raise AssertionError("rtol should be between 0 and 1")
-        if atol < 0:
-            raise AssertionError("atol should be non-negative")
+        weights: Mapping[str, float] | pd.Series,
+        *,
+        close_missing: bool = True,
+    ) -> list[Any]:
+        """Move the portfolio toward the requested ticker weights.
 
-        alloc = self.alloc
-        if not force and not alloc.modified:
-            alloc._next()
-            return []
+        ``cash`` is accepted as a reserved key and is not translated into an order.
+        """
+        targets = pd.Series(dict(weights), dtype="float64")
+        if (targets < 0).any():
+            raise ValueError("target weights must be non-negative")
 
-        total_equity = float(self.broker.getvalue())
-        if total_equity <= 0:
-            alloc._next()
-            return []
+        cash_weight = float(targets.pop("cash")) if "cash" in targets else 0.0
+        if cash_weight < 0:
+            raise ValueError("cash target weight must be non-negative")
+        if float(targets.sum() + cash_weight) > 1.000000000000001:
+            raise ValueError("target weights plus cash must sum to <= 1")
 
-        weights = alloc.weights
-        target_values = weights * total_equity * (1.0 - float(cash_reserve))
-        current_values = pd.Series(
-            {
-                ticker: self.position(ticker).size
-                * self._current_price(self._resolve_ticker_data(ticker))
-                for ticker in alloc.tickers
-            },
-            dtype="float64",
-        )
-        value_diff = target_values - current_values
-        value_diff_abs = float(value_diff.abs().sum())
-        value_diff_rel = value_diff_abs / total_equity
-        should_trade = (
-            force
-            or (bool(atol) and value_diff_abs > float(atol))
-            or value_diff_rel > rtol
-        )
+        known = set(self._bt_data_by_ticker) or set(self.data.tickers)
+        unknown = sorted(str(ticker) for ticker in targets.index if str(ticker) not in known)
+        if unknown:
+            raise ValueError(f"Unknown ticker(s): {unknown}")
 
-        orders = []
-        for ticker in value_diff.sort_values().index:
-            target_weight = float(weights.loc[ticker])
-            if target_weight == 0.0:
-                order = self.order_target_percent(ticker=ticker, target=0.0)
-            elif should_trade:
-                order = self.order_target_value(
-                    ticker=ticker,
-                    target=float(target_values.loc[ticker]),
-                    price=self._current_price(self._resolve_ticker_data(ticker)),
-                )
-            else:
-                order = None
+        orders: list[Any] = []
+        if close_missing:
+            for ticker in sorted(known.difference(str(ticker) for ticker in targets.index)):
+                order = self.target_percent(ticker, 0.0)
+                if order is not None:
+                    orders.append(order)
+
+        for ticker, target in targets.sort_values().items():
+            order = self.target_percent(str(ticker), float(target))
             if order is not None:
                 orders.append(order)
+        return orders
 
-        alloc._next()
+    def target_equal(
+        self,
+        tickers: Sequence[str],
+        *,
+        weight: float = 1.0,
+        close_missing: bool = True,
+    ) -> list[Any]:
+        """Assign an equal combined target weight to the selected tickers."""
+        tickers = [str(ticker) for ticker in tickers]
+        if not tickers:
+            return self.close_all() if close_missing else []
+        per_ticker = float(weight) / len(tickers)
+        return self.target_weights(
+            {ticker: per_ticker for ticker in tickers},
+            close_missing=close_missing,
+        )
+
+    def close_all(self) -> list[Any]:
+        """Close all known Lite data-feed positions."""
+        orders = []
+        for ticker in self._bt_data_by_ticker or {self.data.the_ticker: self._bt_primary_data}:
+            order = self.target_percent(str(ticker), 0.0)
+            if order is not None:
+                orders.append(order)
         return orders
 
     def start_on_day(self, n: int) -> None:
@@ -614,262 +628,3 @@ class Strategy(CoreStrategy):
     @classmethod
     def prepare_data(cls, tickers: list[str], start: str) -> pd.DataFrame | None:
         return None
-
-
-class Allocation:
-    """1.x-style allocation plan used by ``Strategy.rebalance``."""
-
-    class Bucket:
-        """Ranked subset of assets with helper weighting methods."""
-
-        def __init__(self, alloc: Allocation) -> None:
-            self._alloc = alloc
-            self._tickers: list[str] = []
-            self._weights: pd.Series | None = None
-
-        @property
-        def tickers(self) -> list[str]:
-            return self._tickers.copy()
-
-        @property
-        def weights(self) -> pd.Series:
-            if self._weights is None:
-                raise RuntimeError("Bucket.weight_*() should be called before reading weights")
-            if (self._weights < 0).any():
-                raise AssertionError("Weight should be non-negative.")
-            if self._weights.sum() > 1.000000000000001:
-                raise AssertionError(
-                    f"Total weight should be less than or equal to 1. Got {self._weights.sum()}"
-                )
-            return self._weights.copy()
-
-        def append(
-            self,
-            ranked_list: list | pd.Series,
-            *conditions: list | pd.Series,
-        ) -> Allocation.Bucket:
-            candidates = self._candidate_counts(ranked_list, *conditions)
-            selected = [
-                ticker for ticker, count in candidates.items() if count == len(conditions) + 1
-            ]
-            self._tickers.extend(ticker for ticker in selected if ticker not in self._tickers)
-            return self
-
-        def remove(self, *conditions: list | pd.Series) -> Allocation.Bucket:
-            if not conditions:
-                return self
-            candidates = self._candidate_counts(*conditions)
-            self._tickers = [
-                ticker for ticker in self._tickers if candidates.get(ticker, 0) < len(conditions)
-            ]
-            return self
-
-        def trim(self, limit: int) -> Allocation.Bucket:
-            self._tickers = self._tickers[: int(limit)]
-            return self
-
-        def weight_explicitly(self, weight: float | list | pd.Series) -> Allocation.Bucket:
-            if not self._tickers:
-                self._weights = pd.Series(dtype="float64")
-            elif isinstance(weight, Number):
-                if not 0 <= float(weight) * len(self._tickers) <= 1.000000000000001:
-                    raise AssertionError("Total weight should be within [0, 1].")
-                self._weights = pd.Series(float(weight), index=self._tickers, dtype="float64")
-            elif isinstance(weight, list):
-                if any(float(value) < 0 for value in weight) or sum(weight) > 1.000000000000001:
-                    raise AssertionError("Weight should be non-negative and sum to <= 1.")
-                values = list(weight[: len(self._tickers)])
-                values.extend([0.0] * (len(self._tickers) - len(values)))
-                self._weights = pd.Series(values, index=self._tickers, dtype="float64")
-            elif isinstance(weight, pd.Series):
-                if (weight < 0).any() or weight.sum() > 1.000000000000001:
-                    raise AssertionError("Weight should be non-negative and sum to <= 1.")
-                self._weights = pd.Series(0.0, index=self._tickers, dtype="float64")
-                selected = weight[weight.index.isin(self._tickers)]
-                self._weights.loc[selected.index] = selected.astype(float)
-            else:
-                raise ValueError("Weight should be a number, list, or Series.")
-            return self
-
-        def weight_equally(self, sum_: float | None = None) -> Allocation.Bucket:
-            if sum_ is not None and not 0 <= float(sum_) <= 1.000000000000001:
-                raise AssertionError("Total weight should be within [0, 1].")
-            total = self._alloc.unallocated if sum_ is None else float(sum_)
-            if not self._tickers:
-                self._weights = pd.Series(dtype="float64")
-            else:
-                self._weights = pd.Series(
-                    total / len(self._tickers),
-                    index=self._tickers,
-                    dtype="float64",
-                )
-            return self
-
-        def weight_proportionally(
-            self,
-            relative_weights: list,
-            sum_: float | None = None,
-        ) -> Allocation.Bucket:
-            if len(relative_weights) != len(self._tickers):
-                raise AssertionError(
-                    f"Length of relative_weight {len(relative_weights)} does not match "
-                    f"number of assets {len(self._tickers)}"
-                )
-            if any(float(value) < 0 for value in relative_weights):
-                raise AssertionError("Relative weights should be non-negative.")
-            if sum_ is not None and not 0 <= float(sum_) <= 1.000000000000001:
-                raise AssertionError("Total weight should be within [0, 1].")
-            total = self._alloc.unallocated if sum_ is None else float(sum_)
-            denom = float(sum(relative_weights))
-            if not self._tickers or denom == 0:
-                self._weights = pd.Series(dtype="float64")
-            else:
-                self._weights = pd.Series(relative_weights, index=self._tickers, dtype="float64")
-                self._weights = self._weights / denom * total
-            return self
-
-        def apply(self, method: str = "update") -> Allocation.Bucket:
-            if self._weights is None:
-                raise RuntimeError("Bucket.weight_*() should be called before apply()")
-            if self.weights.empty:
-                return self
-            index = self.weights.index
-            if method == "update":
-                self._alloc.weights.loc[index] = self.weights
-            elif method == "overwrite":
-                self._alloc.weights.loc[:] = 0.0
-                self._alloc.weights.loc[index] = self.weights
-            elif method == "accumulate":
-                self._alloc.weights.loc[index] = self._alloc.weights.loc[index] + self.weights
-            else:
-                raise ValueError(f"Invalid method {method!r}")
-            return self
-
-        @staticmethod
-        def _as_candidates(item: list | pd.Series) -> list[str]:
-            if isinstance(item, pd.Series):
-                return [
-                    str(index)
-                    for index, value in item.items()
-                    if not isinstance(value, (bool, np.bool_)) or bool(value)
-                ]
-            return [str(value) for value in item]
-
-        @classmethod
-        def _candidate_counts(cls, *items: list | pd.Series) -> dict[str, int]:
-            candidates: dict[str, int] = {}
-            for item in items:
-                for ticker in cls._as_candidates(item):
-                    candidates[ticker] = candidates.get(ticker, 0) + 1
-            return candidates
-
-        def __len__(self) -> int:
-            return len(self._tickers)
-
-        def __iter__(self):
-            return iter(self._tickers)
-
-    class BucketGroup:
-        """Dictionary-like lazy bucket collection."""
-
-        def __init__(self, alloc: Allocation) -> None:
-            self._alloc = alloc
-            self._buckets: dict[str, Allocation.Bucket] = {}
-
-        def __getitem__(self, name: str) -> Allocation.Bucket:
-            if name not in self._buckets:
-                self._buckets[name] = Allocation.Bucket(self._alloc)
-            return self._buckets[name]
-
-        def clear(self) -> None:
-            self._buckets.clear()
-
-        def __iter__(self):
-            return iter(self._buckets)
-
-        def __len__(self) -> int:
-            return len(self._buckets)
-
-    def __init__(self, tickers: list[str]) -> None:
-        self.tickers = list(tickers)
-        self._previous_weights = pd.Series(0.0, index=self.tickers, dtype="float64")
-        self._weights: pd.Series | None = None
-        self._bucket_group = Allocation.BucketGroup(self)
-
-    def _require_weights(self) -> pd.Series:
-        if self._weights is None:
-            raise RuntimeError('"Allocation.assume_*()" must be called first.')
-        return self._weights
-
-    @property
-    def bucket(self) -> BucketGroup:
-        self._require_weights()
-        return self._bucket_group
-
-    @property
-    def weights(self) -> pd.Series:
-        weights = self._require_weights()
-        if weights.index.to_list() != self.tickers:
-            raise AssertionError("Weight index should be the same as the asset space.")
-        if (weights < 0).any():
-            raise AssertionError("Weight should be non-negative.")
-        if weights.sum() > 1.000000000000001:
-            raise AssertionError(
-                f"Total weight should be less than or equal to 1. Got {weights.sum()}"
-            )
-        return weights
-
-    @weights.setter
-    def weights(self, value: pd.Series) -> None:
-        weights = self._require_weights()
-        value = pd.Series(value, dtype="float64")
-        if (value < 0).any():
-            raise AssertionError("Weight should be non-negative.")
-        if value.sum() > 1.000000000000001:
-            raise AssertionError(
-                f"Total weight should be less than or equal to 1. Got {value.sum()}"
-            )
-        unknown = [str(index) for index in value.index if str(index) not in self.tickers]
-        if unknown:
-            raise KeyError(f"Unknown allocation ticker(s): {unknown}")
-        weights.loc[:] = 0.0
-        weights.loc[[str(index) for index in value.index]] = value.to_numpy(dtype=float)
-
-    @property
-    def previous_weights(self) -> pd.Series:
-        return self._previous_weights.copy()
-
-    @property
-    def unallocated(self) -> float:
-        allocated = float(self.weights.abs().sum())
-        if allocated > 1.000000000000001:
-            raise AssertionError(f"Total weight should be less than or equal to 1. Got {allocated}")
-        return float(1.0 - allocated)
-
-    def assume_zero(self) -> Allocation:
-        self._weights = pd.Series(0.0, index=self.tickers, dtype="float64")
-        return self
-
-    def assume_previous(self) -> Allocation:
-        self._weights = self.previous_weights
-        return self
-
-    def normalize(self) -> pd.Series:
-        total = float(self.weights.abs().sum())
-        if total:
-            self._weights = self.weights / total
-        return self.weights
-
-    @property
-    def modified(self) -> bool:
-        return not self.weights.equals(self.previous_weights)
-
-    def _next(self) -> None:
-        self._previous_weights = self.weights.copy()
-        self._weights = None
-        self._bucket_group.clear()
-
-    def _clear(self) -> None:
-        self._previous_weights = pd.Series(0.0, index=self.tickers, dtype="float64")
-        self._weights = None
-        self._bucket_group.clear()

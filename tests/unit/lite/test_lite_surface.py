@@ -260,20 +260,19 @@ def test_lite_accepts_dict_data_and_ticker_orders() -> None:
     assert seen["bbb_size"] == 2
 
 
-def test_lite_allocation_rebalance_targets_multi_asset_weights() -> None:
+def test_lite_target_weights_targets_multi_asset_weights() -> None:
     data = {
         "AAA": _data(),
         "BBB": _data().assign(close=[20.0, 21.0, 22.0, 23.0, 24.0]),
     }
+
     class LiteStrategy(Strategy):
         def init(self) -> None:
             self.start_on_bar(1)
 
         def next(self) -> None:
             if len(self.data) == 2:
-                self.alloc.assume_zero()
-                self.alloc.weights = pd.Series({"AAA": 0.25, "BBB": 0.50})
-                self.rebalance(cash_reserve=0.0, force=True)
+                self.target_weights({"AAA": 0.25, "BBB": 0.50, "cash": 0.25})
 
     stats = Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run()
     orders = stats["_strategy"].orders
@@ -281,7 +280,7 @@ def test_lite_allocation_rebalance_targets_multi_asset_weights() -> None:
     assert [(order.data._name, order.size) for order in orders] == [("AAA", 22.0), ("BBB", 23.0)]
 
 
-def test_lite_allocation_buckets_and_skip_unchanged_rebalance() -> None:
+def test_lite_target_equal_and_close_all_are_target_position_sugar() -> None:
     data = {
         "AAA": _data(),
         "BBB": _data().assign(close=[20.0, 21.0, 22.0, 23.0, 24.0]),
@@ -293,16 +292,27 @@ def test_lite_allocation_buckets_and_skip_unchanged_rebalance() -> None:
 
         def next(self) -> None:
             if len(self.data) == 2:
-                self.alloc.assume_zero()
-                self.alloc.bucket["core"].append(["AAA", "BBB"]).weight_equally(0.8).apply()
-                self.rebalance(cash_reserve=0.0, force=True)
+                self.target_equal(["AAA", "BBB"], weight=0.8)
             elif len(self.data) == 3:
-                self.alloc.assume_previous()
-                self.rebalance(cash_reserve=0.0)
+                self.close_all()
 
     stats = Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run()
 
-    assert len(stats["_strategy"].orders) == 2
+    submitted_orders = [
+        (order.data._name, order.isbuy(), order.size)
+        for order in stats["_strategy"].orders
+    ]
+    assert submitted_orders == [
+        ("AAA", True, 36.0),
+        ("BBB", True, 19.0),
+        ("AAA", False, 36.0),
+        ("BBB", False, 19.0),
+    ]
+
+
+def test_lite_strategy_does_not_expose_rebalance_or_alloc_lifecycle() -> None:
+    assert "rebalance" not in Strategy.__dict__
+    assert "alloc" not in Strategy.__dict__
 
 
 def test_lite_examples_do_not_use_backtesting_py_surface() -> None:
