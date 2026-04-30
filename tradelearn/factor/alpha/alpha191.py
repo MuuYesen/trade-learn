@@ -83,6 +83,7 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha072",
         "alpha073",
         "alpha074",
+        "alpha075",
         "alpha076",
         "alpha077",
         "alpha078",
@@ -186,6 +187,8 @@ ALPHA191_SUPPORTED = frozenset(
         "alpha178",
         "alpha179",
         "alpha180",
+        "alpha181",
+        "alpha182",
         "alpha183",
         "alpha184",
         "alpha185",
@@ -199,11 +202,8 @@ ALPHA191_SUPPORTED = frozenset(
 
 ALPHA191_SKIPPED = {
     "alpha030": "requires external MKT/SMB/HML regression inputs",
-    "alpha075": "legacy formula is commented and requires benchmark condition counts",
     "alpha143": "legacy formula is commented placeholder",
     "alpha149": "requires benchmark filter input",
-    "alpha181": "legacy formula is commented and requires benchmark close input",
-    "alpha182": "legacy formula is commented and requires benchmark open/close input",
     "alpha190": "legacy formula is commented placeholder",
 }
 
@@ -918,6 +918,16 @@ class Alpha191Factors:
         )
         right = _rank(_correlation(_rank(self.vwap), _rank(self.volume), 6))
         return left + right
+
+    def alpha075(self) -> pd.DataFrame:
+        """Return Alpha#75."""
+        benchmark_down = _broadcast_series(
+            self.benchmark_close < self.benchmark_open,
+            self.close,
+        )
+        return _count((self.close > self.open) & benchmark_down, 50) / _count(
+            benchmark_down, 50
+        )
 
     def alpha076(self) -> pd.DataFrame:
         """Return Alpha#76."""
@@ -1819,6 +1829,35 @@ class Alpha191Factors:
         part[~cond] = -1 * self.volume
         return part
 
+    def alpha181(self) -> pd.DataFrame:
+        """Return Alpha#181."""
+        returns = self.close / _delay(self.close, 1) - 1
+        benchmark_deviation = self.benchmark_close - self.benchmark_close.rolling(
+            20
+        ).mean()
+        numerator = _ts_sum(
+            (returns - _mean(returns, 20)).sub(benchmark_deviation.pow(2), axis=0),
+            20,
+        )
+        denominator = benchmark_deviation.pow(3).rolling(20).sum()
+        return numerator.div(denominator, axis=0)
+
+    def alpha182(self) -> pd.DataFrame:
+        """Return Alpha#182."""
+        benchmark_up = _broadcast_series(
+            self.benchmark_close > self.benchmark_open,
+            self.close,
+        )
+        benchmark_down = _broadcast_series(
+            self.benchmark_close < self.benchmark_open,
+            self.close,
+        )
+        same_direction = (
+            ((self.close > self.open) & benchmark_up)
+            | ((self.close < self.open) & benchmark_down)
+        )
+        return _count(same_direction, 20) / 20
+
     def alpha183(self) -> pd.DataFrame:
         """Return Alpha#183."""
         centered_sum = _ts_sum(self.close - _mean(self.close, 24), 24)
@@ -1954,6 +1993,13 @@ def _prod(frame: pd.DataFrame, window: int) -> pd.DataFrame:
 def _count(cond: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling count of true values."""
     return cond.rolling(window).apply(lambda values: values.sum())
+
+
+def _broadcast_series(series: pd.Series, template: pd.DataFrame) -> pd.DataFrame:
+    """Return a benchmark series aligned to every column in ``template``."""
+    aligned = series.reindex(template.index)
+    values = np.repeat(aligned.to_numpy()[:, None], len(template.columns), axis=1)
+    return pd.DataFrame(values, index=template.index, columns=template.columns)
 
 
 def _sumif(frame: pd.DataFrame, window: int, cond: pd.DataFrame) -> pd.DataFrame:

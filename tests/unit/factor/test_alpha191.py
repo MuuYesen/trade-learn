@@ -7,12 +7,17 @@ import pandas as pd
 import pytest
 
 from tradelearn.factor.alpha import alpha191
-from tradelearn.query import Query
-from tradelearn.query.alpha.alphas191 import Alphas191 as LegacyAlphas191
+
+try:
+    from tradelearn.query.alpha.alphas191 import Alphas191 as LegacyAlphas191
+except ModuleNotFoundError:
+    LegacyAlphas191 = None
 
 
 def test_alpha191_exports_migrated_formulas_like_legacy_query() -> None:
     """The v2 Alpha191 facade returns legacy-compatible long-form columns."""
+    if LegacyAlphas191 is None:
+        pytest.skip("legacy tradelearn.query.alpha facade is not shipped")
     stock_data = _stock_data()
     bench_data = _bench_data()
     names = [
@@ -214,6 +219,8 @@ def test_alpha191_exports_migrated_formulas_like_legacy_query() -> None:
 
 def test_query_alphas191_delegates_supported_formulas_to_v2_facade() -> None:
     """Query.alphas191 keeps its output contract while using the v2 facade."""
+    query_module = pytest.importorskip("tradelearn.query.query")
+    Query = query_module.Query
     stock_data = _stock_data()
     bench_data = _bench_data()
     names = [
@@ -290,6 +297,7 @@ def test_query_alphas191_delegates_supported_formulas_to_v2_facade() -> None:
         "alpha072",
         "alpha073",
         "alpha074",
+        "alpha075",
         "alpha076",
         "alpha077",
         "alpha078",
@@ -393,6 +401,8 @@ def test_query_alphas191_delegates_supported_formulas_to_v2_facade() -> None:
         "alpha178",
         "alpha179",
         "alpha180",
+        "alpha181",
+        "alpha182",
         "alpha183",
         "alpha184",
         "alpha185",
@@ -412,8 +422,56 @@ def test_query_alphas191_delegates_supported_formulas_to_v2_facade() -> None:
     )
 
 
+def test_alpha191_supports_reference_benchmark_formulas() -> None:
+    """Benchmark-backed formulas migrated from commented 1.x reference formulas."""
+    stock_data = _stock_data()
+    bench_data = _bench_data()
+    result = alpha191(stock_data, bench_data, names=["alpha075", "alpha181", "alpha182"])
+
+    pivoted = stock_data.pivot(index="date", columns="code")
+    close = pivoted["close"]
+    open_ = pivoted["open"]
+    benchmark_down = _broadcast_test_series(
+        bench_data["close"] < bench_data["open"],
+        close,
+    )
+    benchmark_up = _broadcast_test_series(
+        bench_data["close"] > bench_data["open"],
+        close,
+    )
+    alpha075 = _rolling_count((close > open_) & benchmark_down, 50) / _rolling_count(
+        benchmark_down, 50
+    )
+    returns = close / close.shift(1) - 1
+    benchmark_deviation = bench_data["close"] - bench_data["close"].rolling(20).mean()
+    alpha181 = (
+        (returns - returns.rolling(20).mean())
+        .sub(benchmark_deviation.pow(2), axis=0)
+        .rolling(20)
+        .sum()
+        .div(benchmark_deviation.pow(3).rolling(20).sum(), axis=0)
+    )
+    same_direction = ((close > open_) & benchmark_up) | ((close < open_) & benchmark_down)
+    alpha182 = _rolling_count(same_direction, 20) / 20
+    expected = _long_alpha191(
+        {
+            "alpha075": alpha075,
+            "alpha181": alpha181,
+            "alpha182": alpha182,
+        }
+    )
+
+    pd.testing.assert_frame_equal(
+        result.sort_values(["date", "code"]).reset_index(drop=True),
+        expected.sort_values(["date", "code"]).reset_index(drop=True),
+        check_dtype=False,
+    )
+
+
 def test_alpha191_v2_facade_avoids_future_warning_for_missing_values() -> None:
     """The v2 Alpha191 path should not inherit legacy None-to-float warnings."""
+    query_module = pytest.importorskip("tradelearn.query.query")
+    Query = query_module.Query
     stock_data = _stock_data()
     bench_data = _bench_data()
     names = [
@@ -472,11 +530,8 @@ def test_alpha191_documents_skipped_legacy_formulas() -> None:
     alpha191_module = importlib.import_module("tradelearn.factor.alpha.alpha191")
     expected_skipped = {
         "alpha030": "requires external MKT/SMB/HML regression inputs",
-        "alpha075": "legacy formula is commented and requires benchmark condition counts",
         "alpha143": "legacy formula is commented placeholder",
         "alpha149": "requires benchmark filter input",
-        "alpha181": "legacy formula is commented and requires benchmark close input",
-        "alpha182": "legacy formula is commented and requires benchmark open/close input",
         "alpha190": "legacy formula is commented placeholder",
     }
 
@@ -521,6 +576,35 @@ def _legacy_alpha191(
         result = pd.merge(result, frame, how="outer", on=["date", "code"])
     for column in result.columns.difference(["date", "code"]):
         result[column] = pd.to_numeric(result[column], errors="coerce")
+    return result
+
+
+def _rolling_count(cond: pd.DataFrame, window: int) -> pd.DataFrame:
+    return cond.rolling(window).apply(lambda values: values.sum())
+
+
+def _broadcast_test_series(series: pd.Series, template: pd.DataFrame) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            column: series.reindex(template.index)
+            for column in template.columns
+        },
+        index=template.index,
+    )
+
+
+def _long_alpha191(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    result = pd.DataFrame({"date": [], "code": []})
+    for name, frame in frames.items():
+        melted = frame.copy()
+        melted["date"] = melted.index
+        melted = melted.melt(
+            id_vars="date",
+            value_vars=melted.columns.drop("date"),
+            value_name=name,
+        )
+        melted.rename(columns={name: f"{name}_191"}, inplace=True)
+        result = pd.merge(result, melted, how="outer", on=["date", "code"])
     return result
 
 
