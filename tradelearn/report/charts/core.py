@@ -260,8 +260,6 @@ def market_replay(
             legend_label=f"Trades ({len(trades_frame)})",
         )
     if not fills_frame.empty:
-        fills_frame = fills_frame.copy()
-        fills_frame["marker_size"] = fills_frame.apply(_fill_marker_size, axis=1)
         buys = fills_frame[fills_frame["side"].str.lower().eq("buy")]
         sells = fills_frame[fills_frame["side"].str.lower().eq("sell")]
         if not buys.empty:
@@ -270,7 +268,7 @@ def market_replay(
                 "price",
                 source=ColumnDataSource(buys),
                 marker="triangle",
-                size="marker_size",
+                size=17,
                 color=MARKET_UP,
                 line_color="white",
                 legend_label="Buy",
@@ -281,7 +279,7 @@ def market_replay(
                 "price",
                 source=ColumnDataSource(sells),
                 marker="inverted_triangle",
-                size="marker_size",
+                size=17,
                 color=MARKET_DOWN,
                 line_color="white",
                 legend_label="Sell",
@@ -326,7 +324,7 @@ def market_replay(
         _style_market_section(plot)
     _style_market_legend(equity_plot, compact=True)
     _style_market_legend(pl_plot if not trades_frame.empty else None)
-    _style_market_legend(price_plot, compact=True)
+    _style_market_legend(price_plot, compact=True, large_glyphs=True)
 
     return gridplot(
         plots,
@@ -869,14 +867,6 @@ def _trade_marker_size(size: float) -> float:
     return max(8.0, min(20.0, 8.0 + abs(float(size)) ** 0.5))
 
 
-def _fill_marker_size(fill: pd.Series) -> float:
-    """Return the OHLC trade marker size using the same scale as P/L markers."""
-    size = fill.get("size", 0.0)
-    if not size:
-        size = fill.get("qty", 0.0)
-    return _trade_marker_size(float(size or 0.0))
-
-
 def _market_section(title: str, *, height: int, x_range):
     """Return a 1.x-style linked replay figure."""
     return figure(
@@ -938,8 +928,12 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
         legend.padding = 4 if compact else 6
         legend.spacing = 1
         legend.margin = 3 if compact else 4
-        legend.glyph_width = 18 if compact else (34 if large_glyphs else 28)
-        legend.glyph_height = 12 if compact else (22 if large_glyphs else 18)
+        if compact and large_glyphs:
+            legend.glyph_width = 28
+            legend.glyph_height = 20
+        else:
+            legend.glyph_width = 18 if compact else (34 if large_glyphs else 28)
+            legend.glyph_height = 12 if compact else (22 if large_glyphs else 18)
         legend.label_text_color = "#33424f"
         legend.label_text_font_size = "8pt" if compact else "9pt"
         legend.click_policy = "hide"
