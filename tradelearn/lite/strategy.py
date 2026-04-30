@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable
+from numbers import Number
 from typing import Any
 
 import numpy as np
@@ -13,6 +14,7 @@ from tradelearn.backtest.strategy import Strategy as CoreStrategy
 from tradelearn.lite.data import LiteDataProxy, _ta_frame
 from tradelearn.lite.indicator import IndicatorBundle, IndicatorProxy
 from tradelearn.lite.position import PositionProxy
+
 
 class Strategy(CoreStrategy):
     """Tradelearn Lite strategy facade."""
@@ -533,7 +535,8 @@ class Strategy(CoreStrategy):
     @property
     def alloc(self) -> Any:
         if not hasattr(self, "_alloc"):
-            self._alloc = Allocation(self.data.tickers)
+            tickers = list(self._bt_data_by_ticker) or self.data.tickers
+            self._alloc = Allocation(tickers)
         return self._alloc
 
     def rebalance(
@@ -543,9 +546,61 @@ class Strategy(CoreStrategy):
         atol: int = 0,
         cash_reserve: float = 0.1,
     ):
-        raise NotImplementedError(
-            "Allocation.rebalance is reserved for the multi-asset facade path"
+        """Rebalance positions according to ``self.alloc`` target weights."""
+        if not 0 <= cash_reserve < 1:
+            raise AssertionError("cash_reserve should be between 0 and 1")
+        if not 0 <= rtol < 1:
+            raise AssertionError("rtol should be between 0 and 1")
+        if atol < 0:
+            raise AssertionError("atol should be non-negative")
+
+        alloc = self.alloc
+        if not force and not alloc.modified:
+            alloc._next()
+            return []
+
+        total_equity = float(self.broker.getvalue())
+        if total_equity <= 0:
+            alloc._next()
+            return []
+
+        weights = alloc.weights
+        target_values = weights * total_equity * (1.0 - float(cash_reserve))
+        current_values = pd.Series(
+            {
+                ticker: self.position(ticker).size
+                * self._current_price(self._resolve_ticker_data(ticker))
+                for ticker in alloc.tickers
+            },
+            dtype="float64",
         )
+        value_diff = target_values - current_values
+        value_diff_abs = float(value_diff.abs().sum())
+        value_diff_rel = value_diff_abs / total_equity
+        should_trade = (
+            force
+            or (bool(atol) and value_diff_abs > float(atol))
+            or value_diff_rel > rtol
+        )
+
+        orders = []
+        for ticker in value_diff.sort_values().index:
+            target_weight = float(weights.loc[ticker])
+            if target_weight == 0.0:
+                order = self.order_target_percent(ticker=ticker, target=0.0)
+            elif should_trade:
+                order = self.order_target_value(
+                    ticker=ticker,
+                    target=float(target_values.loc[ticker]),
+                    price=self._current_price(self._resolve_ticker_data(ticker)),
+                )
+            else:
+                order = None
+            if order is not None:
+                orders.append(order)
+
+        alloc._next()
+        return orders
 
     def start_on_day(self, n: int) -> None:
         assert 0 <= n < len(self.data.index), f"day must be within [0, {len(self.data.index)-1}]"
@@ -562,19 +617,259 @@ class Strategy(CoreStrategy):
 
 
 class Allocation:
-    """Minimal 1.x allocation object placeholder for strategy code that configures weights."""
+    """1.x-style allocation plan used by ``Strategy.rebalance``."""
+
+    class Bucket:
+        """Ranked subset of assets with helper weighting methods."""
+
+        def __init__(self, alloc: Allocation) -> None:
+            self._alloc = alloc
+            self._tickers: list[str] = []
+            self._weights: pd.Series | None = None
+
+        @property
+        def tickers(self) -> list[str]:
+            return self._tickers.copy()
+
+        @property
+        def weights(self) -> pd.Series:
+            if self._weights is None:
+                raise RuntimeError("Bucket.weight_*() should be called before reading weights")
+            if (self._weights < 0).any():
+                raise AssertionError("Weight should be non-negative.")
+            if self._weights.sum() > 1.000000000000001:
+                raise AssertionError(
+                    f"Total weight should be less than or equal to 1. Got {self._weights.sum()}"
+                )
+            return self._weights.copy()
+
+        def append(
+            self,
+            ranked_list: list | pd.Series,
+            *conditions: list | pd.Series,
+        ) -> Allocation.Bucket:
+            candidates = self._candidate_counts(ranked_list, *conditions)
+            selected = [
+                ticker for ticker, count in candidates.items() if count == len(conditions) + 1
+            ]
+            self._tickers.extend(ticker for ticker in selected if ticker not in self._tickers)
+            return self
+
+        def remove(self, *conditions: list | pd.Series) -> Allocation.Bucket:
+            if not conditions:
+                return self
+            candidates = self._candidate_counts(*conditions)
+            self._tickers = [
+                ticker for ticker in self._tickers if candidates.get(ticker, 0) < len(conditions)
+            ]
+            return self
+
+        def trim(self, limit: int) -> Allocation.Bucket:
+            self._tickers = self._tickers[: int(limit)]
+            return self
+
+        def weight_explicitly(self, weight: float | list | pd.Series) -> Allocation.Bucket:
+            if not self._tickers:
+                self._weights = pd.Series(dtype="float64")
+            elif isinstance(weight, Number):
+                if not 0 <= float(weight) * len(self._tickers) <= 1.000000000000001:
+                    raise AssertionError("Total weight should be within [0, 1].")
+                self._weights = pd.Series(float(weight), index=self._tickers, dtype="float64")
+            elif isinstance(weight, list):
+                if any(float(value) < 0 for value in weight) or sum(weight) > 1.000000000000001:
+                    raise AssertionError("Weight should be non-negative and sum to <= 1.")
+                values = list(weight[: len(self._tickers)])
+                values.extend([0.0] * (len(self._tickers) - len(values)))
+                self._weights = pd.Series(values, index=self._tickers, dtype="float64")
+            elif isinstance(weight, pd.Series):
+                if (weight < 0).any() or weight.sum() > 1.000000000000001:
+                    raise AssertionError("Weight should be non-negative and sum to <= 1.")
+                self._weights = pd.Series(0.0, index=self._tickers, dtype="float64")
+                selected = weight[weight.index.isin(self._tickers)]
+                self._weights.loc[selected.index] = selected.astype(float)
+            else:
+                raise ValueError("Weight should be a number, list, or Series.")
+            return self
+
+        def weight_equally(self, sum_: float | None = None) -> Allocation.Bucket:
+            if sum_ is not None and not 0 <= float(sum_) <= 1.000000000000001:
+                raise AssertionError("Total weight should be within [0, 1].")
+            total = self._alloc.unallocated if sum_ is None else float(sum_)
+            if not self._tickers:
+                self._weights = pd.Series(dtype="float64")
+            else:
+                self._weights = pd.Series(
+                    total / len(self._tickers),
+                    index=self._tickers,
+                    dtype="float64",
+                )
+            return self
+
+        def weight_proportionally(
+            self,
+            relative_weights: list,
+            sum_: float | None = None,
+        ) -> Allocation.Bucket:
+            if len(relative_weights) != len(self._tickers):
+                raise AssertionError(
+                    f"Length of relative_weight {len(relative_weights)} does not match "
+                    f"number of assets {len(self._tickers)}"
+                )
+            if any(float(value) < 0 for value in relative_weights):
+                raise AssertionError("Relative weights should be non-negative.")
+            if sum_ is not None and not 0 <= float(sum_) <= 1.000000000000001:
+                raise AssertionError("Total weight should be within [0, 1].")
+            total = self._alloc.unallocated if sum_ is None else float(sum_)
+            denom = float(sum(relative_weights))
+            if not self._tickers or denom == 0:
+                self._weights = pd.Series(dtype="float64")
+            else:
+                self._weights = pd.Series(relative_weights, index=self._tickers, dtype="float64")
+                self._weights = self._weights / denom * total
+            return self
+
+        def apply(self, method: str = "update") -> Allocation.Bucket:
+            if self._weights is None:
+                raise RuntimeError("Bucket.weight_*() should be called before apply()")
+            if self.weights.empty:
+                return self
+            index = self.weights.index
+            if method == "update":
+                self._alloc.weights.loc[index] = self.weights
+            elif method == "overwrite":
+                self._alloc.weights.loc[:] = 0.0
+                self._alloc.weights.loc[index] = self.weights
+            elif method == "accumulate":
+                self._alloc.weights.loc[index] = self._alloc.weights.loc[index] + self.weights
+            else:
+                raise ValueError(f"Invalid method {method!r}")
+            return self
+
+        @staticmethod
+        def _as_candidates(item: list | pd.Series) -> list[str]:
+            if isinstance(item, pd.Series):
+                return [
+                    str(index)
+                    for index, value in item.items()
+                    if not isinstance(value, (bool, np.bool_)) or bool(value)
+                ]
+            return [str(value) for value in item]
+
+        @classmethod
+        def _candidate_counts(cls, *items: list | pd.Series) -> dict[str, int]:
+            candidates: dict[str, int] = {}
+            for item in items:
+                for ticker in cls._as_candidates(item):
+                    candidates[ticker] = candidates.get(ticker, 0) + 1
+            return candidates
+
+        def __len__(self) -> int:
+            return len(self._tickers)
+
+        def __iter__(self):
+            return iter(self._tickers)
+
+    class BucketGroup:
+        """Dictionary-like lazy bucket collection."""
+
+        def __init__(self, alloc: Allocation) -> None:
+            self._alloc = alloc
+            self._buckets: dict[str, Allocation.Bucket] = {}
+
+        def __getitem__(self, name: str) -> Allocation.Bucket:
+            if name not in self._buckets:
+                self._buckets[name] = Allocation.Bucket(self._alloc)
+            return self._buckets[name]
+
+        def clear(self) -> None:
+            self._buckets.clear()
+
+        def __iter__(self):
+            return iter(self._buckets)
+
+        def __len__(self) -> int:
+            return len(self._buckets)
 
     def __init__(self, tickers: list[str]) -> None:
         self.tickers = list(tickers)
-        self.weights = pd.Series(0.0, index=self.tickers, dtype="float64")
+        self._previous_weights = pd.Series(0.0, index=self.tickers, dtype="float64")
+        self._weights: pd.Series | None = None
+        self._bucket_group = Allocation.BucketGroup(self)
+
+    def _require_weights(self) -> pd.Series:
+        if self._weights is None:
+            raise RuntimeError('"Allocation.assume_*()" must be called first.')
+        return self._weights
+
+    @property
+    def bucket(self) -> BucketGroup:
+        self._require_weights()
+        return self._bucket_group
+
+    @property
+    def weights(self) -> pd.Series:
+        weights = self._require_weights()
+        if weights.index.to_list() != self.tickers:
+            raise AssertionError("Weight index should be the same as the asset space.")
+        if (weights < 0).any():
+            raise AssertionError("Weight should be non-negative.")
+        if weights.sum() > 1.000000000000001:
+            raise AssertionError(
+                f"Total weight should be less than or equal to 1. Got {weights.sum()}"
+            )
+        return weights
+
+    @weights.setter
+    def weights(self, value: pd.Series) -> None:
+        weights = self._require_weights()
+        value = pd.Series(value, dtype="float64")
+        if (value < 0).any():
+            raise AssertionError("Weight should be non-negative.")
+        if value.sum() > 1.000000000000001:
+            raise AssertionError(
+                f"Total weight should be less than or equal to 1. Got {value.sum()}"
+            )
+        unknown = [str(index) for index in value.index if str(index) not in self.tickers]
+        if unknown:
+            raise KeyError(f"Unknown allocation ticker(s): {unknown}")
+        weights.loc[:] = 0.0
+        weights.loc[[str(index) for index in value.index]] = value.to_numpy(dtype=float)
+
+    @property
+    def previous_weights(self) -> pd.Series:
+        return self._previous_weights.copy()
 
     @property
     def unallocated(self) -> float:
-        return float(1.0 - self.weights.sum())
+        allocated = float(self.weights.abs().sum())
+        if allocated > 1.000000000000001:
+            raise AssertionError(f"Total weight should be less than or equal to 1. Got {allocated}")
+        return float(1.0 - allocated)
 
     def assume_zero(self) -> Allocation:
-        self.weights.loc[:] = 0.0
+        self._weights = pd.Series(0.0, index=self.tickers, dtype="float64")
         return self
 
     def assume_previous(self) -> Allocation:
+        self._weights = self.previous_weights
         return self
+
+    def normalize(self) -> pd.Series:
+        total = float(self.weights.abs().sum())
+        if total:
+            self._weights = self.weights / total
+        return self.weights
+
+    @property
+    def modified(self) -> bool:
+        return not self.weights.equals(self.previous_weights)
+
+    def _next(self) -> None:
+        self._previous_weights = self.weights.copy()
+        self._weights = None
+        self._bucket_group.clear()
+
+    def _clear(self) -> None:
+        self._previous_weights = pd.Series(0.0, index=self.tickers, dtype="float64")
+        self._weights = None
+        self._bucket_group.clear()

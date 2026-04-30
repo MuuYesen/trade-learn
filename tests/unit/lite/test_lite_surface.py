@@ -260,6 +260,51 @@ def test_lite_accepts_dict_data_and_ticker_orders() -> None:
     assert seen["bbb_size"] == 2
 
 
+def test_lite_allocation_rebalance_targets_multi_asset_weights() -> None:
+    data = {
+        "AAA": _data(),
+        "BBB": _data().assign(close=[20.0, 21.0, 22.0, 23.0, 24.0]),
+    }
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(1)
+
+        def next(self) -> None:
+            if len(self.data) == 2:
+                self.alloc.assume_zero()
+                self.alloc.weights = pd.Series({"AAA": 0.25, "BBB": 0.50})
+                self.rebalance(cash_reserve=0.0, force=True)
+
+    stats = Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run()
+    orders = stats["_strategy"].orders
+
+    assert [(order.data._name, order.size) for order in orders] == [("AAA", 22.0), ("BBB", 23.0)]
+
+
+def test_lite_allocation_buckets_and_skip_unchanged_rebalance() -> None:
+    data = {
+        "AAA": _data(),
+        "BBB": _data().assign(close=[20.0, 21.0, 22.0, 23.0, 24.0]),
+    }
+
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(1)
+
+        def next(self) -> None:
+            if len(self.data) == 2:
+                self.alloc.assume_zero()
+                self.alloc.bucket["core"].append(["AAA", "BBB"]).weight_equally(0.8).apply()
+                self.rebalance(cash_reserve=0.0, force=True)
+            elif len(self.data) == 3:
+                self.alloc.assume_previous()
+                self.rebalance(cash_reserve=0.0)
+
+    stats = Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run()
+
+    assert len(stats["_strategy"].orders) == 2
+
+
 def test_lite_examples_do_not_use_backtesting_py_surface() -> None:
     root = Path(__file__).parents[3]
     checked_paths = [root / "examples" / "lite"]
