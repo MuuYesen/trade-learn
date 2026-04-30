@@ -79,6 +79,7 @@ class RustBroker:
         self._winning_trade_count = 0
         self._last_fill_idx = 0
         self._rust_state_cache: tuple[int, float, float, float] | None = None
+        self._position_state_cache: dict[str, tuple[int, float, float]] = {}
         self._step_fills_from_collect: list[Any] | CompactFillBatch | None = None
         self._active_datas: list[Any] = []
         self._buffer_order_submissions = False
@@ -131,6 +132,7 @@ class RustBroker:
         self._step_close_bars_compact = getattr(engine, "step_close_bars_compact", None)
         self._get_new_fills = getattr(engine, "get_new_fills", None)
         self._get_new_fills_compact = getattr(engine, "get_new_fills_compact", None)
+        self._clear_state_caches()
 
     def setcash(self, cash: float) -> None:
         self._cash = float(cash)
@@ -217,7 +219,13 @@ class RustBroker:
                 return Position(size=size, price=price)
             get_position_for_symbol = getattr(self._engine, "get_position_for_symbol", None)
             if callable(get_position_for_symbol):
-                size, price = get_position_for_symbol(self._rust_symbol(data))
+                symbol = self._rust_symbol(data)
+                cached = self._position_state_cache.get(symbol)
+                if cached is not None and cached[0] == self._curr_idx:
+                    _, size, price = cached
+                    return Position(size=size, price=price)
+                size, price = get_position_for_symbol(symbol)
+                self._position_state_cache[symbol] = (self._curr_idx, size, price)
                 return Position(size=size, price=price)
             _, _cash, size, price = self._get_rust_state()
             return Position(size=size, price=price)
@@ -407,6 +415,11 @@ class RustBroker:
         self._rust_state_cache = (self._curr_idx, cash, size, price)
         return self._rust_state_cache
 
+    def _clear_state_caches(self) -> None:
+        """Drop same-bar Rust state mirrors after a state-changing operation."""
+        self._rust_state_cache = None
+        self._position_state_cache.clear()
+
     def get_mult(self, data: Any = None) -> float:
         return self._mult
 
@@ -449,6 +462,7 @@ class RustBroker:
             and self._trade_on_close
             and self._engine is not None
         ):
+            self._clear_state_caches()
             if self._active_datas and self._step_close_bars_compact is not None:
                 fills, cash, size, price = self._step_close_bars_compact(
                     *self._current_bar_vectors(self._active_datas)
@@ -739,7 +753,7 @@ class RustBroker:
 
     def step(self, i: int) -> None:
         self._curr_idx = i
-        self._rust_state_cache = None
+        self._clear_state_caches()
         self._step_fills_from_collect = None
         if self._engine is not None:
             if self._active_datas and self._step_open_bars_compact is not None:
@@ -804,6 +818,7 @@ class RustBroker:
 
     def _process_rust_fills_batch(self, strategy: Strategy, fills: Any) -> None:
         """Synchronize a batch of Rust fills while preserving notification order."""
+        self._position_state_cache.clear()
         orders_by_ref_get = self._orders_by_ref.get
         pending_size = strategy._pending_size
         mult = self._mult
