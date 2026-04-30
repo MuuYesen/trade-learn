@@ -214,7 +214,6 @@ def market_replay(
                 fill_color=MARKET_UP,
                 line_color=MARKET_UP_LINE,
                 fill_alpha=0.82,
-                legend_label="Up",
             )
         if not down.empty:
             price_plot.vbar(
@@ -226,6 +225,25 @@ def market_replay(
                 fill_color=MARKET_DOWN,
                 line_color=MARKET_DOWN_LINE,
                 fill_alpha=0.82,
+            )
+        if not up.empty:
+            price_plot.scatter(
+                x=[float("nan")],
+                y=[float("nan")],
+                marker="square",
+                size=11,
+                fill_color=MARKET_UP,
+                line_color=MARKET_UP_LINE,
+                legend_label="Up",
+            )
+        if not down.empty:
+            price_plot.scatter(
+                x=[float("nan")],
+                y=[float("nan")],
+                marker="square",
+                size=11,
+                fill_color=MARKET_DOWN,
+                line_color=MARKET_DOWN_LINE,
                 legend_label="Down",
             )
         price_renderer = price_plot.scatter(
