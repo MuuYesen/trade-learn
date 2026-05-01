@@ -119,34 +119,40 @@ def rank_ic(
 
 
 def clean_factor_and_forward_returns(
-    factor: pd.Series,
-    prices: pd.Series,
+    factors: pd.DataFrame,
+    *,
+    factor: str,
+    prices: pd.Series | pd.DataFrame,
     periods: tuple[int, ...] = (1,),
     quantiles: int = 5,
-    groupby: pd.Series | None = None,
+    groupby: str | pd.Series | None = None,
     nan_policy: NanPolicy = "drop",
 ) -> pd.DataFrame:
     """Return an Alphalens-style clean factor frame.
 
+    ``factors`` is a factor table indexed by ``(date, symbol)``. ``factor``
+    names the column to analyze, and ``prices`` supplies aligned close prices.
     Output is indexed by ``(date, symbol)`` and contains ``factor``,
     ``forward_return_N`` columns, ``factor_quantile``, and optional ``group``.
     """
 
     if quantiles <= 0:
         raise ValueError("quantiles must be a positive integer")
-    _validate_multiindex(factor)
-    _validate_multiindex(prices)
+    factor_values = _factor_column(factors, factor)
+    price_values = _price_series(prices)
+    _validate_multiindex(factor_values)
+    _validate_multiindex(price_values)
     if any(period <= 0 for period in periods):
         raise ValueError("periods must contain positive integers")
 
-    frame = factor.rename("factor").to_frame()
+    frame = factor_values.rename("factor").to_frame()
     for period in periods:
-        forward = _forward_returns_from_prices(prices, periods=period)
+        forward = _forward_returns_from_prices(price_values, periods=period)
         frame[f"forward_return_{period}"] = forward
     frame = apply_nan_policy(frame, nan_policy)
     frame["factor_quantile"] = _factor_quantiles(frame["factor"], quantiles)
     if groupby is not None:
-        frame = _attach_group(frame, groupby)
+        frame = _attach_group(frame, _group_series(factors, groupby))
     return frame.dropna(subset=["factor_quantile"]).astype({"factor_quantile": "int64"})
 
 
@@ -451,6 +457,38 @@ def _forward_returns_from_prices(prices: pd.Series, periods: int = 1) -> pd.Seri
     )
     forward.name = "returns"
     return forward
+
+
+def _factor_column(factors: pd.DataFrame, factor: str) -> pd.Series:
+    """Return the selected factor column from a factor table."""
+    if not isinstance(factors, pd.DataFrame):
+        raise TypeError("factors must be a pandas DataFrame indexed by (date, symbol)")
+    if factor not in factors:
+        raise ValueError(f"factors must contain factor column {factor!r}")
+    return pd.Series(factors[factor], index=factors.index, name=factor).sort_index()
+
+
+def _price_series(prices: pd.Series | pd.DataFrame) -> pd.Series:
+    """Return a close-price series from a price input."""
+    if isinstance(prices, pd.Series):
+        return prices.rename("prices").sort_index()
+    if not isinstance(prices, pd.DataFrame):
+        raise TypeError("prices must be a pandas Series or DataFrame")
+    if "close" in prices:
+        return pd.Series(prices["close"], index=prices.index, name="prices").sort_index()
+    if len(prices.columns) == 1:
+        column = prices.columns[0]
+        return pd.Series(prices[column], index=prices.index, name="prices").sort_index()
+    raise ValueError("prices DataFrame must contain a 'close' column or exactly one column")
+
+
+def _group_series(factors: pd.DataFrame, groupby: str | pd.Series) -> pd.Series:
+    """Return group labels aligned with the factor table."""
+    if isinstance(groupby, str):
+        if groupby not in factors:
+            raise ValueError(f"factors must contain groupby column {groupby!r}")
+        return pd.Series(factors[groupby], index=factors.index, name="group").sort_index()
+    return pd.Series(groupby, name="group").sort_index()
 
 
 def _factor_quantiles(factor: pd.Series, quantiles: int) -> pd.Series:

@@ -23,62 +23,6 @@ class FactorAnalyzer:
     quantiles: int = 5
 
     @classmethod
-    def from_frame(
-        cls,
-        data: pd.DataFrame,
-        *,
-        factor: str,
-        target: str = "close",
-        period: int | None = None,
-        periods: tuple[int, ...] | None = None,
-        date: str | None = None,
-        symbol: str | None = None,
-        groupby: str | pd.Series | None = None,
-        quantiles: int = 5,
-        annualization_periods: int = 252,
-    ) -> FactorAnalyzer | MultiPeriodFactorAnalyzer:
-        """Build factor analyzer(s) from a complete factor/price dataset.
-
-        ``data`` can be indexed by ``(date, symbol)`` or contain explicit date
-        and symbol columns. ``factor`` names the factor column and ``target``
-        names the price column used to derive forward returns.
-        """
-        if period is not None and periods is not None:
-            raise ValueError("use either period or periods, not both")
-        selected = _selected_periods(period=period, periods=periods)
-        factor_series = _dataset_series(
-            data,
-            factor,
-            date=date,
-            symbol=symbol,
-            name="factor",
-        )
-        prices = _dataset_series(
-            data,
-            target,
-            date=date,
-            symbol=symbol,
-            name="prices",
-        )
-        groups = _dataset_groupby(data, groupby, date=date, symbol=symbol)
-        clean = factor_metrics.clean_factor_and_forward_returns(
-            factor_series,
-            prices,
-            periods=selected,
-            quantiles=quantiles,
-            groupby=groups,
-        )
-        analyzers = cls.from_clean_factor_data(
-            clean,
-            periods=selected,
-            annualization_periods=annualization_periods,
-            quantiles=quantiles,
-        )
-        if len(selected) == 1:
-            return analyzers[selected[0]]
-        return MultiPeriodFactorAnalyzer(analyzers)
-
-    @classmethod
     def from_clean_factor_data(
         cls,
         clean: pd.DataFrame,
@@ -86,8 +30,8 @@ class FactorAnalyzer:
         periods: tuple[int, ...] | None = None,
         annualization_periods: int = 252,
         quantiles: int = 5,
-    ) -> dict[int, FactorAnalyzer]:
-        """Return one analyzer per ``forward_return_N`` horizon.
+    ) -> MultiPeriodFactorAnalyzer:
+        """Return an analysis object built from clean factor data.
 
         ``clean`` is the frame produced by ``clean_factor_and_forward_returns``.
         """
@@ -100,7 +44,7 @@ class FactorAnalyzer:
             if "group" in clean
             else None
         )
-        return {
+        analyzers = {
             period: cls(
                 factor=factor,
                 forward_returns=pd.Series(
@@ -114,6 +58,7 @@ class FactorAnalyzer:
             )
             for period in selected
         }
+        return MultiPeriodFactorAnalyzer(analyzers)
 
     @classmethod
     def multi_period_summary(
@@ -125,17 +70,13 @@ class FactorAnalyzer:
         quantiles: int = 5,
     ) -> pd.DataFrame:
         """Return summary metrics indexed by prediction horizon."""
-        analyzers = cls.from_clean_factor_data(
+        analyzer = cls.from_clean_factor_data(
             clean,
             periods=periods,
             annualization_periods=annualization_periods,
             quantiles=quantiles,
         )
-        result = pd.DataFrame(
-            {period: analyzer.summary() for period, analyzer in analyzers.items()}
-        ).T
-        result.index.name = "period"
-        return result
+        return analyzer.summary()
 
     def ic(self, by_group: bool = False) -> pd.Series | pd.DataFrame:
         """Return per-date Pearson information coefficient.
@@ -504,6 +445,26 @@ class MultiPeriodFactorAnalyzer:
             return self.analyzers[period].quantile_returns()
         return {key: analyzer.quantile_returns() for key, analyzer in self.analyzers.items()}
 
+    def plot(self, period: int | None = None):
+        """Return factor diagnostic charts for a selected prediction horizon."""
+        return self._selected(period).plot()
+
+    def html(self, path: str, period: int | None = None) -> Path:
+        """Write a standalone factor report for a selected prediction horizon."""
+        return self._selected(period).html(path)
+
+    def report(self, path: str, format: str | None = None, period: int | None = None) -> Path:
+        """Write a factor report for a selected prediction horizon."""
+        return self._selected(period).report(path, format=format)
+
+    def _selected(self, period: int | None) -> FactorAnalyzer:
+        """Return an analyzer by period, defaulting only when the choice is unambiguous."""
+        if period is not None:
+            return self.analyzers[period]
+        if len(self.analyzers) == 1:
+            return next(iter(self.analyzers.values()))
+        raise ValueError("period must be provided when multiple factor horizons are available")
+
 
 def _render_factor_html(
     *,
@@ -655,81 +616,6 @@ def _clean_periods(clean: pd.DataFrame, periods: tuple[int, ...] | None) -> tupl
     if missing:
         raise ValueError(f"clean factor data missing forward_return columns for periods: {missing}")
     return selected
-
-
-def _selected_periods(
-    *,
-    period: int | None,
-    periods: tuple[int, ...] | None,
-) -> tuple[int, ...]:
-    """Return validated prediction horizons for dataset-driven analysis."""
-    if period is not None:
-        selected = (int(period),)
-    elif periods is not None:
-        selected = tuple(int(item) for item in periods)
-    else:
-        selected = (1,)
-    if not selected or any(item <= 0 for item in selected):
-        raise ValueError("periods must contain positive integers")
-    return selected
-
-
-def _dataset_series(
-    data: pd.DataFrame,
-    column: str,
-    *,
-    date: str | None,
-    symbol: str | None,
-    name: str,
-) -> pd.Series:
-    """Return a ``(date, symbol)`` indexed series from ``data[column]``."""
-    if column not in data:
-        raise ValueError(f"data must contain column {column!r}")
-    index = _dataset_index(data, date=date, symbol=symbol)
-    series = pd.Series(data[column].to_numpy(), index=index, name=name)
-    return series.sort_index()
-
-
-def _dataset_groupby(
-    data: pd.DataFrame,
-    groupby: str | pd.Series | None,
-    *,
-    date: str | None,
-    symbol: str | None,
-) -> pd.Series | None:
-    """Return optional group labels aligned to dataset index."""
-    if groupby is None:
-        return None
-    index = _dataset_index(data, date=date, symbol=symbol)
-    if isinstance(groupby, str):
-        if groupby not in data:
-            raise ValueError(f"data must contain groupby column {groupby!r}")
-        return pd.Series(data[groupby].to_numpy(), index=index, name="group").sort_index()
-    return pd.Series(groupby, name="group").sort_index()
-
-
-def _dataset_index(
-    data: pd.DataFrame,
-    *,
-    date: str | None,
-    symbol: str | None,
-) -> pd.MultiIndex:
-    """Return a normalized ``(date, symbol)`` MultiIndex for factor data."""
-    if isinstance(data.index, pd.MultiIndex) and data.index.nlevels >= 2:
-        dates = pd.to_datetime(data.index.get_level_values(0))
-        symbols = data.index.get_level_values(1)
-    else:
-        date_col = date or ("date" if "date" in data else None)
-        symbol_col = symbol or (
-            "symbol" if "symbol" in data else "ticker" if "ticker" in data else None
-        )
-        if date_col is None or symbol_col is None:
-            raise ValueError(
-                "data must use a MultiIndex or provide date and symbol/ticker columns"
-            )
-        dates = pd.to_datetime(data[date_col])
-        symbols = data[symbol_col]
-    return pd.MultiIndex.from_arrays([dates, symbols], names=["date", "symbol"])
 
 
 def _period_metric_frame(

@@ -96,50 +96,32 @@ def test_factor_analyzer_price_derived_ic_uses_symbol_forward_returns() -> None:
     pd.testing.assert_series_equal(analyzer.ic(), factor_metrics.ic(factor, expected_forward))
 
 
-def test_factor_analyzer_from_frame_builds_single_period_from_dataset() -> None:
-    """from_frame accepts a complete factor dataset plus factor/target column names."""
-    data = _factor_price_frame()
+def test_factor_clean_data_accepts_factor_frame_and_prices() -> None:
+    """clean_factor_and_forward_returns uses factor table plus prices as the public path."""
+    factors = _factor_price_frame()[["value_score"]]
+    prices = _factor_price_frame()["close"]
 
-    analyzer = FactorAnalyzer.from_frame(
-        data,
+    clean = clean_factor_and_forward_returns(
+        factors,
         factor="value_score",
-        target="close",
-        period=1,
-        quantiles=2,
-    )
-
-    assert isinstance(analyzer, FactorAnalyzer)
-    assert analyzer.forward_returns is not None
-    expected = _series(
-        [
-            ("2024-01-01", "AAA", 0.10),
-            ("2024-01-01", "BBB", -0.10),
-            ("2024-01-02", "AAA", -0.10),
-            ("2024-01-02", "BBB", 0.10),
-        ]
-    ).rename("forward_returns")
-    pd.testing.assert_series_equal(analyzer.forward_returns.dropna(), expected)
-
-
-def test_factor_analyzer_from_frame_builds_multi_period_from_dataset() -> None:
-    """from_frame returns a multi-period analyzer when periods contains multiple horizons."""
-    data = _factor_price_frame()
-
-    analyzer = FactorAnalyzer.from_frame(
-        data.reset_index(),
-        factor="value_score",
-        target="close",
-        date="date",
-        symbol="symbol",
+        prices=prices,
         periods=(1, 2),
         quantiles=2,
     )
+    analyzer = FactorAnalyzer.from_clean_factor_data(clean, periods=(1, 2), quantiles=2)
 
     assert isinstance(analyzer, MultiPeriodFactorAnalyzer)
     assert set(analyzer.keys()) == {1, 2}
     assert list(analyzer.summary().index) == [1, 2]
     assert list(analyzer.ic().columns) == [1, 2]
     assert isinstance(analyzer[1], FactorAnalyzer)
+    expected = _series(
+        [
+            ("2024-01-01", "AAA", 0.10),
+            ("2024-01-01", "BBB", -0.10),
+        ]
+    ).rename("forward_returns")
+    pd.testing.assert_series_equal(analyzer[1].forward_returns.dropna(), expected)
 
 
 def test_factor_analyzer_builds_period_analyzers_from_clean_factor_data() -> None:
@@ -157,7 +139,8 @@ def test_factor_analyzer_builds_period_analyzers_from_clean_factor_data() -> Non
 
     analyzers = FactorAnalyzer.from_clean_factor_data(clean, periods=(1, 5, 10), quantiles=2)
 
-    assert set(analyzers) == {1, 5, 10}
+    assert isinstance(analyzers, MultiPeriodFactorAnalyzer)
+    assert set(analyzers.keys()) == {1, 5, 10}
     assert analyzers[1].forward_returns is not None
     pd.testing.assert_series_equal(
         analyzers[5].forward_returns,
@@ -475,6 +458,39 @@ def test_factor_analyzer_report_dispatches_html(tmp_path) -> None:
     assert "<html" in output.read_text().lower()
 
 
+def test_multi_period_factor_analyzer_report_dispatches_single_period_html(tmp_path) -> None:
+    """Single-period clean-data analysis can write the factor report directly."""
+    factor, _ = _factor_and_forward_returns()
+    prices = _series(
+        [
+            ("2024-01-01", "AAA", 100.0),
+            ("2024-01-01", "BBB", 100.0),
+            ("2024-01-01", "CCC", 100.0),
+            ("2024-01-02", "AAA", 101.0),
+            ("2024-01-02", "BBB", 99.0),
+            ("2024-01-02", "CCC", 102.0),
+            ("2024-01-03", "AAA", 102.0),
+            ("2024-01-03", "BBB", 98.0),
+            ("2024-01-03", "CCC", 101.0),
+        ]
+    )
+    clean = clean_factor_and_forward_returns(
+        factor.rename("value").to_frame(),
+        factor="value",
+        prices=prices,
+        periods=(1,),
+        quantiles=2,
+    )
+    analyzer = FactorAnalyzer.from_clean_factor_data(clean, periods=(1,), quantiles=2)
+    output = tmp_path / "factor_report.html"
+
+    result = analyzer.report(str(output))
+
+    assert result == output
+    assert output.exists()
+    assert "<html" in output.read_text().lower()
+
+
 def test_clean_factor_and_forward_returns_builds_alphalens_style_frame() -> None:
     factor = _series(
         [
@@ -501,8 +517,9 @@ def test_clean_factor_and_forward_returns_builds_alphalens_style_frame() -> None
     )
 
     clean = clean_factor_and_forward_returns(
-        factor,
-        prices,
+        factor.rename("value").to_frame(),
+        factor="value",
+        prices=prices,
         periods=(1,),
         quantiles=2,
         groupby=groups,

@@ -20,7 +20,7 @@ from bokeh.resources import INLINE
 
 import tradelearn.lite as tl
 from tradelearn.data import TradingViewProvider
-from tradelearn.factor import FactorAnalyzer
+from tradelearn.factor import FactorAnalyzer, clean_factor_and_forward_returns
 from tradelearn.portfolio import select_top
 from tradelearn.report import Reporter
 
@@ -75,14 +75,15 @@ if __name__ == "__main__":
     close = bars["close"].unstack("symbol")
     momentum = close.pct_change(LiteMomentumPortfolio.lookback)
     volatility = close.pct_change().rolling(LiteMomentumPortfolio.lookback).std()
-    factor = (momentum / volatility).stack().rename("momentum_quality")
-    forward_returns = close.pct_change().shift(-1).stack().rename("forward_return")
-
-    factor_analyzer = FactorAnalyzer(
-        factor.dropna(),
-        forward_returns=forward_returns.dropna(),
+    factors = (momentum / volatility).stack().rename("momentum_quality").to_frame()
+    clean_factor = clean_factor_and_forward_returns(
+        factors,
+        factor="momentum_quality",
+        prices=bars["close"],
+        periods=(1,),
         quantiles=3,
     )
+    factor_analyzer = FactorAnalyzer.from_clean_factor_data(clean_factor, quantiles=3)
     factor_report_path = factor_analyzer.report(OUTPUT_DIR / "factor_report.html")
 
     backtest = tl.Backtest(
@@ -121,7 +122,7 @@ if __name__ == "__main__":
 
     print("Lite full workflow")
     print(f"  bars={len(bars)} symbols={len(SYMBOLS)}")
-    print(f"  factor_ic={factor_analyzer.summary()['ic_mean']:.4f}")
+    print(f"  factor_ic={factor_analyzer.summary().loc[1, 'ic_mean']:.4f}")
     print(f"  final_value={stats.summary['final_value']:.2f}")
     print(f"  return_pct={stats.summary['return_pct']:.2f}")
     print(f"  trades={stats.summary['total_trades']}")
