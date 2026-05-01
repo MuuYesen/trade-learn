@@ -168,3 +168,20 @@ def test_strategy_pipeline_exposes_serializable_step_params(tmp_path) -> None:
             "normalize": True,
         },
     }
+
+
+def test_strategy_pipeline_exposes_model_feature_importance() -> None:
+    class ImportanceModel(LinearModel):
+        feature_importances_ = [0.25, 0.75]
+
+    frame = pd.DataFrame({"value": [0.9, 0.2], "quality": [0.1, 0.8]}, index=["A", "B"])
+    pipeline = StrategyPipeline(
+        [
+            ("features", FactorTransformer(["value", "quality"])),
+            ("model", ModelAdapter(ImportanceModel())),
+        ]
+    )
+
+    explanation = pipeline.fit(frame, [1.0, 0.0]).explain()
+
+    assert explanation.to_dict() == {"value": 0.25, "quality": 0.75}

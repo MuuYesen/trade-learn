@@ -118,6 +118,23 @@ class ModelAdapter:
             "score_column": self.score_column,
         }
 
+    def feature_importance(self, feature_names: Sequence[str] | None = None) -> pd.Series:
+        """Return estimator-provided feature importance or coefficients."""
+        if self.estimator is None:
+            return pd.Series(dtype="float64", name="importance")
+        values = None
+        if hasattr(self.estimator, "feature_importances_"):
+            values = self.estimator.feature_importances_
+        elif hasattr(self.estimator, "coef_"):
+            values = self.estimator.coef_
+        if values is None:
+            return pd.Series(dtype="float64", name="importance")
+        flat_values = _flatten_importance(values)
+        names = list(feature_names or [])
+        if len(names) != len(flat_values):
+            names = [f"feature_{idx}" for idx in range(len(flat_values))]
+        return pd.Series(flat_values, index=names, name="importance", dtype="float64")
+
 
 class TopKSelector:
     """Select the top-k symbols by score."""
@@ -282,6 +299,20 @@ class StrategyPipeline:
                 params[name] = {"type": type(step).__name__}
         return params
 
+    def explain(self) -> pd.Series:
+        """Return model feature importance when the estimator exposes it."""
+        model = self._step_of_type(ModelAdapter)
+        if model is None:
+            return pd.Series(dtype="float64", name="importance")
+        feature_names: list[str] = []
+        for _name, step in self.steps:
+            if step is model:
+                break
+            names = getattr(step, "feature_names_", None)
+            if names:
+                feature_names = [str(name) for name in names]
+        return model.feature_importance(feature_names)
+
     def _step_of_type(self, cls: type[Any]) -> Any | None:
         for _name, step in self.steps:
             if isinstance(step, cls):
@@ -306,6 +337,16 @@ def _feature_frame(values: Any, index: pd.Index, default_name: str) -> pd.DataFr
 
 def _matrix(data: pd.DataFrame) -> list[list[float]]:
     return data.astype(float).values.tolist()
+
+
+def _flatten_importance(values: Any) -> list[float]:
+    if hasattr(values, "ravel"):
+        return [float(value) for value in values.ravel()]
+    if isinstance(values, list | tuple):
+        if values and isinstance(values[0], list | tuple):
+            return [float(value) for row in values for value in row]
+        return [float(value) for value in values]
+    return [float(values)]
 
 
 __all__ = [

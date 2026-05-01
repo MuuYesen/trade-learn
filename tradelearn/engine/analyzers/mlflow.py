@@ -48,6 +48,9 @@ class MLflowAnalyzer(Analyzer):
                 mlflow.log_params(_params_payload(self.strategy))
                 mlflow.log_metrics(_metrics_payload(stats))
                 mlflow.log_dict(_stats_payload(stats), self.p.artifact_file)
+                pipeline_payload = _pipeline_payload(self.strategy)
+                if pipeline_payload:
+                    mlflow.log_dict(pipeline_payload, "pipeline.json")
             self._status = "logged"
         except Exception as exc:  # pragma: no cover - exercised through fake module
             self._status = "warning"
@@ -116,6 +119,9 @@ def _params_payload(strategy: Any) -> dict[str, Any]:
         payload["broker.commission"] = getattr(
             broker, "commission", getattr(broker, "commission_ratio", 0.0)
         )
+    pipeline_params = _pipeline_params(strategy)
+    if pipeline_params:
+        payload.update(_flatten_params("pipeline", pipeline_params))
     return payload
 
 
@@ -137,6 +143,92 @@ def _stats_payload(stats: Any) -> dict[str, Any]:
         "analyzers": _stats_field(stats, "analyzers", {}),
         "config": _stats_field(stats, "config", {}),
     }
+
+
+def _pipeline_payload(strategy: Any) -> dict[str, Any]:
+    pipeline = _first_attr(strategy, ("pipeline", "pipeline_"))
+    params = _pipeline_params(strategy)
+    result = _pipeline_result(strategy)
+    explanation = _pipeline_explanation(pipeline)
+    payload: dict[str, Any] = {}
+    if params:
+        payload["params"] = params
+    if result:
+        payload["result"] = result
+    if explanation:
+        payload["explanation"] = explanation
+    return payload
+
+
+def _pipeline_params(strategy: Any) -> dict[str, Any]:
+    pipeline = _first_attr(strategy, ("pipeline", "pipeline_"))
+    if pipeline is None or not hasattr(pipeline, "get_params"):
+        return {}
+    params = pipeline.get_params()
+    return params if isinstance(params, dict) else {}
+
+
+def _pipeline_result(strategy: Any) -> dict[str, Any]:
+    result = _first_attr(strategy, ("pipeline_result", "pipeline_result_"))
+    if result is None:
+        return {}
+    payload: dict[str, Any] = {}
+    scores = getattr(result, "scores", None)
+    if scores is not None:
+        payload["scores"] = _series_dict(scores)
+    selected = getattr(result, "selected", None)
+    if selected is not None:
+        payload["selected"] = [str(item) for item in selected]
+    weights = getattr(result, "weights", None)
+    if weights is not None:
+        payload["weights"] = _series_dict(weights)
+    return payload
+
+
+def _pipeline_explanation(pipeline: Any) -> dict[str, Any]:
+    if pipeline is None or not hasattr(pipeline, "explain"):
+        return {}
+    try:
+        explanation = pipeline.explain()
+    except Exception:
+        return {}
+    return _series_dict(explanation)
+
+
+def _first_attr(obj: Any, names: tuple[str, ...]) -> Any:
+    if obj is None:
+        return None
+    for name in names:
+        if hasattr(obj, name):
+            return getattr(obj, name)
+    return None
+
+
+def _series_dict(values: Any) -> dict[str, Any]:
+    if hasattr(values, "to_dict"):
+        return {str(key): _json_scalar(value) for key, value in values.to_dict().items()}
+    if isinstance(values, dict):
+        return {str(key): _json_scalar(value) for key, value in values.items()}
+    return {}
+
+
+def _flatten_params(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
+    flattened: dict[str, Any] = {}
+    for key, value in values.items():
+        name = f"{prefix}.{key}"
+        if isinstance(value, dict):
+            flattened.update(_flatten_params(name, value))
+        elif isinstance(value, list | tuple):
+            flattened[name] = ",".join(str(item) for item in value)
+        else:
+            flattened[name] = _json_scalar(value)
+    return flattened
+
+
+def _json_scalar(value: Any) -> Any:
+    if hasattr(value, "item"):
+        return value.item()
+    return value
 
 
 def _coerce_broker_event(event: BrokerEvent | dict[str, Any]) -> BrokerEvent:

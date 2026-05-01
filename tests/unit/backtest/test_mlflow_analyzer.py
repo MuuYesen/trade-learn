@@ -9,6 +9,14 @@ from tradelearn.core import BrokerEvent, StreamBar
 from tradelearn.engine import Cerebro, Strategy, grid_search
 from tradelearn.engine.analyzer import Analyzer
 from tradelearn.engine.analyzers import MLflowAnalyzer
+from tradelearn.ml import (
+    EqualWeightOptimizer,
+    FactorTransformer,
+    ModelAdapter,
+    PipelineResult,
+    StrategyPipeline,
+    TopKSelector,
+)
 
 
 def bars() -> pd.DataFrame:
@@ -124,6 +132,87 @@ def test_mlflow_analyzer_logs_params_stats_and_artifacts(monkeypatch) -> None:
     ]
     assert artifact_file == "stats.json"
     assert strategy.analyzer_results["mlflow"]["status"] == "logged"
+
+
+def test_mlflow_analyzer_logs_strategy_pipeline_params_and_artifacts() -> None:
+    class ImportanceModel:
+        feature_importances_ = [0.25, 0.75]
+
+        def fit(self, X, y):
+            return self
+
+        def predict(self, X):
+            return [row[0] for row in X]
+
+    class PipelineStrategy(Strategy):
+        def __init__(self) -> None:
+            super().__init__()
+            self.pipeline = StrategyPipeline(
+                [
+                    ("features", FactorTransformer(["value", "quality"])),
+                    ("model", ModelAdapter(ImportanceModel())),
+                    ("selector", TopKSelector(k=1)),
+                    ("optimizer", EqualWeightOptimizer(gross=0.9)),
+                ]
+            )
+            self.pipeline.fit(
+                pd.DataFrame({"value": [0.8, 0.2], "quality": [0.1, 0.7]}),
+                [1.0, 0.0],
+            )
+            self.pipeline_result = PipelineResult(
+                scores=pd.Series({"AAA": 0.8, "BBB": 0.2}, name="score"),
+                selected=["AAA"],
+                weights=pd.Series({"AAA": 0.9}, name="weight"),
+            )
+
+        def next(self) -> None:
+            pass
+
+    fake = FakeMLflow()
+    cerebro = Cerebro()
+    cerebro.adddata(bars())
+    cerebro.addstrategy(PipelineStrategy)
+    cerebro.addanalyzer(MLflowAnalyzer, name="mlflow", mlflow_module=fake)
+
+    cerebro.run()
+
+    params = fake.params[0]
+    assert params["pipeline.features.features"] == "value,quality"
+    assert params["pipeline.model.estimator"] == "ImportanceModel"
+    assert params["pipeline.selector.k"] == 1
+    assert params["pipeline.optimizer.gross"] == 0.9
+    artifacts = {artifact_file: payload for payload, artifact_file in fake.dicts}
+    assert artifacts["pipeline.json"] == {
+        "params": {
+            "steps": ["features", "model", "selector", "optimizer"],
+            "features": {
+                "type": "FactorTransformer",
+                "features": ["value", "quality"],
+                "feature_store": False,
+            },
+            "model": {
+                "type": "ModelAdapter",
+                "estimator": "ImportanceModel",
+                "score_column": None,
+            },
+            "selector": {
+                "type": "TopKSelector",
+                "k": 1,
+                "ascending": False,
+                "threshold": None,
+            },
+            "optimizer": {
+                "type": "EqualWeightOptimizer",
+                "gross": 0.9,
+            },
+        },
+        "result": {
+            "scores": {"AAA": 0.8, "BBB": 0.2},
+            "selected": ["AAA"],
+            "weights": {"AAA": 0.9},
+        },
+        "explanation": {"value": 0.25, "quality": 0.75},
+    }
 
 
 def test_mlflow_analyzer_uses_env_uri_and_warns_without_interrupt(monkeypatch, caplog) -> None:

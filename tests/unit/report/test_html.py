@@ -123,6 +123,40 @@ def test_reporter_html_writes_report_artifacts(tmp_path) -> None:
     assert stats["config"]["strategy"] == "demo"
 
 
+def test_reporter_html_expands_pipeline_parameters_in_experiment_section(tmp_path) -> None:
+    """Reporter.html renders pipeline config as readable experiment parameters."""
+    path = tmp_path / "pipeline-report.html"
+
+    Reporter(
+        {
+            "returns": _returns(),
+            "trades": _trades(),
+            "summary": {"strategy_name": "pipeline-demo"},
+            "config": {
+                "strategy": "pipeline-demo",
+                "pipeline": {
+                    "steps": ["features", "model", "selector"],
+                    "features": {
+                        "type": "FactorTransformer",
+                        "features": ["value", "quality"],
+                        "feature_store": True,
+                    },
+                    "selector": {"type": "TopKSelector", "k": 10},
+                },
+            },
+        },
+        periods=252,
+    ).html(path)
+
+    html = path.read_text()
+    assert "Pipeline Parameters" in html
+    assert "pipeline.features.features" in html
+    assert "value, quality" in html
+    assert "pipeline.selector.k" in html
+    stats = json.loads((tmp_path / "stats.json").read_text())
+    assert stats["config"]["pipeline"]["selector"]["k"] == 10
+
+
 def test_reporter_html_adds_exposure_chart_for_multi_asset_positions(tmp_path) -> None:
     """Reporter.html adds the multi-asset exposure section when positions contain symbols."""
     path = tmp_path / "multi-asset-report.html"

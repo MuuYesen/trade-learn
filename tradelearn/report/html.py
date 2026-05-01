@@ -211,11 +211,12 @@ def _render_html(
 ) -> str:
     """Render the report HTML string."""
     template = _template_environment().get_template(TEMPLATE_NAME)
+    display_config = {key: value for key, value in config.items() if key != "pipeline"}
     return template.render(
         benchmark_section=_benchmark_section(benchmark),
         bokeh_resources=bokeh_resources,
         charts=charts,
-        config_table=_summary_table(config),
+        config_table=_summary_table(display_config),
         correlation_section=_correlation_section(correlation),
         drawdowns_table=_frame_table(drawdowns),
         exposure_section=_exposure_section(exposure),
@@ -228,6 +229,7 @@ def _render_html(
         factor_long_short_section=_factor_long_short_section(factor_long_short_returns),
         factor_section=_factor_section(factor_quantile_returns),
         metadata={key: escape(value) for key, value in metadata.items()},
+        pipeline_section=_pipeline_section(config),
         returns_count=len(returns),
         script=script,
         summary_table=_summary_cards(summary),
@@ -245,6 +247,8 @@ def _template_environment() -> Environment:
 
 def _summary_table(values: dict[str, Any]) -> str:
     """Render a dict as an HTML table."""
+    if not values:
+        return "<table><tbody></tbody></table>"
     rows = "".join(
         f"<tr><td>{escape(str(key))}</td><td>{escape(_format_value(value))}</td></tr>"
         for key, value in values.items()
@@ -268,6 +272,33 @@ def _summary_cards(values: dict[str, Any]) -> str:
         cells.extend("<th></th><td></td>" for _ in range(missing))
         rows.append(f"<tr>{''.join(cells)}</tr>")
     return f"<table class=\"summary-table\"><tbody>{''.join(rows)}</tbody></table>"
+
+
+def _pipeline_section(config: dict[str, Any]) -> str:
+    """Render pipeline parameters as a readable experiment subsection."""
+    pipeline = config.get("pipeline")
+    if not isinstance(pipeline, dict) or not pipeline:
+        return ""
+    rows = "".join(
+        f"<tr><td>{escape(key)}</td><td>{escape(_format_value(value))}</td></tr>"
+        for key, value in _flatten_display("pipeline", pipeline).items()
+    )
+    return (
+        "<h3>Pipeline Parameters</h3>"
+        "<table><thead><tr><th>parameter</th><th>value</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table>"
+    )
+
+
+def _flatten_display(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
+    flattened: dict[str, Any] = {}
+    for key, value in values.items():
+        name = f"{prefix}.{key}"
+        if isinstance(value, dict):
+            flattened.update(_flatten_display(name, value))
+        else:
+            flattened[name] = value
+    return flattened
 
 
 def _frame_table(frame: pd.DataFrame) -> str:
@@ -404,6 +435,8 @@ def _package_version() -> str:
 
 def _format_value(value: Any) -> str:
     """Format scalar values for HTML."""
+    if isinstance(value, list | tuple):
+        return ", ".join(str(item) for item in value)
     if isinstance(value, float):
         return f"{value:.6f}"
     return str(value)
