@@ -92,6 +92,48 @@ def test_factor_analyzer_price_derived_ic_uses_symbol_forward_returns() -> None:
     pd.testing.assert_series_equal(analyzer.ic(), factor_metrics.ic(factor, expected_forward))
 
 
+def test_factor_analyzer_builds_period_analyzers_from_clean_factor_data() -> None:
+    """FactorAnalyzer can expose separate 1D/5D/10D analyzers from clean factor data."""
+    factor, _ = _factor_and_forward_returns()
+    clean = pd.DataFrame(
+        {
+            "factor": factor,
+            "forward_return_1": [0.01, 0.02, 0.03, 0.02, 0.01, -0.01],
+            "forward_return_5": [0.03, 0.04, 0.05, 0.01, 0.02, 0.03],
+            "forward_return_10": [0.06, 0.05, 0.04, 0.03, 0.02, 0.01],
+            "factor_quantile": [1, 1, 2, 1, 2, 2],
+        }
+    )
+
+    analyzers = FactorAnalyzer.from_clean_factor_data(clean, periods=(1, 5, 10), quantiles=2)
+
+    assert set(analyzers) == {1, 5, 10}
+    assert analyzers[1].forward_returns is not None
+    pd.testing.assert_series_equal(
+        analyzers[5].forward_returns,
+        clean["forward_return_5"].rename("forward_returns"),
+    )
+    assert analyzers[10].quantiles == 2
+
+
+def test_factor_analyzer_multi_period_summary_prefixes_metrics() -> None:
+    """multi_period_summary returns one row per prediction horizon."""
+    factor, _ = _factor_and_forward_returns()
+    clean = pd.DataFrame(
+        {
+            "factor": factor,
+            "forward_return_1": [0.01, 0.02, 0.03, 0.02, 0.01, -0.01],
+            "forward_return_5": [0.03, 0.04, 0.05, 0.01, 0.02, 0.03],
+            "factor_quantile": [1, 1, 2, 1, 2, 2],
+        }
+    )
+
+    summary = FactorAnalyzer.multi_period_summary(clean, periods=(1, 5), quantiles=2)
+
+    assert list(summary.index) == [1, 5]
+    assert {"ic_mean", "rank_ic_mean", "quantile_spread_mean"}.issubset(summary.columns)
+
+
 def test_factor_analyzer_summary_contains_stable_keys() -> None:
     """summary returns scalar diagnostics useful for reports."""
     factor, forward = _factor_and_forward_returns()

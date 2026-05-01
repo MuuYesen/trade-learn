@@ -22,6 +22,65 @@ class FactorAnalyzer:
     periods: int = 252
     quantiles: int = 5
 
+    @classmethod
+    def from_clean_factor_data(
+        cls,
+        clean: pd.DataFrame,
+        *,
+        periods: tuple[int, ...] | None = None,
+        annualization_periods: int = 252,
+        quantiles: int = 5,
+    ) -> dict[int, FactorAnalyzer]:
+        """Return one analyzer per ``forward_return_N`` horizon.
+
+        ``clean`` is the frame produced by ``clean_factor_and_forward_returns``.
+        """
+        if "factor" not in clean:
+            raise ValueError("clean factor data must contain a 'factor' column")
+        selected = _clean_periods(clean, periods)
+        factor = pd.Series(clean["factor"], index=clean.index, name="factor")
+        groups = (
+            pd.Series(clean["group"], index=clean.index, name="group")
+            if "group" in clean
+            else None
+        )
+        return {
+            period: cls(
+                factor=factor,
+                forward_returns=pd.Series(
+                    clean[f"forward_return_{period}"],
+                    index=clean.index,
+                    name="forward_returns",
+                ),
+                groups=groups,
+                periods=annualization_periods,
+                quantiles=quantiles,
+            )
+            for period in selected
+        }
+
+    @classmethod
+    def multi_period_summary(
+        cls,
+        clean: pd.DataFrame,
+        *,
+        periods: tuple[int, ...] | None = None,
+        annualization_periods: int = 252,
+        quantiles: int = 5,
+    ) -> pd.DataFrame:
+        """Return summary metrics indexed by prediction horizon."""
+        analyzers = cls.from_clean_factor_data(
+            clean,
+            periods=periods,
+            annualization_periods=annualization_periods,
+            quantiles=quantiles,
+        )
+        result = pd.DataFrame(
+            {period: analyzer.summary() for period, analyzer in analyzers.items()}
+        ).T
+        result.index.name = "period"
+        return result
+
     def ic(self, by_group: bool = False) -> pd.Series | pd.DataFrame:
         """Return per-date Pearson information coefficient.
 
@@ -463,3 +522,20 @@ def _format_html_value(value: object) -> str:
     if pd.isna(value):
         return "-"
     return str(value)
+
+
+def _clean_periods(clean: pd.DataFrame, periods: tuple[int, ...] | None) -> tuple[int, ...]:
+    """Return validated periods available in clean factor data."""
+    available = sorted(
+        int(str(column).removeprefix("forward_return_"))
+        for column in clean.columns
+        if str(column).startswith("forward_return_")
+        and str(column).removeprefix("forward_return_").isdigit()
+    )
+    if not available:
+        raise ValueError("clean factor data must contain forward_return_N columns")
+    selected = tuple(available if periods is None else periods)
+    missing = [period for period in selected if f"forward_return_{period}" not in clean]
+    if missing:
+        raise ValueError(f"clean factor data missing forward_return columns for periods: {missing}")
+    return selected
