@@ -143,6 +143,7 @@ def test_vendor_indicator_adapter_files_are_named_by_backend() -> None:
 
     assert (root / "pta" / "pandas_ta_adapter.py").exists()
     assert (root / "talib" / "ta_lib_adapter.py").exists()
+    assert not (root / "talib" / "pandas_ta_adapter.py").exists()
     assert (root / "tdx" / "mytt_adapter.py").exists()
     assert (root / "tv" / "pynecore_adapter.py").exists()
     assert not (root / "tdx" / "mytt.py").exists()
