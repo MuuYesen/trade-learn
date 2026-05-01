@@ -1,14 +1,14 @@
 """Standard Random Forest Portfolio Rotation Strategy."""
 
 from __future__ import annotations
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+
 import tradelearn.engine as bt
+
 
 class RandomForestRotation(bt.Strategy):
     """
     Buy the top-ranked symbols based on Random Forest predictions.
-    
+
     This strategy demonstrates rotation across multiple assets.
     """
 
@@ -32,11 +32,11 @@ class RandomForestRotation(bt.Strategy):
             # For this example, we assume some logic or signal is available
             # Let's say we just use a simple momentum signal as a proxy for RF output
             scores[data._name] = data.close[0] / data.close[-1] - 1.0
-            
+
         # 2. Rank assets
         ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
         top_assets = [name for name, score in ranked[:self.p.top_n] if score > 0]
-        
+
         # 3. Rebalance
         for data in self.datas:
             if data._name in top_assets:

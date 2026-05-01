@@ -19,15 +19,18 @@ class LiteAdvancedTurtle(tl.Strategy):
         self.low_20 = self.I(self.data.low.df.rolling(self.entry_window).min())
         self.high_10 = self.I(self.data.high.df.rolling(self.exit_window).max())
         self.low_10 = self.I(self.data.low.df.rolling(self.exit_window).min())
-        self.atr = self.I(_atr(self.data.high.df, self.data.low.df, self.data.close.df, self.atr_window))
+        self.atr = self.I(
+            _atr(self.data.high.df, self.data.low.df, self.data.close.df, self.atr_window)
+        )
         self.units = 0
         self.last_price = 0.0
 
     def _execute_trade(self, is_buy: bool, close: float, atr: float, size_param: float) -> None:
+        size = max(1, int(self.equity * size_param / close))
         if is_buy:
-            self.buy(size=size_param)
+            self.buy(size=size)
         else:
-            self.sell(size=size_param)
+            self.sell(size=size)
         self.last_price = close
         self.units = self.units + 1 if self.position() else 1
 

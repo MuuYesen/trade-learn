@@ -2,6 +2,7 @@
 
 import importlib
 
+
 def _import_strategy(module_name: str, class_name: str):
     """Helper to import from files with numeric prefixes."""
     module = importlib.import_module(f".{module_name}", package=__package__)

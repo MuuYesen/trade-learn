@@ -112,7 +112,7 @@ def run_strategy_in_process(
             sys.modules["tradelearn"] = types.ModuleType("tradelearn")
             sys.modules["tradelearn.engine"] = bt
 
-        module = importlib.import_module(f"examples.backtrader.{mod_name}")
+        module = importlib.import_module(f"examples.engine.{mod_name}")
         importlib.reload(module)
         strategy_cls = getattr(module, cls_name)
 
@@ -221,7 +221,7 @@ def run_portfolio_strategy_in_process(
             sys.modules["tradelearn"] = types.ModuleType("tradelearn")
             sys.modules["tradelearn.engine"] = bt
 
-        module = importlib.import_module(f"examples.backtrader.{mod_name}")
+        module = importlib.import_module(f"examples.engine.{mod_name}")
         importlib.reload(module)
         strategy_cls = getattr(module, cls_name)
 

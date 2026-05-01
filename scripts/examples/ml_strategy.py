@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from examples.backtrader import Alpha101GBMStrategy
+from examples.engine import Alpha101GBMStrategy
 from tradelearn.engine import Cerebro
 from tradelearn.factor.alpha import alpha101
 from tradelearn.ml import CausalSelector

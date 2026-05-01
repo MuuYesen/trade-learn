@@ -40,7 +40,7 @@ def _portfolio_data() -> dict[str, pd.DataFrame]:
 
 def _run_strategy(strategy_name: str) -> tuple[float, object]:
     strategy_cls = getattr(
-        importlib.import_module("examples.backtrader"),
+        importlib.import_module("examples.engine"),
         strategy_name,
     )
     cerebro = bt.Cerebro(trade_on_close=True)

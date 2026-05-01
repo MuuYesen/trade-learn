@@ -8,7 +8,7 @@ from typing import Any
 import pandas as pd
 
 import tradelearn.engine as bt
-from examples.backtrader import MigratedSmaCross
+from examples.engine import MigratedSmaCross
 from tradelearn.backtest import LineSeries
 from tradelearn.factor import FactorAnalyzer
 from tradelearn.ml import CausalSelector, MLStrategy

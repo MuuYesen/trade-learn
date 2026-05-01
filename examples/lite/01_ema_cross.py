@@ -66,8 +66,8 @@ class EMA_Cross_Strategy(tl.Strategy):
         else:
             # Señal de compra: cruce alcista (ema9 cruza por encima de ema21)
             if ema9_prev <= ema21_prev and ema9 > ema21:
-                # Calcular tamaño como porcentaje del equity
-                self.buy(size=self.position_pct)
+                # Target position as percentage of equity
+                self.order_target_percent(target=self.position_pct)
                 self.highest_since_entry = price
 
 

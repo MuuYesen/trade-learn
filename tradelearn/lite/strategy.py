@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -26,12 +25,6 @@ class _TargetWeightSnapshots:
 
 class Strategy(CoreStrategy):
     """Tradelearn Lite strategy facade."""
-
-    class __FULL_EQUITY(float):  # noqa: N801
-        def __repr__(self) -> str:
-            return ".9999"
-
-    _FULL_EQUITY = __FULL_EQUITY(1 - sys.float_info.epsilon)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -233,16 +226,14 @@ class Strategy(CoreStrategy):
         self,
         *,
         ticker: str = None,
-        size: float = _FULL_EQUITY,
+        size: float = 1.0,
         limit: float = None,
         stop: float = None,
         sl: float = None,
         tp: float = None,
         tag: object = None,
     ):
-        assert 0 < size < 1 or round(size) == size, (
-            "size must be a positive fraction of equity, or a positive whole number of units"
-        )
+        assert size > 0, "size must be a positive order quantity"
         if sl is not None or tp is not None:
             return self.buy_bracket(ticker=ticker, size=size, sl=sl, tp=tp, tag=tag)
         data = self._resolve_ticker_data(ticker)
@@ -259,17 +250,6 @@ class Strategy(CoreStrategy):
         **order_kwargs: Any,
     ) -> Any:
         broker = self.broker
-        if 0 < size < 1:
-            equity = broker.getvalue()
-            price = (
-                self._bt_close_array[data._cursor]
-                if data is self._bt_primary_data
-                else data.get_array("close")[data._cursor]
-            )
-            comm_ratio = broker.commission_ratio
-            adjusted_price = price * (1 + comm_ratio if side == Order.Buy else 1 - comm_ratio)
-            size = int((equity * size) / adjusted_price)
-
         actual_size = float(abs(size))
         pending = self._pending_size
         pending_delta = actual_size if side == Order.Buy else -actual_size
@@ -330,16 +310,14 @@ class Strategy(CoreStrategy):
         self,
         *,
         ticker: str = None,
-        size: float = _FULL_EQUITY,
+        size: float = 1.0,
         limit: float = None,
         stop: float = None,
         sl: float = None,
         tp: float = None,
         tag: object = None,
     ):
-        assert 0 < size < 1 or round(size) == size, (
-            "size must be a positive fraction of equity, or a positive whole number of units"
-        )
+        assert size > 0, "size must be a positive order quantity"
         if sl is not None or tp is not None:
             return self.sell_bracket(ticker=ticker, size=size, sl=sl, tp=tp, tag=tag)
         data = self._resolve_ticker_data(ticker)
@@ -424,7 +402,7 @@ class Strategy(CoreStrategy):
         self,
         *,
         ticker: str = None,
-        size: float = _FULL_EQUITY,
+        size: float = 1.0,
         limit: float = None,
         stop: float = None,
         sl: float = None,
@@ -446,7 +424,7 @@ class Strategy(CoreStrategy):
         self,
         *,
         ticker: str = None,
-        size: float = _FULL_EQUITY,
+        size: float = 1.0,
         limit: float = None,
         stop: float = None,
         sl: float = None,

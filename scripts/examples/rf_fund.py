@@ -3,7 +3,7 @@
 import pandas as pd
 
 import tradelearn.engine as bt
-from examples.backtrader import RandomForestRotation
+from examples.engine import RandomForestRotation
 
 
 def main():

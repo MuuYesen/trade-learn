@@ -133,6 +133,21 @@ def test_lite_run_exposes_shared_stats_summary_keys() -> None:
     assert "_records" not in stats
 
 
+def test_lite_fractional_size_is_order_quantity_not_equity_fraction() -> None:
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(2)
+
+        def next(self) -> None:
+            if len(self.data) == 3:
+                self.buy(size=0.5)
+
+    stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
+
+    assert stats.orders.iloc[0]["size"] == 0.5
+    assert stats.fills.iloc[0]["size"] == 0.5
+
+
 def test_lite_and_engine_stats_summary_keys_match() -> None:
     class LiteStrategy(Strategy):
         def next(self) -> None:

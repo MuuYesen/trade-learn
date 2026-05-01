@@ -115,7 +115,7 @@ class MACD_Volume_Strategy(tl.Strategy):
                 self.sl_price = price - (atr * self.sl_multiplier)
                 self.tp_price = price + (atr * self.tp_multiplier)
                 
-                self.buy(size=self.position_pct)
+                self.order_target_percent(target=self.position_pct)
                 self.entry_price = price
 
 

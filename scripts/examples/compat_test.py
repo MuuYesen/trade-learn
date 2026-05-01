@@ -9,7 +9,7 @@ import sys
 import pandas as pd
 
 import tradelearn.engine as bt
-from examples.backtrader import (
+from examples.engine import (
     BetterMA,
     EnhancedRSI,
     MacdTharp,
