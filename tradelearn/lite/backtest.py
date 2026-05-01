@@ -187,6 +187,41 @@ class Backtest:
         """Write a Tradelearn report for the most recent Lite run."""
         return self._last_reporter().report(path, benchmark=benchmark)
 
+    def log_mlflow(
+        self,
+        experiment_name: str = "tradelearn-lite",
+        run_name: str | None = None,
+        *,
+        uri: str | None = None,
+        params: dict[str, Any] | None = None,
+        tags: dict[str, Any] | None = None,
+        nested: bool = False,
+        artifact_file: str = "stats.json",
+        artifact_path: str = "tradelearn",
+        artifact_bundle: bool = True,
+        log_report: bool = True,
+        log_plot: bool = True,
+        mlflow_module: Any | None = None,
+    ) -> str:
+        """Log the most recent Lite run to MLflow."""
+        from .mlflow import log_lite_run
+
+        return log_lite_run(
+            self,
+            experiment_name=experiment_name,
+            run_name=run_name,
+            uri=uri,
+            params=params,
+            tags=tags,
+            nested=nested,
+            artifact_file=artifact_file,
+            artifact_path=artifact_path,
+            artifact_bundle=artifact_bundle,
+            log_report=log_report,
+            log_plot=log_plot,
+            mlflow_module=mlflow_module,
+        )
+
     def _last_reporter(self):
         stats = getattr(self, "_last_stats", None)
         if stats is None:
