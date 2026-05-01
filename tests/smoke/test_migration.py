@@ -25,14 +25,14 @@ class MigrationCheckpoint:
 
 
 MIGRATION_CHECKPOINTS: tuple[MigrationCheckpoint, ...] = (
-    MigrationCheckpoint("query_import", "tradelearn.query.Query", "tradelearn.data"),
+    MigrationCheckpoint("factor_import", "removed Query facade", "tradelearn.factor"),
     MigrationCheckpoint("backtest_runner", "Backtest(data, Strategy).run()", "bt.Cerebro"),
     MigrationCheckpoint("strategy_init", "Strategy.init", "Strategy.__init__"),
     MigrationCheckpoint("line_current", "self.data.close[-1]", "self.data.close[0]"),
     MigrationCheckpoint("params", "class attributes", "params + self.p"),
     MigrationCheckpoint("indicator_registration", "self.I(func, ...)", "bt.talib / bt.tdx / bt.tv"),
-    MigrationCheckpoint("factor_analyzer", "strategy.examine", "tradelearn.factor.FactorAnalyzer"),
-    MigrationCheckpoint("reporter", "Evaluate.analysis_report", "tradelearn.report.Reporter"),
+    MigrationCheckpoint("factor_analyzer", "removed Examine facade", "tradelearn.factor.FactorAnalyzer"),
+    MigrationCheckpoint("reporter", "removed Evaluate facade", "tradelearn.report.Reporter"),
     MigrationCheckpoint("ml", "AutoML / CausalGraph", "tradelearn.ml.MLStrategy"),
 )
 

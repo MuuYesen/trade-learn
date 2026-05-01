@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+import tradelearn.engine as bt
 from tradelearn.engine import Cerebro
 from tradelearn.ml import MLStrategy
 
@@ -37,6 +38,12 @@ def _bars() -> pd.DataFrame:
         },
         index=pd.date_range("2024-01-01", periods=4, tz="UTC"),
     )
+
+
+def test_engine_facade_exports_mlstrategy() -> None:
+    """Engine users can import MLStrategy from the Engine facade."""
+    assert bt.MLStrategy is MLStrategy
+    assert "MLStrategy" in bt.__all__
 
 
 def test_mlstrategy_trains_predicts_and_places_orders() -> None:

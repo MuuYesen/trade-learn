@@ -1,13 +1,301 @@
-"""Tongdaxin 30 classic indicator wrappers backed by MyTT."""
+"""Tongdaxin 30 classic indicator wrappers backed by internal MyTT formulas."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 
+import numpy as np
 import pandas as pd
 
 from tradelearn.indicators.base import FunctionIndicator
-from tradelearn.query.tec import MyTT
+
+
+def _arr(values) -> np.ndarray:
+    return np.asarray(values, dtype=float)
+
+
+def _s(values) -> pd.Series:
+    return pd.Series(_arr(values))
+
+
+def _nan_to_zero(values) -> np.ndarray:
+    return np.nan_to_num(np.asarray(values, dtype=float), nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def _mytt_ma(values, N=5):
+    return _s(values).rolling(int(N), min_periods=1).mean().to_numpy()
+
+
+def _mytt_ema(values, N=5):
+    return _s(values).ewm(span=int(N), adjust=False).mean().to_numpy()
+
+
+def _mytt_sma(values, N=5, M=1):
+    values = _arr(values)
+    n = int(N)
+    m = float(M)
+    out = np.empty_like(values, dtype=float)
+    if len(values) == 0:
+        return out
+    out[0] = values[0]
+    for i in range(1, len(values)):
+        out[i] = (m * values[i] + (n - m) * out[i - 1]) / n
+    return out
+
+
+def _mytt_wma(values, N=5):
+    weights = np.arange(1, int(N) + 1, dtype=float)
+    return _s(values).rolling(int(N), min_periods=1).apply(
+        lambda x: np.dot(x, weights[-len(x):]) / weights[-len(x):].sum(),
+        raw=True,
+    ).to_numpy()
+
+
+def _mytt_macd(values, SHORT=12, LONG=26, M=9):
+    dif = _mytt_ema(values, SHORT) - _mytt_ema(values, LONG)
+    dea = _mytt_ema(dif, M)
+    return dif, dea, (dif - dea) * 2
+
+
+def _mytt_kdj(close, high, low, N=9, M1=3, M2=3):
+    close_s = _s(close)
+    high_n = _s(high).rolling(int(N), min_periods=1).max()
+    low_n = _s(low).rolling(int(N), min_periods=1).min()
+    rsv = ((close_s - low_n) / (high_n - low_n).replace(0, np.nan) * 100).fillna(0).to_numpy()
+    k = _mytt_sma(rsv, M1, 1)
+    d = _mytt_sma(k, M2, 1)
+    return k, d, 3 * k - 2 * d
+
+
+def _mytt_rsi(close, N=24):
+    diff = _s(close).diff().fillna(0)
+    up = diff.clip(lower=0)
+    down = (-diff).clip(lower=0)
+    total = _s(_mytt_sma(up + down, N, 1)).replace(0, np.nan)
+    return (_s(_mytt_sma(up, N, 1)) / total * 100).fillna(0).to_numpy()
+
+
+def _mytt_wr(close, high, low, N=10, N1=6):
+    def _wr(n):
+        high_n = _s(high).rolling(int(n), min_periods=1).max()
+        low_n = _s(low).rolling(int(n), min_periods=1).min()
+        width = (high_n - low_n).replace(0, np.nan)
+        return ((high_n - _s(close)) / width * 100).fillna(0).to_numpy()
+
+    return _wr(N), _wr(N1)
+
+
+def _mytt_bias(close, L1=6, L2=12, L3=24):
+    close_s = _s(close)
+
+    def _bias(n):
+        ma = _s(_mytt_ma(close, n)).replace(0, np.nan)
+        return ((close_s - ma) / ma * 100).fillna(0).to_numpy()
+
+    return _bias(L1), _bias(L2), _bias(L3)
+
+
+def _mytt_boll(close, N=20, P=2):
+    mid = _mytt_ma(close, N)
+    std = _s(close).rolling(int(N), min_periods=1).std(ddof=0).fillna(0).to_numpy()
+    return mid + float(P) * std, mid, mid - float(P) * std
+
+
+def _mytt_psy(close, N=12, M=6):
+    up = (_s(close).diff() > 0).astype(float)
+    psy = up.rolling(int(N), min_periods=1).mean().to_numpy() * 100
+    return psy, _mytt_ma(psy, M)
+
+
+def _mytt_cci(close, high, low, N=14):
+    tp = (_s(close) + _s(high) + _s(low)) / 3
+    ma = tp.rolling(int(N), min_periods=1).mean()
+    md = (tp - ma).abs().rolling(int(N), min_periods=1).mean().replace(0, np.nan)
+    return ((tp - ma) / (0.015 * md)).fillna(0).to_numpy()
+
+
+def _mytt_atr(close, high, low, N=20):
+    close_s = _s(close)
+    tr = pd.concat(
+        [
+            (_s(high) - _s(low)).abs(),
+            (_s(high) - close_s.shift(1)).abs(),
+            (_s(low) - close_s.shift(1)).abs(),
+        ],
+        axis=1,
+    ).max(axis=1).fillna(0)
+    return _mytt_ma(tr, N)
+
+
+def _mytt_bbi(close, M1=3, M2=6, M3=12, M4=20):
+    return (_mytt_ma(close, M1) + _mytt_ma(close, M2) + _mytt_ma(close, M3) + _mytt_ma(close, M4)) / 4
+
+
+def _mytt_dmi(close, high, low, M1=14, M2=6):
+    high_s, low_s = _s(high), _s(low)
+    tr = _mytt_atr(close, high, low, 1)
+    hd = high_s.diff().fillna(0)
+    ld = -low_s.diff().fillna(0)
+    p_dm = np.where((hd > 0) & (hd > ld), hd, 0.0)
+    m_dm = np.where((ld > 0) & (ld > hd), ld, 0.0)
+    tr_ma = _s(_mytt_ma(tr, M1)).replace(0, np.nan)
+    pdi = (_s(_mytt_ma(p_dm, M1)) / tr_ma * 100).fillna(0).to_numpy()
+    mdi = (_s(_mytt_ma(m_dm, M1)) / tr_ma * 100).fillna(0).to_numpy()
+    dx = (np.abs(pdi - mdi) / pd.Series(pdi + mdi).replace(0, np.nan) * 100).fillna(0).to_numpy()
+    adx = _mytt_ma(dx, M2)
+    return pdi, mdi, adx, _mytt_ma(adx, M2)
+
+
+def _mytt_trix(close, M1=12, M2=20):
+    tr = _s(_mytt_ema(_mytt_ema(_mytt_ema(close, M1), M1), M1)).pct_change().fillna(0).to_numpy() * 100
+    return tr, _mytt_ma(tr, M2)
+
+
+def _mytt_vr(close, volume, M1=26):
+    close_s = _s(close)
+    vol = _s(volume)
+    up = vol.where(close_s > close_s.shift(1), 0).rolling(int(M1), min_periods=1).sum()
+    down = vol.where(close_s <= close_s.shift(1), 0)
+    down = down.rolling(int(M1), min_periods=1).sum().replace(0, np.nan)
+    return (up / down * 100).fillna(0).to_numpy()
+
+
+def _mytt_mtm(close, N=12, M=6):
+    mtm = (_s(close) - _s(close).shift(int(N))).fillna(0).to_numpy()
+    return mtm, _mytt_ma(mtm, M)
+
+
+def _mytt_roc(close, N=12, M=6):
+    previous = _s(close).shift(int(N)).replace(0, np.nan)
+    roc = ((_s(close) - _s(close).shift(int(N))) / previous * 100).fillna(0).to_numpy()
+    return roc, _mytt_ma(roc, M)
+
+
+def _mytt_taq(high, low, N=20):
+    up = _s(high).rolling(int(N), min_periods=1).max().to_numpy()
+    down = _s(low).rolling(int(N), min_periods=1).min().to_numpy()
+    return up, (up + down) / 2, down
+
+
+def _mytt_ktn(close, high, low, N=20, M=10):
+    mid = _mytt_ema(close, N)
+    atr = _mytt_atr(close, high, low, M)
+    return mid + atr, mid, mid - atr
+
+
+def _mytt_cr(close, high, low, N=20):
+    mid_prev = ((_s(high) + _s(low)) / 2).shift(1)
+    up = (_s(high) - mid_prev).clip(lower=0).rolling(int(N), min_periods=1).sum()
+    down = (mid_prev - _s(low)).clip(lower=0)
+    down = down.rolling(int(N), min_periods=1).sum().replace(0, np.nan)
+    return (up / down * 100).fillna(0).to_numpy()
+
+
+def _mytt_emv(high, low, volume, N=14, M=9):
+    mid = (_s(high) + _s(low)) / 2
+    distance = mid.diff().fillna(0)
+    box_ratio = (_s(volume) / 10000) / (_s(high) - _s(low)).replace(0, np.nan)
+    emv = (distance / box_ratio).replace([np.inf, -np.inf], 0).fillna(0).to_numpy()
+    emv = _mytt_ma(emv, N)
+    return emv, _mytt_ma(emv, M)
+
+
+def _mytt_dpo(close, M1=20, M2=10, M3=6):
+    dpo = (_s(close) - _s(_mytt_ma(close, M1)).shift(int(M2))).fillna(0).to_numpy()
+    return dpo, _mytt_ma(dpo, M3)
+
+
+def _mytt_brar(open_, close, high, low, M1=26):
+    ar_up = (_s(high) - _s(open_)).rolling(int(M1), min_periods=1).sum()
+    ar_down = (_s(open_) - _s(low)).rolling(int(M1), min_periods=1).sum()
+    ar = (ar_up / ar_down.replace(0, np.nan) * 100).fillna(0).to_numpy()
+    br_up = (_s(high) - _s(close).shift(1)).clip(lower=0)
+    br_up = br_up.rolling(int(M1), min_periods=1).sum()
+    br_down = (_s(close).shift(1) - _s(low)).clip(lower=0)
+    br_down = br_down.rolling(int(M1), min_periods=1).sum().replace(0, np.nan)
+    br = (br_up / br_down * 100).fillna(0).to_numpy()
+    return ar, br
+
+
+def _mytt_dfma(close, N1=10, N2=50, M=10):
+    dif = _mytt_ma(close, N1) - _mytt_ma(close, N2)
+    return dif, _mytt_ma(dif, M)
+
+
+def _mytt_mass(high, low, N1=9, N2=25, M=6):
+    spread = _s(high) - _s(low)
+    mass = (_s(_mytt_ema(spread, N1)) / _s(_mytt_ema(_mytt_ema(spread, N1), N1)).replace(0, np.nan)).fillna(0)
+    mass = mass.rolling(int(N2), min_periods=1).sum().to_numpy()
+    return mass, _mytt_ma(mass, M)
+
+
+def _mytt_expma(close, N1=12, N2=50):
+    return _mytt_ema(close, N1), _mytt_ema(close, N2)
+
+
+def _mytt_obv(close, volume):
+    direction = np.sign(_s(close).diff().fillna(0))
+    return (direction * _s(volume)).cumsum().to_numpy()
+
+
+def _mytt_mfi(close, high, low, volume, N=14):
+    typical = (_s(close) + _s(high) + _s(low)) / 3
+    money = typical * _s(volume)
+    pos = money.where(typical > typical.shift(1), 0).rolling(int(N), min_periods=1).sum()
+    neg = money.where(typical <= typical.shift(1), 0)
+    neg = neg.rolling(int(N), min_periods=1).sum().replace(0, np.nan)
+    return (100 - 100 / (1 + pos / neg)).fillna(0).to_numpy()
+
+
+def _mytt_asi(open_, close, high, low, M1=26, M2=10):
+    si = (_s(close) - _s(close).shift(1)).fillna(0) + (_s(close) - _s(open_)) / 2
+    asi = si.cumsum().to_numpy()
+    return asi, _mytt_ma(asi, M2)
+
+
+def _mytt_xsii(close, high, low, N=102, M=7):
+    mid = _mytt_ma(close, M)
+    td1 = _s(high).rolling(int(N), min_periods=1).max().to_numpy()
+    td4 = _s(low).rolling(int(N), min_periods=1).min().to_numpy()
+    return td1, mid + (td1 - td4) / 3, mid - (td1 - td4) / 3, td4
+
+
+class _MyTT:
+    MA = staticmethod(_mytt_ma)
+    EMA = staticmethod(_mytt_ema)
+    SMA = staticmethod(_mytt_sma)
+    WMA = staticmethod(_mytt_wma)
+    MACD = staticmethod(_mytt_macd)
+    KDJ = staticmethod(_mytt_kdj)
+    RSI = staticmethod(_mytt_rsi)
+    WR = staticmethod(_mytt_wr)
+    BIAS = staticmethod(_mytt_bias)
+    BOLL = staticmethod(_mytt_boll)
+    PSY = staticmethod(_mytt_psy)
+    CCI = staticmethod(_mytt_cci)
+    ATR = staticmethod(_mytt_atr)
+    BBI = staticmethod(_mytt_bbi)
+    DMI = staticmethod(_mytt_dmi)
+    TRIX = staticmethod(_mytt_trix)
+    VR = staticmethod(_mytt_vr)
+    MTM = staticmethod(_mytt_mtm)
+    ROC = staticmethod(_mytt_roc)
+    TAQ = staticmethod(_mytt_taq)
+    KTN = staticmethod(_mytt_ktn)
+    CR = staticmethod(_mytt_cr)
+    EMV = staticmethod(_mytt_emv)
+    DPO = staticmethod(_mytt_dpo)
+    BRAR = staticmethod(_mytt_brar)
+    DFMA = staticmethod(_mytt_dfma)
+    MASS = staticmethod(_mytt_mass)
+    EXPMA = staticmethod(_mytt_expma)
+    OBV = staticmethod(_mytt_obv)
+    MFI = staticmethod(_mytt_mfi)
+    ASI = staticmethod(_mytt_asi)
+    XSII = staticmethod(_mytt_xsii)
+
+
+MyTT = _MyTT()
 
 
 def _index(values: pd.Series | Sequence[float]) -> pd.Index | None:

@@ -237,8 +237,8 @@ class Cerebro:
         return [] if chart is None else [chart]
 
     def report(self, path: str = "report.html", benchmark: Any | None = None) -> Any:
-        """Write a Tradelearn HTML report for the most recent run."""
-        return self._last_reporter().html(path, benchmark=benchmark)
+        """Write a Tradelearn report for the most recent run."""
+        return self._last_reporter().report(path, benchmark=benchmark)
 
     def run(self, **kwargs: Any) -> list[Strategy]:
         self._apply_run_kwargs(kwargs)

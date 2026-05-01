@@ -2,22 +2,29 @@
 
 import importlib
 import warnings
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from tradelearn.factor.alpha import alpha191
 
-try:
-    from tradelearn.query.alpha.alphas191 import Alphas191 as LegacyAlphas191
-except ModuleNotFoundError:
+_LEGACY_ALPHA191_PATH = (
+    Path(__file__).resolve().parents[3] / "reference" / "tradelearn_1x" / "query" / "alpha" / "alphas191.py"
+)
+_legacy_spec = importlib.util.spec_from_file_location("legacy_alpha191", _LEGACY_ALPHA191_PATH)
+if _legacy_spec is not None and _legacy_spec.loader is not None:
+    _legacy_module = importlib.util.module_from_spec(_legacy_spec)
+    _legacy_spec.loader.exec_module(_legacy_module)
+    LegacyAlphas191 = _legacy_module.Alphas191
+else:
     LegacyAlphas191 = None
 
 
-def test_alpha191_exports_migrated_formulas_like_legacy_query() -> None:
+def test_alpha191_exports_migrated_formulas_like_legacy_oracle() -> None:
     """The v2 Alpha191 facade returns legacy-compatible long-form columns."""
     if LegacyAlphas191 is None:
-        pytest.skip("legacy tradelearn.query.alpha facade is not shipped")
+        pytest.skip("legacy Alpha191 oracle is not available")
     stock_data = _stock_data()
     bench_data = _bench_data()
     names = [
@@ -217,211 +224,6 @@ def test_alpha191_exports_migrated_formulas_like_legacy_query() -> None:
     )
 
 
-def test_query_alphas191_delegates_supported_formulas_to_v2_facade() -> None:
-    """Query.alphas191 keeps its output contract while using the v2 facade."""
-    query_module = pytest.importorskip("tradelearn.query.query")
-    Query = query_module.Query
-    stock_data = _stock_data()
-    bench_data = _bench_data()
-    names = [
-        "alpha001",
-        "alpha002",
-        "alpha003",
-        "alpha004",
-        "alpha005",
-        "alpha006",
-        "alpha007",
-        "alpha008",
-        "alpha009",
-        "alpha010",
-        "alpha011",
-        "alpha012",
-        "alpha013",
-        "alpha014",
-        "alpha015",
-        "alpha016",
-        "alpha017",
-        "alpha018",
-        "alpha019",
-        "alpha020",
-        "alpha021",
-        "alpha022",
-        "alpha023",
-        "alpha024",
-        "alpha025",
-        "alpha026",
-        "alpha027",
-        "alpha028",
-        "alpha029",
-        "alpha031",
-        "alpha032",
-        "alpha033",
-        "alpha034",
-        "alpha035",
-        "alpha036",
-        "alpha037",
-        "alpha038",
-        "alpha039",
-        "alpha040",
-        "alpha041",
-        "alpha042",
-        "alpha043",
-        "alpha044",
-        "alpha045",
-        "alpha046",
-        "alpha047",
-        "alpha048",
-        "alpha049",
-        "alpha050",
-        "alpha051",
-        "alpha052",
-        "alpha053",
-        "alpha054",
-        "alpha055",
-        "alpha056",
-        "alpha057",
-        "alpha058",
-        "alpha059",
-        "alpha060",
-        "alpha061",
-        "alpha062",
-        "alpha063",
-        "alpha064",
-        "alpha065",
-        "alpha066",
-        "alpha067",
-        "alpha068",
-        "alpha069",
-        "alpha070",
-        "alpha071",
-        "alpha072",
-        "alpha073",
-        "alpha074",
-        "alpha075",
-        "alpha076",
-        "alpha077",
-        "alpha078",
-        "alpha079",
-        "alpha080",
-        "alpha081",
-        "alpha082",
-        "alpha083",
-        "alpha084",
-        "alpha085",
-        "alpha086",
-        "alpha087",
-        "alpha088",
-        "alpha089",
-        "alpha090",
-        "alpha091",
-        "alpha092",
-        "alpha093",
-        "alpha094",
-        "alpha095",
-        "alpha096",
-        "alpha097",
-        "alpha098",
-        "alpha099",
-        "alpha100",
-        "alpha101",
-        "alpha102",
-        "alpha103",
-        "alpha104",
-        "alpha105",
-        "alpha106",
-        "alpha107",
-        "alpha108",
-        "alpha109",
-        "alpha110",
-        "alpha111",
-        "alpha112",
-        "alpha113",
-        "alpha114",
-        "alpha115",
-        "alpha116",
-        "alpha117",
-        "alpha118",
-        "alpha119",
-        "alpha120",
-        "alpha121",
-        "alpha122",
-        "alpha123",
-        "alpha124",
-        "alpha125",
-        "alpha126",
-        "alpha127",
-        "alpha128",
-        "alpha129",
-        "alpha130",
-        "alpha131",
-        "alpha132",
-        "alpha133",
-        "alpha134",
-        "alpha135",
-        "alpha136",
-        "alpha137",
-        "alpha138",
-        "alpha139",
-        "alpha140",
-        "alpha141",
-        "alpha142",
-        "alpha144",
-        "alpha145",
-        "alpha146",
-        "alpha147",
-        "alpha148",
-        "alpha150",
-        "alpha151",
-        "alpha152",
-        "alpha153",
-        "alpha154",
-        "alpha155",
-        "alpha156",
-        "alpha157",
-        "alpha158",
-        "alpha159",
-        "alpha160",
-        "alpha161",
-        "alpha162",
-        "alpha163",
-        "alpha164",
-        "alpha165",
-        "alpha166",
-        "alpha167",
-        "alpha168",
-        "alpha169",
-        "alpha170",
-        "alpha171",
-        "alpha172",
-        "alpha173",
-        "alpha174",
-        "alpha175",
-        "alpha176",
-        "alpha177",
-        "alpha178",
-        "alpha179",
-        "alpha180",
-        "alpha181",
-        "alpha182",
-        "alpha183",
-        "alpha184",
-        "alpha185",
-        "alpha186",
-        "alpha187",
-        "alpha188",
-        "alpha189",
-        "alpha191",
-    ]
-
-    result = Query.alphas191(stock_data, bench_data, names)
-    expected = alpha191(stock_data, bench_data, names=names)
-
-    pd.testing.assert_frame_equal(
-        result.sort_values(["date", "code"]).reset_index(drop=True),
-        expected.sort_values(["date", "code"]).reset_index(drop=True),
-    )
-
-
 def test_alpha191_supports_reference_benchmark_formulas() -> None:
     """Benchmark-backed formulas migrated from commented 1.x reference formulas."""
     stock_data = _stock_data()
@@ -470,8 +272,6 @@ def test_alpha191_supports_reference_benchmark_formulas() -> None:
 
 def test_alpha191_v2_facade_avoids_future_warning_for_missing_values() -> None:
     """The v2 Alpha191 path should not inherit legacy None-to-float warnings."""
-    query_module = pytest.importorskip("tradelearn.query.query")
-    Query = query_module.Query
     stock_data = _stock_data()
     bench_data = _bench_data()
     names = [
@@ -515,7 +315,6 @@ def test_alpha191_v2_facade_avoids_future_warning_for_missing_values() -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", FutureWarning)
         alpha191(stock_data, bench_data, names=names)
-        Query.alphas191(stock_data, bench_data, names)
 
     assert not [
         warning

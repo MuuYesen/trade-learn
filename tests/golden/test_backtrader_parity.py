@@ -67,7 +67,7 @@ def test_oracle_group_includes_backtrader() -> None:
         "rsi_oversold",
         "bollinger_breakout",
         "macd_cross",
-        "tdx30_kdj",
+        "tdx_kdj",
         "supertrend_tv",
         "pairs_trading",
         "equal_weight",

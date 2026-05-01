@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated
 
 import typer
 
@@ -125,10 +125,7 @@ def lab(
 @app.command()
 def mcp(
     config: Annotated[Path | None, typer.Option("--config", help="Config file path.")] = None,
-    transport: Annotated[
-        Literal["stdio", "sse", "streamable-http"],
-        typer.Option("--transport", help="MCP transport."),
-    ] = "stdio",
+    transport: Annotated[str, typer.Option("--transport", help="MCP transport.")] = "stdio",
     host: Annotated[str, typer.Option("--host", help="MCP HTTP bind host.")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", help="MCP HTTP port.")] = 8765,
     dry_run: Annotated[
@@ -138,6 +135,9 @@ def mcp(
 ) -> None:
     """Start the MCP server entrypoint."""
 
+    if transport not in {"stdio", "sse", "streamable-http"}:
+        typer.echo("Unsupported MCP transport. Choose: stdio, sse, streamable-http", err=True)
+        raise typer.Exit(2)
     if dry_run:
         typer.echo(
             "tradelearn mcp "
@@ -217,8 +217,8 @@ def _starter_config() -> str:
 
 def _starter_strategy() -> str:
     return (
-        "from tradelearn.engine import Strategy\n\n\n"
-        "class DemoStrategy(Strategy):\n"
+        "import tradelearn.engine as bt\n\n\n"
+        "class DemoStrategy(bt.Strategy):\n"
         "    params = ((\"size\", 1),)\n\n"
         "    def next(self) -> None:\n"
         "        if not self.position:\n"

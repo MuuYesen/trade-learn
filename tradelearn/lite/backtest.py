@@ -77,7 +77,7 @@ class Backtest:
         self.broker.configure_matching(trade_on_close=self.trade_on_close)
         self.broker.set_storage(self._storage)
 
-        # Tradelearn 1.x passes strategy params through run(**kwargs).
+        # Lite passes strategy params through run(**kwargs).
         if kwargs:
             self.strats = [(self._strategy_cls, (), kwargs)]
 
@@ -145,8 +145,8 @@ class Backtest:
         return [] if chart is None else [chart]
 
     def report(self, path: str = "report.html", benchmark=None):
-        """Write a Tradelearn HTML report for the most recent Lite run."""
-        return self._last_reporter().html(path, benchmark=benchmark)
+        """Write a Tradelearn report for the most recent Lite run."""
+        return self._last_reporter().report(path, benchmark=benchmark)
 
     def _last_reporter(self):
         stats = getattr(self, "_last_stats", None)

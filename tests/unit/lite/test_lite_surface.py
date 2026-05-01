@@ -59,7 +59,7 @@ def test_lite_target_weight_snapshots_batch_prices_and_positions() -> None:
     }
 
 
-def test_lite_uses_backtrader_bar_indexing_with_1x_position_call() -> None:
+def test_lite_uses_backtrader_bar_indexing_with_lite_position_call() -> None:
     seen: dict[str, float] = {}
 
     class LiteStrategy(Strategy):

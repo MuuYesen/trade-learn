@@ -11,13 +11,13 @@ import os
 from pathlib import Path
 
 import pandas as pd
-from tradelearn.lite import Backtest, Strategy
+import tradelearn.lite as tl
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "benchmarks" / "data" / "backtesting"
 
 
-class EMA_Cross_Strategy(Strategy):
+class EMA_Cross_Strategy(tl.Strategy):
     """
     Estrategia de cruce de medias móviles exponenciales
     """
@@ -101,7 +101,7 @@ def run_backtest(symbol):
     initial_cash = 5000 if symbol == 'ETHUSDT' else 500000  # $500K para BTC escalado
     
     # Crear y ejecutar backtest
-    bt = Backtest(
+    bt = tl.Backtest(
         data, 
         EMA_Cross_Strategy,
         cash=initial_cash,

@@ -28,7 +28,11 @@ def test_cli_new_creates_project_skeleton(tmp_path) -> None:
     assert result.exit_code == 0
     project = tmp_path / "demo"
     assert (project / ".tradelearn" / "config.yaml").exists()
-    assert (project / "strategy.py").exists()
+    strategy = project / "strategy.py"
+    assert strategy.exists()
+    text = strategy.read_text(encoding="utf-8")
+    assert "import tradelearn.engine as bt" in text
+    assert "class DemoStrategy(bt.Strategy):" in text
     assert (project / "notebooks" / "01_explore.ipynb").exists()
     assert (project / "notebooks" / "02_factor.ipynb").exists()
     assert (project / "notebooks" / "03_backtest.ipynb").exists()

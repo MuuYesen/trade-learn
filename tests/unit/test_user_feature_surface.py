@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from zipfile import ZipFile
 from typing import Any
 
 import pandas as pd
@@ -71,6 +72,21 @@ def test_engine_plot_and_html_use_reporter_after_run(tmp_path: Path) -> None:
     assert not hasattr(cerebro, "html")
 
 
+def test_engine_report_dispatches_to_excel(tmp_path: Path) -> None:
+    cerebro = bt.Cerebro(trade_on_close=True)
+    cerebro.adddata(_bars(), name="asset_a")
+    cerebro.addstrategy(EngineBuyAndHold)
+    cerebro.run()
+
+    path = tmp_path / "engine-report.xlsx"
+    result = cerebro.report(path)
+
+    assert result == path
+    assert path.exists()
+    with ZipFile(path) as workbook:
+        assert "xl/workbook.xml" in workbook.namelist()
+
+
 def test_lite_plot_and_html_use_shared_reporter_after_run(tmp_path: Path) -> None:
     backtest = Backtest(_bars(), LiteBuyAndHold, cash=10_000, trade_on_close=True)
     stats = backtest.run()
@@ -86,6 +102,19 @@ def test_lite_plot_and_html_use_shared_reporter_after_run(tmp_path: Path) -> Non
     assert "Price / Trades" in path.read_text()
     assert hasattr(backtest, "report")
     assert not hasattr(backtest, "html")
+
+
+def test_lite_report_dispatches_to_excel(tmp_path: Path) -> None:
+    backtest = Backtest(_bars(), LiteBuyAndHold, cash=10_000, trade_on_close=True)
+    backtest.run()
+
+    path = tmp_path / "lite-report.xlsx"
+    result = backtest.report(path)
+
+    assert result == path
+    assert path.exists()
+    with ZipFile(path) as workbook:
+        assert "xl/workbook.xml" in workbook.namelist()
 
 
 def test_oco_multitimeframe_multiasset_ml_and_metrics_surfaces() -> None:

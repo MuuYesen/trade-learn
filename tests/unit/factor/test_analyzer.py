@@ -326,6 +326,19 @@ def test_factor_analyzer_html_writes_file(tmp_path) -> None:
     assert "<html" in content.lower()
 
 
+def test_factor_analyzer_report_dispatches_html(tmp_path) -> None:
+    """report() is the user-facing alias for factor HTML reports."""
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
+    output = tmp_path / "factor_report.html"
+
+    result = analyzer.report(str(output))
+
+    assert result == output
+    assert output.exists()
+    assert "<html" in output.read_text().lower()
+
+
 def test_clean_factor_and_forward_returns_builds_alphalens_style_frame() -> None:
     factor = _series(
         [

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -185,7 +186,7 @@ class Reporter:
         return charts.trade_distribution(self.trade_distribution(bins=bins))
 
     def market_replay_chart(self):
-        """Return a 1.x-style market replay chart when market data exists."""
+        """Return a market replay chart when market data exists."""
         if self.market_data is None:
             return None
         return charts.market_replay(
@@ -236,6 +237,25 @@ class Reporter:
     def html(self, path: str, benchmark: pd.Series | None = None) -> Any:
         """Write an HTML report."""
         return write_html_report(self, path, benchmark=benchmark)
+
+    def report(
+        self,
+        path: str | Path,
+        benchmark: pd.Series | None = None,
+        format: str | None = None,
+    ) -> Any:
+        """Write a report, dispatching to HTML or Excel from suffix/format."""
+        output = Path(path)
+        chosen = (format or output.suffix.lstrip(".") or "html").lower()
+        if chosen in {"htm", "html"}:
+            if not output.suffix:
+                output = output.with_suffix(".html")
+            return self.html(output, benchmark=benchmark)
+        if chosen in {"xls", "xlsx", "excel"}:
+            if not output.suffix:
+                output = output.with_suffix(".xlsx")
+            return self.excel(output, benchmark=benchmark)
+        raise ValueError(f"Unsupported report format: {chosen}")
 
     def explore(self) -> Any:
         """Open an interactive pygwalker explorer for trades."""

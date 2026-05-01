@@ -32,7 +32,7 @@ def market_replay(
     fills: pd.DataFrame | None = None,
     equity: pd.Series | None = None,
 ):
-    """Return a 1.x-style market replay grid with equity, P/L, OHLC, trades, and volume."""
+    """Return a market replay grid with equity, P/L, OHLC, trades, and volume."""
     frame = _market_frame(market_data)
     if frame.empty:
         return price_trades(market_data, fills)
@@ -841,7 +841,7 @@ def _attach_bar_index(fills: pd.DataFrame, frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def _equity_replay_frame(equity: pd.Series, frame: pd.DataFrame) -> pd.DataFrame:
-    """Return equity aligned to replay bar indices with 1.x-style derived columns."""
+    """Return equity aligned to replay bar indices with derived replay columns."""
     equity_frame = _plot_frame(pd.Series(equity).dropna(), "equity")
     if equity_frame.empty:
         return pd.DataFrame()
@@ -866,7 +866,7 @@ def _equity_replay_frame(equity: pd.Series, frame: pd.DataFrame) -> pd.DataFrame
 
 
 def _trade_segments(fills: pd.DataFrame, frame: pd.DataFrame) -> pd.DataFrame:
-    """Build approximate 1.x-style entry-exit trade segments from fill rows."""
+    """Build approximate entry-exit trade segments from fill rows."""
     if fills.empty:
         return pd.DataFrame()
     active: dict[str, dict[str, object]] = {}
@@ -939,7 +939,7 @@ def _trade_marker_size(size: float) -> float:
 
 
 def _market_section(title: str, *, height: int, x_range):
-    """Return a 1.x-style linked replay figure."""
+    """Return a linked replay figure."""
     return figure(
         title=title,
         x_axis_type="linear",
@@ -956,7 +956,7 @@ def _market_section(title: str, *, height: int, x_range):
 
 
 def _style_market_section(plot) -> None:
-    """Apply common 1.x-inspired Bokeh styling."""
+    """Apply common Bokeh market Bokeh styling."""
     plot.min_border_left = 8
     plot.min_border_top = 8
     plot.min_border_bottom = 8

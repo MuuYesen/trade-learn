@@ -43,8 +43,28 @@ def test_reporter_html_writes_single_file_tear_sheet(tmp_path) -> None:
     assert "annual_return" in html
 
 
+def test_reporter_report_dispatches_html_by_suffix(tmp_path) -> None:
+    """Reporter.report writes HTML when the output suffix is .html."""
+    path = tmp_path / "report.html"
+
+    result = Reporter(_stats(), periods=252).report(path)
+
+    assert result == path
+    assert "Summary Stats" in path.read_text()
+
+
+def test_reporter_report_uses_format_when_suffix_missing(tmp_path) -> None:
+    """Reporter.report can choose an output type from format=."""
+    path = tmp_path / "report"
+
+    result = Reporter(_stats(), periods=252).report(path, format="html")
+
+    assert result == tmp_path / "report.html"
+    assert result.exists()
+
+
 def test_reporter_html_adds_price_trades_chart_when_market_data_exists(tmp_path) -> None:
-    """Reporter.html can include a 1.x-style price curve with fills."""
+    """Reporter.html can include a price curve with fills."""
     path = tmp_path / "market-report.html"
     stats = _stats()
     market_data = pd.DataFrame(

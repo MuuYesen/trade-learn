@@ -18,7 +18,7 @@
     {"name": "rsi_oversold", "description": "RSI oversold reversal"},
     {"name": "bollinger_breakout", "description": "Bollinger breakout"},
     {"name": "macd_cross", "description": "MACD crossover"},
-    {"name": "tdx30_kdj", "description": "A-share KDJ"},
+    {"name": "tdx_kdj", "description": "A-share KDJ"},
     {"name": "supertrend_tv", "description": "TradingView Supertrend"},
     {"name": "pairs_trading", "description": "Multi-asset pairs trading"},
     {"name": "equal_weight", "description": "Equal-weight rotation"},

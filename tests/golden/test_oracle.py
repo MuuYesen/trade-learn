@@ -70,7 +70,6 @@ def test_current_provider_source_uses_opentdx_not_retired_names() -> None:
         ROOT / "scripts" / "build_golden.py",
         ROOT / "scripts" / "check_oracle.py",
         ROOT / "tradelearn" / "data" / "providers.py",
-        ROOT / "tradelearn" / "query" / "query.py",
     ]
     combined = "\n".join(path.read_text(encoding="utf-8") for path in paths)
 
@@ -335,7 +334,7 @@ def test_build_golden_backtrader_oracle_generates_supported_tv_subset(
         "rsi_oversold",
         "bollinger_breakout",
         "macd_cross",
-        "tdx30_kdj",
+        "tdx_kdj",
         "supertrend_tv",
         "pairs_trading",
         "equal_weight",

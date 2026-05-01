@@ -104,7 +104,7 @@ class IndicatorProxy:
 
 
 class IndicatorBundle:
-    """Gradually revealed multi-column indicator bundle used by ``data.ta``."""
+    """Gradually revealed multi-column indicator bundle used by Lite indicator results."""
 
     __slots__ = ("_lines", "_frame", "attrs")
 

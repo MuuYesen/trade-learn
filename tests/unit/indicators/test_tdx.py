@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from tradelearn import ta
-from tradelearn.query.tec import MyTT
+from tradelearn.indicators.tdx.mytt_adapter import MyTT
 
 RTOL = 1e-10
 
@@ -62,8 +62,8 @@ def test_tdx_kdj_matches_mytt_with_stable_columns() -> None:
     pd.testing.assert_index_equal(result.index, close.index)
 
 
-def test_tdx_rsi_matches_mytt_and_tdx30_alias() -> None:
-    """ta.tdx.rsi matches MyTT RSI and ta.tdx30 aliases the same namespace."""
+def test_tdx_rsi_matches_mytt() -> None:
+    """ta.tdx.rsi matches MyTT RSI."""
     close = _close()
 
     result = ta.tdx.rsi(close, n=6)
@@ -76,22 +76,11 @@ def test_tdx_rsi_matches_mytt_and_tdx30_alias() -> None:
     )
     pd.testing.assert_index_equal(result.index, close.index)
     assert result.name == "RSI_6"
-    assert ta.tdx30 is ta.tdx
 
 
-def test_tdx_tdx30_submodule_exposes_classic_functions() -> None:
-    """ta.tdx.tdx30 exposes the same classic indicator functions."""
-    close = _close()
-
-    result = ta.tdx.tdx30.MA(close, N=4)
-
-    np.testing.assert_allclose(
-        result.to_numpy(),
-        MyTT.MA(close.to_numpy(), 4),
-        rtol=RTOL,
-        equal_nan=True,
-    )
-    pd.testing.assert_index_equal(result.index, close.index)
+def test_tdx30_alias_is_removed() -> None:
+    assert not hasattr(ta, "tdx30")
+    assert not hasattr(ta.tdx, "tdx30")
 
 
 def test_tdx_wr_bias_boll_psy_match_mytt_with_stable_columns() -> None:

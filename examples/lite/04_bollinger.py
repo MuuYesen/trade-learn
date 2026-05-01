@@ -1,15 +1,15 @@
-"""Tradelearn 1.x-style Bollinger band strategy for the Lite API."""
+"""Lite Bollinger band strategy for the Lite API."""
 
 from __future__ import annotations
 
-from tradelearn.lite import Strategy
+import tradelearn.lite as tl
 
 
 def crossover(series1, series2) -> bool:
     return series1[-1] < series2[-1] and series1[0] > series2[0]
 
 
-class OneXBollBandCross(Strategy):
+class LiteBollBandCross(tl.Strategy):
     title = "Long"
     n = 20
     p = 2

@@ -13,13 +13,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from tradelearn.lite import Backtest, Strategy
+import tradelearn.lite as tl
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "benchmarks" / "data" / "backtesting"
 
 
-class MACD_Volume_Strategy(Strategy):
+class MACD_Volume_Strategy(tl.Strategy):
     """
     Estrategia MACD + Confirmación de Volumen
     """
@@ -137,7 +137,7 @@ def run_backtest(symbol):
     data = load_data(symbol)
     initial_cash = 5000 if symbol == 'ETHUSDT' else 500000
     
-    bt = Backtest(
+    bt = tl.Backtest(
         data,
         MACD_Volume_Strategy,
         cash=initial_cash,

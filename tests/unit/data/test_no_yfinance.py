@@ -1,12 +1,12 @@
-"""Tests for removing yfinance from default import paths."""
+"""Tests for removed legacy query import paths."""
 
-import sys
+import importlib.util
+from pathlib import Path
 
 
-def test_legacy_query_import_does_not_require_yfinance() -> None:
-    """The legacy Query module must import without yfinance installed."""
-    sys.modules.pop("yfinance", None)
+def test_legacy_query_package_is_removed() -> None:
+    """The old query facade should not ship as a user API."""
+    repo_root = Path(__file__).resolve().parents[3]
 
-    from tradelearn.query import Query
-
-    assert Query.__name__ == "Query"
+    assert not (repo_root / "tradelearn" / "query").exists()
+    assert importlib.util.find_spec("tradelearn.query") is None

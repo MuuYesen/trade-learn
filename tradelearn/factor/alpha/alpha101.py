@@ -14,7 +14,7 @@ ALPHA101_SKIPPED: dict[str, str] = {}
 
 
 def alpha101(stock_data: pd.DataFrame, names: Iterable[str] | None = None) -> pd.DataFrame:
-    """Return selected Alpha101 factors in legacy Query-compatible long form."""
+    """Return selected Alpha101 factors in reference-compatible long form."""
     selected = list(names or sorted(ALPHA101_SUPPORTED))
     unsupported = sorted(set(selected).difference(ALPHA101_SUPPORTED))
     if unsupported:
@@ -1024,10 +1024,10 @@ def _ts_max(frame: pd.DataFrame, window: int) -> pd.DataFrame:
 
 
 def _elementwise_max(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
-    """Return element-wise maximum matching the Alpha101 legacy helper."""
+    """Return element-wise maximum matching the Alpha101 reference helper."""
     return pd.DataFrame(np.maximum(left, right), index=left.index, columns=left.columns)
 
 
 def _elementwise_min(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
-    """Return element-wise minimum matching the Alpha101 legacy helper."""
+    """Return element-wise minimum matching the Alpha101 reference helper."""
     return pd.DataFrame(np.minimum(left, right), index=left.index, columns=left.columns)

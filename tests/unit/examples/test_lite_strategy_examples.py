@@ -91,8 +91,8 @@ def _run_engine(strategy: type[bt.Strategy], **params) -> tuple[float, int]:
     return float(result.stats.summary["final_value"]), len(result.stats.fills)
 
 
-def test_tradelearn_1x_sma_example_runs_on_lite_and_engine_runtime() -> None:
-    lite_strategy = _load_strategy("03_1x_sma_cross", "OneXSmaCross")
+def test_lite_sma_example_runs_on_lite_and_engine_runtime() -> None:
+    lite_strategy = _load_strategy("03_sma_cross", "LiteSmaCross")
 
     class SMA(bt.Indicator):
         lines = ("sma",)
@@ -129,8 +129,8 @@ def test_tradelearn_1x_sma_example_runs_on_lite_and_engine_runtime() -> None:
     assert engine_trades >= 0
 
 
-def test_tradelearn_1x_macd_example_runs_on_lite_and_engine_runtime() -> None:
-    lite_strategy = _load_strategy("05_1x_macd", "OneXMACDCross")
+def test_lite_macd_example_runs_on_lite_and_engine_runtime() -> None:
+    lite_strategy = _load_strategy("05_macd", "LiteMACDCross")
 
     class MACD(bt.Indicator):
         lines = ("macd", "signal")
@@ -173,13 +173,13 @@ def test_tradelearn_1x_macd_example_runs_on_lite_and_engine_runtime() -> None:
     assert engine_trades >= 0
 
 
-def test_tradelearn_1x_strategy_examples_are_runnable() -> None:
+def test_lite_strategy_examples_are_runnable() -> None:
     cases = [
-        ("03_1x_sma_cross", "OneXSmaCross", {}),
-        ("04_1x_bollinger", "OneXBollBandCross", {"title": "Long&Short"}),
-        ("05_1x_macd", "OneXMACDCross", {"title": "Long&Short"}),
-        ("06_1x_grid_trade", "OneXGridTrade", {}),
-        ("07_1x_turtle", "OneXAdvancedTurtle", {"title": "Long"}),
+        ("03_sma_cross", "LiteSmaCross", {}),
+        ("04_bollinger", "LiteBollBandCross", {"title": "Long&Short"}),
+        ("05_macd", "LiteMACDCross", {"title": "Long&Short"}),
+        ("06_grid_trade", "LiteGridTrade", {}),
+        ("07_turtle", "LiteAdvancedTurtle", {"title": "Long"}),
     ]
 
     for module_name, class_name, params in cases:

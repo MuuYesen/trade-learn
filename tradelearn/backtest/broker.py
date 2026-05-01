@@ -25,7 +25,7 @@ _ORDER_TYPE_TO_RUST = {
 }
 
 
-class _LegacyCommInfo:
+class _CommissionInfoView:
     """Facade-only fallback for Backtrader-style commission info."""
 
     def __init__(self, ratio: float):
@@ -448,10 +448,10 @@ class RustBroker:
     def get_mult(self, data: Any = None) -> float:
         return self._mult
 
-    def getcommissioninfo(self, data: Any) -> _LegacyCommInfo:
+    def getcommissioninfo(self, data: Any) -> _CommissionInfoView:
         if self._comminfo is not None:
             return self._comminfo
-        return _LegacyCommInfo(self.commission_ratio)
+        return _CommissionInfoView(self.commission_ratio)
 
     def get_orders_history(self) -> list[Order]:
         return list(self._orders)

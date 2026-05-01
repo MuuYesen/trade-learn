@@ -18,7 +18,7 @@ def alpha191(
     bench_data: pd.DataFrame,
     names: Iterable[str] | None = None,
 ) -> pd.DataFrame:
-    """Return selected Alpha191 factors in legacy Query-compatible long form."""
+    """Return selected Alpha191 factors in reference-compatible long form."""
     selected = list(names or sorted(ALPHA191_SUPPORTED))
     unsupported = sorted(set(selected).difference(ALPHA191_SUPPORTED))
     if unsupported:

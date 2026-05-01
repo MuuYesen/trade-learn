@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 import tradelearn.engine as bt
-from tradelearn.ml import CausalSelector
+import tradelearn.ml as ml
 from tradelearn.report import Reporter
 
 
@@ -67,7 +67,7 @@ def run_migration_smoke() -> dict[str, object]:
         "backtrader_import": "tradelearn.engine",
         "line_indexing": _line_indexing(),
         "cerebro": _cerebro_smoke(),
-        "ml": {"selector": CausalSelector.__name__},
+        "ml": {"selector": ml.CausalSelector.__name__},
         "report": {"reporter": Reporter.__name__},
     }
 

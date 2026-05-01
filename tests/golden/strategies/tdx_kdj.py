@@ -2,10 +2,10 @@
 
 from tests.golden.strategies._helpers import GoldenAdapterBase
 
-STRATEGY_NAME = "tdx30_kdj"
+STRATEGY_NAME = "tdx_kdj"
 
 
-class Tdx30KdjStrategy(GoldenAdapterBase):
+class TdxKdjStrategy(GoldenAdapterBase):
     """Use close location in recent high/low range as a KDJ proxy."""
 
     def _k_value(self) -> float:

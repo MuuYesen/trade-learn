@@ -1,7 +1,7 @@
 """Tongdaxin-compatible indicator namespace."""
 
-from tradelearn.indicators.tdx import tdx30
-from tradelearn.indicators.tdx.tdx30 import (
+from tradelearn.indicators.tdx import mytt_adapter
+from tradelearn.indicators.tdx.mytt_adapter import (
     ASI,
     ATR,
     BBI,
@@ -128,7 +128,6 @@ __all__ = [
     "rsi",
     "sma",
     "taq",
-    "tdx30",
     "trix",
     "vr",
     "wma",

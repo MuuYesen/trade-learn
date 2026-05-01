@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 from sklearn.ensemble import GradientBoostingRegressor
-from tradelearn.ml import MLStrategy
+import tradelearn.engine as bt
 
-class Alpha101GBMStrategy(MLStrategy):
+class Alpha101GBMStrategy(bt.MLStrategy):
     """
     Gradient Boosting strategy over Alpha101 feature columns.
     
@@ -18,5 +18,4 @@ class Alpha101GBMStrategy(MLStrategy):
         ("threshold", 0.001),
         ("size", 100),
     )
-
 

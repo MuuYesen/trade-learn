@@ -31,6 +31,17 @@ def test_reporter_excel_writes_spec_sheets(tmp_path) -> None:
     ]
 
 
+def test_reporter_report_dispatches_excel_by_suffix(tmp_path) -> None:
+    """Reporter.report writes Excel when the output suffix is .xlsx."""
+    path = tmp_path / "report.xlsx"
+
+    result = Reporter(_stats(), periods=252).report(path)
+
+    assert result == path
+    assert path.exists()
+    assert "summary" in _sheet_names(path)
+
+
 def test_reporter_excel_accepts_mapping_stats(tmp_path) -> None:
     """Reporter.excel accepts dict-shaped stats."""
     path = tmp_path / "mapping-report.xlsx"

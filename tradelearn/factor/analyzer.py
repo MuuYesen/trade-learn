@@ -245,6 +245,16 @@ class FactorAnalyzer:
         output.write_text(html_content, encoding="utf-8")
         return output
 
+    def report(self, path: str, format: str | None = None) -> Path:
+        """Write a factor report using the user-facing report() entrypoint."""
+        output = Path(path)
+        chosen = (format or output.suffix.lstrip(".") or "html").lower()
+        if chosen in {"htm", "html"}:
+            if not output.suffix:
+                output = output.with_suffix(".html")
+            return self.html(str(output))
+        raise ValueError(f"Unsupported factor report format: {chosen}")
+
     def _forward_returns(self) -> pd.Series:
         """Return configured or price-derived forward returns."""
         if self.forward_returns is not None:

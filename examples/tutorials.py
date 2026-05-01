@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 import tradelearn.engine as bt
-from tradelearn.ml import CausalSelector
+import tradelearn.ml as ml
 
 
 class _TutorialBuyOnce(bt.Strategy):
@@ -42,7 +42,7 @@ def run_tutorial_smoke() -> dict[str, object]:
     """Run lightweight tutorial checks without external services."""
 
     strategy, summary = _run_strategy()
-    selector = CausalSelector()
+    selector = ml.CausalSelector()
     selected_features = selector.select(
         pd.DataFrame({"mom": [0.1, 0.2, 0.3], "noise": [0.3, 0.2, 0.1]}),
         pd.Series([0.0, 1.0, 1.0]),

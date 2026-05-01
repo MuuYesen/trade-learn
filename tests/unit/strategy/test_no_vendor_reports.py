@@ -1,21 +1,12 @@
-"""Structural tests for legacy report vendor cleanup."""
+"""Structural tests for removed legacy strategy facades."""
 
+import importlib.util
 from pathlib import Path
 
 
-def test_legacy_report_vendor_trees_are_removed() -> None:
-    """Stage 2 report/factor facades must not ship vendored report engines."""
+def test_legacy_strategy_package_is_removed() -> None:
+    """The old strategy namespace should not ship as a user API."""
     root = Path("tradelearn/strategy")
 
-    assert not (root / "evaluate" / "empyrical").exists()
-    assert not (root / "evaluate" / "pyfolio").exists()
-    assert not (root / "examine" / "alphalens").exists()
-
-
-def test_legacy_report_facades_remain_importable() -> None:
-    """Compatibility facades should import without vendored pyfolio/alphalens."""
-    from tradelearn.strategy.evaluate import Evaluate
-    from tradelearn.strategy.examine import Examine
-
-    assert Evaluate.__name__ == "Evaluate"
-    assert Examine.__name__ == "Examine"
+    assert not root.exists()
+    assert importlib.util.find_spec("tradelearn.strategy") is None

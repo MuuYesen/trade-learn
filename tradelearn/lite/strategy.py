@@ -285,9 +285,9 @@ class Strategy(CoreStrategy):
         if sl is not None or tp is not None:
             return self.buy_bracket(ticker=ticker, size=size, sl=sl, tp=tp, tag=tag)
         data = self._resolve_ticker_data(ticker)
-        return self._submit_1x_order(Order.Buy, data, size, limit, stop, tag)
+        return self._submit_lite_order(Order.Buy, data, size, limit, stop, tag)
 
-    def _submit_1x_order(
+    def _submit_lite_order(
         self,
         side: int,
         data: Any,
@@ -347,7 +347,7 @@ class Strategy(CoreStrategy):
         info = kwargs.get("info")
         if tag is None and isinstance(info, dict):
             tag = info.get("tag")
-        return self._submit_1x_order(Order.Buy, data, size or 1, limit, stop, tag, **kwargs)
+        return self._submit_lite_order(Order.Buy, data, size or 1, limit, stop, tag, **kwargs)
 
     def _sell_data(
         self,
@@ -363,7 +363,7 @@ class Strategy(CoreStrategy):
         info = kwargs.get("info")
         if tag is None and isinstance(info, dict):
             tag = info.get("tag")
-        return self._submit_1x_order(Order.Sell, data, size or 1, limit, stop, tag, **kwargs)
+        return self._submit_lite_order(Order.Sell, data, size or 1, limit, stop, tag, **kwargs)
 
     def sell(
         self,
@@ -382,7 +382,7 @@ class Strategy(CoreStrategy):
         if sl is not None or tp is not None:
             return self.sell_bracket(ticker=ticker, size=size, sl=sl, tp=tp, tag=tag)
         data = self._resolve_ticker_data(ticker)
-        return self._submit_1x_order(Order.Sell, data, size, limit, stop, tag)
+        return self._submit_lite_order(Order.Sell, data, size, limit, stop, tag)
 
     def cancel(self, order: Any) -> None:
         return self.broker.cancel(order)
@@ -630,7 +630,7 @@ class Strategy(CoreStrategy):
         orders: list[Any] = []
         for request, data in intents:
             side = Order.Buy if request.side == "buy" else Order.Sell
-            order = self._submit_1x_order(side, data, request.qty, None, None, None)
+            order = self._submit_lite_order(side, data, request.qty, None, None, None)
             if order is not None:
                 orders.append(order)
         return orders

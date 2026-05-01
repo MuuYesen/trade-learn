@@ -1,13 +1,13 @@
-"""Tradelearn 1.x-style turtle strategy for the Lite API."""
+"""Lite turtle strategy for the Lite API."""
 
 from __future__ import annotations
 
 import pandas as pd
 
-from tradelearn.lite import Strategy
+import tradelearn.lite as tl
 
 
-class OneXAdvancedTurtle(Strategy):
+class LiteAdvancedTurtle(tl.Strategy):
     title = "Long"
     entry_window = 20
     exit_window = 10

@@ -1,6 +1,7 @@
 """Backtrader-compatible facade backed by tradelearn's backtest engine."""
 
 import importlib
+from typing import Any
 
 import pandas as pd
 
@@ -66,6 +67,14 @@ talib = importlib.import_module("tradelearn.indicators.talib")
 tdx = importlib.import_module("tradelearn.indicators.tdx")
 tv = importlib.import_module("tradelearn.indicators.tv")
 
+
+def __getattr__(name: str) -> Any:
+    if name == "MLStrategy":
+        from tradelearn.ml import MLStrategy
+
+        return MLStrategy
+    raise AttributeError(f"module 'tradelearn.engine' has no attribute {name!r}")
+
 __all__ = [
     "Cerebro",
     "OptReturn",
@@ -78,6 +87,7 @@ __all__ = [
     "Position",
     "Sizer",
     "Strategy",
+    "MLStrategy",
     "Trade",
     "Indicator",
     "IndexEnhanceStrategy",

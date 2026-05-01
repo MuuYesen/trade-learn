@@ -23,7 +23,7 @@ SUPPORTED_BACKTRADER_STRATEGIES = (
     "rsi_oversold",
     "bollinger_breakout",
     "macd_cross",
-    "tdx30_kdj",
+    "tdx_kdj",
     "supertrend_tv",
     "pairs_trading",
     "equal_weight",
@@ -172,7 +172,7 @@ def _strategy_class(strategy_name: str) -> type[Any]:
         def should_exit(self) -> bool:
             return _momentum(self.data.close, 2) < 0
 
-    class Tdx30Kdj(GoldenBacktraderBase):
+    class TdxKdj(GoldenBacktraderBase):
         def _k_value(self) -> float:
             highs = _values(self.data.high, 3)
             lows = _values(self.data.low, 3)
@@ -192,7 +192,7 @@ def _strategy_class(strategy_name: str) -> type[Any]:
         "rsi_oversold": RsiOversold,
         "bollinger_breakout": BollingerBreakout,
         "macd_cross": MacdCross,
-        "tdx30_kdj": Tdx30Kdj,
+        "tdx_kdj": TdxKdj,
         "supertrend_tv": SupertrendTv,
         "pairs_trading": PairsTrading,
         "equal_weight": EqualWeight,

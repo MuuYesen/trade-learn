@@ -62,7 +62,7 @@ class PositionProxy:
         data = self._data or strategy.datas[0]
         effective_size = self.size + strategy._pending_size.get(data, 0.0)
         if effective_size > 0:
-            return strategy._submit_1x_order(
+            return strategy._submit_lite_order(
                 Order.Sell,
                 data,
                 abs(effective_size) * float(portion),
@@ -71,7 +71,7 @@ class PositionProxy:
                 None,
             )
         if effective_size < 0:
-            return strategy._submit_1x_order(
+            return strategy._submit_lite_order(
                 Order.Buy,
                 data,
                 abs(effective_size) * float(portion),

@@ -1,14 +1,14 @@
-"""Tradelearn 1.x-style grid trading strategy for the Lite API."""
+"""Lite grid trading strategy for the Lite API."""
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-from tradelearn.lite import Strategy
+import tradelearn.lite as tl
 
 
-class OneXGridTrade(Strategy):
+class LiteGridTrade(tl.Strategy):
     title = "Long"
     prepare_days = 30
     distance = 0.01

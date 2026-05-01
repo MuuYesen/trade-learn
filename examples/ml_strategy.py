@@ -7,8 +7,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 import tradelearn.engine as bt
-from tradelearn.factor import alpha101
-from tradelearn.ml import MLStrategy
+import tradelearn.factor as tf
 
 
 @dataclass(frozen=True)
@@ -43,7 +42,7 @@ def build_alpha101_features(bars: pd.DataFrame, max_features: int = 3) -> pd.Dat
         else stock_data["vwap"]
     )
     names = ["alpha001", "alpha002", "alpha003", "alpha004", "alpha005"][:max_features]
-    factors = alpha101(stock_data, names=names)
+    factors = tf.alpha101(stock_data, names=names)
     feature_frame = factors.set_index("date").drop(columns=["code"])
     feature_frame.columns = [name.replace("_101", "") for name in feature_frame.columns]
     return feature_frame.reindex(bars.index)
@@ -57,7 +56,7 @@ def run_example() -> MLExampleResult:
     data = pd.concat([bars, factors], axis=1)
     data["target"] = data["close"].pct_change().shift(-1).fillna(0.0)
 
-    class AlphaStrategy(MLStrategy):
+    class AlphaStrategy(bt.MLStrategy):
         model = ThresholdModel()
         features = tuple(selected_features)
         target = "target"

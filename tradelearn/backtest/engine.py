@@ -494,7 +494,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
             lows = data._low
             closes = data._close
             volumes = data._volume
-        else:  # BT Legacy / LineSeries fallback
+        else:  # LineSeries fallback
             timestamps = np.array(data.datetime._values, dtype=np.int64)
             opens = np.array(data.open._values, dtype=np.float64)
             highs = np.array(data.high._values, dtype=np.float64)

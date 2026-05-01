@@ -1,22 +1,29 @@
 """Tests for v2 Alpha101 factor entry points."""
 
 import importlib
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from tradelearn.factor.alpha import alpha101
 
-try:
-    from tradelearn.query.alpha.alphas101 import Alphas101 as LegacyAlphas101
-except ModuleNotFoundError:
+_LEGACY_ALPHA101_PATH = (
+    Path(__file__).resolve().parents[3] / "reference" / "tradelearn_1x" / "query" / "alpha" / "alphas101.py"
+)
+_legacy_spec = importlib.util.spec_from_file_location("legacy_alpha101", _LEGACY_ALPHA101_PATH)
+if _legacy_spec is not None and _legacy_spec.loader is not None:
+    _legacy_module = importlib.util.module_from_spec(_legacy_spec)
+    _legacy_spec.loader.exec_module(_legacy_module)
+    LegacyAlphas101 = _legacy_module.Alphas101
+else:
     LegacyAlphas101 = None
 
 
-def test_alpha101_exports_migrated_formulas_like_legacy_query() -> None:
+def test_alpha101_exports_migrated_formulas_like_legacy_oracle() -> None:
     """The v2 Alpha101 facade returns legacy-compatible long-form columns."""
     if LegacyAlphas101 is None:
-        pytest.skip("legacy tradelearn.query.alpha facade is not shipped")
+        pytest.skip("legacy Alpha101 oracle is not available")
     data = _stock_data()
     names = [
         "alpha001",
@@ -105,105 +112,6 @@ def test_alpha101_exports_migrated_formulas_like_legacy_query() -> None:
     expected = _legacy_alpha101(data, names)
 
     result = alpha101(data, names=names)
-
-    pd.testing.assert_frame_equal(
-        result.sort_values(["date", "code"]).reset_index(drop=True),
-        expected.sort_values(["date", "code"]).reset_index(drop=True),
-    )
-
-
-def test_query_alphas101_delegates_supported_formulas_to_v2_facade() -> None:
-    """Query.alphas101 keeps its output contract while using the v2 facade."""
-    query_module = pytest.importorskip("tradelearn.query.query")
-    Query = query_module.Query
-    data = _stock_data()
-    names = [
-        "alpha001",
-        "alpha002",
-        "alpha003",
-        "alpha004",
-        "alpha005",
-        "alpha006",
-        "alpha007",
-        "alpha008",
-        "alpha009",
-        "alpha010",
-        "alpha011",
-        "alpha012",
-        "alpha013",
-        "alpha014",
-        "alpha015",
-        "alpha016",
-        "alpha017",
-        "alpha018",
-        "alpha019",
-        "alpha020",
-        "alpha021",
-        "alpha022",
-        "alpha023",
-        "alpha024",
-        "alpha025",
-        "alpha026",
-        "alpha027",
-        "alpha028",
-        "alpha029",
-        "alpha030",
-        "alpha031",
-        "alpha032",
-        "alpha033",
-        "alpha034",
-        "alpha035",
-        "alpha036",
-        "alpha037",
-        "alpha038",
-        "alpha039",
-        "alpha040",
-        "alpha041",
-        "alpha042",
-        "alpha043",
-        "alpha044",
-        "alpha045",
-        "alpha046",
-        "alpha047",
-        "alpha049",
-        "alpha050",
-        "alpha051",
-        "alpha052",
-        "alpha053",
-        "alpha054",
-        "alpha055",
-        "alpha057",
-        "alpha060",
-        "alpha061",
-        "alpha062",
-        "alpha064",
-        "alpha065",
-        "alpha066",
-        "alpha068",
-        "alpha071",
-        "alpha072",
-        "alpha073",
-        "alpha074",
-        "alpha075",
-        "alpha077",
-        "alpha078",
-        "alpha081",
-        "alpha083",
-        "alpha084",
-        "alpha085",
-        "alpha086",
-        "alpha088",
-        "alpha092",
-        "alpha094",
-        "alpha095",
-        "alpha096",
-        "alpha098",
-        "alpha099",
-        "alpha101",
-    ]
-
-    result = Query.alphas101(data, names)
-    expected = alpha101(data, names=names)
 
     pd.testing.assert_frame_equal(
         result.sort_values(["date", "code"]).reset_index(drop=True),

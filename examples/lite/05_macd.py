@@ -1,17 +1,17 @@
-"""Tradelearn 1.x-style MACD crossover strategy for the Lite API."""
+"""Lite MACD crossover strategy for the Lite API."""
 
 from __future__ import annotations
 
 import pandas as pd
 
-from tradelearn.lite import Strategy
+import tradelearn.lite as tl
 
 
 def crossover(series1, series2) -> bool:
     return series1[-1] < series2[-1] and series1[0] > series2[0]
 
 
-class OneXMACDCross(Strategy):
+class LiteMACDCross(tl.Strategy):
     title = "Long"
     s = 12
     l = 26
