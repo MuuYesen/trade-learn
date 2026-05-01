@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from contextlib import contextmanager
+from pathlib import Path
 
 import pandas as pd
 
@@ -40,6 +41,7 @@ class FakeMLflow:
         self.params: list[dict[str, object]] = []
         self.metrics: list[dict[str, float]] = []
         self.dicts: list[tuple[dict[str, object], str]] = []
+        self.artifacts: list[tuple[str, str | None]] = []
 
     def set_tracking_uri(self, uri: str) -> None:
         self.tracking_uris.append(uri)
@@ -60,6 +62,9 @@ class FakeMLflow:
 
     def log_dict(self, dictionary: dict[str, object], artifact_file: str) -> None:
         self.dicts.append((dict(dictionary), artifact_file))
+
+    def log_artifact(self, local_path: str, artifact_path: str | None = None) -> None:
+        self.artifacts.append((Path(local_path).name, artifact_path))
 
 
 def test_mlflow_analyzer_logs_params_stats_and_artifacts(monkeypatch) -> None:
@@ -213,6 +218,49 @@ def test_mlflow_analyzer_logs_strategy_pipeline_params_and_artifacts() -> None:
         },
         "explanation": {"value": 0.25, "quality": 0.75},
     }
+
+
+def test_mlflow_analyzer_logs_report_plot_and_table_artifacts() -> None:
+    class BundleStrategy(Strategy):
+        def __init__(self) -> None:
+            super().__init__()
+            self.pipeline_result = PipelineResult(
+                scores=pd.Series({"AAA": 0.7, "BBB": 0.3}, name="score"),
+                selected=["AAA"],
+                weights=pd.Series({"AAA": 0.8, "BBB": 0.2}, name="weight"),
+            )
+
+        def next(self) -> None:
+            if len(self.data) == 1:
+                self.buy(size=1)
+            elif len(self.data) == 3:
+                self.close()
+
+    fake = FakeMLflow()
+    cerebro = Cerebro()
+    cerebro.adddata(bars())
+    cerebro.addstrategy(BundleStrategy)
+    cerebro.addanalyzer(
+        MLflowAnalyzer,
+        name="mlflow",
+        mlflow_module=fake,
+        artifact_bundle=True,
+        log_report=True,
+        log_plot=True,
+        artifact_path="bundle",
+    )
+
+    cerebro.run()
+
+    artifacts = {name: artifact_path for name, artifact_path in fake.artifacts}
+    assert {
+        "report.html",
+        "plot.html",
+        "trades.parquet",
+        "equity.parquet",
+        "weights.parquet",
+    }.issubset(artifacts)
+    assert all(artifact_path == "bundle" for artifact_path in artifacts.values())
 
 
 def test_mlflow_analyzer_uses_env_uri_and_warns_without_interrupt(monkeypatch, caplog) -> None:

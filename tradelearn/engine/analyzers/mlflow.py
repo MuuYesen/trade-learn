@@ -3,10 +3,17 @@ from __future__ import annotations
 import logging
 import math
 import os
+import tempfile
 from collections import Counter
+from pathlib import Path
 from typing import Any
 
+import pandas as pd
+from bokeh.embed import file_html
+from bokeh.resources import INLINE
+
 from tradelearn.core import BrokerEvent
+from tradelearn.report import Reporter
 
 from ..analyzer import Analyzer
 
@@ -23,6 +30,10 @@ class MLflowAnalyzer(Analyzer):
         ("nested", False),
         ("mlflow_module", None),
         ("artifact_file", "stats.json"),
+        ("artifact_bundle", False),
+        ("artifact_path", "tradelearn"),
+        ("log_report", False),
+        ("log_plot", False),
     )
 
     def __init__(self, **kwargs) -> None:
@@ -51,6 +62,15 @@ class MLflowAnalyzer(Analyzer):
                 pipeline_payload = _pipeline_payload(self.strategy)
                 if pipeline_payload:
                     mlflow.log_dict(pipeline_payload, "pipeline.json")
+                if self.p.artifact_bundle:
+                    _log_artifact_bundle(
+                        mlflow,
+                        strategy=self.strategy,
+                        stats=stats,
+                        artifact_path=self.p.artifact_path,
+                        log_report=bool(self.p.log_report),
+                        log_plot=bool(self.p.log_plot),
+                    )
             self._status = "logged"
         except Exception as exc:  # pragma: no cover - exercised through fake module
             self._status = "warning"
@@ -102,6 +122,74 @@ class MLflowAnalyzer(Analyzer):
 def _import_mlflow() -> Any:
     import mlflow
     return mlflow
+
+
+def _log_artifact_bundle(
+    mlflow: Any,
+    *,
+    strategy: Any,
+    stats: Any,
+    artifact_path: str | None,
+    log_report: bool,
+    log_plot: bool,
+) -> None:
+    if not hasattr(mlflow, "log_artifact"):
+        return
+
+    with tempfile.TemporaryDirectory(prefix="tradelearn-mlflow-") as directory:
+        output_dir = Path(directory)
+        reporter = Reporter(stats, market_data=_market_data(strategy))
+        _write_table_artifacts(output_dir, stats, strategy)
+
+        if log_report:
+            reporter.report(output_dir / "report.html")
+        if log_plot:
+            chart = reporter.market_replay_chart()
+            if chart is not None:
+                (output_dir / "plot.html").write_text(
+                    file_html(chart, INLINE, "Tradelearn Market Replay")
+                )
+
+        for artifact in sorted(output_dir.iterdir()):
+            if artifact.is_file():
+                mlflow.log_artifact(str(artifact), artifact_path=artifact_path)
+
+
+def _write_table_artifacts(output_dir: Path, stats: Any, strategy: Any) -> None:
+    equity = _coerce_series(_stats_field(stats, "equity", pd.Series(dtype="float64")))
+    if not equity.empty:
+        equity.to_frame("equity").to_parquet(output_dir / "equity.parquet")
+
+    trades = pd.DataFrame(_stats_field(stats, "trades", pd.DataFrame()))
+    trades.to_parquet(output_dir / "trades.parquet", index=False)
+
+    weights = _pipeline_weights(strategy)
+    if weights is not None and not weights.empty:
+        weights.to_frame("weight").to_parquet(output_dir / "weights.parquet")
+
+
+def _market_data(strategy: Any) -> pd.DataFrame | None:
+    data = getattr(strategy, "data", None)
+    frame = getattr(data, "_frame", None)
+    if frame is None:
+        return None
+    return pd.DataFrame(frame).copy()
+
+
+def _coerce_series(values: Any) -> pd.Series:
+    if isinstance(values, pd.Series):
+        return values.copy()
+    return pd.Series(values)
+
+
+def _pipeline_weights(strategy: Any) -> pd.Series | None:
+    result = _first_attr(strategy, ("pipeline_result", "pipeline_result_"))
+    if result is None:
+        return None
+    weights = getattr(result, "weights", None)
+    if weights is None:
+        return None
+    return pd.Series(weights, dtype="float64", name="weight")
 
 
 def _params_payload(strategy: Any) -> dict[str, Any]:
