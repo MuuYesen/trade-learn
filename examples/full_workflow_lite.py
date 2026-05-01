@@ -50,12 +50,10 @@ class LiteMomentumPortfolio(tl.Strategy):
             return
 
         scores: dict[str, float] = {}
-        for ticker, feed in self._target_weight_data_map().items():
-            close = feed.get_array("close")
-            cursor = feed._cursor
-            previous = close[cursor - self.lookback]
+        for data in self.datas:
+            previous = data.close[-self.lookback]
             if previous and previous == previous:
-                scores[ticker] = close[cursor] / previous - 1.0
+                scores[data._name] = data.close[0] / previous - 1.0
 
         selected = [
             ticker
