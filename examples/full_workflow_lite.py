@@ -19,6 +19,7 @@ from bokeh.resources import INLINE
 
 import tradelearn.lite as tl
 from tradelearn.data import TradingViewProvider
+from tradelearn.portfolio import select_top
 
 OUTPUT_DIR = Path("examples/output/full_workflow_lite")
 SYMBOLS = ("NASDAQ:AAPL", "NASDAQ:MSFT", "NASDAQ:GOOG")
@@ -55,12 +56,7 @@ class LiteMomentumPortfolio(tl.Strategy):
             if previous and previous == previous:
                 scores[data._name] = data.close[0] / previous - 1.0
 
-        selected = [
-            ticker
-            for ticker, _ in sorted(scores.items(), key=lambda item: item[1], reverse=True)[
-                : self.top_k
-            ]
-        ]
+        selected = select_top(scores, k=self.top_k)
         if not selected:
             return
 

@@ -20,6 +20,7 @@ from bokeh.resources import INLINE
 import tradelearn.engine as bt
 from tradelearn.data import TradingViewProvider
 from tradelearn.engine.analyzers import MLflowAnalyzer
+from tradelearn.portfolio import select_top
 
 OUTPUT_DIR = Path("examples/output/full_workflow_engine")
 SYMBOLS = ("NASDAQ:AAPL", "NASDAQ:MSFT", "NASDAQ:GOOG")
@@ -59,12 +60,7 @@ class EngineMomentumPortfolio(bt.IndexEnhanceStrategy):
             if previous and previous == previous:
                 scores[data._name] = data.close[0] / previous - 1.0
 
-        selected = [
-            ticker
-            for ticker, _ in sorted(scores.items(), key=lambda item: item[1], reverse=True)[
-                : self.p.top_k
-            ]
-        ]
+        selected = select_top(scores, k=self.p.top_k)
         if not selected:
             return
 
