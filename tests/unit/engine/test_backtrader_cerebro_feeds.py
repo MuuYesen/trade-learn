@@ -21,6 +21,23 @@ def bars() -> pd.DataFrame:
     )
 
 
+def panel_bars() -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    for symbol, offset in (("AAA", 0.0), ("BBB", 100.0)):
+        frame = bars().copy()
+        frame["symbol"] = symbol
+        frame["close"] = frame["close"] + offset
+        frame["open"] = frame["open"] + offset
+        frame["high"] = frame["high"] + offset
+        frame["low"] = frame["low"] + offset
+        frames.append(frame.reset_index(names="timestamp"))
+    return (
+        pd.concat(frames, ignore_index=True)
+        .set_index(["timestamp", "symbol"])
+        .sort_index()
+    )
+
+
 def test_backtrader_cerebro_runs_pandasdata_feed_and_analyzer() -> None:
     class RecordingStrategy(bt.Strategy):
         params = (("threshold", 10.5),)
@@ -110,3 +127,25 @@ def test_pandasdata_accepts_backtrader_style_column_mapping() -> None:
     assert data._name == "mapped"
     assert data.open[0] == 9.0
     assert data.close[0] == 10.0
+
+
+def test_cerebro_adddata_accepts_provider_panel_dataframe() -> None:
+    cerebro = bt.Cerebro()
+
+    returned = cerebro.adddata(panel_bars())
+
+    assert returned is cerebro.datas[0]
+    assert [data._name for data in cerebro.datas] == ["AAA", "BBB"]
+    assert list(cerebro.datasbyname) == ["AAA", "BBB"]
+    assert cerebro.datasbyname["AAA"].close.to_series().tolist() == [10.0, 11.0, 12.0]
+    assert cerebro.datasbyname["BBB"].close.to_series().tolist() == [110.0, 111.0, 112.0]
+
+
+def test_cerebro_adddata_panel_name_mapping() -> None:
+    cerebro = bt.Cerebro()
+
+    returned = cerebro.adddata(panel_bars(), name={"AAA": "alpha", "BBB": "beta"})
+
+    assert returned is cerebro.datas[0]
+    assert [data._name for data in cerebro.datas] == ["alpha", "beta"]
+    assert list(cerebro.datasbyname) == ["alpha", "beta"]

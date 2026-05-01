@@ -82,8 +82,7 @@ def main() -> None:
     cerebro = bt.Cerebro(trade_on_close=True)
     cerebro.setcash(CASH)
     cerebro.setcommission(COMMISSION)
-    for symbol in SYMBOLS:
-        cerebro.adddata(bars.xs(symbol, level="symbol"), name=symbol)
+    cerebro.adddata(bars)
     cerebro.addstrategy(EngineMomentumPortfolio)
 
     if LOG_MLFLOW:
