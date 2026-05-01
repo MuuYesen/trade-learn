@@ -68,6 +68,10 @@ class LiteStats(Mapping[str, Any]):
     def orders(self) -> pd.DataFrame:
         return self.stats.orders
 
+    @property
+    def config(self) -> dict[str, Any]:
+        return self.stats.config
+
 
 class Backtest:
     """Tradelearn Lite quick backtest facade."""

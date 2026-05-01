@@ -116,6 +116,7 @@ def test_lite_run_exposes_shared_stats_summary_keys() -> None:
     assert stats.trades is shared_stats.trades
     assert stats.positions is shared_stats.positions
     assert stats.orders is shared_stats.orders
+    assert stats.config is shared_stats.config
     assert stats.records == {}
     for key, value in shared_stats.summary.items():
         assert key in stats
