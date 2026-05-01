@@ -62,6 +62,17 @@ def test_create_full_tear_sheet_accepts_value_named_position_column(tmp_path: Pa
     assert output.exists()
 
 
+def test_create_full_tear_sheet_ignores_non_numeric_position_columns(tmp_path: Path) -> None:
+    """pyfolio facade ignores metadata columns in wide positions."""
+    output = tmp_path / "metadata-positions.html"
+    positions = _positions()
+    positions["sector"] = "technology"
+
+    create_full_tear_sheet(_returns(), positions=positions, output=output)
+
+    assert output.exists()
+
+
 def _returns() -> pd.Series:
     return pd.Series(
         [0.02, -0.01, 0.015, -0.03, 0.04],

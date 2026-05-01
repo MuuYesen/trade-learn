@@ -141,7 +141,13 @@ def _positions_frame(positions: pd.DataFrame | None) -> pd.DataFrame:
     long = frame.reset_index()
     index_column = original_index_name if original_index_name in long.columns else "index"
     long = long.rename(columns={index_column: "date"})
-    value_columns = [column for column in long.columns if column != "date"]
+    value_columns = [
+        column
+        for column in long.columns
+        if column != "date" and pd.api.types.is_numeric_dtype(long[column])
+    ]
+    if not value_columns:
+        return pd.DataFrame()
     result = long.melt(
         id_vars=["date"],
         value_vars=value_columns,

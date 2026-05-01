@@ -141,6 +141,7 @@ def exposure_weights(positions: pd.DataFrame) -> pd.DataFrame:
         values="value",
         aggfunc="sum",
     ).sort_index()
+    exposure = exposure.apply(pd.to_numeric, errors="coerce").fillna(0.0)
     totals = exposure.abs().sum(axis=1)
     return exposure.div(totals.replace(0, np.nan), axis=0).fillna(0.0)
 
