@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 import tradelearn.engine as bt
+import tradelearn.ml as ml
 from tradelearn.engine import Cerebro
 from tradelearn.ml import MLStrategy
 
@@ -44,6 +45,13 @@ def test_engine_facade_exports_mlstrategy() -> None:
     """Engine users can import MLStrategy from the Engine facade."""
     assert bt.MLStrategy is MLStrategy
     assert "MLStrategy" in bt.__all__
+
+
+def test_ml_facade_exports_automl_next_to_causal_selector() -> None:
+    """AutoML is exposed directly from the ML facade."""
+
+    assert ml.AutoML.__name__ == "AutoML"
+    assert ml.CausalSelector.__name__ == "CausalSelector"
 
 
 def test_mlstrategy_trains_predicts_and_places_orders() -> None:

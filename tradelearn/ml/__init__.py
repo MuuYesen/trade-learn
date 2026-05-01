@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
-from typing import Any
-
 from tradelearn.ml.causal import CausalSelector
 from tradelearn.ml.features import FeatureStore, feature
 from tradelearn.ml.pipeline import (
@@ -22,6 +19,7 @@ from tradelearn.ml.strategy import MLStrategy
 __all__ = [
     "CausalSelector",
     "EqualWeightOptimizer",
+    "AutoML",
     "FactorTransformer",
     "FeatureStore",
     "MLStrategy",
@@ -31,13 +29,14 @@ __all__ = [
     "RiskPolicy",
     "StrategyPipeline",
     "TopKSelector",
-    "automl",
     "feature",
     "model_uri",
 ]
 
 
-def __getattr__(name: str) -> Any:
-    if name == "automl":
-        return importlib.import_module("tradelearn.ml.automl")
+def __getattr__(name: str):
+    if name == "AutoML":
+        from tradelearn.ml.automl import AutoML
+
+        return AutoML
     raise AttributeError(f"module 'tradelearn.ml' has no attribute {name!r}")

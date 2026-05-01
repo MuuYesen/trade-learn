@@ -42,10 +42,15 @@ def run_tutorial_smoke() -> dict[str, object]:
     """Run lightweight tutorial checks without external services."""
 
     strategy, summary = _run_strategy()
-    selector = ml.CausalSelector()
+    selector = ml.CausalSelector(target="label")
     selected_features = selector.select(
-        pd.DataFrame({"mom": [0.1, 0.2, 0.3], "noise": [0.3, 0.2, 0.1]}),
-        pd.Series([0.0, 1.0, 1.0]),
+        pd.DataFrame(
+            {
+                "mom": [0.1, 0.2, 0.3],
+                "noise": [0.3, 0.2, 0.1],
+                "label": [0.0, 1.0, 1.0],
+            }
+        ),
     )
     return {
         "factor_research": {"feature_count": 2},

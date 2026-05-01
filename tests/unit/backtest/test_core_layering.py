@@ -77,8 +77,11 @@ def test_backtest_runtime_modules_are_flattened() -> None:
         "indicator_cache.py",
         "lines.py",
         "models.py",
+        "optimize.py",
+        "reporting.py",
         "sizer.py",
         "strategy.py",
+        "targets.py",
     }
 
     assert not (backtest_root / "core").exists()
