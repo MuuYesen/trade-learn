@@ -129,11 +129,11 @@ class _OpenTdxReferenceClient:
         end: str | None = None,
         adjust: str | None = None,
     ) -> Any:
-        from tradelearn.data import OpenTdxProvider
+        from tradelearn.data import TdxProvider
 
         global _LAST_REFERENCE_TDX_ERROR
         try:
-            bars = OpenTdxProvider().history_ohlc(symbol, start=begin, end=end)
+            bars = TdxProvider().history_ohlc(symbol, start=begin, end=end)
         except Exception as exc:
             _LAST_REFERENCE_TDX_ERROR = f"{type(exc).__name__}: {exc}"
             raise

@@ -9,7 +9,7 @@ import pandas as pd
 
 from tradelearn.data.bars import Frequency, normalize_bars
 
-OPEN_TDX_PERIOD: dict[str, str] = {
+TDX_PERIOD: dict[str, str] = {
     "5m": "MIN_5",
     "15m": "MIN_15",
     "30m": "MIN_30",
@@ -17,6 +17,22 @@ OPEN_TDX_PERIOD: dict[str, str] = {
     "1d": "DAILY",
     "1w": "WEEKLY",
     "1m": "MONTHLY",
+}
+
+TRADINGVIEW_INTERVAL: dict[str, str] = {
+    "1m": "in_1_minute",
+    "3m": "in_3_minute",
+    "5m": "in_5_minute",
+    "15m": "in_15_minute",
+    "30m": "in_30_minute",
+    "45m": "in_45_minute",
+    "1h": "in_1_hour",
+    "2h": "in_2_hour",
+    "3h": "in_3_hour",
+    "4h": "in_4_hour",
+    "1d": "in_daily",
+    "1w": "in_weekly",
+    "1M": "in_monthly",
 }
 
 
@@ -35,8 +51,8 @@ class DataProvider(Protocol):
         ...
 
 
-class OpenTdxProvider:
-    """opentdx-backed A-share OHLCV provider."""
+class TdxProvider:
+    """TDX-backed A-share OHLCV provider."""
 
     def __init__(
         self,
@@ -47,7 +63,7 @@ class OpenTdxProvider:
         count: int = 800,
         client_factory: Callable[[], object] | None = None,
     ) -> None:
-        """Create a provider with optional opentdx client injection."""
+        """Create a provider with optional TDX client injection."""
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -63,8 +79,8 @@ class OpenTdxProvider:
         freq: Frequency = "1d",
     ) -> pd.DataFrame:
         """Fetch A-share OHLCV data and return contract-valid Bars."""
-        if freq not in OPEN_TDX_PERIOD:
-            raise ValueError(f"Unsupported opentdx frequency: {freq}")
+        if freq not in TDX_PERIOD:
+            raise ValueError(f"Unsupported TDX frequency: {freq}")
 
         market, code = infer_tdx_market(symbol)
         client = self._make_client()
@@ -77,22 +93,22 @@ class OpenTdxProvider:
             count=self.count,
         )
         if not rows:
-            raise ConnectionError(f"opentdx returned no rows for {symbol}")
+            raise ConnectionError(f"TDX returned no rows for {symbol}")
         raw = pd.DataFrame(rows)
 
-        raw = _normalize_opentdx_columns(raw, code)
+        raw = _normalize_tdx_columns(raw, code)
         raw = _filter_dates(raw, start=start, end=end)
         return normalize_bars(
             raw,
             market="CN",
             freq=freq,
-            engine="opentdx",
+            engine="tdx",
             source=self._source_label(client),
             adjust="none",
         )
 
     def _make_client(self) -> object:
-        """Create the underlying opentdx client."""
+        """Create the underlying TDX client."""
         if self._client_factory is not None:
             return self._client_factory()
 
@@ -101,7 +117,7 @@ class OpenTdxProvider:
         return TdxClient()
 
     def _prepare_client(self, client: object) -> None:
-        """Connect opentdx quotation client following the official default flow."""
+        """Connect TDX quotation client following the official default flow."""
         quotation_client = getattr(client, "quotation_client", None)
         connect = getattr(quotation_client, "connect", None)
         if quotation_client is None or connect is None:
@@ -136,19 +152,19 @@ class OpenTdxProvider:
             if selected_ip is not None or selected_port is not None
             else ""
         )
-        raise ConnectionError(f"opentdx {reason} for {configured}{selected}")
+        raise ConnectionError(f"TDX {reason} for {configured}{selected}")
 
     @staticmethod
     def _source_label(client: object) -> str:
-        """Return the connected opentdx endpoint label when available."""
+        """Return the connected TDX endpoint label when available."""
         quotation_client: Any = getattr(client, "quotation_client", None)
         ip = getattr(quotation_client, "ip", None)
         port = getattr(quotation_client, "port", None)
-        return f"{ip}:{port}" if ip is not None and port is not None else "opentdx:auto"
+        return f"{ip}:{port}" if ip is not None and port is not None else "tdx:auto"
 
     @staticmethod
     def _market_value(market: int) -> object:
-        """Return an opentdx market enum when the library is available."""
+        """Return a TDX market enum when the library is available."""
         try:
             from opentdx.tdxClient import MARKET
         except ModuleNotFoundError:
@@ -157,7 +173,7 @@ class OpenTdxProvider:
 
     @staticmethod
     def _period_value(freq: Frequency) -> object:
-        """Return an opentdx period enum when the library is available."""
+        """Return a TDX period enum when the library is available."""
         try:
             from opentdx.tdxClient import PERIOD
         except ModuleNotFoundError:
@@ -170,8 +186,75 @@ class OpenTdxProvider:
                 "WEEKLY": 5,
                 "MONTHLY": 6,
             }
-            return period_values[OPEN_TDX_PERIOD[freq]]
-        return getattr(PERIOD, OPEN_TDX_PERIOD[freq])
+            return period_values[TDX_PERIOD[freq]]
+        return getattr(PERIOD, TDX_PERIOD[freq])
+
+
+class TradingViewProvider:
+    """tvdatafeed-backed OHLCV provider."""
+
+    def __init__(
+        self,
+        *,
+        username: str | None = None,
+        password: str | None = None,
+        n_bars: int = 5000,
+        client_factory: Callable[[], object] | None = None,
+    ) -> None:
+        self.username = username
+        self.password = password
+        self.n_bars = int(n_bars)
+        self._client_factory = client_factory
+
+    def history_ohlc(
+        self,
+        symbol: str,
+        *,
+        start: str | None = None,
+        end: str | None = None,
+        freq: Frequency = "1d",
+        exchange: str | None = None,
+    ) -> pd.DataFrame:
+        """Fetch TradingView OHLCV data and return contract-valid Bars."""
+        if freq not in TRADINGVIEW_INTERVAL:
+            raise ValueError(f"Unsupported TradingView frequency: {freq}")
+
+        exchange_name, tv_symbol = _split_tradingview_symbol(symbol, exchange=exchange)
+        client = self._make_client()
+        rows = client.get_hist(
+            symbol=tv_symbol,
+            exchange=exchange_name,
+            interval=self._interval_value(freq),
+            n_bars=self.n_bars,
+        )
+        if rows is None or len(rows) == 0:
+            raise ConnectionError(f"TradingView returned no rows for {symbol}")
+        raw = _normalize_tradingview_columns(pd.DataFrame(rows), exchange_name, tv_symbol)
+        raw = _filter_dates(raw, start=start, end=end)
+        return normalize_bars(
+            raw,
+            market="GLOBAL",
+            freq=freq,
+            engine="tradingview",
+            source="tvdatafeed",
+            adjust="none",
+        )
+
+    def _make_client(self) -> object:
+        if self._client_factory is not None:
+            return self._client_factory()
+        from tvDatafeed import TvDatafeed
+
+        return TvDatafeed(username=self.username, password=self.password)
+
+    @staticmethod
+    def _interval_value(freq: Frequency) -> object:
+        interval_name = TRADINGVIEW_INTERVAL[freq]
+        try:
+            from tvDatafeed import Interval
+        except ModuleNotFoundError:
+            return interval_name
+        return getattr(Interval, interval_name)
 
 
 def infer_tdx_market(symbol: str) -> tuple[int, str]:
@@ -186,8 +269,18 @@ def infer_tdx_market(symbol: str) -> tuple[int, str]:
     return 0, normalized
 
 
-def _normalize_opentdx_columns(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
-    """Map opentdx row columns to raw Bars input columns."""
+def _split_tradingview_symbol(symbol: str, *, exchange: str | None = None) -> tuple[str, str]:
+    normalized = symbol.strip()
+    if exchange is not None:
+        return exchange.strip().upper(), normalized.upper()
+    if ":" in normalized:
+        exchange_name, tv_symbol = normalized.split(":", 1)
+        return exchange_name.strip().upper(), tv_symbol.strip().upper()
+    raise ValueError("TradingView symbols require an exchange, e.g. 'NASDAQ:AAPL'")
+
+
+def _normalize_tdx_columns(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    """Map TDX row columns to raw Bars input columns."""
     frame = raw.copy()
     if "datetime" in frame.columns:
         frame = frame.rename(columns={"datetime": "timestamp"})
@@ -199,6 +292,24 @@ def _normalize_opentdx_columns(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
     columns = ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
     optional = [column for column in ("amount", "vwap") if column in frame.columns]
     return frame[columns + optional]
+
+
+def _normalize_tradingview_columns(
+    raw: pd.DataFrame,
+    exchange: str,
+    symbol: str,
+) -> pd.DataFrame:
+    """Map tvdatafeed rows to raw Bars input columns."""
+    frame = raw.copy()
+    if "datetime" not in frame.columns:
+        frame = frame.reset_index(names="datetime")
+    frame = frame.rename(columns={"datetime": "timestamp"})
+    frame["symbol"] = f"{exchange}:{symbol}"
+    columns = ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
+    missing = [column for column in columns if column not in frame.columns]
+    if missing:
+        raise ValueError(f"TradingView data missing column(s): {missing}")
+    return frame[columns]
 
 
 def _filter_dates(

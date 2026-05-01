@@ -4,16 +4,26 @@ from __future__ import annotations
 
 import pytest
 
-from tradelearn.data.providers import DataProvider, OpenTdxProvider, infer_tdx_market
+from tradelearn.data.providers import (
+    DataProvider,
+    TdxProvider,
+    TradingViewProvider,
+    infer_tdx_market,
+)
 
 
 def enum_value(value: object) -> object:
-    """Return enum value for assertions when opentdx is installed."""
+    """Return enum value for assertions when the TDX dependency is installed."""
     return getattr(value, "value", value)
 
 
+def enum_name(value: object) -> object:
+    """Return enum name for assertions when optional providers are installed."""
+    return getattr(value, "name", value)
+
+
 class FakeTdxClient:
-    """Small opentdx-compatible fake client."""
+    """Small TDX-compatible fake client."""
 
     def __init__(self) -> None:
         """Initialize fake call state."""
@@ -28,7 +38,7 @@ class FakeTdxClient:
         start: int,
         count: int,
     ) -> list[dict[str, object]]:
-        """Return opentdx-style kline dictionaries."""
+        """Return TDX-style kline dictionaries."""
         self.calls.append((market, code, period, start, count))
         return [
             {
@@ -53,7 +63,7 @@ class FakeTdxClient:
 
 
 class EmptyTdxClient:
-    """Fake client that simulates unavailable opentdx data."""
+    """Fake client that simulates unavailable TDX data."""
 
     def stock_kline(self, **_: object) -> list[dict[str, object]]:
         """Return no rows."""
@@ -88,7 +98,7 @@ class FakeQuotationClient:
 
 
 class ConnectableTdxClient(FakeTdxClient):
-    """Fake client with an opentdx-style quotation connection."""
+    """Fake client with a TDX-style quotation connection."""
 
     def __init__(self, *, connected: bool = True) -> None:
         """Initialize fake data and connection state."""
@@ -96,10 +106,45 @@ class ConnectableTdxClient(FakeTdxClient):
         self.quotation_client = FakeQuotationClient(connected=connected)
 
 
-def test_opentdx_provider_fetches_and_normalizes_daily_bars() -> None:
-    """OpenTdxProvider converts opentdx rows into Bars."""
+class FakeTvDatafeedClient:
+    """Small tvdatafeed-compatible fake client."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, object, int]] = []
+
+    def get_hist(
+        self,
+        *,
+        symbol: str,
+        exchange: str,
+        interval: object,
+        n_bars: int,
+    ):
+        self.calls.append((symbol, exchange, interval, n_bars))
+        import pandas as pd
+
+        return pd.DataFrame(
+            {
+                "symbol": ["NASDAQ:AAPL", "NASDAQ:AAPL"],
+                "open": [100.0, 101.0],
+                "high": [102.0, 103.0],
+                "low": [99.0, 100.0],
+                "close": [101.0, 102.0],
+                "volume": [1000.0, 1100.0],
+            },
+            index=pd.date_range("2024-01-01", periods=2, freq="D"),
+        )
+
+
+class EmptyTvDatafeedClient:
+    def get_hist(self, **_: object):
+        return None
+
+
+def test_tdx_provider_fetches_and_normalizes_daily_bars() -> None:
+    """TdxProvider converts TDX rows into Bars."""
     client = FakeTdxClient()
-    provider: DataProvider = OpenTdxProvider(client_factory=lambda: client)
+    provider: DataProvider = TdxProvider(client_factory=lambda: client)
 
     bars = provider.history_ohlc("600519", start="2024-01-02", end="2024-01-02", freq="1d")
 
@@ -116,13 +161,13 @@ def test_opentdx_provider_fetches_and_normalizes_daily_bars() -> None:
     assert bars.iloc[0]["volume"] == 120.0
     assert bars.attrs["market"] == "CN"
     assert bars.attrs["freq"] == "1d"
-    assert bars.attrs["engine"] == "opentdx"
+    assert bars.attrs["engine"] == "tdx"
 
 
-def test_opentdx_provider_maps_symbol_market_and_frequency() -> None:
+def test_tdx_provider_maps_symbol_market_and_frequency() -> None:
     """Provider maps common A-share symbols and supported frequencies."""
     client = FakeTdxClient()
-    provider = OpenTdxProvider(client_factory=lambda: client)
+    provider = TdxProvider(client_factory=lambda: client)
 
     provider.history_ohlc("000001", freq="1h")
 
@@ -136,10 +181,10 @@ def test_opentdx_provider_maps_symbol_market_and_frequency() -> None:
     )
 
 
-def test_opentdx_provider_connects_with_configured_host() -> None:
+def test_tdx_provider_connects_with_configured_host() -> None:
     """Provider uses configured host/port before fetching live rows."""
     client = ConnectableTdxClient()
-    provider = OpenTdxProvider(
+    provider = TdxProvider(
         host="1.2.3.4",
         port=7710,
         timeout=2.5,
@@ -151,10 +196,10 @@ def test_opentdx_provider_connects_with_configured_host() -> None:
     assert client.quotation_client.calls == [("1.2.3.4", 7710, 2.5)]
 
 
-def test_opentdx_provider_reports_unestablished_connection() -> None:
-    """Provider reports host diagnostics when opentdx never connects."""
+def test_tdx_provider_reports_unestablished_connection() -> None:
+    """Provider reports host diagnostics when TDX never connects."""
     client = ConnectableTdxClient(connected=False)
-    provider = OpenTdxProvider(
+    provider = TdxProvider(
         host="1.2.3.4",
         port=7710,
         timeout=2.5,
@@ -165,27 +210,27 @@ def test_opentdx_provider_reports_unestablished_connection() -> None:
         provider.history_ohlc("000001")
 
 
-def test_opentdx_provider_uses_official_auto_server_by_default() -> None:
-    """Provider follows opentdx's default auto server selection."""
+def test_tdx_provider_uses_official_auto_server_by_default() -> None:
+    """Provider follows TDX's default auto server selection."""
     client = ConnectableTdxClient()
-    provider = OpenTdxProvider(client_factory=lambda: client)
+    provider = TdxProvider(client_factory=lambda: client)
 
     provider.history_ohlc("000001")
 
     assert client.quotation_client.calls == [(None, 7709, 5.0)]
 
 
-def test_opentdx_provider_rejects_unsupported_frequency() -> None:
+def test_tdx_provider_rejects_unsupported_frequency() -> None:
     """Unsupported frequencies fail before network access."""
-    provider = OpenTdxProvider(client_factory=FakeTdxClient)
+    provider = TdxProvider(client_factory=FakeTdxClient)
 
     with pytest.raises(ValueError, match="Unsupported"):
         provider.history_ohlc("000001", freq="4h")
 
 
-def test_opentdx_provider_reports_empty_live_response() -> None:
+def test_tdx_provider_reports_empty_live_response() -> None:
     """Empty live responses fail with a concrete provider message."""
-    provider = OpenTdxProvider(client_factory=EmptyTdxClient)
+    provider = TdxProvider(client_factory=EmptyTdxClient)
 
     with pytest.raises(ConnectionError, match="returned no rows"):
         provider.history_ohlc("000001")
@@ -204,3 +249,59 @@ def test_infer_tdx_market_maps_common_index_and_etf_symbols() -> None:
     assert infer_tdx_market("SH.000300") == (1, "000300")
     assert infer_tdx_market("510300") == (1, "510300")
     assert infer_tdx_market("159919") == (0, "159919")
+
+
+def test_tradingview_provider_fetches_and_normalizes_bars() -> None:
+    """TradingViewProvider converts tvdatafeed rows into Bars."""
+
+    client = FakeTvDatafeedClient()
+    provider: DataProvider = TradingViewProvider(client_factory=lambda: client, n_bars=100)
+
+    bars = provider.history_ohlc(
+        "NASDAQ:AAPL",
+        start="2024-01-02",
+        end="2024-01-02",
+        freq="1d",
+    )
+
+    calls = [
+        (symbol, exchange, enum_name(interval), n_bars)
+        for symbol, exchange, interval, n_bars in client.calls
+    ]
+    assert calls == [("AAPL", "NASDAQ", "in_daily", 100)]
+    assert bars.index.names == ["timestamp", "symbol"]
+    assert list(bars.index.get_level_values("symbol")) == ["NASDAQ:AAPL"]
+    assert str(bars.index.get_level_values("timestamp").tz) == "UTC"
+    assert bars.iloc[0]["close"] == 102.0
+    assert bars.attrs["market"] == "GLOBAL"
+    assert bars.attrs["freq"] == "1d"
+    assert bars.attrs["engine"] == "tradingview"
+
+
+def test_tradingview_provider_accepts_exchange_keyword() -> None:
+    """Symbols can be split into symbol plus exchange arguments."""
+
+    client = FakeTvDatafeedClient()
+    provider = TradingViewProvider(client_factory=lambda: client)
+
+    provider.history_ohlc("AAPL", exchange="NASDAQ", freq="1h")
+
+    calls = [
+        (symbol, exchange, enum_name(interval), n_bars)
+        for symbol, exchange, interval, n_bars in client.calls
+    ]
+    assert calls == [("AAPL", "NASDAQ", "in_1_hour", 5000)]
+
+
+def test_tradingview_provider_rejects_unsupported_frequency() -> None:
+    provider = TradingViewProvider(client_factory=FakeTvDatafeedClient)
+
+    with pytest.raises(ValueError, match="Unsupported"):
+        provider.history_ohlc("NASDAQ:AAPL", freq="10m")
+
+
+def test_tradingview_provider_reports_empty_response() -> None:
+    provider = TradingViewProvider(client_factory=EmptyTvDatafeedClient)
+
+    with pytest.raises(ConnectionError, match="returned no rows"):
+        provider.history_ohlc("NASDAQ:AAPL")
