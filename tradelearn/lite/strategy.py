@@ -56,9 +56,6 @@ class Strategy(CoreStrategy):
         self._records: dict[str, pd.Series | pd.DataFrame] = {}
         self._storage: dict[str, Any] | None = None
         self._start_on_day = 0
-        self._lite_signals: list[tuple[str, Any, str | None]] = []
-        self._lite_signal_sentinel: Any = None
-        self._lite_signal_state: dict[str | None, int] = {}
         self._lite_target_size_by_data: dict[Any, float] = {}
 
     def _check_params(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -99,47 +96,11 @@ class Strategy(CoreStrategy):
             self._bt_positions[ticker] = proxy
         return proxy
 
-    def signal(self, line: Any, *, kind: str = "long", ticker: str | None = None) -> Any:
-        """Register a Lite signal line as strategy syntax sugar."""
-        kind = kind.lower()
-        if kind not in {"long", "short", "longshort"}:
-            raise ValueError("kind must be one of 'long', 'short', or 'longshort'")
-        self._lite_signals.append((kind, line, ticker))
-        return line
-
     def next(self) -> None:
-        self._process_lite_signals()
         self._next_lite_custom()
 
     def _next_lite_custom(self) -> None:
         pass
-
-    def _signal_value(self, line: Any) -> float:
-        try:
-            return float(line[0])
-        except (IndexError, TypeError, ValueError):
-            return 0.0
-
-    def _process_lite_signals(self) -> None:
-        if not self._lite_signals:
-            return
-        for kind, line, ticker in self._lite_signals:
-            value = self._signal_value(line)
-            state = self._lite_signal_state.get(ticker, 0)
-            if kind == "long":
-                if value > 0.0 and state <= 0:
-                    self.buy(ticker=ticker, size=1)
-                    self._lite_signal_state[ticker] = 1
-            elif kind == "short":
-                if value < 0.0 and state >= 0:
-                    self.sell(ticker=ticker, size=1)
-                    self._lite_signal_state[ticker] = -1
-            elif value > 0.0 and state <= 0:
-                self.buy(ticker=ticker, size=1)
-                self._lite_signal_state[ticker] = 1
-            elif value < 0.0 and state >= 0:
-                self.sell(ticker=ticker, size=1)
-                self._lite_signal_state[ticker] = -1
 
     def I(  # noqa: E743
         self,

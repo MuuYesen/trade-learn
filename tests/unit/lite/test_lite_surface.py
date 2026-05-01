@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 import tradelearn as tl
-from tradelearn.lite import Backtest, MLStrategy, Signal, SignalStrategy, Strategy
+from tradelearn.lite import Backtest, MLStrategy, Strategy
 from tradelearn.lite.backtest import _can_skip_normalize_data
 
 
@@ -166,6 +166,13 @@ def test_lite_records_are_exposed_from_run_result() -> None:
     assert records["signal"].dropna().tolist() == [12.0, 13.0, 14.0]
 
 
+def test_lite_does_not_export_trading_signal_api() -> None:
+    assert "Signal" not in tl.lite.__all__
+    assert "SignalStrategy" not in tl.lite.__all__
+    assert not hasattr(tl.lite, "Signal")
+    assert not hasattr(tl.lite, "SignalStrategy")
+
+
 def test_lite_rejects_sl_tp_until_bracket_orders_are_implemented() -> None:
     class LiteStrategy(Strategy):
         def init(self) -> None:
@@ -221,25 +228,6 @@ def test_lite_supports_explicit_bracket_helpers() -> None:
     stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
 
     assert len(stats["_strategy"].orders) == 3
-
-
-def test_lite_signal_sugar_trades_on_positive_signal() -> None:
-    class LiteStrategy(Strategy):
-        def init(self) -> None:
-            self.sig = self.I(pd.Series([0.0, 1.0, 1.0, 0.0, 0.0], index=self.data.index))
-            self.signal(self.sig, kind="long")
-            self.start_on_bar(1)
-
-    stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
-
-    assert stats["_strategy"].position().size > 0
-    assert len(stats["_strategy"].orders) >= 1
-
-
-def test_lite_exports_signal_strategy_names() -> None:
-    assert SignalStrategy is Strategy
-    wrapped = Signal([0.0, 1.0])
-    assert wrapped[1] == 1.0
 
 
 def test_lite_exports_mlstrategy_with_shared_ml_runtime() -> None:

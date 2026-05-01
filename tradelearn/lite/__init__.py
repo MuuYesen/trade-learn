@@ -6,16 +6,11 @@ import importlib
 from typing import Any
 
 from .backtest import Backtest
-from .indicator import Signal
 from .strategy import Strategy
-
-SignalStrategy = Strategy
 
 __all__ = [
     "Backtest",
     "MLStrategy",
-    "Signal",
-    "SignalStrategy",
     "Strategy",
     "ta",
     "talib",

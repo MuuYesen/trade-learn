@@ -6,19 +6,6 @@ import numpy as np
 import pandas as pd
 
 
-class Signal:
-    """Lite signal wrapper with line-like indexing."""
-
-    def __init__(self, values: Any) -> None:
-        self._values = values
-
-    def __getitem__(self, index: int) -> float:
-        try:
-            return float(self._values[index])
-        except (IndexError, TypeError, ValueError):
-            return 0.0
-
-
 class IndicatorProxy:
     """Gradually revealed indicator/data line used by the Lite facade."""
 
@@ -198,4 +185,4 @@ def _indicator_column_aliases(column: object) -> tuple[str, ...]:
     return tuple(aliases)
 
 
-__all__ = ["IndicatorBundle", "IndicatorProxy", "Signal", "_wrap_indicator_result"]
+__all__ = ["IndicatorBundle", "IndicatorProxy", "_wrap_indicator_result"]
