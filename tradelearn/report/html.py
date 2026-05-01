@@ -44,6 +44,8 @@ def write_html_report(
     factor_autocorrelation = reporter.factor_autocorrelation()
     factor_long_short_returns = reporter.factor_long_short_returns()
     factor_quantile_returns = reporter.factor_quantile_returns()
+    factor_quantile_forward_returns = reporter.factor_quantile_forward_returns()
+    factor_events_distribution = reporter.factor_events_distribution()
     summary = reporter.summary(benchmark=benchmark_returns)
     config = reporter._get("config", default={}) or {}
     metadata = _metadata(summary, returns, config)
@@ -58,6 +60,7 @@ def write_html_report(
     plots["Annual Returns"] = charts.annual_returns(returns)
     plots["Monthly Returns Heatmap"] = charts.monthly_heatmap(reporter.monthly_heatmap())
     plots["Monthly Returns Distribution"] = charts.monthly_returns_distribution(returns)
+    plots["Monthly Returns Timeseries"] = charts.monthly_returns_timeseries(returns)
     plots["Rolling Returns"] = charts.rolling_returns(returns)
     plots["Rolling Sharpe"] = charts.rolling_sharpe(reporter.rolling_sharpe())
     plots["Rolling Volatility"] = charts.rolling_volatility(returns)
@@ -71,6 +74,15 @@ def write_html_report(
     if _has_multi_asset_exposure(exposure):
         plots["Correlation Matrix"] = charts.correlation_matrix(correlation)
         plots["Exposure Chart"] = charts.exposure(exposure)
+        positions = reporter._get("positions", default=pd.DataFrame())
+        fills = reporter._get("fills", default=pd.DataFrame())
+        plots["Holdings"] = charts.holdings(positions)
+        plots["Long/Short Holdings"] = charts.long_short_holdings(positions)
+        plots["Gross Leverage"] = charts.gross_leverage(positions)
+        plots["Position Concentration"] = charts.position_concentration(positions)
+        plots["Turnover"] = charts.turnover(fills, positions)
+        plots["Daily Volume"] = charts.daily_volume(fills)
+        plots["Transaction Time Histogram"] = charts.transaction_time_histogram(fills)
     if not factor_ic.empty:
         plots["Factor IC"] = charts.factor_ic(factor_ic)
         plots["Factor IC Histogram"] = charts.factor_ic_histogram(factor_ic)
@@ -99,6 +111,14 @@ def write_html_report(
         if factor_analyzer is not None and hasattr(factor_analyzer, "quantile_counts"):
             plots["Factor Quantile Counts"] = charts.quantile_counts(
                 factor_analyzer.quantile_counts()
+            )
+        if not factor_quantile_forward_returns.empty:
+            plots["Factor Quantile Returns Violin"] = charts.factor_quantile_returns_violin(
+                factor_quantile_forward_returns
+            )
+        if not factor_events_distribution.empty:
+            plots["Factor Events Distribution"] = charts.factor_events_distribution(
+                factor_events_distribution
             )
         plots["Factor Quantile Returns"] = charts.quantile_returns(factor_quantile_returns)
     plots = {title: plot for title, plot in plots.items() if _has_glyph_renderers(plot)}

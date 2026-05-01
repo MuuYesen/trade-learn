@@ -6,20 +6,28 @@ from bokeh.plotting import figure
 from tradelearn.report.charts import (
     annual_returns,
     correlation_matrix,
+    daily_volume,
     drawdown,
     equity_curve,
     exposure,
+    factor_events_distribution,
     factor_ic,
     factor_ic_histogram,
     factor_ic_qq,
     factor_long_short_returns,
     factor_quantile_returns_bar,
+    factor_quantile_returns_violin,
     factor_quantile_spread,
     factor_rank_ic,
     factor_turnover,
+    gross_leverage,
+    holdings,
+    long_short_holdings,
     market_replay,
     monthly_heatmap,
     monthly_returns_distribution,
+    monthly_returns_timeseries,
+    position_concentration,
     quantile_counts,
     quantile_returns,
     return_quantiles,
@@ -28,6 +36,8 @@ from tradelearn.report.charts import (
     rolling_sharpe,
     rolling_volatility,
     trade_distribution,
+    transaction_time_histogram,
+    turnover,
 )
 
 
@@ -39,6 +49,7 @@ def test_report_charts_return_bokeh_figures() -> None:
         annual_returns(_series("returns")),
         monthly_heatmap(_monthly_returns()),
         monthly_returns_distribution(_series("returns")),
+        monthly_returns_timeseries(_series("returns")),
         rolling_returns(_series("returns")),
         rolling_volatility(_series("returns")),
         return_quantiles(_series("returns")),
@@ -48,7 +59,9 @@ def test_report_charts_return_bokeh_figures() -> None:
         correlation_matrix(_correlation()),
         quantile_returns(_quantile_returns()),
         factor_quantile_returns_bar(_quantile_stats()),
+        factor_quantile_returns_violin(_quantile_forward_returns()),
         factor_quantile_spread(_series("quantile_spread")),
+        factor_events_distribution(_factor_events()),
         quantile_counts(_quantile_counts()),
         rolling_beta(_series("rolling_beta")),
         factor_ic(_series("ic")),
@@ -57,6 +70,13 @@ def test_report_charts_return_bokeh_figures() -> None:
         factor_rank_ic(_series("rank_ic")),
         factor_turnover(_series("turnover"), _series("autocorrelation")),
         factor_long_short_returns(_long_short_returns()),
+        holdings(_positions()),
+        long_short_holdings(_positions()),
+        gross_leverage(_positions()),
+        position_concentration(_positions()),
+        turnover(_transactions(), _positions()),
+        daily_volume(_transactions()),
+        transaction_time_histogram(_transactions()),
     ]
 
     assert all(isinstance(plot, type(figure())) for plot in plots)
@@ -147,6 +167,48 @@ def _long_short_returns() -> pd.DataFrame:
             "spread": [0.02, 0.06],
         },
         index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+    )
+
+
+def _quantile_forward_returns() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "quantile": [1, 1, 1, 2, 2, 2],
+            "forward_return": [-0.03, -0.01, 0.02, 0.01, 0.04, 0.06],
+        }
+    )
+
+
+def _factor_events() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "date": pd.date_range("2024-01-01", periods=4, tz="UTC"),
+            "symbol": ["AAA", "BBB", "AAA", "CCC"],
+        }
+    )
+
+
+def _positions() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
+                utc=True,
+            ),
+            "symbol": ["AAA", "BBB", "AAA", "BBB"],
+            "value": [60_000.0, -20_000.0, 30_000.0, 40_000.0],
+        }
+    )
+
+
+def _transactions() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "datetime": pd.date_range("2024-01-01 10:00", periods=3, freq="h", tz="UTC"),
+            "symbol": ["AAA", "BBB", "AAA"],
+            "size": [100.0, -50.0, 75.0],
+            "price": [10.0, 20.0, 11.0],
+        }
     )
 
 

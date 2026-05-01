@@ -190,6 +190,10 @@ def test_reporter_html_adds_exposure_chart_for_multi_asset_positions(tmp_path) -
     html = path.read_text()
     assert "Correlation Matrix" in html
     assert "Exposure Chart" in html
+    assert "Holdings" in html
+    assert "Long/Short Holdings" in html
+    assert "Gross Leverage" in html
+    assert "Position Concentration" in html
     assert "AAA" in html
     assert "BBB" in html
 
@@ -240,7 +244,9 @@ def test_reporter_html_adds_factor_quantile_chart_when_analyzer_exists(tmp_path)
     html = path.read_text()
     assert "Factor Quantile Returns" in html
     assert "Factor Mean Return by Quantile" in html
+    assert "Factor Quantile Returns Violin" in html
     assert "Factor Quantile Spread" in html
+    assert "Factor Events Distribution" in html
     assert "Factor Quantile Counts" in html
     assert "Factor IC" in html
     assert "Factor IC Histogram" in html
@@ -327,6 +333,24 @@ class _FactorAnalyzerStub:
         return pd.DataFrame(
             {1: [2, 3], 2: [3, 2]},
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+        )
+
+    def quantile_forward_returns(self) -> pd.DataFrame:
+        """Return raw forward returns grouped by quantile for report tests."""
+        return pd.DataFrame(
+            {
+                "quantile": [1, 1, 2, 2],
+                "forward_return": [-0.01, 0.02, 0.03, 0.04],
+            }
+        )
+
+    def events_distribution(self) -> pd.DataFrame:
+        """Return event rows for distribution charts."""
+        return pd.DataFrame(
+            {
+                "date": pd.date_range("2024-01-01", periods=3, tz="UTC"),
+                "symbol": ["AAA", "BBB", "CCC"],
+            }
         )
 
 

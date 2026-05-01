@@ -76,27 +76,25 @@ class FactorAnalyzer:
 
     def quantile_counts(self) -> pd.DataFrame:
         """Return per-date asset counts by factor quantile."""
-        if self.quantiles <= 0:
-            raise ValueError("quantiles must be a positive integer")
-        aligned = pd.concat(
-            {"factor": self.factor, "returns": self._forward_returns()},
-            axis=1,
-        ).dropna()
-
-        def _assign_quantiles(frame: pd.Series) -> pd.Series:
-            labels = pd.qcut(
-                frame.rank(method="first"),
-                q=min(self.quantiles, len(frame)),
-                labels=False,
-            )
-            return labels.astype(int) + 1
-
-        quantiles = aligned["factor"].groupby(level=0, group_keys=False).apply(_assign_quantiles)
+        aligned, quantiles = self._aligned_quantiles()
         counts = quantiles.groupby([quantiles.index.get_level_values(0), quantiles]).size()
         result = counts.unstack(fill_value=0).sort_index(axis=1)
         result.index.name = self.factor.index.names[0]
         result.columns.name = None
         return result
+
+    def quantile_forward_returns(self) -> pd.DataFrame:
+        """Return raw forward return observations with assigned factor quantiles."""
+        aligned, quantiles = self._aligned_quantiles()
+        return pd.DataFrame(
+            {
+                "date": aligned.index.get_level_values(0),
+                "symbol": aligned.index.get_level_values(1),
+                "quantile": quantiles.astype(int).to_numpy(),
+                "forward_return": aligned["returns"].to_numpy(),
+            },
+            index=aligned.index,
+        )
 
     def quantile_decay(self, window: int = 5) -> pd.DataFrame:
         """Return rolling mean returns by factor quantile."""
@@ -166,6 +164,20 @@ class FactorAnalyzer:
         """Return factor rank autocorrelation."""
         return factor_metrics.autocorrelation(self.factor)
 
+    def events_distribution(self) -> pd.DataFrame:
+        """Return factor observation events for event-count distribution charts."""
+        aligned = pd.concat(
+            {"factor": self.factor, "returns": self._forward_returns()},
+            axis=1,
+        ).dropna()
+        return pd.DataFrame(
+            {
+                "date": aligned.index.get_level_values(0),
+                "symbol": aligned.index.get_level_values(1),
+            },
+            index=aligned.index,
+        )
+
     def summary(self) -> dict[str, float]:
         """Return scalar factor diagnostics."""
         ic_values = self.ic()
@@ -214,6 +226,9 @@ class FactorAnalyzer:
         qs = self.quantile_stats()
         if not qs.empty:
             items.append(charts.factor_quantile_returns_bar(qs))
+        qfr = self.quantile_forward_returns()
+        if not qfr.empty:
+            items.append(charts.factor_quantile_returns_violin(qfr))
         qr = self.quantile_cumulative_returns()
         if not qr.empty:
             items.append(charts.quantile_returns(qr))
@@ -237,6 +252,9 @@ class FactorAnalyzer:
         qc = self.quantile_counts()
         if not qc.empty:
             items.append(charts.quantile_counts(qc))
+        events = self.events_distribution()
+        if not events.empty:
+            items.append(charts.factor_events_distribution(events))
         t = self.turnover()
         ac = self.autocorrelation()
         if not t.empty or not ac.empty:
@@ -290,6 +308,26 @@ class FactorAnalyzer:
             forward.name = "forward_returns"
             return forward
         raise ValueError("FactorAnalyzer requires forward_returns or prices")
+
+    def _aligned_quantiles(self) -> tuple[pd.DataFrame, pd.Series]:
+        """Return aligned factor/return rows and per-date quantile labels."""
+        if self.quantiles <= 0:
+            raise ValueError("quantiles must be a positive integer")
+        aligned = pd.concat(
+            {"factor": self.factor, "returns": self._forward_returns()},
+            axis=1,
+        ).dropna()
+
+        def _assign_quantiles(frame: pd.Series) -> pd.Series:
+            labels = pd.qcut(
+                frame.rank(method="first"),
+                q=min(self.quantiles, len(frame)),
+                labels=False,
+            )
+            return labels.astype(int) + 1
+
+        quantiles = aligned["factor"].groupby(level=0, group_keys=False).apply(_assign_quantiles)
+        return aligned, quantiles
 
 
 def _render_factor_html(

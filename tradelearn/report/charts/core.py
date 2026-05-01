@@ -537,6 +537,31 @@ def monthly_returns_distribution(returns: pd.Series):
     return plot
 
 
+def monthly_returns_timeseries(returns: pd.Series):
+    """Return a pyfolio-style monthly returns time series."""
+    monthly = ((1.0 + pd.Series(returns).dropna()).resample("ME").prod() - 1.0).dropna()
+    frame = _plot_frame(monthly, "return")
+    frame["color"] = [MARKET_UP if value >= 0 else MARKET_DOWN for value in frame["return"]]
+    plot = figure(
+        title="Monthly Returns Timeseries",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not frame.empty:
+        plot.vbar(
+            "date",
+            width=20 * 24 * 60 * 60 * 1000,
+            top="return",
+            source=ColumnDataSource(frame),
+            color="color",
+            alpha=0.70,
+        )
+    plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+    _make_static_chart(plot)
+    return plot
+
+
 def rolling_returns(returns: pd.Series):
     """Return a cumulative rolling returns chart."""
     curve = (1.0 + pd.Series(returns).dropna()).cumprod() - 1.0
@@ -592,6 +617,160 @@ def return_quantiles(returns: pd.Series):
     if not frame.empty:
         plot.vbar("quantile", 0.7, "return", source=ColumnDataSource(frame), color="color")
     plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+    _make_static_chart(plot)
+    return plot
+
+
+def holdings(positions: pd.DataFrame):
+    """Return number of active holdings over time."""
+    wide = _positions_wide(positions)
+    values = wide.drop(columns=["cash"], errors="ignore")
+    counts = values.ne(0).sum(axis=1) if not values.empty else pd.Series(dtype="float64")
+    frame = _plot_frame(counts, "holdings")
+    plot = figure(title="Holdings", x_axis_type="datetime", height=220, sizing_mode="stretch_width")
+    if not frame.empty:
+        plot.line(frame["date"], frame["holdings"], line_width=2, color=MARKET_BLUE)
+    _make_static_chart(plot)
+    return plot
+
+
+def long_short_holdings(positions: pd.DataFrame):
+    """Return long and short holding counts over time."""
+    wide = _positions_wide(positions).drop(columns=["cash"], errors="ignore")
+    long_counts = wide.gt(0).sum(axis=1) if not wide.empty else pd.Series(dtype="float64")
+    short_counts = wide.lt(0).sum(axis=1) if not wide.empty else pd.Series(dtype="float64")
+    frame = pd.DataFrame({"long": long_counts, "short": short_counts})
+    frame = frame.reset_index().rename(columns={frame.index.name or "index": "date"})
+    frame["date"] = _normalize_dates(frame["date"])
+    plot = figure(
+        title="Long/Short Holdings",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not frame.empty:
+        plot.line(frame["date"], frame["long"], line_width=2, color=MARKET_UP, legend_label="Long")
+        plot.line(
+            frame["date"],
+            frame["short"],
+            line_width=2,
+            color=MARKET_DOWN,
+            legend_label="Short",
+        )
+    _make_static_chart(plot)
+    return plot
+
+
+def gross_leverage(positions: pd.DataFrame):
+    """Return gross leverage computed from position values."""
+    wide = _positions_wide(positions)
+    assets = wide.drop(columns=["cash"], errors="ignore")
+    gross = assets.abs().sum(axis=1)
+    equity = wide.sum(axis=1).replace(0, pd.NA)
+    leverage = (gross / equity.abs()).astype("float64").fillna(0.0)
+    frame = _plot_frame(leverage, "gross_leverage")
+    plot = figure(
+        title="Gross Leverage",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not frame.empty:
+        plot.line(frame["date"], frame["gross_leverage"], line_width=2, color="#8c564b")
+    _make_static_chart(plot)
+    return plot
+
+
+def position_concentration(positions: pd.DataFrame):
+    """Return max and median absolute position concentration."""
+    wide = _positions_wide(positions)
+    assets = wide.drop(columns=["cash"], errors="ignore")
+    totals = assets.abs().sum(axis=1).replace(0, pd.NA)
+    weights = assets.abs().div(totals, axis=0).fillna(0.0)
+    frame = pd.DataFrame(
+        {
+            "max": weights.max(axis=1),
+            "median": weights.median(axis=1),
+        }
+    )
+    frame = frame.reset_index().rename(columns={frame.index.name or "index": "date"})
+    frame["date"] = _normalize_dates(frame["date"])
+    plot = figure(
+        title="Position Concentration",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not frame.empty:
+        plot.line(frame["date"], frame["max"], line_width=2, color=MARKET_BLUE, legend_label="Max")
+        plot.line(
+            frame["date"],
+            frame["median"],
+            line_width=2,
+            color="#ff7f0e",
+            legend_label="Median",
+        )
+    plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+    _make_static_chart(plot)
+    return plot
+
+
+def turnover(transactions: pd.DataFrame, positions: pd.DataFrame | None = None):
+    """Return daily turnover from transaction notional."""
+    frame = _transactions_frame(transactions)
+    plot = figure(title="Turnover", x_axis_type="datetime", height=220, sizing_mode="stretch_width")
+    if frame.empty:
+        _make_static_chart(plot)
+        return plot
+    daily = frame.groupby(frame["date"].dt.floor("D"))["notional"].sum()
+    if positions is not None and not positions.empty:
+        wide = _positions_wide(positions)
+        equity = wide.sum(axis=1).abs().replace(0, pd.NA)
+        daily = daily / equity.reindex(daily.index, method="nearest").ffill()
+    daily = daily.astype("float64").fillna(0.0)
+    data = _plot_frame(daily, "turnover")
+    plot.line(data["date"], data["turnover"], line_width=2, color=MARKET_BLUE)
+    _make_static_chart(plot)
+    return plot
+
+
+def daily_volume(transactions: pd.DataFrame):
+    """Return daily traded share or contract volume."""
+    frame = _transactions_frame(transactions)
+    plot = figure(
+        title="Daily Volume",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not frame.empty:
+        daily = frame.groupby(frame["date"].dt.floor("D"))["size"].sum().abs()
+        data = _plot_frame(daily, "volume")
+        plot.vbar(
+            data["date"],
+            width=20 * 60 * 60 * 1000,
+            top=data["volume"],
+            color=MARKET_BLUE,
+            alpha=0.70,
+        )
+    _make_static_chart(plot)
+    return plot
+
+
+def transaction_time_histogram(transactions: pd.DataFrame):
+    """Return transaction count histogram by hour of day."""
+    frame = _transactions_frame(transactions)
+    plot = figure(
+        title="Transaction Time Histogram",
+        x_range=[str(hour) for hour in range(24)],
+        height=220,
+        sizing_mode="stretch_width",
+        toolbar_location=None,
+    )
+    if not frame.empty:
+        counts = frame["date"].dt.hour.value_counts().reindex(range(24), fill_value=0)
+        data = pd.DataFrame({"hour": counts.index.astype(str), "count": counts.to_numpy()})
+        plot.vbar("hour", 0.8, "count", source=ColumnDataSource(data), color=MARKET_BLUE)
     _make_static_chart(plot)
     return plot
 
@@ -754,6 +933,49 @@ def factor_quantile_returns_bar(stats: pd.DataFrame):
     if not frame.empty:
         plot.vbar("quantile", 0.7, "mean", source=ColumnDataSource(frame), color="color")
     plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+    _make_static_chart(plot)
+    return plot
+
+
+def factor_quantile_returns_violin(forward_returns: pd.DataFrame):
+    """Return Alphalens-style forward return distribution by factor quantile."""
+    frame = _quantile_forward_frame(forward_returns)
+    quantiles = (
+        [str(value) for value in sorted(frame["quantile"].unique())]
+        if not frame.empty
+        else []
+    )
+    plot = figure(
+        title="Quantile Returns Violin",
+        x_range=(-0.5, max(0.5, len(quantiles) - 0.5)),
+        height=260,
+        sizing_mode="stretch_width",
+        toolbar_location=None,
+    )
+    if not frame.empty:
+        for quantile in quantiles:
+            quantile_mask = frame["quantile"].astype(str).eq(quantile)
+            values = frame.loc[quantile_mask, "forward_return"].dropna()
+            if values.empty:
+                continue
+            bins = min(18, max(4, len(values)))
+            counts = pd.cut(values, bins=bins).value_counts(sort=False)
+            if counts.empty or counts.max() == 0:
+                continue
+            centers = [(interval.left + interval.right) / 2 for interval in counts.index]
+            widths = [0.42 * count / counts.max() for count in counts.to_numpy()]
+            x_center = quantiles.index(quantile)
+            xs = [x_center + width for width in widths] + [
+                x_center - width for width in reversed(widths)
+            ]
+            ys = centers + list(reversed(centers))
+            plot.patch(xs, ys, fill_color=MARKET_BLUE, fill_alpha=0.28, line_color=MARKET_BLUE)
+            plot.scatter([x_center], [float(values.median())], size=7, color="#ff7f0e")
+        plot.xaxis.ticker = list(range(len(quantiles)))
+        plot.xaxis.major_label_overrides = {
+            index: f"Q{value}" for index, value in enumerate(quantiles)
+        }
+        plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
     _make_static_chart(plot)
     return plot
 
@@ -997,6 +1219,29 @@ def factor_turnover(turnover: pd.Series, autocorrelation: pd.Series):
     return plot
 
 
+def factor_events_distribution(events: pd.DataFrame | pd.MultiIndex | pd.Series):
+    """Return event count distribution over time."""
+    frame = _events_frame(events)
+    plot = figure(
+        title="Events Distribution",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not frame.empty:
+        counts = frame.groupby(frame["date"].dt.floor("D")).size()
+        data = _plot_frame(counts.rename("count"), "count")
+        plot.vbar(
+            data["date"],
+            width=20 * 60 * 60 * 1000,
+            top=data["count"],
+            color=MARKET_BLUE,
+            alpha=0.70,
+        )
+    _make_static_chart(plot)
+    return plot
+
+
 def _add_drawdown_markers(plot, equity: pd.Series, drawdowns: pd.DataFrame) -> None:
     """Add peak and valley markers for drawdown episodes."""
     for column, name, color, marker in [
@@ -1019,6 +1264,114 @@ def _add_drawdown_markers(plot, equity: pd.Series, drawdowns: pd.DataFrame) -> N
             legend_label=name.replace("_", " ").title(),
             name=name,
         )
+
+
+def _normalize_dates(values: pd.Series) -> pd.Series:
+    """Return timezone-naive datetimes for Bokeh."""
+    dates = pd.to_datetime(values, errors="coerce")
+    if isinstance(dates.dtype, pd.DatetimeTZDtype):
+        return dates.dt.tz_convert("UTC").dt.tz_localize(None)
+    return dates
+
+
+def _positions_wide(positions: pd.DataFrame) -> pd.DataFrame:
+    """Return numeric date x symbol position values."""
+    frame = pd.DataFrame(positions).copy()
+    if frame.empty:
+        return pd.DataFrame()
+    lowered = {str(column).lower(): column for column in frame.columns}
+    date_col = lowered.get("date") or lowered.get("datetime") or lowered.get("timestamp")
+    symbol_col = lowered.get("symbol") or lowered.get("ticker") or lowered.get("asset")
+    value_col = lowered.get("value") or lowered.get("market_value") or lowered.get("position_value")
+    if date_col is not None and symbol_col is not None and value_col is not None:
+        frame["__date"] = _normalize_dates(frame[date_col])
+        frame["__value"] = pd.to_numeric(frame[value_col], errors="coerce")
+        wide = frame.pivot_table(
+            index="__date",
+            columns=symbol_col,
+            values="__value",
+            aggfunc="sum",
+        )
+        return wide.sort_index().fillna(0.0)
+    if date_col is not None:
+        frame = frame.set_index(_normalize_dates(frame[date_col])).drop(columns=[date_col])
+    if not isinstance(frame.index, pd.DatetimeIndex):
+        frame.index = _normalize_dates(pd.Series(frame.index))
+    numeric = frame.select_dtypes(include="number").copy()
+    return numeric.sort_index().fillna(0.0)
+
+
+def _transactions_frame(transactions: pd.DataFrame) -> pd.DataFrame:
+    """Return normalized transactions with date, signed size, price, and notional."""
+    frame = pd.DataFrame(transactions).copy()
+    if frame.empty:
+        return pd.DataFrame(columns=["date", "size", "price", "notional"])
+    lowered = {str(column).lower(): column for column in frame.columns}
+    date_col = lowered.get("datetime") or lowered.get("date") or lowered.get("timestamp")
+    size_col = lowered.get("size") or lowered.get("qty") or lowered.get("quantity")
+    price_col = lowered.get("price") or lowered.get("fill_price")
+    amount_col = lowered.get("amount") or lowered.get("notional") or lowered.get("value")
+    if date_col is None:
+        return pd.DataFrame(columns=["date", "size", "price", "notional"])
+    result = pd.DataFrame({"date": _normalize_dates(frame[date_col])})
+    if size_col is not None:
+        result["size"] = pd.to_numeric(frame[size_col], errors="coerce").fillna(0.0)
+    else:
+        result["size"] = 0.0
+    if price_col is not None:
+        result["price"] = pd.to_numeric(frame[price_col], errors="coerce").fillna(0.0)
+    else:
+        result["price"] = 0.0
+    if amount_col is not None:
+        result["notional"] = pd.to_numeric(frame[amount_col], errors="coerce").abs().fillna(0.0)
+    else:
+        result["notional"] = (result["size"].abs() * result["price"].abs()).fillna(0.0)
+    return result.dropna(subset=["date"])
+
+
+def _quantile_forward_frame(forward_returns: pd.DataFrame) -> pd.DataFrame:
+    """Return a normalized quantile/forward_return frame."""
+    frame = pd.DataFrame(forward_returns).copy()
+    if frame.empty:
+        return pd.DataFrame(columns=["quantile", "forward_return"])
+    lowered = {str(column).lower(): column for column in frame.columns}
+    quantile_col = lowered.get("quantile") or lowered.get("factor_quantile")
+    return_col = lowered.get("forward_return") or lowered.get("return") or lowered.get("returns")
+    if quantile_col is not None and return_col is not None:
+        result = pd.DataFrame(
+            {
+                "quantile": frame[quantile_col],
+                "forward_return": pd.to_numeric(frame[return_col], errors="coerce"),
+            }
+        )
+        return result.dropna(subset=["quantile", "forward_return"])
+    if isinstance(frame.index, pd.MultiIndex) and frame.index.nlevels >= 2 and frame.shape[1] >= 1:
+        result = frame.iloc[:, 0].reset_index()
+        result.columns = [*result.columns[:-1], "forward_return"]
+        quantile_name = "factor_quantile" if "factor_quantile" in result else result.columns[-2]
+        return result.rename(columns={quantile_name: "quantile"})[["quantile", "forward_return"]]
+    return pd.DataFrame(columns=["quantile", "forward_return"])
+
+
+def _events_frame(events: pd.DataFrame | pd.MultiIndex | pd.Series) -> pd.DataFrame:
+    """Return event rows with a normalized date column."""
+    if isinstance(events, pd.MultiIndex):
+        dates = events.get_level_values(0)
+        return pd.DataFrame({"date": _normalize_dates(pd.Series(dates))})
+    if isinstance(events, pd.Series):
+        if isinstance(events.index, pd.MultiIndex):
+            dates = events.index.get_level_values(0)
+        else:
+            dates = events.index
+        return pd.DataFrame({"date": _normalize_dates(pd.Series(dates))})
+    frame = pd.DataFrame(events).copy()
+    if frame.empty:
+        return pd.DataFrame(columns=["date"])
+    lowered = {str(column).lower(): column for column in frame.columns}
+    date_col = lowered.get("date") or lowered.get("datetime") or lowered.get("timestamp")
+    if date_col is None:
+        return pd.DataFrame(columns=["date"])
+    return pd.DataFrame({"date": _normalize_dates(frame[date_col])}).dropna()
 
 
 def _plot_frame(series: pd.Series, name: str) -> pd.DataFrame:

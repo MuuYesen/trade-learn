@@ -320,7 +320,9 @@ def test_factor_analyzer_plot_includes_alphalens_style_sections() -> None:
     titles = _collect_titles(layout)
 
     assert "Mean Return by Quantile" in titles
+    assert "Quantile Returns Violin" in titles
     assert "Quantile Spread" in titles
+    assert "Events Distribution" in titles
     assert "IC Histogram" in titles
     assert "IC QQ" in titles
     assert "Quantile Counts" in titles

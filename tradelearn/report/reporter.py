@@ -158,6 +158,13 @@ class Reporter:
             return pd.DataFrame()
         return pd.DataFrame(factor_analyzer.quantile_counts()).copy()
 
+    def factor_quantile_forward_returns(self) -> pd.DataFrame:
+        """Return raw forward returns by factor quantile from analyzers."""
+        factor_analyzer = self._factor_analyzer()
+        if factor_analyzer is None or not hasattr(factor_analyzer, "quantile_forward_returns"):
+            return pd.DataFrame()
+        return pd.DataFrame(factor_analyzer.quantile_forward_returns()).copy()
+
     def factor_long_short_returns(self) -> pd.DataFrame:
         """Return factor long-short cumulative returns from analyzers."""
         factor_analyzer = self._factor_analyzer()
@@ -193,6 +200,13 @@ class Reporter:
             return pd.Series(dtype="float64", name="autocorrelation")
         return pd.Series(factor_analyzer.autocorrelation()).copy()
 
+    def factor_events_distribution(self) -> pd.DataFrame:
+        """Return factor event rows from analyzers."""
+        factor_analyzer = self._factor_analyzer()
+        if factor_analyzer is None or not hasattr(factor_analyzer, "events_distribution"):
+            return pd.DataFrame()
+        return pd.DataFrame(factor_analyzer.events_distribution()).copy()
+
     def equity_curve_chart(self, benchmark: pd.Series | None = None):
         """Return a Bokeh equity curve chart."""
         return charts.equity_curve(
@@ -216,6 +230,10 @@ class Reporter:
     def monthly_returns_distribution_chart(self):
         """Return a Bokeh monthly returns distribution chart."""
         return charts.monthly_returns_distribution(self._get("returns"))
+
+    def monthly_returns_timeseries_chart(self):
+        """Return a Bokeh monthly returns time series chart."""
+        return charts.monthly_returns_timeseries(self._get("returns"))
 
     def rolling_returns_chart(self):
         """Return a Bokeh rolling returns chart."""
@@ -259,6 +277,37 @@ class Reporter:
         """Return a Bokeh exposure chart."""
         return charts.exposure(self.exposure())
 
+    def holdings_chart(self):
+        """Return a Bokeh holdings chart."""
+        return charts.holdings(self._get("positions", default=pd.DataFrame()))
+
+    def long_short_holdings_chart(self):
+        """Return a Bokeh long/short holdings chart."""
+        return charts.long_short_holdings(self._get("positions", default=pd.DataFrame()))
+
+    def gross_leverage_chart(self):
+        """Return a Bokeh gross leverage chart."""
+        return charts.gross_leverage(self._get("positions", default=pd.DataFrame()))
+
+    def position_concentration_chart(self):
+        """Return a Bokeh position concentration chart."""
+        return charts.position_concentration(self._get("positions", default=pd.DataFrame()))
+
+    def turnover_chart(self):
+        """Return a Bokeh turnover chart."""
+        return charts.turnover(
+            self._get("fills", default=pd.DataFrame()),
+            self._get("positions", default=pd.DataFrame()),
+        )
+
+    def daily_volume_chart(self):
+        """Return a Bokeh daily transaction volume chart."""
+        return charts.daily_volume(self._get("fills", default=pd.DataFrame()))
+
+    def transaction_time_histogram_chart(self):
+        """Return a Bokeh transaction time histogram."""
+        return charts.transaction_time_histogram(self._get("fills", default=pd.DataFrame()))
+
     def correlation_matrix_chart(self):
         """Return a Bokeh correlation matrix chart."""
         return charts.correlation_matrix(self.correlation_matrix())
@@ -278,6 +327,10 @@ class Reporter:
     def factor_quantile_counts_chart(self):
         """Return a Bokeh factor quantile counts chart."""
         return charts.quantile_counts(self.factor_quantile_counts())
+
+    def factor_quantile_returns_violin_chart(self):
+        """Return a Bokeh factor quantile return distribution chart."""
+        return charts.factor_quantile_returns_violin(self.factor_quantile_forward_returns())
 
     def factor_long_short_returns_chart(self):
         """Return a Bokeh factor long-short returns chart."""
@@ -305,6 +358,10 @@ class Reporter:
             self.factor_turnover(),
             self.factor_autocorrelation(),
         )
+
+    def factor_events_distribution_chart(self):
+        """Return a Bokeh factor events distribution chart."""
+        return charts.factor_events_distribution(self.factor_events_distribution())
 
     def excel(self, path: str, benchmark: pd.Series | None = None) -> Any:
         """Write an Excel report."""
