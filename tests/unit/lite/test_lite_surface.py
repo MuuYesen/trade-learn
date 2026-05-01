@@ -23,10 +23,43 @@ def _data() -> pd.DataFrame:
     )
 
 
+def _panel_data() -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    for symbol, offset in (("AAA", 0.0), ("BBB", 10.0)):
+        frame = _data().copy()
+        frame["symbol"] = symbol
+        for column in ("open", "high", "low", "close"):
+            frame[column] = frame[column] + offset
+        frames.append(frame.reset_index(names="timestamp"))
+    return (
+        pd.concat(frames, ignore_index=True)
+        .set_index(["timestamp", "symbol"])
+        .sort_index()
+    )
+
+
 def test_lite_backtest_detects_normalized_data_for_feed_fast_path() -> None:
     assert _can_skip_normalize_data(_data())
     assert not _can_skip_normalize_data(_data().rename(columns={"open": "Open"}))
     assert not _can_skip_normalize_data(_data().assign(FACTOR=[1.0, 2.0, 3.0, 4.0, 5.0]))
+
+
+def test_lite_backtest_accepts_provider_panel_dataframe() -> None:
+    seen: dict[str, dict[str, float]] = {}
+
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(1)
+
+        def next(self) -> None:
+            if len(self.data) == 2:
+                snapshots = self._target_weight_snapshots(self._target_weight_data_map())
+                seen["prices"] = snapshots.prices
+
+    stats = Backtest(_panel_data(), LiteStrategy, cash=1000.0).run()
+
+    assert [data._name for data in stats.strategy.datas] == ["AAA", "BBB"]
+    assert seen == {"prices": {"AAA": 11.0, "BBB": 21.0}}
 
 
 def test_lite_normalizes_extra_columns_to_lowercase_even_on_fast_path() -> None:

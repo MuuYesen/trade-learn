@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from collections.abc import Mapping
 from typing import Any
 
+from tradelearn.backtest.feed import is_panel_ohlcv_frame, panel_symbol_level
 from tradelearn.backtest.models import FixedCommission, FixedSlippage
 from tradelearn.backtest.reporting import reporter_from_results
 from tradelearn.engine.analyzer import AnalyzerCollection
@@ -14,27 +14,6 @@ from tradelearn.engine.sizers import FixedSize
 from tradelearn.engine.strategy import Strategy
 
 from .analyzer import Analyzer
-
-_PANEL_SYMBOL_LEVELS = {"symbol", "ticker"}
-
-
-def _panel_symbol_level(data: Any) -> str | None:
-    index = getattr(data, "index", None)
-    names = getattr(index, "names", None)
-    if not names or len(names) < 2:
-        return None
-    for level in names:
-        if level and str(level).lower() in _PANEL_SYMBOL_LEVELS:
-            return str(level)
-    return None
-
-
-def _is_panel_frame(data: Any) -> bool:
-    return (
-        hasattr(data, "columns")
-        and hasattr(data, "index")
-        and _panel_symbol_level(data) is not None
-    )
 
 
 class OptReturn:
@@ -116,16 +95,16 @@ class Cerebro:
         self.trade_on_close = bool(coc)
         self.broker.configure_matching(trade_on_close=self.trade_on_close)
 
-    def adddata(self, data: Any, name: str | Mapping[Any, str] | None = None) -> Any:
-        if _is_panel_frame(data):
+    def adddata(self, data: Any, name: Any | None = None) -> Any:
+        if is_panel_ohlcv_frame(data):
             first = None
-            symbol_level = _panel_symbol_level(data)
+            symbol_level = panel_symbol_level(data)
             symbols = data.index.get_level_values(symbol_level).unique()
             for symbol in symbols:
                 symbol_name = str(symbol)
                 feed_name = (
                     str(name[symbol])
-                    if isinstance(name, Mapping) and symbol in name
+                    if isinstance(name, dict) and symbol in name
                     else symbol_name
                 )
                 frame = data.xs(symbol, level=symbol_level, drop_level=True)

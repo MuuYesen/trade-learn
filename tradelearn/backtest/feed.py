@@ -9,6 +9,37 @@ import pandas as pd
 from tradelearn.backtest.data import DataContainer
 from tradelearn.backtest.lines import LineSeries
 
+_PANEL_SYMBOL_LEVELS = {"symbol", "ticker"}
+
+
+def panel_symbol_level(data: Any) -> str | None:
+    index = getattr(data, "index", None)
+    names = getattr(index, "names", None)
+    if not names or len(names) < 2:
+        return None
+    for level in names:
+        if level and str(level).lower() in _PANEL_SYMBOL_LEVELS:
+            return str(level)
+    return None
+
+
+def is_panel_ohlcv_frame(data: Any) -> bool:
+    return (
+        hasattr(data, "columns")
+        and hasattr(data, "index")
+        and panel_symbol_level(data) is not None
+    )
+
+
+def split_panel_ohlcv_frame(data: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    symbol_level = panel_symbol_level(data)
+    if symbol_level is None:
+        raise ValueError("panel data must have a symbol or ticker index level")
+    return {
+        str(symbol): data.xs(symbol, level=symbol_level, drop_level=True)
+        for symbol in data.index.get_level_values(symbol_level).unique()
+    }
+
 
 def normalize_ohlcv_frame(data: pd.DataFrame) -> pd.DataFrame:
     """Normalize user OHLCV data into the shared backtest runtime shape."""
@@ -38,6 +69,8 @@ def normalize_ohlcv_frame(data: pd.DataFrame) -> pd.DataFrame:
 
 def is_normalized_ohlcv_frame(data: pd.DataFrame) -> bool:
     """Return whether an OHLCV frame can skip normalization work."""
+    if is_panel_ohlcv_frame(data):
+        return False
     if isinstance(data.columns, pd.MultiIndex):
         return False
     columns = {str(column) for column in data.columns}
@@ -111,6 +144,8 @@ def build_data_feeds(
     copy: bool = True,
 ) -> list[RuntimeDataFeed]:
     """Build runtime feeds from a single DataFrame or a ticker->DataFrame mapping."""
+    if is_panel_ohlcv_frame(data):
+        data = split_panel_ohlcv_frame(data)
     if isinstance(data, Mapping):
         if not data:
             raise ValueError("data dict must contain at least one ticker")

@@ -77,10 +77,9 @@ def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     bars = load_bars()
-    data = {symbol: bars.xs(symbol, level="symbol") for symbol in SYMBOLS}
 
     backtest = tl.Backtest(
-        data,
+        bars,
         LiteMomentumPortfolio,
         cash=CASH,
         commission=COMMISSION,
