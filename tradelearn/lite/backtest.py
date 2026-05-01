@@ -114,7 +114,7 @@ class Backtest:
         )
         self.strats = [(strategy, (), {})]
         self.match_mode = match_mode
-        self.stats_mode = "lazy"
+        self.stats_mode = "full"
         from tradelearn.backtest.sizer import FixedSize
         self._sizer_spec = (FixedSize, {})
         self.broker = RustBroker(cash=cash, commission=commission, match_mode=match_mode)

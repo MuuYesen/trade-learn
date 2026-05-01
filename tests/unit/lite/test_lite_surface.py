@@ -102,7 +102,7 @@ def test_lite_uses_backtrader_bar_indexing_with_lite_position_call() -> None:
 
     stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
 
-    assert stats["total_trades"] == 1
+    assert stats["total_trades"] == 2
     assert seen == {
         "close_now": 12.0,
         "close_prev": 11.0,
@@ -123,9 +123,11 @@ def test_lite_run_exposes_shared_stats_summary_keys() -> None:
             elif len(self.data) == 4:
                 self.position().close()
 
-    stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
+    backtest = Backtest(_data(), LiteStrategy, cash=1000.0)
+    stats = backtest.run()
     shared_stats = stats.strategy.stats
 
+    assert backtest.stats_mode == "full"
     assert stats.stats is shared_stats
     assert stats.summary == shared_stats.summary
     assert stats.equity is shared_stats.equity
