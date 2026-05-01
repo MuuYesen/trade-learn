@@ -4,19 +4,29 @@ import pandas as pd
 from bokeh.plotting import figure
 
 from tradelearn.report.charts import (
+    annual_returns,
     correlation_matrix,
     drawdown,
     equity_curve,
     exposure,
     factor_ic,
+    factor_ic_histogram,
+    factor_ic_qq,
     factor_long_short_returns,
+    factor_quantile_returns_bar,
+    factor_quantile_spread,
     factor_rank_ic,
     factor_turnover,
     market_replay,
     monthly_heatmap,
+    monthly_returns_distribution,
+    quantile_counts,
     quantile_returns,
+    return_quantiles,
     rolling_beta,
+    rolling_returns,
     rolling_sharpe,
+    rolling_volatility,
     trade_distribution,
 )
 
@@ -26,14 +36,24 @@ def test_report_charts_return_bokeh_figures() -> None:
     plots = [
         equity_curve(_series("equity")),
         drawdown(_series("drawdown")),
+        annual_returns(_series("returns")),
         monthly_heatmap(_monthly_returns()),
+        monthly_returns_distribution(_series("returns")),
+        rolling_returns(_series("returns")),
+        rolling_volatility(_series("returns")),
+        return_quantiles(_series("returns")),
         rolling_sharpe(_series("rolling_sharpe")),
         trade_distribution(_trade_distribution()),
         exposure(_exposure()),
         correlation_matrix(_correlation()),
         quantile_returns(_quantile_returns()),
+        factor_quantile_returns_bar(_quantile_stats()),
+        factor_quantile_spread(_series("quantile_spread")),
+        quantile_counts(_quantile_counts()),
         rolling_beta(_series("rolling_beta")),
         factor_ic(_series("ic")),
+        factor_ic_histogram(_series("ic")),
+        factor_ic_qq(_series("ic")),
         factor_rank_ic(_series("rank_ic")),
         factor_turnover(_series("turnover"), _series("autocorrelation")),
         factor_long_short_returns(_long_short_returns()),
@@ -101,6 +121,20 @@ def _correlation() -> pd.DataFrame:
 def _quantile_returns() -> pd.DataFrame:
     return pd.DataFrame(
         {1: [0.01, 0.03], 2: [0.02, 0.05]},
+        index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+    )
+
+
+def _quantile_stats() -> pd.DataFrame:
+    return pd.DataFrame(
+        {"mean": [0.01, 0.03], "std": [0.02, 0.04], "count": [10, 10]},
+        index=[1, 2],
+    )
+
+
+def _quantile_counts() -> pd.DataFrame:
+    return pd.DataFrame(
+        {1: [3, 2], 2: [2, 3]},
         index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
     )
 

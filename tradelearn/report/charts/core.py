@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from statistics import NormalDist
+
 import pandas as pd
 from bokeh.layouts import gridplot
 from bokeh.models import (
@@ -443,6 +445,27 @@ def drawdown(drawdown_series: pd.Series):
     return plot
 
 
+def annual_returns(returns: pd.Series):
+    """Return an annual returns bar chart."""
+    annual = (1.0 + pd.Series(returns).dropna()).resample("YE").prod() - 1.0
+    frame = annual.to_frame("return").reset_index()
+    frame.columns = ["date", "return"]
+    frame["year"] = frame["date"].dt.year.astype(str)
+    frame["color"] = [MARKET_UP if value >= 0 else MARKET_DOWN for value in frame["return"]]
+    plot = figure(
+        title="Annual Returns",
+        x_range=list(frame["year"]),
+        height=220,
+        sizing_mode="stretch_width",
+        toolbar_location=None,
+    )
+    if not frame.empty:
+        plot.vbar("year", 0.7, "return", source=ColumnDataSource(frame), color="color", alpha=0.75)
+    plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+    _make_static_chart(plot)
+    return plot
+
+
 def monthly_heatmap(monthly: pd.DataFrame):
     """Return a monthly returns heatmap figure."""
     values = monthly.drop(index="month_avg", errors="ignore")
@@ -477,6 +500,98 @@ def monthly_heatmap(monthly: pd.DataFrame):
         fill_color=mapper,
         line_color="white",
     )
+    _make_static_chart(plot)
+    return plot
+
+
+def monthly_returns_distribution(returns: pd.Series):
+    """Return a pyfolio-style monthly returns distribution chart."""
+    monthly = ((1.0 + pd.Series(returns).dropna()).resample("ME").prod() - 1.0).dropna()
+    plot = figure(
+        title="Monthly Returns Distribution",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not monthly.empty:
+        buckets = min(20, max(1, len(monthly)))
+        counts = pd.cut(monthly, bins=buckets).value_counts(sort=False)
+        frame = pd.DataFrame(
+            {
+                "left": [interval.left for interval in counts.index],
+                "right": [interval.right for interval in counts.index],
+                "count": counts.to_numpy(),
+            }
+        )
+        plot.quad(
+            top="count",
+            bottom=0,
+            left="left",
+            right="right",
+            source=ColumnDataSource(frame),
+            fill_color=MARKET_BLUE,
+            line_color="white",
+            alpha=0.70,
+        )
+    plot.xaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+    _make_static_chart(plot)
+    return plot
+
+
+def rolling_returns(returns: pd.Series):
+    """Return a cumulative rolling returns chart."""
+    curve = (1.0 + pd.Series(returns).dropna()).cumprod() - 1.0
+    frame = _plot_frame(curve, "rolling_returns")
+    plot = figure(
+        title="Rolling Returns",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not frame.empty:
+        plot.line(frame["date"], frame["rolling_returns"], line_width=2, color=MARKET_BLUE)
+    plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+    _make_static_chart(plot)
+    return plot
+
+
+def rolling_volatility(returns: pd.Series, window: int = 126, periods: int = 252):
+    """Return annualized rolling volatility."""
+    values = pd.Series(returns).dropna().rolling(window, min_periods=2).std() * periods ** 0.5
+    frame = _plot_frame(values, "rolling_volatility").dropna()
+    plot = figure(
+        title="Rolling Volatility",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not frame.empty:
+        plot.line(frame["date"], frame["rolling_volatility"], line_width=2, color="#8c564b")
+    plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+    _make_static_chart(plot)
+    return plot
+
+
+def return_quantiles(returns: pd.Series):
+    """Return a pyfolio-style return quantile bar chart."""
+    values = pd.Series(returns).dropna()
+    quantiles = values.quantile([0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99])
+    frame = pd.DataFrame(
+        {
+            "quantile": [f"{int(level * 100)}%" for level in quantiles.index],
+            "return": quantiles.to_numpy(),
+            "color": [MARKET_UP if value >= 0 else MARKET_DOWN for value in quantiles],
+        }
+    )
+    plot = figure(
+        title="Return Quantiles",
+        x_range=list(frame["quantile"]),
+        height=220,
+        sizing_mode="stretch_width",
+        toolbar_location=None,
+    )
+    if not frame.empty:
+        plot.vbar("quantile", 0.7, "return", source=ColumnDataSource(frame), color="color")
+    plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
     _make_static_chart(plot)
     return plot
 
@@ -621,6 +736,47 @@ def quantile_returns(returns: pd.DataFrame):
     return plot
 
 
+def factor_quantile_returns_bar(stats: pd.DataFrame):
+    """Return mean forward return by factor quantile."""
+    frame = pd.DataFrame(stats).copy()
+    if "mean" not in frame:
+        frame["mean"] = pd.Series(dtype="float64")
+    frame = frame.reset_index().rename(columns={frame.index.name or "index": "quantile"})
+    frame["quantile"] = frame["quantile"].astype(str)
+    frame["color"] = [MARKET_UP if value >= 0 else MARKET_DOWN for value in frame["mean"]]
+    plot = figure(
+        title="Mean Return by Quantile",
+        x_range=list(frame["quantile"]),
+        height=220,
+        sizing_mode="stretch_width",
+        toolbar_location=None,
+    )
+    if not frame.empty:
+        plot.vbar("quantile", 0.7, "mean", source=ColumnDataSource(frame), color="color")
+    plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+    _make_static_chart(plot)
+    return plot
+
+
+def factor_quantile_spread(spread: pd.Series):
+    """Return top-minus-bottom quantile spread time series."""
+    frame = _plot_frame(pd.Series(spread).dropna(), "spread")
+    plot = figure(
+        title="Quantile Spread",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    if not frame.empty:
+        plot.add_layout(
+            Span(location=0, dimension="width", line_color=MARKET_MUTED, line_dash="dashed")
+        )
+        plot.line(frame["date"], frame["spread"], line_width=2, color=MARKET_BLUE)
+    plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+    _make_static_chart(plot)
+    return plot
+
+
 def factor_long_short_returns(returns: pd.DataFrame):
     """Return a factor long-short returns figure."""
     frame = returns.reset_index().rename(columns={returns.index.name or "index": "date"})
@@ -667,6 +823,60 @@ def factor_ic(ic: pd.Series):
             color="#ff7f0e",
             legend_label="Expanding Mean",
         )
+    _make_static_chart(plot)
+    return plot
+
+
+def factor_ic_histogram(ic: pd.Series):
+    """Return an IC distribution histogram."""
+    values = pd.Series(ic).dropna()
+    plot = figure(title="IC Histogram", height=220, sizing_mode="stretch_width")
+    if not values.empty:
+        buckets = min(20, max(1, len(values)))
+        counts = pd.cut(values, bins=buckets).value_counts(sort=False)
+        frame = pd.DataFrame(
+            {
+                "left": [interval.left for interval in counts.index],
+                "right": [interval.right for interval in counts.index],
+                "count": counts.to_numpy(),
+            }
+        )
+        plot.quad(
+            top="count",
+            bottom=0,
+            left="left",
+            right="right",
+            source=ColumnDataSource(frame),
+            fill_color=MARKET_BLUE,
+            line_color="white",
+            alpha=0.70,
+        )
+        mean = float(values.mean())
+        plot.line([mean, mean], [0, max(1, int(counts.max()))], color="#ff7f0e", line_width=2)
+    _make_static_chart(plot)
+    return plot
+
+
+def factor_ic_qq(ic: pd.Series):
+    """Return an IC normal QQ chart."""
+    values = pd.Series(ic).dropna().sort_values().reset_index(drop=True)
+    plot = figure(title="IC QQ", height=220, sizing_mode="stretch_width")
+    if not values.empty:
+        dist = NormalDist()
+        n = len(values)
+        theoretical = [dist.inv_cdf((index + 0.5) / n) for index in range(n)]
+        frame = pd.DataFrame({"theoretical": theoretical, "sample": values})
+        plot.scatter(
+            "theoretical",
+            "sample",
+            source=ColumnDataSource(frame),
+            size=7,
+            color=MARKET_BLUE,
+            alpha=0.75,
+        )
+        low = min(float(frame["theoretical"].min()), float(frame["sample"].min()))
+        high = max(float(frame["theoretical"].max()), float(frame["sample"].max()))
+        plot.line([low, high], [low, high], line_color=MARKET_MUTED, line_dash="dashed")
     _make_static_chart(plot)
     return plot
 
@@ -727,6 +937,32 @@ def factor_monthly_ic_heatmap(monthly_ic: pd.DataFrame):
         fill_color=mapper,
         line_color="white",
     )
+    _make_static_chart(plot)
+    return plot
+
+
+def quantile_counts(counts: pd.DataFrame):
+    """Return per-date factor quantile membership counts."""
+    frame = pd.DataFrame(counts).reset_index().rename(
+        columns={counts.index.name or "index": "date"}
+    )
+    if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
+        frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
+    plot = figure(
+        title="Quantile Counts",
+        x_axis_type="datetime",
+        height=220,
+        sizing_mode="stretch_width",
+    )
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#8c564b", "#e377c2"]
+    for index, column in enumerate(counts.columns):
+        plot.line(
+            frame["date"],
+            frame[column],
+            line_width=2,
+            color=colors[index % len(colors)],
+            legend_label=f"Q{column}",
+        )
     _make_static_chart(plot)
     return plot
 

@@ -311,6 +311,21 @@ def test_factor_analyzer_plot_returns_bokeh_layout() -> None:
     assert layout is not None
 
 
+def test_factor_analyzer_plot_includes_alphalens_style_sections() -> None:
+    """plot() includes returns, IC, turnover, and distribution diagnostics."""
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
+
+    layout = analyzer.plot()
+    titles = _collect_titles(layout)
+
+    assert "Mean Return by Quantile" in titles
+    assert "Quantile Spread" in titles
+    assert "IC Histogram" in titles
+    assert "IC QQ" in titles
+    assert "Quantile Counts" in titles
+
+
 def test_factor_analyzer_html_writes_file(tmp_path) -> None:
     """html() writes an Alphalens-style standalone report."""
     factor, forward = _factor_and_forward_returns()
@@ -328,6 +343,8 @@ def test_factor_analyzer_html_writes_file(tmp_path) -> None:
     assert "Factor Summary" in content
     assert "Quantile Statistics" in content
     assert "Information Coefficient" in content
+    assert "Mean Return by Quantile" in content
+    assert "IC Histogram" in content
 
 
 def test_factor_analyzer_report_dispatches_html(tmp_path) -> None:
@@ -475,3 +492,14 @@ def _series(rows: list[tuple[str, str, float]]) -> pd.Series:
     values = [row[2] for row in rows]
     index = pd.MultiIndex.from_arrays([dates, symbols], names=["date", "symbol"])
     return pd.Series(values, index=index, dtype="float64")
+
+
+def _collect_titles(layout) -> set[str]:
+    titles: set[str] = set()
+    for child in getattr(layout, "children", []):
+        item = child[0] if isinstance(child, tuple) else child
+        title = getattr(getattr(item, "title", None), "text", "")
+        if title:
+            titles.add(title)
+        titles.update(_collect_titles(item))
+    return titles

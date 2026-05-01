@@ -12,11 +12,14 @@ import pandas as pd
 from tradelearn import metrics
 from tradelearn.report import charts
 from tradelearn.report.analytics import (
+    annual_returns,
     exposure_correlation,
     exposure_weights,
     monthly_returns_matrix,
     rolling_beta,
+    rolling_returns,
     rolling_sharpe,
+    rolling_volatility,
     top_drawdowns,
     trade_distribution,
 )
@@ -91,6 +94,18 @@ class Reporter:
         """Return monthly returns matrix with yearly and monthly totals."""
         return monthly_returns_matrix(self._get("returns"))
 
+    def annual_returns(self) -> pd.Series:
+        """Return annual compounded returns."""
+        return annual_returns(self._get("returns"))
+
+    def rolling_returns(self) -> pd.Series:
+        """Return cumulative rolling returns."""
+        return rolling_returns(self._get("returns"))
+
+    def rolling_volatility(self, window: int = 126) -> pd.Series:
+        """Return annualized rolling volatility."""
+        return rolling_volatility(self._get("returns"), window=window, periods=self.periods)
+
     def rolling_sharpe(self, window: int = 126) -> pd.Series:
         """Return rolling Sharpe ratio."""
         return rolling_sharpe(self._get("returns"), window=window, periods=self.periods)
@@ -121,6 +136,27 @@ class Reporter:
         if factor_analyzer is None or not hasattr(factor_analyzer, "quantile_cumulative_returns"):
             return pd.DataFrame()
         return pd.DataFrame(factor_analyzer.quantile_cumulative_returns()).copy()
+
+    def factor_quantile_stats(self) -> pd.DataFrame:
+        """Return factor quantile statistics from analyzers."""
+        factor_analyzer = self._factor_analyzer()
+        if factor_analyzer is None or not hasattr(factor_analyzer, "quantile_stats"):
+            return pd.DataFrame()
+        return pd.DataFrame(factor_analyzer.quantile_stats()).copy()
+
+    def factor_quantile_spread(self) -> pd.Series:
+        """Return factor top-minus-bottom quantile spread from analyzers."""
+        factor_analyzer = self._factor_analyzer()
+        if factor_analyzer is None or not hasattr(factor_analyzer, "quantile_spread"):
+            return pd.Series(dtype="float64", name="quantile_spread")
+        return pd.Series(factor_analyzer.quantile_spread()).copy()
+
+    def factor_quantile_counts(self) -> pd.DataFrame:
+        """Return factor quantile membership counts from analyzers."""
+        factor_analyzer = self._factor_analyzer()
+        if factor_analyzer is None or not hasattr(factor_analyzer, "quantile_counts"):
+            return pd.DataFrame()
+        return pd.DataFrame(factor_analyzer.quantile_counts()).copy()
 
     def factor_long_short_returns(self) -> pd.DataFrame:
         """Return factor long-short cumulative returns from analyzers."""
@@ -173,6 +209,26 @@ class Reporter:
         """Return a Bokeh monthly heatmap chart."""
         return charts.monthly_heatmap(self.monthly_heatmap())
 
+    def annual_returns_chart(self):
+        """Return a Bokeh annual returns chart."""
+        return charts.annual_returns(self._get("returns"))
+
+    def monthly_returns_distribution_chart(self):
+        """Return a Bokeh monthly returns distribution chart."""
+        return charts.monthly_returns_distribution(self._get("returns"))
+
+    def rolling_returns_chart(self):
+        """Return a Bokeh rolling returns chart."""
+        return charts.rolling_returns(self._get("returns"))
+
+    def rolling_volatility_chart(self, window: int = 126):
+        """Return a Bokeh rolling volatility chart."""
+        return charts.rolling_volatility(self._get("returns"), window=window, periods=self.periods)
+
+    def return_quantiles_chart(self):
+        """Return a Bokeh return quantiles chart."""
+        return charts.return_quantiles(self._get("returns"))
+
     def rolling_sharpe_chart(self, window: int = 126):
         """Return a Bokeh rolling Sharpe chart."""
         return charts.rolling_sharpe(self.rolling_sharpe(window=window))
@@ -211,6 +267,18 @@ class Reporter:
         """Return a Bokeh factor quantile returns chart."""
         return charts.quantile_returns(self.factor_quantile_returns())
 
+    def factor_quantile_returns_bar_chart(self):
+        """Return a Bokeh factor quantile mean returns bar chart."""
+        return charts.factor_quantile_returns_bar(self.factor_quantile_stats())
+
+    def factor_quantile_spread_chart(self):
+        """Return a Bokeh factor quantile spread chart."""
+        return charts.factor_quantile_spread(self.factor_quantile_spread())
+
+    def factor_quantile_counts_chart(self):
+        """Return a Bokeh factor quantile counts chart."""
+        return charts.quantile_counts(self.factor_quantile_counts())
+
     def factor_long_short_returns_chart(self):
         """Return a Bokeh factor long-short returns chart."""
         return charts.factor_long_short_returns(self.factor_long_short_returns())
@@ -218,6 +286,14 @@ class Reporter:
     def factor_ic_chart(self):
         """Return a Bokeh factor IC chart."""
         return charts.factor_ic(self.factor_ic())
+
+    def factor_ic_histogram_chart(self):
+        """Return a Bokeh factor IC histogram chart."""
+        return charts.factor_ic_histogram(self.factor_ic())
+
+    def factor_ic_qq_chart(self):
+        """Return a Bokeh factor IC QQ chart."""
+        return charts.factor_ic_qq(self.factor_ic())
 
     def factor_rank_ic_chart(self):
         """Return a Bokeh factor rank IC chart."""

@@ -34,8 +34,13 @@ def test_reporter_html_writes_single_file_tear_sheet(tmp_path) -> None:
     assert "Generated" in html
     assert "Equity Curve" in html
     assert "Drawdown" in html
+    assert "Annual Returns" in html
     assert "Top 10 Drawdowns" in html
     assert "Monthly Returns Heatmap" in html
+    assert "Monthly Returns Distribution" in html
+    assert "Rolling Returns" in html
+    assert "Rolling Volatility" in html
+    assert "Return Quantiles" in html
     assert "Trade Distribution" in html
     assert "Rolling Sharpe" not in html
     assert "Tradelearn" in html
@@ -234,7 +239,12 @@ def test_reporter_html_adds_factor_quantile_chart_when_analyzer_exists(tmp_path)
 
     html = path.read_text()
     assert "Factor Quantile Returns" in html
+    assert "Factor Mean Return by Quantile" in html
+    assert "Factor Quantile Spread" in html
+    assert "Factor Quantile Counts" in html
     assert "Factor IC" in html
+    assert "Factor IC Histogram" in html
+    assert "Factor IC QQ" in html
     assert "Factor Rank IC" in html
     assert "Factor Turnover" in html
     assert "Factor Long-Short Returns" in html
@@ -294,6 +304,28 @@ class _FactorAnalyzerStub:
                 "short": [0.01, 0.02],
                 "spread": [0.02, 0.02],
             },
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+        )
+
+    def quantile_stats(self) -> pd.DataFrame:
+        """Return factor quantile statistics for report tests."""
+        return pd.DataFrame(
+            {"mean": [0.01, 0.03], "std": [0.02, 0.01], "count": [3, 3]},
+            index=[1, 2],
+        )
+
+    def quantile_spread(self) -> pd.Series:
+        """Return factor quantile spread for report tests."""
+        return pd.Series(
+            [0.02, 0.03],
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+            name="quantile_spread",
+        )
+
+    def quantile_counts(self) -> pd.DataFrame:
+        """Return factor quantile counts for report tests."""
+        return pd.DataFrame(
+            {1: [2, 3], 2: [3, 2]},
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
         )
 

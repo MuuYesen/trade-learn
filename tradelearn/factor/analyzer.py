@@ -211,21 +211,32 @@ class FactorAnalyzer:
         from tradelearn.report import charts
 
         items = []
+        qs = self.quantile_stats()
+        if not qs.empty:
+            items.append(charts.factor_quantile_returns_bar(qs))
         qr = self.quantile_cumulative_returns()
         if not qr.empty:
             items.append(charts.quantile_returns(qr))
+        spread = self.quantile_spread()
+        if not spread.empty:
+            items.append(charts.factor_quantile_spread(spread))
         ls = self.long_short_cumulative_returns()
         if not ls.empty:
             items.append(charts.factor_long_short_returns(ls))
         ic_series = self.ic()
         if not ic_series.empty:
             items.append(charts.factor_ic(ic_series))
+            items.append(charts.factor_ic_histogram(ic_series))
+            items.append(charts.factor_ic_qq(ic_series))
         ric_series = self.rank_ic()
         if not ric_series.empty:
             items.append(charts.factor_rank_ic(ric_series))
         monthly_ic = self.monthly_ic_heatmap()
         if not monthly_ic.empty:
             items.append(charts.factor_monthly_ic_heatmap(monthly_ic))
+        qc = self.quantile_counts()
+        if not qc.empty:
+            items.append(charts.quantile_counts(qc))
         t = self.turnover()
         ac = self.autocorrelation()
         if not t.empty or not ac.empty:

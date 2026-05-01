@@ -55,8 +55,13 @@ def write_html_report(
         drawdowns=top_drawdowns.head(5),
     )
     plots["Drawdown"] = charts.drawdown(reporter.drawdown())
+    plots["Annual Returns"] = charts.annual_returns(returns)
     plots["Monthly Returns Heatmap"] = charts.monthly_heatmap(reporter.monthly_heatmap())
+    plots["Monthly Returns Distribution"] = charts.monthly_returns_distribution(returns)
+    plots["Rolling Returns"] = charts.rolling_returns(returns)
     plots["Rolling Sharpe"] = charts.rolling_sharpe(reporter.rolling_sharpe())
+    plots["Rolling Volatility"] = charts.rolling_volatility(returns)
+    plots["Return Quantiles"] = charts.return_quantiles(returns)
     plots["Trade Distribution"] = charts.trade_distribution(reporter.trade_distribution())
     price_plot = reporter.price_trades_chart()
     if price_plot is not None:
@@ -68,6 +73,8 @@ def write_html_report(
         plots["Exposure Chart"] = charts.exposure(exposure)
     if not factor_ic.empty:
         plots["Factor IC"] = charts.factor_ic(factor_ic)
+        plots["Factor IC Histogram"] = charts.factor_ic_histogram(factor_ic)
+        plots["Factor IC QQ"] = charts.factor_ic_qq(factor_ic)
     if not factor_rank_ic.empty:
         plots["Factor Rank IC"] = charts.factor_rank_ic(factor_rank_ic)
     if not factor_turnover.empty or not factor_autocorrelation.empty:
@@ -80,6 +87,19 @@ def write_html_report(
             factor_long_short_returns
         )
     if not factor_quantile_returns.empty:
+        factor_analyzer = reporter._factor_analyzer()
+        if factor_analyzer is not None and hasattr(factor_analyzer, "quantile_stats"):
+            plots["Factor Mean Return by Quantile"] = charts.factor_quantile_returns_bar(
+                factor_analyzer.quantile_stats()
+            )
+        if factor_analyzer is not None and hasattr(factor_analyzer, "quantile_spread"):
+            plots["Factor Quantile Spread"] = charts.factor_quantile_spread(
+                factor_analyzer.quantile_spread()
+            )
+        if factor_analyzer is not None and hasattr(factor_analyzer, "quantile_counts"):
+            plots["Factor Quantile Counts"] = charts.quantile_counts(
+                factor_analyzer.quantile_counts()
+            )
         plots["Factor Quantile Returns"] = charts.quantile_returns(factor_quantile_returns)
     plots = {title: plot for title, plot in plots.items() if _has_glyph_renderers(plot)}
     script, chart_components = components(plots)

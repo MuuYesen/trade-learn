@@ -20,6 +20,23 @@ def monthly_returns_matrix(returns: pd.Series) -> pd.DataFrame:
     return result
 
 
+def annual_returns(returns: pd.Series) -> pd.Series:
+    """Return annual compounded returns."""
+    return ((1.0 + returns.dropna()).resample("YE").prod() - 1.0).rename("annual_return")
+
+
+def rolling_returns(returns: pd.Series) -> pd.Series:
+    """Return cumulative rolling returns."""
+    return ((1.0 + returns.dropna()).cumprod() - 1.0).rename("rolling_returns")
+
+
+def rolling_volatility(returns: pd.Series, window: int, periods: int) -> pd.Series:
+    """Return annualized rolling volatility."""
+    return (
+        returns.dropna().rolling(window, min_periods=2).std() * periods ** 0.5
+    ).rename("rolling_volatility")
+
+
 def rolling_sharpe(returns: pd.Series, window: int, periods: int) -> pd.Series:
     """Return rolling Sharpe ratio using tradelearn.metrics.sharpe."""
     values = [
