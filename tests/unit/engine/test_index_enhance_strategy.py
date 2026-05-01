@@ -20,7 +20,7 @@ def _frame(closes: list[float]) -> pd.DataFrame:
     )
 
 
-def test_index_enhance_strategy_rebalances_from_cross_section_universe() -> None:
+def test_index_enhance_strategy_targets_weights_from_user_next() -> None:
     class MonthlyTopClose(IndexEnhanceStrategy):
         rebalance_freq = "monthly"
 
@@ -28,10 +28,13 @@ def test_index_enhance_strategy_rebalances_from_cross_section_universe() -> None
             super().__init__()
             self.universe_snapshots: list[pd.DataFrame] = []
 
-        def rebalance(self, dt: pd.Timestamp, universe: pd.DataFrame) -> pd.Series:
+        def next(self) -> None:
+            if not self.should_rebalance():
+                return
+            universe = self.current_universe()
             self.universe_snapshots.append(universe.copy())
             winner = str(universe["close"].idxmax())
-            return pd.Series({winner: 0.5})
+            self.target_weights(pd.Series({winner: 0.5}))
 
     cerebro = Cerebro(trade_on_close=True)
     cerebro.setcash(100_000.0)
@@ -58,9 +61,11 @@ def test_index_enhance_strategy_integer_rebalance_frequency() -> None:
             super().__init__()
             self.calls: list[pd.Timestamp] = []
 
-        def rebalance(self, dt: pd.Timestamp, universe: pd.DataFrame) -> dict[str, float]:
-            self.calls.append(dt)
-            return {"AAA": 0.25}
+        def next(self) -> None:
+            if not self.should_rebalance():
+                return
+            self.calls.append(self.current_datetime())
+            self.target_weights({"AAA": 0.25})
 
     cerebro = Cerebro(trade_on_close=True)
     cerebro.adddata(_frame([10, 11, 12, 13, 14]), name="AAA")
@@ -85,8 +90,11 @@ def test_index_enhance_strategy_can_consume_pipeline_weights() -> None:
                 ]
             )
 
-        def rebalance(self, dt: pd.Timestamp, universe: pd.DataFrame) -> dict[str, float]:
-            return self.pipeline.predict_weights(universe).as_weight_dict()
+        def next(self) -> None:
+            if not self.should_rebalance():
+                return
+            universe = self.current_universe()
+            self.target_weights(self.pipeline.predict_weights(universe).as_weight_dict())
 
     cerebro = Cerebro(trade_on_close=True)
     cerebro.setcash(100_000.0)

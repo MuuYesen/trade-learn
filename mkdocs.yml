@@ -6,6 +6,9 @@ repo_name: MuuYesen/trade-learn
 docs_dir: docs
 exclude_docs: |
   PROGRESS.md
+  BACKTESTING_COMPAT.md
+  backtrader_compat_refactor.md
+  archive/
   superpowers/
 
 theme:
@@ -90,7 +93,10 @@ markdown_extensions:
 
 nav:
   - Quickstart: README.md
-  - Project: PROJECT.md
+  - Project:
+      - Overview: PROJECT.md
+      - Structure: PROJECT_STRUCTURE.md
+      - Component Usage: COMPONENT_USAGE.md
   - Runbook: RUNBOOK.md
   - Specs:
       - Architecture: specs/ARCHITECTURE.md
@@ -106,6 +112,20 @@ nav:
       - Event Loop: internal/event-loop.md
       - Matching: internal/matching-design.md
       - Portfolio: internal/portfolio.md
+      - Agent Loop: internal/agent-loop.md
   - Release:
       - Evaluation: release/evaluation.md
-      - API Reference: api/reference.md
+      - API Reference:
+          - Overview: api/reference.md
+          - Strategy Writing Guide: api/strategy.md
+          - Engine API Guide: api/engine.md
+          - Lite API Guide: api/lite.md
+          - Reference:
+              - Engine: api/reference/engine.md
+              - Lite: api/reference/lite.md
+              - Data: api/reference/data.md
+              - Indicators: api/reference/indicators.md
+              - Metrics: api/reference/metrics.md
+              - Factor: api/reference/factor.md
+              - Report: api/reference/report.md
+              - ML: api/reference/ml.md

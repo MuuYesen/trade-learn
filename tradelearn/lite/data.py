@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from tradelearn.lite.indicator import IndicatorProxy
@@ -111,20 +110,6 @@ class LiteDataProxy:
         if len(tickers) != 1:
             raise ValueError("Ticker must explicitly specified for multi-asset Lite backtests")
         return tickers[0]
-
-    @property
-    def pip(self) -> float:
-        close = np.asarray(self._close_array, dtype=float)
-        if close.size == 0:
-            return 0.01
-        decimals = [
-            len(str(value).partition(".")[-1].rstrip("0"))
-            for value in close
-            if np.isfinite(value)
-        ]
-        if not decimals:
-            return 0.01
-        return float(10 ** -int(np.median(decimals)))
 
 
 def _ta_frame(data_feed: Any) -> pd.DataFrame:

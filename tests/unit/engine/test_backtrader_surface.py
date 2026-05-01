@@ -172,6 +172,23 @@ def test_cerebro_run_accepts_backtrader_runtime_kwargs() -> None:
     assert cerebro.broker._trade_on_close is True
 
 
+def test_engine_adddata_normalizes_extra_columns_to_lowercase() -> None:
+    seen: dict[str, float] = {}
+
+    class FactorStrategy(bt.Strategy):
+        def next(self) -> None:
+            if len(self.data) == 3:
+                seen["factor"] = self.data.get_array("factor")[self.data._cursor]
+
+    cerebro = bt.Cerebro()
+    cerebro.adddata(_ohlcv(5).assign(FACTOR=[1.0, 2.0, 3.0, 4.0, 5.0]))
+    cerebro.addstrategy(FactorStrategy)
+
+    cerebro.run()
+
+    assert seen == {"factor": 3.0}
+
+
 def test_addanalyzer_preserves_positional_arguments() -> None:
     class NamedAnalyzer(bt.Analyzer):
         def __init__(self, prefix: str, suffix: str = "") -> None:

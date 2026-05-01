@@ -44,6 +44,8 @@ def is_normalized_ohlcv_frame(data: pd.DataFrame) -> bool:
     required = {"open", "high", "low", "close", "volume"}
     if not required.issubset(columns):
         return False
+    if any(str(column) != str(column).lower() for column in data.columns):
+        return False
     if not isinstance(data.index, pd.DatetimeIndex):
         return False
     return bool(data.index.is_monotonic_increasing)

@@ -104,11 +104,13 @@ def test_mlflow_analyzer_logs_params_stats_and_artifacts(monkeypatch) -> None:
             "bars": 3.0,
             "final_cash": 123.0,
             "final_value": 123.0,
+            "return_pct": 0.0,
             "final_realized_pnl": 0.0,
             "final_unrealized_pnl": 0.0,
             "final_margin_used": 0.0,
             "max_drawdown": 0.0,
             "total_trades": 0.0,
+            "win_rate_pct": 0.0,
             "total_orders": 0.0,
             "total_fills": 0.0,
         }
@@ -277,9 +279,12 @@ def test_mlflow_analyzer_logs_pipeline_target_weight_artifacts() -> None:
                 ]
             )
 
-        def rebalance(self, dt: pd.Timestamp, universe: pd.DataFrame) -> dict[str, float]:
+        def next(self) -> None:
+            if not self.should_rebalance():
+                return
+            universe = self.current_universe()
             self.pipeline_result = self.pipeline.predict_weights(universe)
-            return self.pipeline_result.as_weight_dict()
+            self.target_weights(self.pipeline_result.as_weight_dict())
 
     fake = FakeMLflow()
     cerebro = Cerebro(trade_on_close=True)

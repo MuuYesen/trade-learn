@@ -26,6 +26,24 @@ def _data() -> pd.DataFrame:
 def test_lite_backtest_detects_normalized_data_for_feed_fast_path() -> None:
     assert _can_skip_normalize_data(_data())
     assert not _can_skip_normalize_data(_data().rename(columns={"open": "Open"}))
+    assert not _can_skip_normalize_data(_data().assign(FACTOR=[1.0, 2.0, 3.0, 4.0, 5.0]))
+
+
+def test_lite_normalizes_extra_columns_to_lowercase_even_on_fast_path() -> None:
+    seen: dict[str, float] = {}
+    data = _data().assign(FACTOR=[1.0, 2.0, 3.0, 4.0, 5.0])
+
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(2)
+
+        def next(self) -> None:
+            if len(self.data) == 3:
+                seen["factor"] = self.data.factor[0]
+
+    Backtest(data, LiteStrategy, cash=1000.0).run()
+
+    assert seen == {"factor": 3.0}
 
 
 def test_lite_target_weight_snapshots_batch_prices_and_positions() -> None:

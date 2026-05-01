@@ -12,12 +12,11 @@ from tradelearn.engine.strategy import Strategy
 
 
 class IndexEnhanceStrategy(Strategy):
-    """Backtrader-style cross-sectional strategy base.
+    """Engine cross-sectional strategy helper.
 
-    Subclasses override :meth:`rebalance` and return target weights by data
-    feed name. The class keeps the normal event-driven ``next`` lifecycle:
-    it only adds a thin rebalance trigger and translates weights into existing
-    ``order_target_percent`` calls.
+    Subclasses keep the normal ``next`` lifecycle. This class only provides
+    utilities for building a current cross section and translating symbol
+    weights into existing ``order_target_percent`` calls.
     """
 
     rebalance_freq: str | int = "monthly"
@@ -26,30 +25,6 @@ class IndexEnhanceStrategy(Strategy):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._last_rebalance_key: Any = None
-
-    def next(self) -> None:
-        if not self._should_rebalance():
-            return
-        dt = self._current_datetime()
-        weights = self.rebalance(dt, self.current_universe())
-        self.target_weights(weights, close_missing=self.close_missing)
-
-    def rebalance(
-        self,
-        dt: pd.Timestamp,
-        universe: pd.DataFrame,
-    ) -> Mapping[str, float] | pd.Series:
-        """Return target weights for the current cross section.
-
-        Parameters
-        ----------
-        dt
-            Current bar timestamp.
-        universe
-            Symbol-indexed OHLCV snapshot built from all bound data feeds.
-        """
-
-        return {}
 
     def current_universe(self) -> pd.DataFrame:
         """Return the current multi-data OHLCV cross section."""
@@ -104,6 +79,16 @@ class IndexEnhanceStrategy(Strategy):
             if order is not None:
                 orders.append(order)
         return orders
+
+    def current_datetime(self) -> pd.Timestamp:
+        """Return the timestamp of the current primary data bar."""
+
+        return self._current_datetime()
+
+    def should_rebalance(self) -> bool:
+        """Return whether the current bar starts a new rebalance window."""
+
+        return self._should_rebalance()
 
     def _data_by_name(self) -> dict[str, Any]:
         return {
