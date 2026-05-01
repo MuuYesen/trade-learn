@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from tradelearn.engine import Cerebro, IndexEnhanceStrategy
+from tradelearn.ml import EqualWeightOptimizer, ModelAdapter, StrategyPipeline, TopKSelector
 
 
 def _frame(closes: list[float]) -> pd.DataFrame:
@@ -68,3 +69,31 @@ def test_index_enhance_strategy_integer_rebalance_frequency() -> None:
     strategy = cerebro.run()[0]
 
     assert len(strategy.calls) == 3
+
+
+def test_index_enhance_strategy_can_consume_pipeline_weights() -> None:
+    class PipelineWeights(IndexEnhanceStrategy):
+        rebalance_freq = 1
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.pipeline = StrategyPipeline(
+                [
+                    ("model", ModelAdapter(score_column="close")),
+                    ("selector", TopKSelector(k=1)),
+                    ("optimizer", EqualWeightOptimizer(gross=0.5)),
+                ]
+            )
+
+        def rebalance(self, dt: pd.Timestamp, universe: pd.DataFrame) -> dict[str, float]:
+            return self.pipeline.predict_weights(universe).as_weight_dict()
+
+    cerebro = Cerebro(trade_on_close=True)
+    cerebro.setcash(100_000.0)
+    cerebro.adddata(_frame([10, 10, 10]), name="AAA")
+    cerebro.adddata(_frame([20, 20, 20]), name="BBB")
+    cerebro.addstrategy(PipelineWeights)
+
+    strategy = cerebro.run()[0]
+
+    assert strategy.getpositionbyname("BBB").size > 0
