@@ -451,11 +451,19 @@ class MultiPeriodFactorAnalyzer:
 
     def html(self, path: str, period: int | None = None) -> Path:
         """Write a standalone factor report for a selected prediction horizon."""
+        if period is None and len(self.analyzers) > 1:
+            return self._multi_period_html(path)
         return self._selected(period).html(path)
 
     def report(self, path: str, format: str | None = None, period: int | None = None) -> Path:
         """Write a factor report for a selected prediction horizon."""
-        return self._selected(period).report(path, format=format)
+        output = Path(path)
+        chosen = (format or output.suffix.lstrip(".") or "html").lower()
+        if chosen in {"htm", "html"}:
+            if not output.suffix:
+                output = output.with_suffix(".html")
+            return self.html(str(output), period=period)
+        raise ValueError(f"Unsupported factor report format: {chosen}")
 
     def _selected(self, period: int | None) -> FactorAnalyzer:
         """Return an analyzer by period, defaulting only when the choice is unambiguous."""
@@ -465,11 +473,52 @@ class MultiPeriodFactorAnalyzer:
             return next(iter(self.analyzers.values()))
         raise ValueError("period must be provided when multiple factor horizons are available")
 
+    def _multi_period_html(self, path: str) -> Path:
+        """Write one HTML report containing all configured factor horizons."""
+        from bokeh.embed import components
+        from bokeh.layouts import column as bk_column
+        from bokeh.models import Div
+        from bokeh.resources import INLINE
+
+        sections = []
+        for period, analyzer in self.analyzers.items():
+            grid = analyzer.plot()
+            if grid is not None:
+                sections.append(
+                    bk_column(
+                        Div(
+                            text=f"<h2>{period}-bar Forward Return</h2>",
+                            sizing_mode="stretch_width",
+                        ),
+                        grid,
+                        sizing_mode="stretch_width",
+                    )
+                )
+        chart = bk_column(*sections, sizing_mode="stretch_width") if sections else None
+        if chart is None:
+            raise ValueError("FactorAnalyzer has no data to plot")
+        script, rendered_chart = components(chart)
+        html_content = _render_factor_html(
+            title="Tradelearn Multi-Period Factor Analysis",
+            summary={},
+            summary_frame=self.summary(),
+            quantile_stats=pd.DataFrame(),
+            quantile_counts=pd.DataFrame(),
+            script=script,
+            chart=rendered_chart,
+            bokeh_resources=INLINE.render(),
+        )
+        output = Path(path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(html_content, encoding="utf-8")
+        return output
+
 
 def _render_factor_html(
     *,
     title: str,
     summary: dict[str, float],
+    summary_frame: pd.DataFrame | None = None,
     quantile_stats: pd.DataFrame,
     quantile_counts: pd.DataFrame,
     script: str,
@@ -477,6 +526,12 @@ def _render_factor_html(
     bokeh_resources: str,
 ) -> str:
     """Return a compact Alphalens-style factor report HTML page."""
+    summary_title = "Period Summary" if summary_frame is not None else "Factor Summary"
+    summary_table = (
+        _frame_table(summary_frame)
+        if summary_frame is not None
+        else _dict_table(summary, class_name="summary-table")
+    )
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -551,8 +606,8 @@ def _render_factor_html(
       </div>
       <aside>
         <section>
-          <h2>Factor Summary</h2>
-          {_dict_table(summary, class_name="summary-table")}
+          <h2>{summary_title}</h2>
+          {summary_table}
         </section>
         <section>
           <h2>Quantile Statistics</h2>

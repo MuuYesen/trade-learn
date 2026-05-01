@@ -491,6 +491,45 @@ def test_multi_period_factor_analyzer_report_dispatches_single_period_html(tmp_p
     assert "<html" in output.read_text().lower()
 
 
+def test_multi_period_factor_analyzer_report_defaults_to_all_periods(tmp_path) -> None:
+    """Multi-period clean-data analysis writes one report with all horizons by default."""
+    factor, _ = _factor_and_forward_returns()
+    prices = _series(
+        [
+            ("2024-01-01", "AAA", 100.0),
+            ("2024-01-01", "BBB", 100.0),
+            ("2024-01-01", "CCC", 100.0),
+            ("2024-01-02", "AAA", 101.0),
+            ("2024-01-02", "BBB", 99.0),
+            ("2024-01-02", "CCC", 102.0),
+            ("2024-01-03", "AAA", 102.0),
+            ("2024-01-03", "BBB", 98.0),
+            ("2024-01-03", "CCC", 101.0),
+            ("2024-01-04", "AAA", 103.0),
+            ("2024-01-04", "BBB", 97.0),
+            ("2024-01-04", "CCC", 100.0),
+        ]
+    )
+    clean = clean_factor_and_forward_returns(
+        factor.rename("value").to_frame(),
+        factor="value",
+        prices=prices,
+        periods=(1, 2),
+        quantiles=2,
+    )
+    analyzer = FactorAnalyzer.from_clean_factor_data(clean, periods=(1, 2), quantiles=2)
+    output = tmp_path / "factor_multi_period.html"
+
+    result = analyzer.report(str(output))
+
+    assert result == output
+    content = output.read_text()
+    assert "Multi-Period Factor Analysis" in content
+    assert "Period Summary" in content
+    assert "1-bar Forward Return" in content
+    assert "2-bar Forward Return" in content
+
+
 def test_clean_factor_and_forward_returns_builds_alphalens_style_frame() -> None:
     factor = _series(
         [
