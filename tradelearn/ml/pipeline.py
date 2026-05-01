@@ -9,9 +9,12 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
+
+if TYPE_CHECKING:
+    from tradelearn.ml.features import FeatureStore
 
 FeatureInput = str | Callable[[pd.DataFrame], pd.Series | pd.DataFrame | Iterable[float]]
 
@@ -32,8 +35,14 @@ class PipelineResult:
 class FactorTransformer:
     """Select or compute feature columns from a cross-sectional DataFrame."""
 
-    def __init__(self, features: Sequence[FeatureInput]) -> None:
+    def __init__(
+        self,
+        features: Sequence[FeatureInput],
+        *,
+        feature_store: FeatureStore | None = None,
+    ) -> None:
         self.features = tuple(features)
+        self.feature_store = feature_store
         self.feature_names_: list[str] = []
 
     def fit(self, data: pd.DataFrame, y: Any | None = None) -> FactorTransformer:
@@ -47,9 +56,12 @@ class FactorTransformer:
         frames: list[pd.DataFrame] = []
         for feature in self.features:
             if isinstance(feature, str):
-                if feature not in data:
+                if feature in data:
+                    frames.append(data[[feature]].copy())
+                elif self.feature_store is not None:
+                    frames.append(self.feature_store.compute(data, [feature]))
+                else:
                     raise KeyError(f"feature column {feature!r} not found")
-                frames.append(data[[feature]].copy())
                 continue
             values = feature(data)
             feature_name = getattr(feature, "__name__", "feature")
@@ -62,6 +74,14 @@ class FactorTransformer:
         """Fit and transform in one pass."""
         self.fit(data, y)
         return self.transform(data)
+
+    def get_params(self) -> dict[str, Any]:
+        """Return serializable transformer parameters for tracking."""
+        return {
+            "type": type(self).__name__,
+            "features": [_feature_name(feature) for feature in self.features],
+            "feature_store": self.feature_store is not None,
+        }
 
 
 class ModelAdapter:
@@ -90,6 +110,14 @@ class ModelAdapter:
         values = self.estimator.predict(_matrix(data))
         return pd.Series(values, index=data.index, name="score", dtype="float64")
 
+    def get_params(self) -> dict[str, Any]:
+        """Return serializable model parameters for tracking."""
+        return {
+            "type": type(self).__name__,
+            "estimator": None if self.estimator is None else type(self.estimator).__name__,
+            "score_column": self.score_column,
+        }
+
 
 class TopKSelector:
     """Select the top-k symbols by score."""
@@ -115,6 +143,15 @@ class TopKSelector:
                 ranked = ranked[ranked >= self.threshold]
         return [str(symbol) for symbol in ranked.head(self.k).index]
 
+    def get_params(self) -> dict[str, Any]:
+        """Return serializable selector parameters for tracking."""
+        return {
+            "type": type(self).__name__,
+            "k": self.k,
+            "ascending": self.ascending,
+            "threshold": self.threshold,
+        }
+
 
 class EqualWeightOptimizer:
     """Build equal weights for selected symbols."""
@@ -128,6 +165,10 @@ class EqualWeightOptimizer:
             return pd.Series(dtype="float64")
         weight = self.gross / len(selected)
         return pd.Series({str(symbol): weight for symbol in selected}, dtype="float64")
+
+    def get_params(self) -> dict[str, Any]:
+        """Return serializable optimizer parameters for tracking."""
+        return {"type": type(self).__name__, "gross": self.gross}
 
 
 class RiskPolicy:
@@ -157,6 +198,15 @@ class RiskPolicy:
             if gross > 0:
                 adjusted = adjusted / gross
         return adjusted
+
+    def get_params(self) -> dict[str, Any]:
+        """Return serializable risk parameters for tracking."""
+        return {
+            "type": type(self).__name__,
+            "max_weight": self.max_weight,
+            "min_abs_weight": self.min_abs_weight,
+            "normalize": self.normalize,
+        }
 
 
 class StrategyPipeline:
@@ -222,11 +272,27 @@ class StrategyPipeline:
                 weights = step.apply(weights)
         return PipelineResult(scores=scores, selected=selected, weights=weights)
 
+    def get_params(self) -> dict[str, Any]:
+        """Return serializable pipeline parameters for MLflow/report tracking."""
+        params: dict[str, Any] = {"steps": [name for name, _step in self.steps]}
+        for name, step in self.steps:
+            if hasattr(step, "get_params"):
+                params[name] = step.get_params()
+            else:
+                params[name] = {"type": type(step).__name__}
+        return params
+
     def _step_of_type(self, cls: type[Any]) -> Any | None:
         for _name, step in self.steps:
             if isinstance(step, cls):
                 return step
         return None
+
+
+def _feature_name(feature: FeatureInput) -> str:
+    if isinstance(feature, str):
+        return feature
+    return str(getattr(feature, "feature_name", getattr(feature, "__name__", "feature")))
 
 
 def _feature_frame(values: Any, index: pd.Index, default_name: str) -> pd.DataFrame:

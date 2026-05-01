@@ -10,6 +10,7 @@ from tradelearn.ml import (
     StrategyPipeline,
     TopKSelector,
 )
+from tradelearn.ml.features import FeatureStore, feature
 
 
 class LinearModel:
@@ -87,3 +88,83 @@ def test_risk_policy_normalizes_and_drops_small_weights() -> None:
     adjusted = policy.apply(weights)
 
     assert adjusted.to_dict() == {"A": 0.4, "B": 0.2}
+
+
+def test_factor_transformer_can_read_registered_feature_store_feature(tmp_path) -> None:
+    index = pd.MultiIndex.from_tuples(
+        [
+            (pd.Timestamp("2024-01-01", tz="UTC"), "A"),
+            (pd.Timestamp("2024-01-01", tz="UTC"), "B"),
+        ],
+        names=["timestamp", "symbol"],
+    )
+    frame = pd.DataFrame(
+        {
+            "open": [10.0, 12.0],
+            "high": [12.0, 13.0],
+            "low": [9.5, 9.8],
+            "close": [11.5, 10.0],
+            "volume": [1000.0, 1200.0],
+        },
+        index=index,
+    )
+    store = FeatureStore(tmp_path)
+
+    @feature(name="spread", version=1)
+    def spread(data: pd.DataFrame) -> pd.Series:
+        return data["close"] - data["open"]
+
+    store.register(spread)
+
+    transformed = FactorTransformer(["spread"], feature_store=store).fit_transform(frame)
+
+    assert transformed["spread"].to_dict() == {
+        (pd.Timestamp("2024-01-01", tz="UTC"), "A"): 1.5,
+        (pd.Timestamp("2024-01-01", tz="UTC"), "B"): -2.0,
+    }
+    assert store.exists(frame, "spread")
+
+
+def test_strategy_pipeline_exposes_serializable_step_params(tmp_path) -> None:
+    store = FeatureStore(tmp_path)
+    pipeline = StrategyPipeline(
+        [
+            ("features", FactorTransformer(["value"], feature_store=store)),
+            ("model", ModelAdapter(score_column="score")),
+            ("selector", TopKSelector(k=2, threshold=0.1)),
+            ("optimizer", EqualWeightOptimizer(gross=0.8)),
+            ("risk", RiskPolicy(max_weight=0.4, min_abs_weight=0.01, normalize=True)),
+        ]
+    )
+
+    params = pipeline.get_params()
+
+    assert params == {
+        "steps": ["features", "model", "selector", "optimizer", "risk"],
+        "features": {
+            "type": "FactorTransformer",
+            "features": ["value"],
+            "feature_store": True,
+        },
+        "model": {
+            "type": "ModelAdapter",
+            "estimator": None,
+            "score_column": "score",
+        },
+        "selector": {
+            "type": "TopKSelector",
+            "k": 2,
+            "ascending": False,
+            "threshold": 0.1,
+        },
+        "optimizer": {
+            "type": "EqualWeightOptimizer",
+            "gross": 0.8,
+        },
+        "risk": {
+            "type": "RiskPolicy",
+            "max_weight": 0.4,
+            "min_abs_weight": 0.01,
+            "normalize": True,
+        },
+    }
