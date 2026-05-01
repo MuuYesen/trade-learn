@@ -6,7 +6,7 @@ from tradelearn.ml import (
     EqualWeightOptimizer,
     FactorTransformer,
     ModelAdapter,
-    RiskPolicy,
+    PortfolioConstraints,
     StrategyPipeline,
     TopKSelector,
 )
@@ -41,7 +41,7 @@ def test_strategy_pipeline_fits_scores_and_weights() -> None:
             ("model", ModelAdapter(model)),
             ("selector", TopKSelector(k=2)),
             ("optimizer", EqualWeightOptimizer(gross=1.0)),
-            ("risk", RiskPolicy(max_weight=0.6)),
+            ("risk", PortfolioConstraints(max_weight=0.6)),
         ]
     )
 
@@ -115,7 +115,7 @@ def test_topk_selector_ascending_threshold_uses_portfolio_filtering() -> None:
 
 
 def test_risk_policy_normalizes_and_drops_small_weights() -> None:
-    policy = RiskPolicy(max_weight=0.4, min_abs_weight=0.05)
+    policy = PortfolioConstraints(max_weight=0.4, min_abs_weight=0.05)
     weights = pd.Series({"A": 0.9, "B": 0.2, "C": 0.01})
 
     adjusted = policy.apply(weights)
@@ -166,7 +166,7 @@ def test_strategy_pipeline_exposes_serializable_step_params(tmp_path) -> None:
             ("model", ModelAdapter(score_column="score")),
             ("selector", TopKSelector(k=2, threshold=0.1)),
             ("optimizer", EqualWeightOptimizer(gross=0.8)),
-            ("risk", RiskPolicy(max_weight=0.4, min_abs_weight=0.01, normalize=True)),
+            ("risk", PortfolioConstraints(max_weight=0.4, min_abs_weight=0.01, normalize=True)),
         ]
     )
 
@@ -195,7 +195,7 @@ def test_strategy_pipeline_exposes_serializable_step_params(tmp_path) -> None:
             "gross": 0.8,
         },
         "risk": {
-            "type": "RiskPolicy",
+            "type": "PortfolioConstraints",
             "max_weight": 0.4,
             "min_abs_weight": 0.01,
             "normalize": True,

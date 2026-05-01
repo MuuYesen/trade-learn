@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from tradelearn.portfolio import EqualWeightOptimizer, RiskPolicy, TopKSelector
+from tradelearn.portfolio import EqualWeightOptimizer, PortfolioConstraints, TopKSelector
 
 if TYPE_CHECKING:
     from tradelearn.ml.features import FeatureStore
@@ -153,7 +153,7 @@ class StrategyPipeline:
         """Fit transformer and model steps."""
         transformed = data
         for _name, step in self.steps:
-            if isinstance(step, (TopKSelector, EqualWeightOptimizer, RiskPolicy)):
+            if isinstance(step, (TopKSelector, EqualWeightOptimizer, PortfolioConstraints)):
                 continue
             if isinstance(step, ModelAdapter):
                 step.fit(transformed, y)
@@ -172,7 +172,7 @@ class StrategyPipeline:
         transformed = data
         model: ModelAdapter | None = None
         for _name, step in self.steps:
-            if isinstance(step, (TopKSelector, EqualWeightOptimizer, RiskPolicy)):
+            if isinstance(step, (TopKSelector, EqualWeightOptimizer, PortfolioConstraints)):
                 continue
             if isinstance(step, ModelAdapter):
                 model = step
@@ -197,7 +197,7 @@ class StrategyPipeline:
         else:
             weights = scores.loc[selected]
         for _name, step in self.steps:
-            if isinstance(step, RiskPolicy):
+            if isinstance(step, PortfolioConstraints):
                 weights = step.apply(weights)
         return PipelineResult(scores=scores, selected=selected, weights=weights)
 
@@ -266,7 +266,6 @@ __all__ = [
     "FactorTransformer",
     "ModelAdapter",
     "PipelineResult",
-    "RiskPolicy",
     "StrategyPipeline",
     "TopKSelector",
 ]

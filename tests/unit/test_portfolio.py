@@ -4,7 +4,13 @@ import math
 
 import pandas as pd
 
-from tradelearn.portfolio import EqualWeightOptimizer, RiskPolicy, TopKSelector, select_top
+from tradelearn.portfolio import (
+    EqualWeightOptimizer,
+    PortfolioConstraints,
+    RiskPolicy,
+    TopKSelector,
+    select_top,
+)
 
 
 def test_select_top_returns_highest_score_keys() -> None:
@@ -35,7 +41,11 @@ def test_portfolio_selector_optimizer_and_risk_policy_are_public() -> None:
     scores = pd.Series({"AAPL": 0.10, "MSFT": 0.25, "GOOG": 0.18})
     selected = TopKSelector(k=2).select(scores)
     weights = EqualWeightOptimizer(gross=0.8).optimize(selected, scores)
-    adjusted = RiskPolicy(max_weight=0.4, normalize=True).apply(weights)
+    adjusted = PortfolioConstraints(max_weight=0.4, normalize=True).apply(weights)
 
     assert selected == ["MSFT", "GOOG"]
     assert adjusted.to_dict() == {"MSFT": 0.5, "GOOG": 0.5}
+
+
+def test_risk_policy_remains_compatibility_alias() -> None:
+    assert RiskPolicy is PortfolioConstraints

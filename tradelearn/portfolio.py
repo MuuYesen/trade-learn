@@ -108,8 +108,8 @@ class EqualWeightOptimizer:
         return {"type": type(self).__name__, "gross": self.gross}
 
 
-class RiskPolicy:
-    """Post-process portfolio weights with simple risk constraints."""
+class PortfolioConstraints:
+    """Post-process portfolio weights with simple portfolio constraints."""
 
     def __init__(
         self,
@@ -137,7 +137,7 @@ class RiskPolicy:
         return adjusted
 
     def get_params(self) -> dict[str, Any]:
-        """Return serializable risk parameters for tracking."""
+        """Return serializable constraint parameters for tracking."""
         return {
             "type": type(self).__name__,
             "max_weight": self.max_weight,
@@ -146,8 +146,12 @@ class RiskPolicy:
         }
 
 
+RiskPolicy = PortfolioConstraints
+
+
 __all__ = [
     "EqualWeightOptimizer",
+    "PortfolioConstraints",
     "RiskPolicy",
     "TopKSelector",
     "select_top",

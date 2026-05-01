@@ -12,7 +12,12 @@ from tradelearn.ml.pipeline import (
 )
 from tradelearn.ml.registry import ModelRegistry, model_uri
 from tradelearn.ml.strategy import MLStrategy
-from tradelearn.portfolio import EqualWeightOptimizer, RiskPolicy, TopKSelector
+from tradelearn.portfolio import (
+    EqualWeightOptimizer,
+    PortfolioConstraints,
+    RiskPolicy,
+    TopKSelector,
+)
 
 __all__ = [
     "CausalSelector",
@@ -24,6 +29,7 @@ __all__ = [
     "ModelAdapter",
     "ModelRegistry",
     "PipelineResult",
+    "PortfolioConstraints",
     "RiskPolicy",
     "StrategyPipeline",
     "TopKSelector",
