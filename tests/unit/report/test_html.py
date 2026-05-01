@@ -64,7 +64,7 @@ def test_reporter_report_uses_format_when_suffix_missing(tmp_path) -> None:
 
 
 def test_reporter_html_adds_price_trades_chart_when_market_data_exists(tmp_path) -> None:
-    """Reporter.html can include a price curve with fills."""
+    """Reporter.html keeps the tear sheet and adds optional market replay."""
     path = tmp_path / "market-report.html"
     stats = _stats()
     market_data = pd.DataFrame(
@@ -91,7 +91,9 @@ def test_reporter_html_adds_price_trades_chart_when_market_data_exists(tmp_path)
     assert "Price / Trades" in html
     assert "Buy" in html
     assert "Sell" in html
-    assert "Equity Curve" not in html
+    assert "Equity Curve" in html
+    assert "Drawdown" in html
+    assert "Monthly Returns Heatmap" in html
 
 
 def test_reporter_html_accepts_mapping_stats(tmp_path) -> None:

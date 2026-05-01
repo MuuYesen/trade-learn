@@ -15,33 +15,27 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: #eef3f5;
+      background: #f3f6f8;
       color: var(--ink);
       font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
       line-height: 1.5;
     }
-    .shell {
-      max-width: 1180px;
-      margin: 32px auto;
-      padding: 0 24px;
-    }
+    .shell { max-width: 1180px; margin: 28px auto; padding: 0 22px; }
     header, section, footer {
       width: 100%;
       margin: 0 0 28px;
-      padding: 24px 28px;
+      padding: 22px 26px;
       background: white;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 6px;
       box-shadow: 0 1px 2px rgba(31, 45, 51, 0.04);
     }
-    header {
-      border-top: 5px solid var(--accent);
-    }
+    header { border-top: 4px solid var(--accent); }
     h1, h2 {
       margin: 0 0 16px;
       line-height: 1.2;
     }
-    h1 { font-size: 34px; }
+    h1 { font-size: 32px; }
     h2 { font-size: 24px; }
     p { margin: 4px 0; color: var(--muted); }
     .eyebrow {
@@ -76,8 +70,8 @@
       font-weight: 700;
       overflow-wrap: anywhere;
     }
-    table { border-collapse: collapse; width: 100%; margin: 12px 0 0; }
-    th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0 0; font-size: 13px; }
+    th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; }
     th { background: var(--panel); font-weight: 700; }
     .section-note {
       margin: -6px 0 10px;
@@ -110,6 +104,28 @@
       width: 100% !important;
       max-width: 100% !important;
     }
+    .tear-sheet {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: 24px;
+      align-items: start;
+    }
+    .tear-sheet-main section,
+    .tear-sheet-side section {
+      margin-bottom: 22px;
+    }
+    .tear-sheet-side {
+      position: sticky;
+      top: 18px;
+    }
+    .compact-section h2 {
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+    @media (max-width: 980px) {
+      .tear-sheet { grid-template-columns: 1fr; }
+      .tear-sheet-side { position: static; }
+    }
   </style>
 </head>
 <body>
@@ -136,35 +152,40 @@
         </div>
       </div>
     </header>
-    <section>
-      <h2>Experiment Parameters</h2>
-      <p class="section-note">Strategy inputs, run identifiers, and execution configuration used for this report.</p>
-      {{ config_table | safe }}
-      {{ pipeline_section | safe }}
-    </section>
-    <section>
-      <h2>Summary Stats</h2>
-      <p class="section-note">Key performance and accounting metrics for the run.</p>
-      {{ summary_table | safe }}
-    </section>
-    {{ benchmark_section | safe }}
-    <section>
-    <h2>Top 10 Drawdowns</h2>
-    {{ drawdowns_table | safe }}
-    </section>
-    {{ correlation_section | safe }}
-    {{ exposure_section | safe }}
-    {{ factor_ic_section | safe }}
-    {{ factor_rank_ic_section | safe }}
-    {{ factor_turnover_section | safe }}
-    {{ factor_long_short_section | safe }}
-    {{ factor_section | safe }}
-    {% for title, chart in charts.items() %}
-    <section class="chart">
-      <h2>{{ title }}</h2>
-      {{ chart | safe }}
-    </section>
-    {% endfor %}
+    <div class="tear-sheet">
+      <div class="tear-sheet-main">
+        {% for title, chart in charts.items() %}
+        <section class="chart">
+          <h2>{{ title }}</h2>
+          {{ chart | safe }}
+        </section>
+        {% endfor %}
+      </div>
+      <aside class="tear-sheet-side">
+        <section class="compact-section">
+          <h2>Summary Stats</h2>
+          <p class="section-note">Pyfolio-style key performance and accounting metrics.</p>
+          {{ summary_table | safe }}
+        </section>
+        <section class="compact-section">
+          <h2>Top 10 Drawdowns</h2>
+          {{ drawdowns_table | safe }}
+        </section>
+        <section class="compact-section">
+          <h2>Experiment Parameters</h2>
+          {{ config_table | safe }}
+          {{ pipeline_section | safe }}
+        </section>
+        {{ benchmark_section | safe }}
+        {{ correlation_section | safe }}
+        {{ exposure_section | safe }}
+        {{ factor_ic_section | safe }}
+        {{ factor_rank_ic_section | safe }}
+        {{ factor_turnover_section | safe }}
+        {{ factor_long_short_section | safe }}
+        {{ factor_section | safe }}
+      </aside>
+    </div>
     {{ script | safe }}
     <footer>
       <p>Tradelearn {{ metadata.version }} | Generated: {{ metadata.generated_at }}</p>

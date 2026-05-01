@@ -312,7 +312,7 @@ def test_factor_analyzer_plot_returns_bokeh_layout() -> None:
 
 
 def test_factor_analyzer_html_writes_file(tmp_path) -> None:
-    """html() writes a standalone HTML file and returns its path."""
+    """html() writes an Alphalens-style standalone report."""
     factor, forward = _factor_and_forward_returns()
     analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
     output = tmp_path / "factor_report.html"
@@ -324,6 +324,10 @@ def test_factor_analyzer_html_writes_file(tmp_path) -> None:
     assert output.stat().st_size > 0
     content = output.read_text()
     assert "<html" in content.lower()
+    assert "Tradelearn Factor Analysis" in content
+    assert "Factor Summary" in content
+    assert "Quantile Statistics" in content
+    assert "Information Coefficient" in content
 
 
 def test_factor_analyzer_report_dispatches_html(tmp_path) -> None:
