@@ -7,7 +7,7 @@ from typing import Any
 
 __version__ = "0.1.2.0"
 
-__all__ = ["__version__", "ta", "pta", "talib", "tdx", "tv"]
+__all__ = ["__version__", "optimize", "ta", "pta", "talib", "tdx", "tv"]
 
 
 def __getattr__(name: str) -> Any:
@@ -22,6 +22,8 @@ def __getattr__(name: str) -> Any:
         return importlib.import_module("tradelearn.indicators.tdx")
     if name == "tv":
         return importlib.import_module("tradelearn.indicators.tv")
+    if name == "optimize":
+        return importlib.import_module("tradelearn.optimize")
     if name == "lab":
         from tradelearn import lab
         return lab

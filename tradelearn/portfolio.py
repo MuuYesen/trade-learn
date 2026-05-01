@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Hashable, Mapping, Sequence
+from importlib import import_module
 from typing import Any
 
 import pandas as pd
@@ -149,10 +150,116 @@ class PortfolioConstraints:
 RiskPolicy = PortfolioConstraints
 
 
+class RiskfolioOptimizer:
+    """Optional Riskfolio-Lib portfolio optimizer wrapper.
+
+    The wrapper turns a return matrix into target weights. It does not submit
+    orders or change backtest execution semantics.
+    """
+
+    def __init__(
+        self,
+        *,
+        model: str = "Classic",
+        rm: str = "MV",
+        obj: str = "Sharpe",
+        rf: float = 0.0,
+        risk_aversion: float = 0.0,
+        hist: bool = True,
+        method_mu: str = "hist",
+        method_cov: str = "hist",
+        **kwargs: Any,
+    ) -> None:
+        self.model = model
+        self.rm = rm
+        self.obj = obj
+        self.rf = float(rf)
+        self.risk_aversion = float(kwargs.pop("l", risk_aversion))
+        self.hist = bool(hist)
+        self.method_mu = method_mu
+        self.method_cov = method_cov
+        self.kwargs = dict(kwargs)
+
+    def optimize(self, returns: pd.DataFrame) -> pd.Series:
+        """Return optimized target weights from a returns matrix."""
+        riskfolio = _import_optional(
+            "riskfolio",
+            extra="riskfolio",
+            package="Riskfolio-Lib",
+        )
+        portfolio = riskfolio.Portfolio(returns=returns.astype("float64"))
+        portfolio.assets_stats(method_mu=self.method_mu, method_cov=self.method_cov)
+        result = portfolio.optimization(
+            model=self.model,
+            rm=self.rm,
+            obj=self.obj,
+            rf=self.rf,
+            l=self.risk_aversion,
+            hist=self.hist,
+            **self.kwargs,
+        )
+        return _weights_series(result)
+
+    def get_params(self) -> dict[str, Any]:
+        """Return serializable optimizer parameters for tracking."""
+        params = {
+            "type": type(self).__name__,
+            "model": self.model,
+            "rm": self.rm,
+            "obj": self.obj,
+            "rf": self.rf,
+            "risk_aversion": self.risk_aversion,
+            "hist": self.hist,
+            "method_mu": self.method_mu,
+            "method_cov": self.method_cov,
+        }
+        params.update(self.kwargs)
+        return params
+
+
+def _import_optional(module: str, *, extra: str, package: str):
+    try:
+        imported = import_module(module)
+    except ImportError as exc:
+        raise ImportError(
+            f"{package} is required for this feature. Install with "
+            f"`pip install trade-learn[{extra}]`."
+        ) from exc
+    if imported is None:
+        raise ImportError(
+            f"{package} is required for this feature. Install with "
+            f"`pip install trade-learn[{extra}]`."
+        )
+    return imported
+
+
+def _weights_series(result: Any) -> pd.Series:
+    if isinstance(result, pd.DataFrame):
+        if "weights" in result.columns:
+            series = result["weights"]
+        elif "weight" in result.columns:
+            series = result["weight"]
+        elif result.shape[1] == 1:
+            series = result.iloc[:, 0]
+        else:
+            raise ValueError("Riskfolio result DataFrame must contain one weight column")
+    elif isinstance(result, pd.Series):
+        series = result
+    elif isinstance(result, Mapping):
+        series = pd.Series(result)
+    else:
+        raise TypeError("Riskfolio optimizer returned unsupported weight output")
+    series = series.astype("float64")
+    series.index = series.index.astype(str)
+    series.name = "weight"
+    return series
+
+
 __all__ = [
     "EqualWeightOptimizer",
     "PortfolioConstraints",
     "RiskPolicy",
+    "RiskfolioOptimizer",
     "TopKSelector",
     "select_top",
 ]

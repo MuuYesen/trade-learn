@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import math
+import sys
+import types
 
 import pandas as pd
+import pytest
 
 from tradelearn.portfolio import (
     EqualWeightOptimizer,
     PortfolioConstraints,
+    RiskfolioOptimizer,
     RiskPolicy,
     TopKSelector,
     select_top,
@@ -49,3 +53,35 @@ def test_portfolio_selector_optimizer_and_risk_policy_are_public() -> None:
 
 def test_risk_policy_remains_compatibility_alias() -> None:
     assert RiskPolicy is PortfolioConstraints
+
+
+def test_riskfolio_optimizer_requires_optional_dependency(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "riskfolio", None)
+    optimizer = RiskfolioOptimizer()
+
+    with pytest.raises(ImportError, match="trade-learn\\[riskfolio\\]"):
+        optimizer.optimize(pd.DataFrame({"A": [0.01], "B": [0.02]}))
+
+
+def test_riskfolio_optimizer_wraps_weights(monkeypatch) -> None:
+    class FakePortfolio:
+        def __init__(self, *, returns):
+            self.returns = returns
+            self.stats_kwargs = None
+
+        def assets_stats(self, **kwargs):
+            self.stats_kwargs = kwargs
+
+        def optimization(self, **kwargs):
+            assert kwargs["model"] == "Classic"
+            assert kwargs["rm"] == "MV"
+            assert kwargs["obj"] == "Sharpe"
+            return pd.DataFrame({"weights": [0.6, 0.4]}, index=["A", "B"])
+
+    fake = types.SimpleNamespace(Portfolio=FakePortfolio)
+    monkeypatch.setitem(sys.modules, "riskfolio", fake)
+    returns = pd.DataFrame({"A": [0.01, 0.02], "B": [0.02, 0.01]})
+
+    weights = RiskfolioOptimizer().optimize(returns)
+
+    assert weights.to_dict() == {"A": 0.6, "B": 0.4}

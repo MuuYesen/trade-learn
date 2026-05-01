@@ -73,6 +73,16 @@ docs = [
 duckdb = [
     "duckdb",
 ]
+riskfolio = [
+    "Riskfolio-Lib",
+]
+optuna = [
+    "optuna",
+]
+research = [
+    "Riskfolio-Lib",
+    "optuna",
+]
 
 [dependency-groups]
 oracle = [
