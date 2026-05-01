@@ -4,7 +4,11 @@ import math
 
 import pandas as pd
 
-from tradelearn.factor import FactorAnalyzer, clean_factor_and_forward_returns
+from tradelearn.factor import (
+    FactorAnalyzer,
+    MultiPeriodFactorAnalyzer,
+    clean_factor_and_forward_returns,
+)
 from tradelearn.metrics import factor as factor_metrics
 
 
@@ -90,6 +94,52 @@ def test_factor_analyzer_price_derived_ic_uses_symbol_forward_returns() -> None:
     analyzer = FactorAnalyzer(factor, prices=prices)
 
     pd.testing.assert_series_equal(analyzer.ic(), factor_metrics.ic(factor, expected_forward))
+
+
+def test_factor_analyzer_from_frame_builds_single_period_from_dataset() -> None:
+    """from_frame accepts a complete factor dataset plus factor/target column names."""
+    data = _factor_price_frame()
+
+    analyzer = FactorAnalyzer.from_frame(
+        data,
+        factor="value_score",
+        target="close",
+        period=1,
+        quantiles=2,
+    )
+
+    assert isinstance(analyzer, FactorAnalyzer)
+    assert analyzer.forward_returns is not None
+    expected = _series(
+        [
+            ("2024-01-01", "AAA", 0.10),
+            ("2024-01-01", "BBB", -0.10),
+            ("2024-01-02", "AAA", -0.10),
+            ("2024-01-02", "BBB", 0.10),
+        ]
+    ).rename("forward_returns")
+    pd.testing.assert_series_equal(analyzer.forward_returns.dropna(), expected)
+
+
+def test_factor_analyzer_from_frame_builds_multi_period_from_dataset() -> None:
+    """from_frame returns a multi-period analyzer when periods contains multiple horizons."""
+    data = _factor_price_frame()
+
+    analyzer = FactorAnalyzer.from_frame(
+        data.reset_index(),
+        factor="value_score",
+        target="close",
+        date="date",
+        symbol="symbol",
+        periods=(1, 2),
+        quantiles=2,
+    )
+
+    assert isinstance(analyzer, MultiPeriodFactorAnalyzer)
+    assert set(analyzer.keys()) == {1, 2}
+    assert list(analyzer.summary().index) == [1, 2]
+    assert list(analyzer.ic().columns) == [1, 2]
+    assert isinstance(analyzer[1], FactorAnalyzer)
 
 
 def test_factor_analyzer_builds_period_analyzers_from_clean_factor_data() -> None:
@@ -315,6 +365,27 @@ def _factor_and_forward_returns() -> tuple[pd.Series, pd.Series]:
         ]
     )
     return factor, forward
+
+
+def _factor_price_frame() -> pd.DataFrame:
+    index = pd.MultiIndex.from_tuples(
+        [
+            (pd.Timestamp("2024-01-01"), "AAA"),
+            (pd.Timestamp("2024-01-01"), "BBB"),
+            (pd.Timestamp("2024-01-02"), "AAA"),
+            (pd.Timestamp("2024-01-02"), "BBB"),
+            (pd.Timestamp("2024-01-03"), "AAA"),
+            (pd.Timestamp("2024-01-03"), "BBB"),
+        ],
+        names=["date", "symbol"],
+    )
+    return pd.DataFrame(
+        {
+            "value_score": [1.0, 2.0, 1.0, 2.0, 1.5, 2.5],
+            "close": [100.0, 100.0, 110.0, 90.0, 99.0, 99.0],
+        },
+        index=index,
+    )
 
 
 def test_factor_analyzer_monotonicity_detects_ordered_quantiles() -> None:

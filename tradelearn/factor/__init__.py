@@ -14,7 +14,7 @@ from tradelearn.factor.alpha import (
     validate_alpha_formula_metadata,
     validated_alpha_formula_metadata,
 )
-from tradelearn.factor.analyzer import FactorAnalyzer
+from tradelearn.factor.analyzer import FactorAnalyzer, MultiPeriodFactorAnalyzer
 from tradelearn.factor.risk_model import FactorRiskModel, PerformanceAttribution
 from tradelearn.metrics.factor import clean_factor_and_forward_returns
 
@@ -26,6 +26,7 @@ __all__ = [
     "ALPHA191_SUPPORTED",
     "AlphaFormulaBlocker",
     "FactorAnalyzer",
+    "MultiPeriodFactorAnalyzer",
     "FactorRiskModel",
     "PerformanceAttribution",
     "alpha101",
