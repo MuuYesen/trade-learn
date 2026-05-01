@@ -9,6 +9,8 @@ from tradelearn.backtest.feed import (
     is_normalized_ohlcv_frame,
     normalize_ohlcv_frame,
 )
+from tradelearn.backtest.optimize import expand_grid
+from tradelearn.backtest.reporting import reporter_from_stats
 
 from .strategy import Strategy
 
@@ -114,23 +116,20 @@ class Backtest:
 
     def optimize(self, **kwargs) -> pd.Series:
         """Simple grid search optimization."""
-        import itertools
         from concurrent.futures import ProcessPoolExecutor
+        from itertools import repeat
 
-        keys = list(kwargs.keys())
-        values = list(kwargs.values())
-        grid = list(itertools.product(*values))
+        grid = expand_grid(kwargs)
 
         print(f"Starting Grid Search: {len(grid)} combinations...")
 
         with ProcessPoolExecutor() as executor:
             results = list(executor.map(_optimize_worker,
-                                        itertools.repeat(self._data),
-                                        itertools.repeat(self._strategy_cls),
-                                        itertools.repeat(self._cash),
-                                        itertools.repeat(self._commission),
-                                        itertools.repeat(self.match_mode),
-                                        itertools.repeat(keys),
+                                        repeat(self._data),
+                                        repeat(self._strategy_cls),
+                                        repeat(self._cash),
+                                        repeat(self._commission),
+                                        repeat(self.match_mode),
                                         grid))
 
         # Find best result based on Return [%]
@@ -152,18 +151,9 @@ class Backtest:
         stats = getattr(self, "_last_stats", None)
         if stats is None:
             raise RuntimeError("run() must be called before plot() or report()")
-        from tradelearn.report import Reporter
+        return reporter_from_stats(stats, getattr(self, "datas", None))
 
-        return Reporter(stats, market_data=self._report_market_data())
-
-    def _report_market_data(self):
-        feeds = getattr(self, "datas", None)
-        if not feeds:
-            return None
-        return getattr(feeds[0], "_frame", None)
-
-def _optimize_worker(data, strategy_cls, cash, commission, match_mode, keys, params_values):
-    params = dict(zip(keys, params_values, strict=False))
+def _optimize_worker(data, strategy_cls, cash, commission, match_mode, params):
     bt = Backtest(data, strategy_cls, cash=cash, commission=commission, match_mode=match_mode)
     return bt.run(**params), params
 

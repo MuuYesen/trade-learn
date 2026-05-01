@@ -4,6 +4,7 @@ from collections import OrderedDict
 from typing import Any
 
 from tradelearn.backtest.models import FixedCommission, FixedSlippage
+from tradelearn.backtest.reporting import reporter_from_results
 from tradelearn.engine.analyzer import AnalyzerCollection
 from tradelearn.engine.base import TimeFrame
 from tradelearn.engine.datafeed import DataFeed
@@ -321,19 +322,7 @@ class Cerebro:
 
     def _last_reporter(self):
         results = getattr(self, "_last_results", None)
-        if not results:
-            raise RuntimeError("run() must be called before plot() or report()")
-        stats = getattr(results[0], "stats", None)
-        if stats is None:
-            raise RuntimeError("last run did not produce stats")
-        from tradelearn.report import Reporter
-
-        return Reporter(stats, market_data=self._report_market_data())
-
-    def _report_market_data(self):
-        if not self.datas:
-            return None
-        return getattr(self.datas[0], "_frame", None)
+        return reporter_from_results(results, self.datas)
 
     def _attach_observers(self, strategy: Any) -> None:
         strategy.observers = ObserverCollection()

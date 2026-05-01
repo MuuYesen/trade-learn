@@ -7,6 +7,7 @@ from typing import Any
 
 import pandas as pd
 
+from tradelearn.backtest.targets import TargetWeightSnapshot, build_target_weight_intents
 from tradelearn.engine.strategy import Strategy
 
 
@@ -80,32 +81,26 @@ class IndexEnhanceStrategy(Strategy):
     ) -> list[Any]:
         """Move all data feeds toward symbol target weights."""
 
-        requested = _coerce_weights(weights)
-        cash_weight = requested.pop("cash", 0.0)
-        if cash_weight < 0:
-            raise ValueError("cash target weight must be non-negative")
-        if any(weight < 0 for weight in requested.values()):
-            raise ValueError("target weights must be non-negative")
-        if sum(requested.values()) + cash_weight > 1.000000000000001:
-            raise ValueError("target weights plus cash must sum to <= 1")
-
         data_by_name = self._data_by_name()
-        unknown = sorted(set(requested) - set(data_by_name))
-        if unknown:
-            raise ValueError(f"Unknown symbol(s): {unknown}")
-
-        targets = dict(requested)
-        if close_missing:
-            for name in data_by_name.keys() - targets.keys():
-                targets[name] = 0.0
-
-        ordered = sorted(
-            targets.items(),
-            key=lambda item: (item[1] > self._current_weight(data_by_name[item[0]]), item[0]),
+        snapshots = {
+            name: TargetWeightSnapshot(
+                price=float(data.close[0]),
+                size=float(self.getposition(data).size + self._pending_size.get(data, 0.0)),
+                mult=self._position_mult(data),
+            )
+            for name, data in data_by_name.items()
+        }
+        intents = build_target_weight_intents(
+            weights,
+            data_by_symbol=data_by_name,
+            snapshots=snapshots,
+            equity=float(self.broker.getvalue()) if self.broker is not None else 0.0,
+            close_missing=close_missing,
+            unknown_label="symbol(s)",
         )
         orders: list[Any] = []
-        for name, target in ordered:
-            order = self.order_target_percent(data=data_by_name[name], target=float(target))
+        for intent in intents:
+            order = self.order_target_percent(data=intent.data, target=intent.target_weight)
             if order is not None:
                 orders.append(order)
         return orders
@@ -115,12 +110,6 @@ class IndexEnhanceStrategy(Strategy):
             str(getattr(data, "_name", None) or f"data{i}"): data
             for i, data in enumerate(self.datas)
         }
-
-    def _current_weight(self, data: Any) -> float:
-        total = float(self.broker.getvalue()) if self.broker is not None else 0.0
-        if total == 0:
-            return 0.0
-        return float(self.broker.getvalue(datas=[data])) / total
 
     def _current_datetime(self) -> pd.Timestamp:
         if self.data is None:
@@ -155,11 +144,6 @@ class IndexEnhanceStrategy(Strategy):
         if freq in {"yearly", "annual", "year", "y"}:
             return dt.year
         raise ValueError(f"unsupported rebalance_freq: {self.rebalance_freq!r}")
-
-
-def _coerce_weights(weights: Mapping[str, float] | pd.Series) -> dict[str, float]:
-    items = weights.items() if hasattr(weights, "items") else dict(weights).items()
-    return {str(name): float(weight) for name, weight in items}
 
 
 def _data_datetime(data: Any) -> pd.Timestamp:

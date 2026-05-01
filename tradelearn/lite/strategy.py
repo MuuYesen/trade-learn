@@ -11,7 +11,7 @@ import pandas as pd
 from tradelearn.backtest.indicator_cache import BatchIndicatorCache
 from tradelearn.backtest.models import Order
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
-from tradelearn.core import OrderRequest
+from tradelearn.backtest.targets import TargetWeightSnapshot, build_target_weight_intents
 from tradelearn.lite.data import LiteDataProxy, _ta_frame
 from tradelearn.lite.indicator import IndicatorBundle, IndicatorProxy
 from tradelearn.lite.position import PositionProxy
@@ -558,82 +558,32 @@ class Strategy(CoreStrategy):
 
         ``cash`` is accepted as a reserved key and is not translated into an order.
         """
-        requested: dict[str, float] = {
-            str(ticker): float(target)
-            for ticker, target in (
-                weights.items() if hasattr(weights, "items") else dict(weights).items()
-            )
-        }
-        if any(target < 0 for target in requested.values()):
-            raise ValueError("target weights must be non-negative")
-
-        cash_weight = float(requested.pop("cash", 0.0))
-        if cash_weight < 0:
-            raise ValueError("cash target weight must be non-negative")
-        if float(sum(requested.values()) + cash_weight) > 1.000000000000001:
-            raise ValueError("target weights plus cash must sum to <= 1")
-
         data_by_ticker = self._target_weight_data_map()
-        known = set(data_by_ticker)
-        unknown = sorted(ticker for ticker in requested if ticker not in known)
-        if unknown:
-            raise ValueError(f"Unknown ticker(s): {unknown}")
-
         equity = self._portfolio_equity_snapshot()
         snapshots = self._target_weight_snapshots(data_by_ticker)
-        intents = self._target_weight_order_requests(
-            requested,
-            data_by_ticker,
-            snapshots,
-            equity,
-            close_missing,
+        intent_snapshots = {
+            ticker: TargetWeightSnapshot(
+                price=snapshots.prices[ticker],
+                size=snapshots.sizes[ticker],
+                mult=snapshots.mults[ticker],
+            )
+            for ticker in data_by_ticker
+        }
+        intents = build_target_weight_intents(
+            weights,
+            data_by_symbol=data_by_ticker,
+            snapshots=intent_snapshots,
+            equity=equity,
+            close_missing=close_missing,
+            unknown_label="ticker(s)",
         )
         orders: list[Any] = []
-        for request, data in intents:
-            side = Order.Buy if request.side == "buy" else Order.Sell
-            order = self._submit_lite_order(side, data, request.qty, None, None, None)
+        for intent in intents:
+            side = Order.Buy if intent.side == "buy" else Order.Sell
+            order = self._submit_lite_order(side, intent.data, intent.qty, None, None, None)
             if order is not None:
                 orders.append(order)
         return orders
-
-    def _target_weight_order_requests(
-        self,
-        requested: Mapping[str, float],
-        data_by_ticker: dict[str, Any],
-        snapshots: _TargetWeightSnapshots,
-        equity: float,
-        close_missing: bool,
-    ) -> list[tuple[OrderRequest, Any]]:
-        target_by_ticker = dict(requested)
-        if close_missing:
-            for ticker in data_by_ticker.keys() - requested.keys():
-                target_by_ticker[ticker] = 0.0
-
-        requests: list[tuple[OrderRequest, Any]] = []
-        for ticker, target in target_by_ticker.items():
-            data = data_by_ticker[ticker]
-            price = snapshots.prices[ticker]
-            mult = snapshots.mults[ticker]
-            if price <= 0 or mult <= 0:
-                continue
-            current_size = snapshots.sizes[ticker]
-            current_value = current_size * price * mult
-            target_value = float(target) * equity
-            delta_value = target_value - current_value
-            if abs(delta_value) < 1e-12:
-                continue
-            qty = int(abs(delta_value) / (price * mult))
-            if not qty:
-                continue
-            side = "buy" if delta_value > 0 else "sell"
-            requests.append(
-                (
-                    OrderRequest(symbol=ticker, side=side, qty=float(qty)),
-                    data,
-                )
-            )
-        requests.sort(key=lambda item: (item[0].side == "buy", item[0].symbol))
-        return requests
 
     def _target_weight_data_map(self) -> dict[str, Any]:
         if self._bt_data_by_ticker:

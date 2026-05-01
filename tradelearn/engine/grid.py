@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from itertools import product
 from typing import Any
 
 import pandas as pd
+
+from tradelearn.backtest.optimize import expand_grid
 
 from .analyzers import MLflowAnalyzer
 from .cerebro import Cerebro
@@ -32,7 +33,7 @@ def grid_search(
     """Run a simple strategy parameter grid with nested MLflow runs."""
 
     results: list[GridSearchResult] = []
-    for index, params in enumerate(_expand_grid(param_grid)):
+    for index, params in enumerate(expand_grid(param_grid)):
         cerebro = Cerebro()
         cerebro.adddata(data)
         cerebro.addstrategy(strategy, **params)
@@ -50,9 +51,3 @@ def grid_search(
             )
         )
     return results
-
-
-def _expand_grid(param_grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
-    keys = list(param_grid)
-    values = [param_grid[key] for key in keys]
-    return [dict(zip(keys, item, strict=True)) for item in product(*values)]
