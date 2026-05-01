@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
 import tradelearn.lite as tl
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -73,7 +74,9 @@ class MACD_Volume_Strategy(tl.Strategy):
         macd_line = self.macd_line_ind[0]
         macd_signal = self.macd_signal_ind[0]
         macd_line_prev = self.macd_line_ind[-1] if len(self.macd_line_ind) > 1 else macd_line
-        macd_signal_prev = self.macd_signal_ind[-1] if len(self.macd_signal_ind) > 1 else macd_signal
+        macd_signal_prev = (
+            self.macd_signal_ind[-1] if len(self.macd_signal_ind) > 1 else macd_signal
+        )
         
         # Si estamos en posición
         if self.position():
@@ -102,7 +105,12 @@ class MACD_Volume_Strategy(tl.Strategy):
             volume_ok = volume > (vol_avg * self.volume_threshold)
             
             # Señal de compra: MACD cruce alcista (línea cruza por encima de señal)
-            if macd_line_prev <= macd_signal_prev and macd_line > macd_signal and volume_ok and not np.isnan(atr):
+            if (
+                macd_line_prev <= macd_signal_prev
+                and macd_line > macd_signal
+                and volume_ok
+                and not np.isnan(atr)
+            ):
                 # Calcular stops basados en ATR
                 self.sl_price = price - (atr * self.sl_multiplier)
                 self.tp_price = price + (atr * self.tp_multiplier)
@@ -154,15 +162,15 @@ def run_backtest(symbol):
     return {
         'symbol': symbol,
         'strategy': 'MACD_Volume',
-        'return_pct': stats['Return [%]'],
+        'return_pct': stats['return_pct'],
         'return_ann_pct': stats.get('Return (Ann.) [%]', 0.0),
         'sharpe_ratio': stats.get('Sharpe Ratio', 0.0),
         'max_drawdown_pct': stats.get('Max. Drawdown [%]', 0.0),
-        'win_rate_pct': stats['Win Rate [%]'],
-        'total_trades': stats['# Trades'],
+        'win_rate_pct': stats['win_rate_pct'],
+        'total_trades': stats['total_trades'],
         'profit_factor': stats.get('Profit Factor', 0),
         'avg_trade_pct': stats.get('Avg. Trade [%]', 0.0),
-        'equity_final': stats['Equity Final [$]']
+        'equity_final': stats['final_value']
     }
 
 

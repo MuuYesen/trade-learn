@@ -133,4 +133,4 @@ def test_target_weights_benchmark_reports_profile_segments() -> None:
     assert profile.signal_rank_seconds >= 0.0
     assert profile.target_weights_seconds >= profile.order_submit_seconds >= 0.0
     assert profile.order_count >= 3
-    assert float(stats["Equity Final [$]"]) > 0.0
+    assert float(stats["final_value"]) > 0.0

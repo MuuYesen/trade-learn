@@ -88,31 +88,21 @@ class Backtest:
         self._last_results = results
         self._last_strategy = strategy_instance
         self._last_stats = getattr(strategy_instance, "stats", None)
-
-        # Generate statistics
-        final_value = self.broker.getvalue()
-        trade_summary = getattr(self.broker, "trade_summary", None)
-        if callable(trade_summary):
-            trade_count, wins = trade_summary()
-        else:
-            trades = getattr(strategy_instance, "_trades", [])
-            trade_count = len(trades)
-            wins = sum(1 for trade in trades if getattr(trade, "pnl", 0) > 0)
-        win_rate = (wins / trade_count * 100) if trade_count else 0.0
+        if self._last_stats is None:
+            raise RuntimeError("backtest runtime did not produce stats")
 
         records = {
             key: value.copy()
             for key, value in getattr(strategy_instance, "_records", {}).items()
         }
-
-        return pd.Series({
-            "Equity Final [$]": final_value,
-            "Return [%]": (final_value / self._cash - 1) * 100,
-            "# Trades": trade_count,
-            "Win Rate [%]": win_rate,
+        values = dict(self._last_stats.summary)
+        values.update({
             "_strategy": strategy_instance,
+            "_stats": self._last_stats,
             "_records": records,
         })
+
+        return pd.Series(values)
 
     def optimize(self, **kwargs) -> pd.Series:
         """Simple grid search optimization."""
@@ -132,8 +122,7 @@ class Backtest:
                                         repeat(self.match_mode),
                                         grid))
 
-        # Find best result based on Return [%]
-        best_res, best_params = max(results, key=lambda x: x[0]["Return [%]"])
+        best_res, best_params = max(results, key=lambda x: x[0]["return_pct"])
         print(f"Best Params: {best_params}")
         return best_res
 

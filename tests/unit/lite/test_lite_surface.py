@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 import tradelearn as tl
+import tradelearn.engine as bt
 from tradelearn.lite import Backtest, MLStrategy, Strategy
 from tradelearn.lite.backtest import _can_skip_normalize_data
 
@@ -83,7 +84,7 @@ def test_lite_uses_backtrader_bar_indexing_with_lite_position_call() -> None:
 
     stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
 
-    assert stats["# Trades"] == 1
+    assert stats["total_trades"] == 1
     assert seen == {
         "close_now": 12.0,
         "close_prev": 11.0,
@@ -91,6 +92,60 @@ def test_lite_uses_backtrader_bar_indexing_with_lite_position_call() -> None:
         "line_prev": 2.0,
         "sma_now": 11.5,
     }
+
+
+def test_lite_run_exposes_shared_stats_summary_keys() -> None:
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(2)
+
+        def next(self) -> None:
+            if len(self.data) == 3:
+                self.buy(size=1)
+            elif len(self.data) == 4:
+                self.position().close()
+
+    stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
+    shared_stats = stats["_strategy"].stats
+
+    assert stats["_stats"] is shared_stats
+    for key, value in shared_stats.summary.items():
+        assert key in stats
+        if value == value:
+            assert stats[key] == value
+    assert "return_pct" in stats
+    assert "win_rate_pct" in stats
+    assert "Equity Final [$]" not in stats
+    assert "Return [%]" not in stats
+    assert "# Trades" not in stats
+    assert "Win Rate [%]" not in stats
+
+
+def test_lite_and_engine_stats_summary_keys_match() -> None:
+    class LiteStrategy(Strategy):
+        def next(self) -> None:
+            if len(self.data) == 3:
+                self.buy(size=1)
+            elif len(self.data) == 4:
+                self.position().close()
+
+    class EngineStrategy(bt.Strategy):
+        def next(self) -> None:
+            if len(self.data) == 3:
+                self.buy(size=1)
+            elif len(self.data) == 4:
+                self.close()
+
+    lite_stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
+
+    cerebro = bt.Cerebro()
+    cerebro.broker.setcash(1000.0)
+    cerebro.adddata(bt.feeds.PandasData(dataname=_data(), name="data"))
+    cerebro.addstrategy(EngineStrategy)
+    [engine_strategy] = cerebro.run()
+
+    public_lite_keys = {key for key in lite_stats.index if not str(key).startswith("_")}
+    assert public_lite_keys == set(engine_strategy.stats.summary)
 
 
 def test_lite_data_ta_returns_current_bar_line_proxy() -> None:

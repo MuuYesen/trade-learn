@@ -133,7 +133,7 @@ def run_lite(data: pd.DataFrame, *, trade_on_close: bool = False) -> tuple[float
     backtest = Backtest(data, LiteSmaCross, cash=100_000.0, trade_on_close=trade_on_close)
     stats = backtest.run()
     fills = len(backtest.broker.fills_frame())
-    return float(stats["Equity Final [$]"]), fills, int(stats["# Trades"])
+    return float(stats["final_value"]), fills, int(stats["total_trades"])
 
 
 def run_backtrader(data: pd.DataFrame) -> tuple[float, int, int]:

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from zipfile import ZipFile
 from typing import Any
+from zipfile import ZipFile
 
 import pandas as pd
 
@@ -95,7 +95,7 @@ def test_lite_plot_and_html_use_shared_reporter_after_run(tmp_path: Path) -> Non
     path = tmp_path / "lite-report.html"
     result = backtest.report(path)
 
-    assert stats["# Trades"] >= 0
+    assert stats["total_trades"] >= 0
     assert len(charts) == 1
     assert result == path
     assert "Summary Stats" in path.read_text()

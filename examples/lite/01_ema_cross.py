@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 
 import pandas as pd
+
 import tradelearn.lite as tl
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -122,15 +123,15 @@ def run_backtest(symbol):
     return {
         'symbol': symbol,
         'strategy': 'EMA_Cross_9_21',
-        'return_pct': stats['Return [%]'],
+        'return_pct': stats['return_pct'],
         'return_ann_pct': stats.get('Return (Ann.) [%]', 0.0),
         'sharpe_ratio': stats.get('Sharpe Ratio', 0.0),
         'max_drawdown_pct': stats.get('Max. Drawdown [%]', 0.0),
-        'win_rate_pct': stats['Win Rate [%]'],
-        'total_trades': stats['# Trades'],
+        'win_rate_pct': stats['win_rate_pct'],
+        'total_trades': stats['total_trades'],
         'profit_factor': stats.get('Profit Factor', 0),
         'avg_trade_pct': stats.get('Avg. Trade [%]', 0.0),
-        'equity_final': stats['Equity Final [$]']
+        'equity_final': stats['final_value']
     }
 
 

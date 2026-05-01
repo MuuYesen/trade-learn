@@ -77,7 +77,7 @@ def _run_lite(strategy: type[LiteStrategy], **params) -> tuple[float, int]:
         commission=0.0,
         trade_on_close=True,
     ).run(**params)
-    return float(stats["Equity Final [$]"]), int(stats["# Trades"])
+    return float(stats["final_value"]), int(stats["total_trades"])
 
 
 def _run_engine(strategy: type[bt.Strategy], **params) -> tuple[float, int]:

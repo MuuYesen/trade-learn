@@ -320,6 +320,25 @@ def _stats_config(cerebro: Any) -> dict[str, Any]:
     }
 
 
+def _return_pct(final_value: float, broker: Any) -> float:
+    start_cash = float(getattr(broker, "_cash", 0.0) or 0.0)
+    if start_cash == 0.0:
+        return float("nan")
+    return (float(final_value) / start_cash - 1.0) * 100.0
+
+
+def _trade_summary(broker: Any) -> tuple[float, float]:
+    trade_summary = getattr(broker, "trade_summary", None)
+    if callable(trade_summary):
+        total, wins = trade_summary()
+        return float(total), float(wins)
+    return 0.0, 0.0
+
+
+def _win_rate_pct(total_trades: float, wins: float) -> float:
+    return wins / total_trades * 100.0 if total_trades else 0.0
+
+
 def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -> Stats:
     data = strategy.data
     frame = getattr(data, "_frame", None)
@@ -333,8 +352,7 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
         final_value = float(strategy.broker.getvalue())
         total_orders = float(len(getattr(strategy.broker, "_orders", ())))
         total_fills = float(len(getattr(strategy.broker, "_fills", ())))
-        trade_summary = getattr(strategy.broker, "trade_summary", None)
-        total_trades = float(trade_summary()[0]) if callable(trade_summary) else 0.0
+        total_trades, winning_trades = _trade_summary(strategy.broker)
 
         def equity_factory() -> pd.Series:
             return _build_equity_returns(strategy, index, fills_factory())[0]
@@ -361,12 +379,14 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
                 "bars": float(len(index)),
                 "final_cash": final_cash,
                 "final_value": final_value,
+                "return_pct": _return_pct(final_value, strategy.broker),
                 "final_realized_pnl": 0.0,
                 "final_unrealized_pnl": 0.0,
                 "final_margin_used": 0.0,
                 "max_drawdown": 0.0,
                 "sharpe": float("nan"),
                 "total_trades": total_trades,
+                "win_rate_pct": _win_rate_pct(total_trades, winning_trades),
                 "total_orders": total_orders,
                 "total_fills": total_fills,
             },
@@ -381,16 +401,22 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
     trades = _trades_frame(fills)
     orders = _orders_frame(strategy.broker)
     positions = _positions_frame(strategy, fills, index)
+    final_cash = float(strategy.broker.getcash())
+    final_value = float(strategy.broker.getvalue())
+    total_trades = float(len(trades))
+    _, winning_trades = _trade_summary(strategy.broker)
     summary = {
         "bars": float(len(index)),
-        "final_cash": float(strategy.broker.getcash()),
-        "final_value": float(strategy.broker.getvalue()),
+        "final_cash": final_cash,
+        "final_value": final_value,
+        "return_pct": _return_pct(final_value, strategy.broker),
         "final_realized_pnl": 0.0,
         "final_unrealized_pnl": 0.0,
         "final_margin_used": 0.0,
         "max_drawdown": float(drawdowns.fillna(0.0).max()) if not drawdowns.empty else 0.0,
         "sharpe": float("nan"),
-        "total_trades": float(len(trades)),
+        "total_trades": total_trades,
+        "win_rate_pct": _win_rate_pct(total_trades, winning_trades),
         "total_orders": float(len(orders)),
         "total_fills": float(len(fills)),
     }

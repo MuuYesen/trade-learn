@@ -521,8 +521,8 @@ def test_lite_run_uses_lazy_stats_without_materializing_fills(monkeypatch) -> No
 
     stats = Backtest(data, RoundTrip, cash=1000, commission=0.0).run()
 
-    assert stats["# Trades"] == 1
-    assert stats["Win Rate [%]"] == 100.0
+    assert stats["total_trades"] == 1
+    assert stats["win_rate_pct"] == 100.0
 
 
 def test_stats_lazy_artifacts_materialize_once() -> None:

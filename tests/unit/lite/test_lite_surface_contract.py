@@ -62,7 +62,7 @@ def test_lite_facade_accepts_lite_strategy_surface() -> None:
 
     stats = Backtest(_data(), SurfaceStrategy, cash=1000.0, storage=storage).run(threshold=13)
 
-    assert stats["Equity Final [$]"] > 0
+    assert stats["final_value"] > 0
     assert seen["init_len"] == 5
     assert seen["first_next_len"] == 3
     assert seen["df_columns"] == ["open", "high", "low", "close", "volume"]
