@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
+from typing import Any
+
 import pandas as pd
 
 from tradelearn.backtest.broker import RustBroker
@@ -9,10 +12,61 @@ from tradelearn.backtest.feed import (
     is_normalized_ohlcv_frame,
     normalize_ohlcv_frame,
 )
+from tradelearn.backtest.models import Stats
 from tradelearn.backtest.optimize import expand_grid
 from tradelearn.backtest.reporting import reporter_from_stats
 
 from .strategy import Strategy
+
+
+class LiteStats(Mapping[str, Any]):
+    """Lite run result.
+
+    Summary values are available through mapping access, while detailed
+    artifacts delegate to the shared backtest Stats object.
+    """
+
+    def __init__(self, stats: Stats, strategy: Strategy, records: dict[str, pd.Series]) -> None:
+        self.stats = stats
+        self.strategy = strategy
+        self.records = records
+        self.summary = dict(stats.summary)
+
+    def __getitem__(self, key: str) -> Any:
+        return self.summary[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.summary)
+
+    def __len__(self) -> int:
+        return len(self.summary)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.summary.get(key, default)
+
+    @property
+    def equity(self) -> pd.Series:
+        return self.stats.equity
+
+    @property
+    def returns(self) -> pd.Series:
+        return self.stats.returns
+
+    @property
+    def fills(self) -> pd.DataFrame:
+        return self.stats.fills
+
+    @property
+    def trades(self) -> pd.DataFrame:
+        return self.stats.trades
+
+    @property
+    def positions(self) -> pd.DataFrame:
+        return self.stats.positions
+
+    @property
+    def orders(self) -> pd.DataFrame:
+        return self.stats.orders
 
 
 class Backtest:
@@ -68,7 +122,7 @@ class Backtest:
     def _normalize_data(data: pd.DataFrame) -> pd.DataFrame:
         return normalize_ohlcv_frame(data)
 
-    def run(self, **kwargs) -> pd.Series:
+    def run(self, **kwargs) -> LiteStats:
         """Run the backtest and return statistics."""
         # Reset broker for fresh run
         self.broker = RustBroker(
@@ -95,16 +149,9 @@ class Backtest:
             key: value.copy()
             for key, value in getattr(strategy_instance, "_records", {}).items()
         }
-        values = dict(self._last_stats.summary)
-        values.update({
-            "_strategy": strategy_instance,
-            "_stats": self._last_stats,
-            "_records": records,
-        })
+        return LiteStats(self._last_stats, strategy_instance, records)
 
-        return pd.Series(values)
-
-    def optimize(self, **kwargs) -> pd.Series:
+    def optimize(self, **kwargs) -> LiteStats:
         """Simple grid search optimization."""
         from concurrent.futures import ProcessPoolExecutor
         from itertools import repeat

@@ -106,9 +106,17 @@ def test_lite_run_exposes_shared_stats_summary_keys() -> None:
                 self.position().close()
 
     stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
-    shared_stats = stats["_strategy"].stats
+    shared_stats = stats.strategy.stats
 
-    assert stats["_stats"] is shared_stats
+    assert stats.stats is shared_stats
+    assert stats.summary == shared_stats.summary
+    assert stats.equity is shared_stats.equity
+    assert stats.returns is shared_stats.returns
+    assert stats.fills is shared_stats.fills
+    assert stats.trades is shared_stats.trades
+    assert stats.positions is shared_stats.positions
+    assert stats.orders is shared_stats.orders
+    assert stats.records == {}
     for key, value in shared_stats.summary.items():
         assert key in stats
         if value == value:
@@ -119,6 +127,9 @@ def test_lite_run_exposes_shared_stats_summary_keys() -> None:
     assert "Return [%]" not in stats
     assert "# Trades" not in stats
     assert "Win Rate [%]" not in stats
+    assert "_stats" not in stats
+    assert "_strategy" not in stats
+    assert "_records" not in stats
 
 
 def test_lite_and_engine_stats_summary_keys_match() -> None:
@@ -144,8 +155,7 @@ def test_lite_and_engine_stats_summary_keys_match() -> None:
     cerebro.addstrategy(EngineStrategy)
     [engine_strategy] = cerebro.run()
 
-    public_lite_keys = {key for key in lite_stats.index if not str(key).startswith("_")}
-    assert public_lite_keys == set(engine_strategy.stats.summary)
+    assert set(lite_stats) == set(engine_strategy.stats.summary)
 
 
 def test_lite_data_ta_returns_current_bar_line_proxy() -> None:
@@ -217,7 +227,7 @@ def test_lite_records_are_exposed_from_run_result() -> None:
 
     stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
 
-    records = stats["_records"]
+    records = stats.records
     assert records["signal"].dropna().tolist() == [12.0, 13.0, 14.0]
 
 
@@ -238,7 +248,7 @@ def test_lite_rejects_sl_tp_until_bracket_orders_are_implemented() -> None:
                 self.buy(size=1, sl=9.0, tp=13.0)
 
     stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
-    orders = stats["_strategy"].orders
+    orders = stats.strategy.orders
 
     assert len(orders) == 3
     assert orders[1].parent is orders[0]
@@ -282,7 +292,7 @@ def test_lite_supports_explicit_bracket_helpers() -> None:
 
     stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
 
-    assert len(stats["_strategy"].orders) == 3
+    assert len(stats.strategy.orders) == 3
 
 
 def test_lite_exports_mlstrategy_with_shared_ml_runtime() -> None:
@@ -310,7 +320,7 @@ def test_lite_exports_mlstrategy_with_shared_ml_runtime() -> None:
             return (data["close"].shift(-1) > data["close"]).astype(float)
 
     stats = Backtest(_data(), LiteML, cash=1000.0, trade_on_close=True).run()
-    strategy = stats["_strategy"]
+    strategy = stats.strategy
 
     assert strategy.model_.fit_X == [[10.0], [11.0], [12.0], [13.0], [14.0]]
     assert strategy.model_.fit_y == [1.0, 1.0, 1.0, 1.0, 0.0]
@@ -394,7 +404,7 @@ def test_lite_target_weights_targets_multi_asset_weights() -> None:
                 self.target_weights({"AAA": 0.25, "BBB": 0.50, "cash": 0.25})
 
     stats = Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run()
-    orders = stats["_strategy"].orders
+    orders = stats.strategy.orders
 
     assert [(order.data._name, order.size) for order in orders] == [("AAA", 22.0), ("BBB", 23.0)]
 
@@ -419,7 +429,7 @@ def test_lite_target_equal_and_close_all_are_target_position_sugar() -> None:
 
     submitted_orders = [
         (order.data._name, order.isbuy(), order.size)
-        for order in stats["_strategy"].orders
+        for order in stats.strategy.orders
     ]
     assert submitted_orders == [
         ("AAA", True, 36.0),

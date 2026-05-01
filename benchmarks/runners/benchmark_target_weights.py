@@ -160,7 +160,7 @@ def run_benchmark(
     start = time.perf_counter()
     _ = float(stats["final_value"])
     _ = int(stats["total_trades"])
-    _ = stats["_strategy"]
+    _ = stats.strategy
     profile.stats_read_seconds = time.perf_counter() - start
 
     return [
@@ -211,7 +211,7 @@ def main() -> None:
     print(f"{'bars/s':>16}: {total_data_bars / total:,.0f}")
     print(f"{'final_value':>16}: {float(stats['final_value']):,.2f}")
     print(f"{'trades':>16}: {int(stats['total_trades'])}")
-    strategy = stats["_strategy"]
+    strategy = stats.strategy
     print(f"{'orders':>16}: {len(strategy.orders):,}")
 
 
