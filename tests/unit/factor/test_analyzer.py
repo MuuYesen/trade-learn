@@ -6,6 +6,7 @@ import pandas as pd
 
 from tradelearn.factor import (
     FactorAnalyzer,
+    MultiFactorAnalyzer,
     MultiPeriodFactorAnalyzer,
     clean_factor_and_forward_returns,
 )
@@ -122,6 +123,29 @@ def test_factor_clean_data_accepts_factor_frame_and_prices() -> None:
         ]
     ).rename("forward_returns")
     pd.testing.assert_series_equal(analyzer[1].forward_returns.dropna(), expected)
+
+
+def test_factor_clean_data_accepts_multiple_factors() -> None:
+    """Factor analysis can compare multiple factor columns from one factor table."""
+    factors = _factor_price_frame()[["value_score"]].copy()
+    factors["reverse_score"] = -factors["value_score"]
+    prices = _factor_price_frame()["close"]
+
+    clean = clean_factor_and_forward_returns(
+        factors,
+        factor=("value_score", "reverse_score"),
+        prices=prices,
+        periods=(1, 2),
+        quantiles=2,
+    )
+    analyzer = FactorAnalyzer.from_clean_factor_data(clean, periods=(1, 2), quantiles=2)
+
+    assert isinstance(analyzer, MultiFactorAnalyzer)
+    assert set(analyzer.keys()) == {"value_score", "reverse_score"}
+    assert isinstance(analyzer["value_score"], MultiPeriodFactorAnalyzer)
+    assert list(analyzer.summary().index.names) == ["factor", "period"]
+    assert ("value_score", 1) in analyzer.summary().index
+    assert ("reverse_score", 2) in analyzer.summary().index
 
 
 def test_factor_analyzer_builds_period_analyzers_from_clean_factor_data() -> None:

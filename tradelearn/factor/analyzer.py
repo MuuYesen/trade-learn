@@ -30,11 +30,23 @@ class FactorAnalyzer:
         periods: tuple[int, ...] | None = None,
         annualization_periods: int = 252,
         quantiles: int = 5,
-    ) -> MultiPeriodFactorAnalyzer:
+    ) -> MultiPeriodFactorAnalyzer | MultiFactorAnalyzer:
         """Return an analysis object built from clean factor data.
 
         ``clean`` is the frame produced by ``clean_factor_and_forward_returns``.
+        A ``factor_name`` column produces one multi-period analyzer per factor.
         """
+        if "factor_name" in clean:
+            analyzers = {
+                str(factor_name): cls.from_clean_factor_data(
+                    frame.drop(columns=["factor_name"]),
+                    periods=periods,
+                    annualization_periods=annualization_periods,
+                    quantiles=quantiles,
+                )
+                for factor_name, frame in clean.groupby("factor_name", sort=True)
+            }
+            return MultiFactorAnalyzer(analyzers)
         if "factor" not in clean:
             raise ValueError("clean factor data must contain a 'factor' column")
         selected = _clean_periods(clean, periods)
@@ -500,6 +512,117 @@ class MultiPeriodFactorAnalyzer:
         script, rendered_chart = components(chart)
         html_content = _render_factor_html(
             title="Tradelearn Multi-Period Factor Analysis",
+            summary={},
+            summary_frame=self.summary(),
+            quantile_stats=pd.DataFrame(),
+            quantile_counts=pd.DataFrame(),
+            script=script,
+            chart=rendered_chart,
+            bokeh_resources=INLINE.render(),
+        )
+        output = Path(path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(html_content, encoding="utf-8")
+        return output
+
+
+@dataclass(frozen=True)
+class MultiFactorAnalyzer:
+    """Thin facade around one multi-period analyzer per factor."""
+
+    analyzers: dict[str, MultiPeriodFactorAnalyzer]
+
+    def __post_init__(self) -> None:
+        if not self.analyzers:
+            raise ValueError("MultiFactorAnalyzer requires at least one factor")
+        object.__setattr__(self, "analyzers", dict(sorted(self.analyzers.items())))
+
+    def __getitem__(self, factor: str) -> MultiPeriodFactorAnalyzer:
+        """Return the analyzer for ``factor``."""
+        return self.analyzers[factor]
+
+    def keys(self):
+        """Return available factor names."""
+        return self.analyzers.keys()
+
+    def values(self):
+        """Return analyzers ordered by factor name."""
+        return self.analyzers.values()
+
+    def items(self):
+        """Return ``(factor, analyzer)`` pairs ordered by factor name."""
+        return self.analyzers.items()
+
+    def summary(self) -> pd.DataFrame:
+        """Return summary metrics indexed by ``(factor, period)``."""
+        result = pd.concat(
+            {factor: analyzer.summary() for factor, analyzer in self.analyzers.items()},
+            names=["factor", "period"],
+        )
+        return result
+
+    def ic(self, by_group: bool = False) -> pd.DataFrame:
+        """Return IC series with ``(factor, period)`` columns."""
+        result = pd.concat(
+            {
+                factor: analyzer.ic(by_group=by_group)
+                for factor, analyzer in self.analyzers.items()
+            },
+            axis=1,
+        )
+        result.columns.names = ["factor", "period"]
+        return result
+
+    def rank_ic(self, by_group: bool = False) -> pd.DataFrame:
+        """Return rank IC series with ``(factor, period)`` columns."""
+        result = pd.concat(
+            {
+                factor: analyzer.rank_ic(by_group=by_group)
+                for factor, analyzer in self.analyzers.items()
+            },
+            axis=1,
+        )
+        result.columns.names = ["factor", "period"]
+        return result
+
+    def report(self, path: str, format: str | None = None) -> Path:
+        """Write a multi-factor report using the user-facing report() entrypoint."""
+        output = Path(path)
+        chosen = (format or output.suffix.lstrip(".") or "html").lower()
+        if chosen in {"htm", "html"}:
+            if not output.suffix:
+                output = output.with_suffix(".html")
+            return self.html(str(output))
+        raise ValueError(f"Unsupported factor report format: {chosen}")
+
+    def html(self, path: str) -> Path:
+        """Write one HTML report containing every factor and prediction horizon."""
+        from bokeh.embed import components
+        from bokeh.layouts import column as bk_column
+        from bokeh.models import Div
+        from bokeh.resources import INLINE
+
+        sections = []
+        for factor, analyzer in self.analyzers.items():
+            for period, period_analyzer in analyzer.items():
+                grid = period_analyzer.plot()
+                if grid is not None:
+                    sections.append(
+                        bk_column(
+                            Div(
+                                text=f"<h2>{escape(factor)} · {period}-bar Forward Return</h2>",
+                                sizing_mode="stretch_width",
+                            ),
+                            grid,
+                            sizing_mode="stretch_width",
+                        )
+                    )
+        chart = bk_column(*sections, sizing_mode="stretch_width") if sections else None
+        if chart is None:
+            raise ValueError("FactorAnalyzer has no data to plot")
+        script, rendered_chart = components(chart)
+        html_content = _render_factor_html(
+            title="Tradelearn Multi-Factor Analysis",
             summary={},
             summary_frame=self.summary(),
             quantile_stats=pd.DataFrame(),

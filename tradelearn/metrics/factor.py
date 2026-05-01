@@ -1,6 +1,7 @@
 """Factor evaluation metrics."""
 
 import math
+from collections.abc import Sequence
 
 import numpy as np
 import pandas as pd
@@ -121,7 +122,7 @@ def rank_ic(
 def clean_factor_and_forward_returns(
     factors: pd.DataFrame,
     *,
-    factor: str,
+    factor: str | Sequence[str],
     prices: pd.Series | pd.DataFrame,
     periods: tuple[int, ...] = (1,),
     quantiles: int = 5,
@@ -131,13 +132,50 @@ def clean_factor_and_forward_returns(
     """Return an Alphalens-style clean factor frame.
 
     ``factors`` is a factor table indexed by ``(date, symbol)``. ``factor``
-    names the column to analyze, and ``prices`` supplies aligned close prices.
+    names the column or columns to analyze, and ``prices`` supplies aligned close prices.
     Output is indexed by ``(date, symbol)`` and contains ``factor``,
     ``forward_return_N`` columns, ``factor_quantile``, and optional ``group``.
     """
 
     if quantiles <= 0:
         raise ValueError("quantiles must be a positive integer")
+    factor_names = _factor_names(factor)
+    if len(factor_names) > 1:
+        frames = [
+            _clean_single_factor_and_forward_returns(
+                factors,
+                factor=name,
+                prices=prices,
+                periods=periods,
+                quantiles=quantiles,
+                groupby=groupby,
+                nan_policy=nan_policy,
+            ).assign(factor_name=name)
+            for name in factor_names
+        ]
+        return pd.concat(frames).sort_index()
+    return _clean_single_factor_and_forward_returns(
+        factors,
+        factor=factor_names[0],
+        prices=prices,
+        periods=periods,
+        quantiles=quantiles,
+        groupby=groupby,
+        nan_policy=nan_policy,
+    )
+
+
+def _clean_single_factor_and_forward_returns(
+    factors: pd.DataFrame,
+    *,
+    factor: str,
+    prices: pd.Series | pd.DataFrame,
+    periods: tuple[int, ...],
+    quantiles: int,
+    groupby: str | pd.Series | None,
+    nan_policy: NanPolicy,
+) -> pd.DataFrame:
+    """Return clean factor data for one factor column."""
     factor_values = _factor_column(factors, factor)
     price_values = _price_series(prices)
     _validate_multiindex(factor_values)
@@ -457,6 +495,16 @@ def _forward_returns_from_prices(prices: pd.Series, periods: int = 1) -> pd.Seri
     )
     forward.name = "returns"
     return forward
+
+
+def _factor_names(factor: str | Sequence[str]) -> tuple[str, ...]:
+    """Return factor column names from user input."""
+    if isinstance(factor, str):
+        return (factor,)
+    names = tuple(str(item) for item in factor)
+    if not names:
+        raise ValueError("factor must contain at least one factor name")
+    return names
 
 
 def _factor_column(factors: pd.DataFrame, factor: str) -> pd.Series:
