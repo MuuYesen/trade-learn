@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from tradelearn.portfolio import EqualWeightOptimizer, PortfolioConstraints, TopKSelector
+from tradelearn.research.portfolio import EqualWeightOptimizer, PortfolioConstraints, TopKSelector
 
 if TYPE_CHECKING:
     from tradelearn.ml.features import FeatureStore

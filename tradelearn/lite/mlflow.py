@@ -48,9 +48,14 @@ def log_lite_run(
         tag_payload = dict(tags or {})
         if tag_payload and hasattr(mlflow, "set_tags"):
             mlflow.set_tags(tag_payload)
-        mlflow.log_params(_params_payload(stats, params=params, tags=tag_payload))
+        mlflow.log_params(
+            _params_payload(stats, strategy=strategy, params=params, tags=tag_payload)
+        )
         mlflow.log_metrics(_metrics_payload(stats))
         mlflow.log_dict(_stats_payload(stats), artifact_file)
+        research_payload = _research_payload(strategy)
+        if research_payload:
+            mlflow.log_dict(research_payload, "research.json")
         if artifact_bundle:
             _log_artifact_bundle(
                 mlflow,
@@ -97,15 +102,50 @@ def _log_artifact_bundle(
 def _params_payload(
     stats: Any,
     *,
+    strategy: Any,
     params: dict[str, Any] | None,
     tags: dict[str, Any],
 ) -> dict[str, Any]:
     payload = _flatten_params("config", getattr(stats, "config", {}))
+    payload.update(_flatten_params("research", _research_params(strategy)))
     if params:
         payload.update(params)
     if tags:
         payload.update({f"tag.{key}": value for key, value in tags.items()})
     return payload
+
+
+def _research_payload(strategy: Any) -> dict[str, Any]:
+    result = _first_attr(strategy, ("research_result", "research_result_"))
+    if result is None:
+        return {}
+    if hasattr(result, "to_dict"):
+        payload = result.to_dict()
+        return payload if isinstance(payload, dict) else {}
+    return {}
+
+
+def _research_params(strategy: Any) -> dict[str, Any]:
+    result = _first_attr(strategy, ("research_result", "research_result_"))
+    if result is None:
+        return {}
+    payload: dict[str, Any] = {}
+    name = getattr(result, "name", None)
+    if name:
+        payload["name"] = str(name)
+    params = getattr(result, "params", None)
+    if isinstance(params, dict):
+        payload.update(params)
+    return payload
+
+
+def _first_attr(obj: Any, names: tuple[str, ...]) -> Any:
+    if obj is None:
+        return None
+    for name in names:
+        if hasattr(obj, name):
+            return getattr(obj, name)
+    return None
 
 
 def _metrics_payload(stats: Any) -> dict[str, float]:

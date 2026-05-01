@@ -65,6 +65,12 @@ API_REFERENCE_MODULES: tuple[ApiReferenceModule, ...] = (
         ("Report", "TearSheet", "export_excel"),
     ),
     ApiReferenceModule(
+        "Research",
+        "tradelearn.research",
+        "指数增强研发流程记录、预处理与组合构建工具。",
+        ("ResearchRun", "ResearchResult", "preprocess", "portfolio"),
+    ),
+    ApiReferenceModule(
         "ML",
         "tradelearn.ml",
         "机器学习策略、特征存储、模型注册与特征筛选。",

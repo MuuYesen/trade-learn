@@ -7,12 +7,14 @@ import types
 import pandas as pd
 import pytest
 
-from tradelearn.portfolio import (
+from tradelearn.research.portfolio import (
     EqualWeightOptimizer,
     PortfolioConstraints,
     RiskfolioOptimizer,
     RiskPolicy,
     TopKSelector,
+    apply_constraints,
+    equal_weight,
     select_top,
 )
 
@@ -48,6 +50,15 @@ def test_portfolio_selector_optimizer_and_risk_policy_are_public() -> None:
     adjusted = PortfolioConstraints(max_weight=0.4, normalize=True).apply(weights)
 
     assert selected == ["MSFT", "GOOG"]
+    assert adjusted.to_dict() == {"MSFT": 0.5, "GOOG": 0.5}
+
+
+def test_portfolio_functions_build_weights_without_pipeline_classes() -> None:
+    selected = ["MSFT", "GOOG"]
+
+    weights = equal_weight(selected, gross=0.8)
+    adjusted = apply_constraints(weights, max_weight=0.4, normalize=True)
+
     assert adjusted.to_dict() == {"MSFT": 0.5, "GOOG": 0.5}
 
 

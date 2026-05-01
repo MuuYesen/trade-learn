@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 from tradelearn import metrics
+from tradelearn.research import ResearchResult
 from tradelearn.report.artifacts import write_artifact_bundle
 
 
@@ -46,6 +47,23 @@ def test_write_artifact_bundle_writes_tables_report_plot_and_weights(tmp_path) -
     }.issubset(names)
     weights = pd.read_parquet(tmp_path / "weights.parquet")["weight"]
     assert weights.to_dict() == {"AAA": 0.6, "BBB": 0.4}
+
+
+def test_write_artifact_bundle_writes_research_result_weights(tmp_path) -> None:
+    stats = _stats()
+    strategy = SimpleNamespace(
+        research_result=ResearchResult(
+            name="research",
+            weights=pd.Series({"AAA": 0.7, "BBB": 0.3}, name="weight"),
+        )
+    )
+
+    files = write_artifact_bundle(stats, tmp_path, strategy=strategy)
+
+    names = {path.name for path in files}
+    assert "weights.parquet" in names
+    weights = pd.read_parquet(tmp_path / "weights.parquet")["weight"]
+    assert weights.to_dict() == {"AAA": 0.7, "BBB": 0.3}
 
 
 def _stats() -> SimpleNamespace:

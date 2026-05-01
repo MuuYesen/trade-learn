@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from tradelearn.lite import Backtest, Strategy
+from tradelearn.research import ResearchResult
 
 
 def _data() -> pd.DataFrame:
@@ -113,3 +114,43 @@ def test_lite_log_mlflow_logs_stats_config_params_and_artifacts() -> None:
         "trades.parquet",
     ]
     assert {artifact_path for _, artifact_path in fake.artifacts} == {"lite"}
+
+
+def test_lite_log_mlflow_logs_research_result_params_and_artifacts() -> None:
+    result = ResearchResult(
+        name="lite_research",
+        params={"select_top.k": 1},
+        scores=pd.Series({"primary": 1.0}, name="score"),
+        selected=["primary"],
+        weights=pd.Series({"primary": 0.5}, name="weight"),
+    )
+
+    class LiteResearchStrategy(Strategy):
+        research_result = None
+
+        def init(self) -> None:
+            self.start_on_bar(2)
+
+        def next(self) -> None:
+            if len(self.data) == 3:
+                self.record_research_result(self.research_result)
+                self.buy(size=1)
+
+    fake = FakeMLflow()
+    bt = Backtest(_data(), LiteResearchStrategy, cash=1000.0)
+    bt.run(research_result=result)
+
+    bt.log_mlflow(
+        experiment_name="lite-research",
+        artifact_path="lite",
+        artifact_bundle=True,
+        log_report=False,
+        log_plot=False,
+        mlflow_module=fake,
+    )
+
+    assert fake.params[0]["research.name"] == "lite_research"
+    assert fake.params[0]["research.select_top.k"] == 1
+    payloads = {artifact_file: payload for payload, artifact_file in fake.dicts}
+    assert payloads["research.json"]["result"]["weights"] == {"primary": 0.5}
+    assert ("weights.parquet", "lite") in fake.artifacts

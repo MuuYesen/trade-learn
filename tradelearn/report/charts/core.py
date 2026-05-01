@@ -505,7 +505,7 @@ def monthly_heatmap(monthly: pd.DataFrame):
 
 
 def monthly_returns_distribution(returns: pd.Series):
-    """Return a pyfolio-style monthly returns distribution chart."""
+    """Return a monthly returns distribution chart."""
     monthly = ((1.0 + pd.Series(returns).dropna()).resample("ME").prod() - 1.0).dropna()
     plot = figure(
         title="Monthly Returns Distribution",
@@ -538,7 +538,7 @@ def monthly_returns_distribution(returns: pd.Series):
 
 
 def monthly_returns_timeseries(returns: pd.Series):
-    """Return a pyfolio-style monthly returns time series."""
+    """Return a monthly returns time series."""
     monthly = ((1.0 + pd.Series(returns).dropna()).resample("ME").prod() - 1.0).dropna()
     frame = _plot_frame(monthly, "return")
     frame["color"] = [MARKET_UP if value >= 0 else MARKET_DOWN for value in frame["return"]]
@@ -597,7 +597,7 @@ def rolling_volatility(returns: pd.Series, window: int = 126, periods: int = 252
 
 
 def return_quantiles(returns: pd.Series):
-    """Return a pyfolio-style return quantile bar chart."""
+    """Return a return quantile bar chart."""
     values = pd.Series(returns).dropna()
     quantiles = values.quantile([0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99])
     frame = pd.DataFrame(

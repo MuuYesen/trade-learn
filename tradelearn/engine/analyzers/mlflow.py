@@ -58,6 +58,9 @@ class MLflowAnalyzer(Analyzer):
                 pipeline_payload = _pipeline_payload(self.strategy)
                 if pipeline_payload:
                     mlflow.log_dict(pipeline_payload, "pipeline.json")
+                research_payload = _research_payload(self.strategy)
+                if research_payload:
+                    mlflow.log_dict(research_payload, "research.json")
                 if self.p.artifact_bundle:
                     _log_artifact_bundle(
                         mlflow,
@@ -163,6 +166,9 @@ def _params_payload(strategy: Any) -> dict[str, Any]:
     pipeline_params = _pipeline_params(strategy)
     if pipeline_params:
         payload.update(_flatten_params("pipeline", pipeline_params))
+    research_params = _research_params(strategy)
+    if research_params:
+        payload.update(_flatten_params("research", research_params))
     return payload
 
 
@@ -201,6 +207,30 @@ def _pipeline_payload(strategy: Any) -> dict[str, Any]:
     return payload
 
 
+def _research_payload(strategy: Any) -> dict[str, Any]:
+    result = _first_attr(strategy, ("research_result", "research_result_"))
+    if result is None:
+        return {}
+    if hasattr(result, "to_dict"):
+        payload = result.to_dict()
+        return payload if isinstance(payload, dict) else {}
+    return _result_payload(result)
+
+
+def _research_params(strategy: Any) -> dict[str, Any]:
+    result = _first_attr(strategy, ("research_result", "research_result_"))
+    if result is None:
+        return {}
+    payload: dict[str, Any] = {}
+    name = getattr(result, "name", None)
+    if name:
+        payload["name"] = str(name)
+    params = getattr(result, "params", None)
+    if isinstance(params, dict):
+        payload.update(params)
+    return payload
+
+
 def _pipeline_params(strategy: Any) -> dict[str, Any]:
     pipeline = _first_attr(strategy, ("pipeline", "pipeline_"))
     if pipeline is None or not hasattr(pipeline, "get_params"):
@@ -213,6 +243,10 @@ def _pipeline_result(strategy: Any) -> dict[str, Any]:
     result = _first_attr(strategy, ("pipeline_result", "pipeline_result_"))
     if result is None:
         return {}
+    return _result_payload(result)
+
+
+def _result_payload(result: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {}
     scores = getattr(result, "scores", None)
     if scores is not None:
@@ -269,6 +303,10 @@ def _flatten_params(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
 def _json_scalar(value: Any) -> Any:
     if hasattr(value, "item"):
         return value.item()
+    if isinstance(value, list | tuple):
+        return [_json_scalar(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_scalar(item) for key, item in value.items()}
     return value
 
 

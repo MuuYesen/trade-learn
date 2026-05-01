@@ -22,7 +22,7 @@ import tradelearn.engine as bt
 from tradelearn.data import TradingViewProvider
 from tradelearn.engine.analyzers import MLflowAnalyzer
 from tradelearn.factor import FactorAnalyzer, clean_factor_and_forward_returns
-from tradelearn.portfolio import select_top
+from tradelearn.research.portfolio import select_top
 
 OUTPUT_DIR = Path("examples/output/full_workflow_engine")
 SYMBOLS = ("NASDAQ:AAPL", "NASDAQ:MSFT", "NASDAQ:GOOG")

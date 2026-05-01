@@ -72,7 +72,10 @@ def _write_pipeline_weights(output_dir: Path, strategy: Any | None) -> None:
 
 
 def _pipeline_weights(strategy: Any | None) -> pd.Series | None:
-    result = _first_attr(strategy, ("pipeline_result", "pipeline_result_"))
+    result = _first_attr(
+        strategy,
+        ("research_result", "research_result_", "pipeline_result", "pipeline_result_"),
+    )
     if result is None:
         return None
     weights = getattr(result, "weights", None)

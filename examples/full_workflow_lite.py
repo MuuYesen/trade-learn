@@ -21,7 +21,7 @@ from bokeh.resources import INLINE
 import tradelearn.lite as tl
 from tradelearn.data import TradingViewProvider
 from tradelearn.factor import FactorAnalyzer, clean_factor_and_forward_returns
-from tradelearn.portfolio import select_top
+from tradelearn.research.portfolio import select_top
 from tradelearn.report import Reporter
 
 OUTPUT_DIR = Path("examples/output/full_workflow_lite")

@@ -45,6 +45,16 @@ class Strategy:
     def stop(self):
         pass
 
+    def record_research_result(self, result: Any) -> Any:
+        """Expose the research result executed on the current bar to analyzers."""
+        self.research_result = result
+        history = getattr(self, "research_results_history", None)
+        if history is None:
+            history = []
+            self.research_results_history = history
+        history.append(result)
+        return result
+
     def notify_order(self, order: Any):
         pass
 

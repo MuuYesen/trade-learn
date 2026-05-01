@@ -7,7 +7,10 @@ from typing import Any
 
 import pandas as pd
 
+from tradelearn.research.run import tracked
 
+
+@tracked(category="portfolio")
 def select_top(
     scores: Mapping[Hashable, float],
     *,
@@ -17,23 +20,7 @@ def select_top(
     max_score: float | None = None,
     exclude_nan: bool = True,
 ) -> list[Hashable]:
-    """Return the top ``k`` keys by score.
-
-    Parameters
-    ----------
-    scores:
-        Mapping from asset identifier to numeric score.
-    k:
-        Number of identifiers to return.
-    reverse:
-        ``True`` selects highest scores first. ``False`` selects lowest scores.
-    min_score:
-        Optional lower score bound.
-    max_score:
-        Optional upper score bound.
-    exclude_nan:
-        Drop NaN values before ranking.
-    """
+    """Return the top ``k`` keys by score."""
     if k <= 0:
         return []
 
@@ -52,6 +39,38 @@ def select_top(
         key
         for key, _ in sorted(items, key=lambda item: item[1], reverse=reverse)[:k]
     ]
+
+
+@tracked(category="portfolio")
+def equal_weight(selected: Sequence[Hashable], *, gross: float = 1.0) -> pd.Series:
+    """Return equal positive weights for selected symbols."""
+    if not selected:
+        return pd.Series(dtype="float64")
+    weight = float(gross) / len(selected)
+    return pd.Series({str(symbol): weight for symbol in selected}, dtype="float64")
+
+
+@tracked(category="portfolio")
+def apply_constraints(
+    weights: Mapping[Hashable, float] | pd.Series,
+    *,
+    max_weight: float | None = None,
+    min_abs_weight: float = 0.0,
+    normalize: bool = False,
+) -> pd.Series:
+    """Apply clipping, pruning, and optional gross normalization."""
+    adjusted = pd.Series(weights, dtype="float64").copy()
+    adjusted.index = adjusted.index.astype(str)
+    if max_weight is not None:
+        cap = float(max_weight)
+        adjusted = adjusted.clip(lower=-cap, upper=cap)
+    if min_abs_weight > 0:
+        adjusted = adjusted[adjusted.abs() >= float(min_abs_weight)]
+    if normalize and not adjusted.empty:
+        gross = adjusted.abs().sum()
+        if gross > 0:
+            adjusted = adjusted / gross
+    return adjusted
 
 
 class TopKSelector:
@@ -99,10 +118,7 @@ class EqualWeightOptimizer:
 
     def optimize(self, selected: Sequence[str], scores: pd.Series | None = None) -> pd.Series:
         """Return equal positive weights for selected symbols."""
-        if not selected:
-            return pd.Series(dtype="float64")
-        weight = self.gross / len(selected)
-        return pd.Series({str(symbol): weight for symbol in selected}, dtype="float64")
+        return equal_weight(selected, gross=self.gross)
 
     def get_params(self) -> dict[str, Any]:
         """Return serializable optimizer parameters for tracking."""
@@ -125,17 +141,12 @@ class PortfolioConstraints:
 
     def apply(self, weights: pd.Series) -> pd.Series:
         """Apply clipping, pruning, and optional normalization."""
-        adjusted = weights.astype(float).copy()
-        if self.max_weight is not None:
-            cap = float(self.max_weight)
-            adjusted = adjusted.clip(lower=-cap, upper=cap)
-        if self.min_abs_weight > 0:
-            adjusted = adjusted[adjusted.abs() >= self.min_abs_weight]
-        if self.normalize and not adjusted.empty:
-            gross = adjusted.abs().sum()
-            if gross > 0:
-                adjusted = adjusted / gross
-        return adjusted
+        return apply_constraints(
+            weights,
+            max_weight=self.max_weight,
+            min_abs_weight=self.min_abs_weight,
+            normalize=self.normalize,
+        )
 
     def get_params(self) -> dict[str, Any]:
         """Return serializable constraint parameters for tracking."""
@@ -151,11 +162,7 @@ RiskPolicy = PortfolioConstraints
 
 
 class RiskfolioOptimizer:
-    """Optional Riskfolio-Lib portfolio optimizer wrapper.
-
-    The wrapper turns a return matrix into target weights. It does not submit
-    orders or change backtest execution semantics.
-    """
+    """Optional Riskfolio-Lib portfolio optimizer wrapper."""
 
     def __init__(
         self,
@@ -261,5 +268,7 @@ __all__ = [
     "RiskPolicy",
     "RiskfolioOptimizer",
     "TopKSelector",
+    "apply_constraints",
+    "equal_weight",
     "select_top",
 ]

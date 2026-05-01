@@ -18,6 +18,7 @@ from tradelearn.ml import (
     StrategyPipeline,
     TopKSelector,
 )
+from tradelearn.research import ResearchResult, ResearchStep
 
 
 def bars() -> pd.DataFrame:
@@ -325,6 +326,65 @@ def test_mlflow_analyzer_logs_pipeline_target_weight_artifacts() -> None:
         "plot.html",
     }.issubset(artifacts)
     assert all(artifact_path == "pipeline-run" for artifact_path in artifacts.values())
+
+
+def test_mlflow_analyzer_logs_research_result_from_strategy_params() -> None:
+    result = ResearchResult(
+        name="index_enhance_v1",
+        steps=[
+            ResearchStep("winsorize", "preprocess", {"columns": ["alpha"]}),
+            ResearchStep("select_top", "portfolio", {"k": 1}),
+        ],
+        params={"winsorize.columns": ["alpha"], "select_top.k": 1},
+        scores=pd.Series({"AAA": 0.2, "BBB": 0.8}, name="score"),
+        selected=["BBB"],
+        weights=pd.Series({"BBB": 0.5}, name="weight"),
+    )
+
+    class ResearchWeights(IndexEnhanceStrategy):
+        params = (("research_results", None),)
+        rebalance_freq = 1
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.research_results = self.p.research_results
+
+        def next(self) -> None:
+            if not self.should_rebalance():
+                return
+            current = self.research_results["2026-01-01"]
+            self.record_research_result(current)
+            self.target_weights(current.as_weight_dict())
+
+    fake = FakeMLflow()
+    cerebro = Cerebro(trade_on_close=True)
+    cerebro.setcash(100_000.0)
+    cerebro.adddata(bars(), name="AAA")
+    cerebro.adddata(
+        bars().assign(close=lambda frame: frame["close"] + 10.0),
+        name="BBB",
+    )
+    cerebro.addstrategy(ResearchWeights, research_results={"2026-01-01": result})
+    cerebro.addanalyzer(
+        MLflowAnalyzer,
+        name="mlflow",
+        mlflow_module=fake,
+        artifact_bundle=True,
+        artifact_path="research-run",
+    )
+
+    [strategy] = cerebro.run()
+
+    assert strategy.getpositionbyname("BBB").size > 0
+    params = fake.params[0]
+    assert params["research.name"] == "index_enhance_v1"
+    assert params["research.select_top.k"] == 1
+    payloads = {artifact_file: payload for payload, artifact_file in fake.dicts}
+    assert payloads["research.json"]["result"]["selected"] == ["BBB"]
+    assert payloads["research.json"]["result"]["weights"] == {"BBB": 0.5}
+    assert payloads["research.json"]["steps"][1]["name"] == "select_top"
+    artifacts = {name: artifact_path for name, artifact_path in fake.artifacts}
+    assert artifacts["weights.parquet"] == "research-run"
 
 
 def test_mlflow_analyzer_uses_env_uri_and_warns_without_interrupt(monkeypatch, caplog) -> None:

@@ -1,4 +1,4 @@
-"""Tests for pyfolio-style factor risk and attribution helpers."""
+"""Tests for factor risk and attribution helpers."""
 
 import math
 

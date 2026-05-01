@@ -459,7 +459,7 @@ class Reporter:
 
     @staticmethod
     def _positions_frame(positions: pd.DataFrame | None) -> pd.DataFrame:
-        """Normalize pyfolio-style wide positions into report position rows."""
+        """Normalize wide positions into report position rows."""
         if positions is None:
             return pd.DataFrame()
         frame = pd.DataFrame(positions).copy()
