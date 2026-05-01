@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from tradelearn.core import BrokerEvent, StreamBar
-from tradelearn.engine import Cerebro, Strategy, grid_search
+from tradelearn.engine import Cerebro, IndexEnhanceStrategy, Strategy, grid_search
 from tradelearn.engine.analyzer import Analyzer
 from tradelearn.engine.analyzers import MLflowAnalyzer
 from tradelearn.ml import (
@@ -261,6 +261,65 @@ def test_mlflow_analyzer_logs_report_plot_and_table_artifacts() -> None:
         "weights.parquet",
     }.issubset(artifacts)
     assert all(artifact_path == "bundle" for artifact_path in artifacts.values())
+
+
+def test_mlflow_analyzer_logs_pipeline_target_weight_artifacts() -> None:
+    class PipelineWeights(IndexEnhanceStrategy):
+        rebalance_freq = 1
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.pipeline = StrategyPipeline(
+                [
+                    ("model", ModelAdapter(score_column="close")),
+                    ("selector", TopKSelector(k=1)),
+                    ("optimizer", EqualWeightOptimizer(gross=0.5)),
+                ]
+            )
+
+        def rebalance(self, dt: pd.Timestamp, universe: pd.DataFrame) -> dict[str, float]:
+            self.pipeline_result = self.pipeline.predict_weights(universe)
+            return self.pipeline_result.as_weight_dict()
+
+    fake = FakeMLflow()
+    cerebro = Cerebro(trade_on_close=True)
+    cerebro.setcash(100_000.0)
+    cerebro.adddata(bars(), name="AAA")
+    cerebro.adddata(
+        bars().assign(
+            open=lambda frame: frame["open"] + 10.0,
+            high=lambda frame: frame["high"] + 10.0,
+            low=lambda frame: frame["low"] + 10.0,
+            close=lambda frame: frame["close"] + 10.0,
+        ),
+        name="BBB",
+    )
+    cerebro.addstrategy(PipelineWeights)
+    cerebro.addanalyzer(
+        MLflowAnalyzer,
+        name="mlflow",
+        mlflow_module=fake,
+        artifact_bundle=True,
+        log_report=True,
+        log_plot=True,
+        artifact_path="pipeline-run",
+    )
+
+    [strategy] = cerebro.run()
+
+    assert strategy.getpositionbyname("BBB").size > 0
+    payloads = {artifact_file: payload for payload, artifact_file in fake.dicts}
+    assert payloads["pipeline.json"]["result"]["selected"] == ["BBB"]
+    assert payloads["pipeline.json"]["result"]["weights"] == {"BBB": 0.5}
+    artifacts = {name: artifact_path for name, artifact_path in fake.artifacts}
+    assert {
+        "equity.parquet",
+        "trades.parquet",
+        "weights.parquet",
+        "report.html",
+        "plot.html",
+    }.issubset(artifacts)
+    assert all(artifact_path == "pipeline-run" for artifact_path in artifacts.values())
 
 
 def test_mlflow_analyzer_uses_env_uri_and_warns_without_interrupt(monkeypatch, caplog) -> None:

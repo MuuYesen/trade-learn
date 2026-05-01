@@ -8,12 +8,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
-from bokeh.embed import file_html
-from bokeh.resources import INLINE
-
 from tradelearn.core import BrokerEvent
-from tradelearn.report import Reporter
+from tradelearn.report.artifacts import market_data_from_strategy, write_artifact_bundle
 
 from ..analyzer import Analyzer
 
@@ -137,59 +133,16 @@ def _log_artifact_bundle(
         return
 
     with tempfile.TemporaryDirectory(prefix="tradelearn-mlflow-") as directory:
-        output_dir = Path(directory)
-        reporter = Reporter(stats, market_data=_market_data(strategy))
-        _write_table_artifacts(output_dir, stats, strategy)
-
-        if log_report:
-            reporter.report(output_dir / "report.html")
-        if log_plot:
-            chart = reporter.market_replay_chart()
-            if chart is not None:
-                (output_dir / "plot.html").write_text(
-                    file_html(chart, INLINE, "Tradelearn Market Replay")
-                )
-
-        for artifact in sorted(output_dir.iterdir()):
-            if artifact.is_file():
-                mlflow.log_artifact(str(artifact), artifact_path=artifact_path)
-
-
-def _write_table_artifacts(output_dir: Path, stats: Any, strategy: Any) -> None:
-    equity = _coerce_series(_stats_field(stats, "equity", pd.Series(dtype="float64")))
-    if not equity.empty:
-        equity.to_frame("equity").to_parquet(output_dir / "equity.parquet")
-
-    trades = pd.DataFrame(_stats_field(stats, "trades", pd.DataFrame()))
-    trades.to_parquet(output_dir / "trades.parquet", index=False)
-
-    weights = _pipeline_weights(strategy)
-    if weights is not None and not weights.empty:
-        weights.to_frame("weight").to_parquet(output_dir / "weights.parquet")
-
-
-def _market_data(strategy: Any) -> pd.DataFrame | None:
-    data = getattr(strategy, "data", None)
-    frame = getattr(data, "_frame", None)
-    if frame is None:
-        return None
-    return pd.DataFrame(frame).copy()
-
-
-def _coerce_series(values: Any) -> pd.Series:
-    if isinstance(values, pd.Series):
-        return values.copy()
-    return pd.Series(values)
-
-
-def _pipeline_weights(strategy: Any) -> pd.Series | None:
-    result = _first_attr(strategy, ("pipeline_result", "pipeline_result_"))
-    if result is None:
-        return None
-    weights = getattr(result, "weights", None)
-    if weights is None:
-        return None
-    return pd.Series(weights, dtype="float64", name="weight")
+        artifacts = write_artifact_bundle(
+            stats,
+            Path(directory),
+            strategy=strategy,
+            market_data=market_data_from_strategy(strategy),
+            log_report=log_report,
+            log_plot=log_plot,
+        )
+        for artifact in artifacts:
+            mlflow.log_artifact(str(artifact), artifact_path=artifact_path)
 
 
 def _params_payload(strategy: Any) -> dict[str, Any]:
