@@ -52,6 +52,16 @@ def test_pyfolio_report_alias_writes_default_html(tmp_path: Path) -> None:
     assert result.exists()
 
 
+def test_create_full_tear_sheet_accepts_value_named_position_column(tmp_path: Path) -> None:
+    """pyfolio facade accepts wide positions even when a symbol is named value."""
+    output = tmp_path / "value-symbol.html"
+    positions = _positions().rename(columns={"AAA": "value"})
+
+    create_full_tear_sheet(_returns(), positions=positions, output=output)
+
+    assert output.exists()
+
+
 def _returns() -> pd.Series:
     return pd.Series(
         [0.02, -0.01, 0.015, -0.03, 0.04],

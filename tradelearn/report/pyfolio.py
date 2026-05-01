@@ -133,6 +133,8 @@ def _positions_frame(positions: pd.DataFrame | None) -> pd.DataFrame:
     frame = pd.DataFrame(positions).copy()
     if {"date", "symbol", "value"}.issubset(frame.columns):
         return frame
+    if {"datetime", "symbol", "value"}.issubset(frame.columns):
+        return frame.rename(columns={"datetime": "date"})
     if frame.empty:
         return pd.DataFrame()
     original_index_name = frame.index.name
@@ -140,12 +142,13 @@ def _positions_frame(positions: pd.DataFrame | None) -> pd.DataFrame:
     index_column = original_index_name if original_index_name in long.columns else "index"
     long = long.rename(columns={index_column: "date"})
     value_columns = [column for column in long.columns if column != "date"]
-    return long.melt(
+    result = long.melt(
         id_vars=["date"],
         value_vars=value_columns,
         var_name="symbol",
-        value_name="value",
+        value_name="_position_value",
     )
+    return result.rename(columns={"_position_value": "value"})
 
 
 def _fills_from_transactions(transactions: pd.DataFrame | None) -> pd.DataFrame:

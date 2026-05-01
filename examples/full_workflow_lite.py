@@ -22,6 +22,7 @@ import tradelearn.lite as tl
 from tradelearn.data import TradingViewProvider
 from tradelearn.factor import FactorAnalyzer
 from tradelearn.portfolio import select_top
+from tradelearn.report import pyfolio
 
 OUTPUT_DIR = Path("examples/output/full_workflow_lite")
 SYMBOLS = ("NASDAQ:AAPL", "NASDAQ:MSFT", "NASDAQ:GOOG")
@@ -93,6 +94,12 @@ if __name__ == "__main__":
     )
     stats = backtest.run()
     report_path = backtest.report(OUTPUT_DIR / "report.html")
+    pyfolio_report_path = pyfolio.create_full_tear_sheet(
+        stats.returns,
+        positions=stats.positions,
+        transactions=stats.fills,
+        output=OUTPUT_DIR / "pyfolio_report.html",
+    )
     plot_path = OUTPUT_DIR / "plot.html"
     charts = backtest.plot()
     plot_path.write_text(file_html(charts[0], INLINE, "Tradelearn Lite Plot"))
@@ -121,4 +128,5 @@ if __name__ == "__main__":
     print(f"  trades={stats.summary['total_trades']}")
     print(f"  factor_report={factor_report_path}")
     print(f"  report={report_path}")
+    print(f"  pyfolio_report={pyfolio_report_path}")
     print(f"  plot={plot_path}")
