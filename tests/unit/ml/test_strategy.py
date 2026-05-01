@@ -77,6 +77,25 @@ def test_mlstrategy_trains_predicts_and_places_orders() -> None:
     assert strategy.stats.fills.iloc[0]["size"] == 2.0
 
 
+def test_mlstrategy_defaults_to_full_equity_when_size_not_set() -> None:
+    model = RecordingModel([0.8, 0.8, 0.8, 0.8])
+
+    class DemoMLStrategy(MLStrategy):
+        features = ("feature",)
+        target = "target"
+
+    DemoMLStrategy.model = model
+
+    cerebro = Cerebro(trade_on_close=True)
+    cerebro.broker.setcash(1000.0)
+    cerebro.adddata(_bars(), name="demo")
+    cerebro.addstrategy(DemoMLStrategy, threshold=0.5)
+    [strategy] = cerebro.run()
+
+    assert strategy.stats is not None
+    assert strategy.stats.fills.iloc[0]["size"] == 95.0
+
+
 def test_mlstrategy_negative_prediction_closes_long_position() -> None:
     model = RecordingModel([0.8, -0.8, -0.8, -0.8])
 

@@ -19,7 +19,7 @@ class MLStrategyMixin:
 
     params = (
         ("threshold", 0.0),
-        ("size", 1.0),
+        ("size", None),
         ("training_data", None),
         ("allow_short", False),
         ("model_registry", None),
@@ -28,7 +28,7 @@ class MLStrategyMixin:
     features: tuple[FeatureSpec, ...] = ()
     target: TargetSpec | None = None
     threshold = 0.0
-    size = 1.0
+    size = None
     training_data = None
     allow_short = False
     model_registry = None
@@ -77,18 +77,28 @@ class MLStrategyMixin:
 
     def apply_prediction(self, prediction: float) -> None:
         threshold = float(self._ml_param("threshold"))
-        size = float(self._ml_param("size"))
+        size = self._ml_param("size")
         position = self._ml_position()
         if prediction > threshold:
             if position.size <= 0:
-                self.buy(size=size)
+                self._ml_target_position(1.0, size=size)
         elif prediction < -threshold:
             if position.size > 0:
-                self.sell(size=position.size)
+                self._ml_target_position(0.0, size=size)
             elif bool(self._ml_param("allow_short")):
-                self.sell(size=size)
+                self._ml_target_position(-1.0, size=size)
         elif position:
-            self.close()
+            self._ml_target_position(0.0, size=size)
+
+    def _ml_target_position(self, target: float, *, size: Any = None) -> Any:
+        if size is None:
+            return self.order_target_percent(target=target)
+        fixed_size = float(size)
+        if target > 0:
+            return self.buy(size=fixed_size)
+        if target < 0:
+            return self.sell(size=fixed_size)
+        return self.close()
 
     def _has_custom_feature_vector(self) -> bool:
         return type(self).feature_vector is not MLStrategyMixin.feature_vector
