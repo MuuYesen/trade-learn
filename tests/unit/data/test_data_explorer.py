@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from tradelearn.data import DataExplorer, explore, normalize_bars
+from tradelearn.data import DataExplorer
+from tradelearn.data.bars import normalize_bars
 
 
 def test_data_explorer_summarizes_bars_schema_and_missing_values() -> None:
@@ -12,7 +13,7 @@ def test_data_explorer_summarizes_bars_schema_and_missing_values() -> None:
     bars = _bars()
     bars.loc[(pd.Timestamp("2024-01-02", tz="UTC"), "BBB"), "volume"] = pd.NA
 
-    explorer = explore(bars)
+    explorer = DataExplorer(bars)
 
     assert isinstance(explorer, DataExplorer)
     assert explorer.summary()["rows"] == 6
@@ -40,7 +41,7 @@ def test_data_explorer_reports_ohlcv_quality_issues() -> None:
     bars.loc[(pd.Timestamp("2024-01-03", tz="UTC"), "AAA"), "close"] = 20.0
     bars.loc[(pd.Timestamp("2024-01-03", tz="UTC"), "BBB"), "volume"] = -1.0
 
-    quality = explore(bars).ohlcv_quality()
+    quality = DataExplorer(bars).ohlcv_quality()
 
     assert quality.loc["high_below_low", "count"] == 1
     assert quality.loc["close_outside_range", "count"] == 1
@@ -69,7 +70,7 @@ def test_data_explorer_report_writes_html(tmp_path) -> None:
     """report() writes a standalone HTML profile for raw data."""
     path = tmp_path / "data.html"
 
-    result = explore(_bars()).report(path)
+    result = DataExplorer(_bars()).report(path)
 
     assert result == path
     html = path.read_text(encoding="utf-8")

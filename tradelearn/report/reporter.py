@@ -31,6 +31,31 @@ from tradelearn.report.html import write_html_report
 class Reporter:
     """Build report-ready summaries and series from backtest stats."""
 
+    @classmethod
+    def from_returns(
+        cls,
+        *,
+        returns: pd.Series,
+        positions: pd.DataFrame | None = None,
+        transactions: pd.DataFrame | None = None,
+        benchmark: pd.Series | None = None,
+        market_data: pd.DataFrame | None = None,
+        periods: int = 252,
+        strategy_name: str = "external-returns",
+    ) -> Reporter:
+        """Create a reporter from external return series and optional holdings."""
+        stats = {
+            "returns": pd.Series(returns).copy(),
+            "trades": cls._trades_from_transactions(transactions),
+            "fills": cls._fills_from_transactions(transactions),
+            "positions": cls._positions_frame(positions),
+            "summary": {"strategy_name": strategy_name},
+            "config": {"strategy": strategy_name, "source": "external_returns"},
+        }
+        reporter = cls(stats, periods=periods, market_data=market_data)
+        reporter.benchmark = None if benchmark is None else pd.Series(benchmark).copy()
+        return reporter
+
     def __init__(
         self,
         stats: Any,
@@ -379,6 +404,7 @@ class Reporter:
     ) -> Any:
         """Write a report, dispatching to HTML or Excel from suffix/format."""
         output = Path(path)
+        benchmark = benchmark if benchmark is not None else getattr(self, "benchmark", None)
         chosen = (format or output.suffix.lstrip(".") or "html").lower()
         if chosen in {"htm", "html"}:
             if not output.suffix:
@@ -430,6 +456,75 @@ class Reporter:
             f"factor_{key}": float(value)
             for key, value in factor_analyzer.summary().items()
         }
+
+    @staticmethod
+    def _positions_frame(positions: pd.DataFrame | None) -> pd.DataFrame:
+        """Normalize pyfolio-style wide positions into report position rows."""
+        if positions is None:
+            return pd.DataFrame()
+        frame = pd.DataFrame(positions).copy()
+        if {"date", "symbol", "value"}.issubset(frame.columns):
+            return frame
+        if {"datetime", "symbol", "value"}.issubset(frame.columns):
+            return frame.rename(columns={"datetime": "date"})
+        if frame.empty:
+            return pd.DataFrame()
+        original_index_name = frame.index.name
+        long = frame.reset_index()
+        index_column = original_index_name if original_index_name in long.columns else "index"
+        long = long.rename(columns={index_column: "date"})
+        value_columns = [
+            column
+            for column in long.columns
+            if column != "date" and pd.api.types.is_numeric_dtype(long[column])
+        ]
+        if not value_columns:
+            return pd.DataFrame()
+        result = long.melt(
+            id_vars=["date"],
+            value_vars=value_columns,
+            var_name="symbol",
+            value_name="_position_value",
+        )
+        return result.rename(columns={"_position_value": "value"})
+
+    @staticmethod
+    def _fills_from_transactions(transactions: pd.DataFrame | None) -> pd.DataFrame:
+        """Normalize transaction rows into report fills."""
+        if transactions is None:
+            return pd.DataFrame()
+        frame = pd.DataFrame(transactions).copy()
+        if frame.empty:
+            return pd.DataFrame()
+        if "datetime" not in frame:
+            frame["datetime"] = frame.index
+        if "side" not in frame and "amount" in frame:
+            frame["side"] = ["buy" if amount > 0 else "sell" for amount in frame["amount"]]
+        if "size" not in frame and "amount" in frame:
+            frame["size"] = frame["amount"].abs()
+        columns = [
+            column
+            for column in ["datetime", "symbol", "side", "size", "price", "commission"]
+            if column in frame
+        ]
+        return frame[columns].reset_index(drop=True)
+
+    @staticmethod
+    def _trades_from_transactions(transactions: pd.DataFrame | None) -> pd.DataFrame:
+        """Normalize transaction rows into report trades."""
+        if transactions is None:
+            return pd.DataFrame({"pnl": pd.Series(dtype="float64")})
+        frame = pd.DataFrame(transactions).copy()
+        if frame.empty or "pnl" not in frame:
+            return pd.DataFrame({"pnl": pd.Series(dtype="float64")})
+        result = frame[["pnl"]].copy()
+        if "datetime" in frame:
+            result["datetime"] = frame["datetime"]
+        else:
+            result["datetime"] = frame.index
+        if "symbol" in frame:
+            result["symbol"] = frame["symbol"]
+        return result.reset_index(drop=True)
 
     @staticmethod
     def _max_drawdown_duration(returns: pd.Series) -> int:

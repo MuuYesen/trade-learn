@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 import pandas as pd
@@ -36,12 +37,22 @@ TRADINGVIEW_INTERVAL: dict[str, str] = {
 }
 
 
+@dataclass(frozen=True)
+class TdxSymbol:
+    """Resolved TDX request symbol and canonical output symbol."""
+
+    exchange: str
+    market: int
+    code: str
+    canonical: str
+
+
 class DataProvider(Protocol):
     """Protocol for OHLCV market data providers."""
 
     def history_ohlc(
         self,
-        symbol: str,
+        symbol: str | list[str] | tuple[str, ...],
         *,
         start: str | None = None,
         end: str | None = None,
@@ -72,7 +83,7 @@ class TdxProvider:
 
     def history_ohlc(
         self,
-        symbol: str,
+        symbol: str | list[str] | tuple[str, ...],
         *,
         start: str | None = None,
         end: str | None = None,
@@ -81,13 +92,20 @@ class TdxProvider:
         """Fetch A-share OHLCV data and return contract-valid Bars."""
         if freq not in TDX_PERIOD:
             raise ValueError(f"Unsupported TDX frequency: {freq}")
+        if _is_symbol_collection(symbol):
+            return _combine_bars(
+                [
+                    self.history_ohlc(item, start=start, end=end, freq=freq)
+                    for item in symbol
+                ]
+            )
 
-        market, code = infer_tdx_market(symbol)
+        tdx_symbol = resolve_tdx_symbol(symbol)
         client = self._make_client()
         self._prepare_client(client)
         rows = client.stock_kline(
-            market=self._market_value(market),
-            code=code,
+            market=self._market_value(tdx_symbol.market),
+            code=tdx_symbol.code,
             period=self._period_value(freq),
             start=0,
             count=self.count,
@@ -96,7 +114,7 @@ class TdxProvider:
             raise ConnectionError(f"TDX returned no rows for {symbol}")
         raw = pd.DataFrame(rows)
 
-        raw = _normalize_tdx_columns(raw, code)
+        raw = _normalize_tdx_columns(raw, tdx_symbol.canonical)
         raw = _filter_dates(raw, start=start, end=end)
         return normalize_bars(
             raw,
@@ -208,7 +226,7 @@ class TradingViewProvider:
 
     def history_ohlc(
         self,
-        symbol: str,
+        symbol: str | list[str] | tuple[str, ...],
         *,
         start: str | None = None,
         end: str | None = None,
@@ -218,6 +236,19 @@ class TradingViewProvider:
         """Fetch TradingView OHLCV data and return contract-valid Bars."""
         if freq not in TRADINGVIEW_INTERVAL:
             raise ValueError(f"Unsupported TradingView frequency: {freq}")
+        if _is_symbol_collection(symbol):
+            return _combine_bars(
+                [
+                    self.history_ohlc(
+                        item,
+                        start=start,
+                        end=end,
+                        freq=freq,
+                        exchange=exchange,
+                    )
+                    for item in symbol
+                ]
+            )
 
         exchange_name, tv_symbol = _split_tradingview_symbol(symbol, exchange=exchange)
         client = self._make_client()
@@ -259,14 +290,85 @@ class TradingViewProvider:
 
 def infer_tdx_market(symbol: str) -> tuple[int, str]:
     """Infer TDX market id and bare code from an A-share symbol."""
+    tdx_symbol = resolve_tdx_symbol(symbol)
+    return tdx_symbol.market, tdx_symbol.code
+
+
+def resolve_tdx_symbol(symbol: str) -> TdxSymbol:
+    """Resolve a user TDX symbol into request fields and canonical symbol."""
     normalized = symbol.strip().upper()
-    if normalized.startswith("SH."):
-        return 1, normalized[3:]
-    if normalized.startswith("SZ."):
-        return 0, normalized[3:]
-    if normalized.startswith(("5", "6", "9")):
-        return 1, normalized
-    return 0, normalized
+    exchange, code = _split_tdx_symbol(normalized)
+    if exchange is None:
+        exchange = _infer_tdx_exchange(code)
+
+    market = 1 if exchange == "SH" else 0
+    return TdxSymbol(
+        exchange=exchange,
+        market=market,
+        code=code,
+        canonical=f"{exchange}:{code}",
+    )
+
+
+def _split_tdx_symbol(symbol: str) -> tuple[str | None, str]:
+    """Split explicit SH/SZ prefixes from a TDX symbol."""
+    for separator in (":", "."):
+        if separator in symbol:
+            exchange, code = symbol.split(separator, 1)
+            exchange = exchange.strip().upper()
+            code = code.strip().upper()
+            if exchange not in {"SH", "SZ"}:
+                raise ValueError("TDX symbols only support SH or SZ exchange prefixes")
+            return exchange, _normalize_tdx_code(code)
+    return None, _normalize_tdx_code(symbol)
+
+
+def _normalize_tdx_code(code: str) -> str:
+    """Validate and normalize a six-digit TDX code."""
+    if len(code) != 6 or not code.isdigit():
+        raise ValueError("TDX symbols must use a six-digit code")
+    return code
+
+
+def _infer_tdx_exchange(code: str) -> str:
+    """Infer TDX exchange from conservative exchange code ranges."""
+    if code.startswith(("600", "601", "603", "605", "688", "900")):
+        return "SH"
+    if code.startswith(
+        (
+            "500",
+            "510",
+            "511",
+            "512",
+            "513",
+            "515",
+            "516",
+            "518",
+            "588",
+        )
+    ):
+        return "SH"
+    if code.startswith(("000", "001", "002", "003", "200", "300", "301")):
+        return "SZ"
+    if code.startswith(
+        (
+            "159",
+            "160",
+            "161",
+            "162",
+            "163",
+            "164",
+            "165",
+            "166",
+            "167",
+            "168",
+            "169",
+        )
+    ):
+        return "SZ"
+    raise ValueError(
+        f"Ambiguous TDX symbol: {code}; use an explicit exchange prefix like SH:{code} or SZ:{code}"
+    )
 
 
 def _split_tradingview_symbol(symbol: str, *, exchange: str | None = None) -> tuple[str, str]:
@@ -310,6 +412,18 @@ def _normalize_tradingview_columns(
     if missing:
         raise ValueError(f"TradingView data missing column(s): {missing}")
     return frame[columns]
+
+
+def _is_symbol_collection(symbol: object) -> bool:
+    return isinstance(symbol, list | tuple)
+
+
+def _combine_bars(frames: list[pd.DataFrame]) -> pd.DataFrame:
+    if not frames:
+        raise ValueError("symbol list must not be empty")
+    combined = pd.concat(frames).sort_index()
+    combined.attrs.update(frames[0].attrs)
+    return combined
 
 
 def _filter_dates(

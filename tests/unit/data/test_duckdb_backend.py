@@ -3,7 +3,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from tradelearn.data import DuckDBBarsBackend, normalize_bars
+from tradelearn.data import DuckDBBarsBackend
+from tradelearn.data.bars import normalize_bars
 
 
 class _FakeResult:

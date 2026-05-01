@@ -169,3 +169,52 @@ def test_oco_multitimeframe_multiasset_ml_and_metrics_surfaces() -> None:
     assert metrics.sharpe(pd.Series([0.01, -0.01, 0.02]), periods=252) == metrics.sharpe(
         pd.Series([0.01, -0.01, 0.02]), periods=252
     )
+
+
+def test_user_facades_hide_internal_helper_functions() -> None:
+    import tradelearn.backtest as backtest
+    import tradelearn.data as data
+    import tradelearn.factor as factor
+    import tradelearn.factor.alpha as alpha
+
+    data_hidden = {
+        "bars_fingerprint",
+        "infer_tdx_market",
+        "normalize_bars",
+        "resolve_tdx_symbol",
+        "resample_frame",
+    }
+    backtest_hidden = {
+        "_notify_order",
+        "run_backtest",
+        "BatchIndicatorCache",
+        "DelayedLine",
+        "IndicatorCache",
+        "IndicatorLine",
+        "LineSeries",
+        "Lines",
+        "RollingBarBuffer",
+        "RollingIndicatorCache",
+        "SharedBarBuffer",
+    }
+    factor_hidden = {
+        "ALPHA101_SKIPPED",
+        "ALPHA101_SUPPORTED",
+        "ALPHA191_SKIPPED",
+        "ALPHA191_SUPPORTED",
+        "AlphaFormulaBlocker",
+        "AlphaFormulaFamilyMetadata",
+        "alpha_formula_blockers",
+        "alpha_formula_metadata",
+        "validate_alpha_formula_metadata",
+        "validated_alpha_formula_metadata",
+    }
+
+    assert all(not hasattr(data, name) for name in data_hidden)
+    assert data_hidden.isdisjoint(data.__all__)
+    assert all(not hasattr(backtest, name) for name in backtest_hidden)
+    assert backtest_hidden.isdisjoint(backtest.__all__)
+    assert all(not hasattr(factor, name) for name in factor_hidden)
+    assert factor_hidden.isdisjoint(factor.__all__)
+    assert all(not hasattr(alpha, name) for name in factor_hidden)
+    assert factor_hidden.isdisjoint(alpha.__all__)

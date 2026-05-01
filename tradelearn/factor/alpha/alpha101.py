@@ -8,24 +8,15 @@ import numpy as np
 import pandas as pd
 from scipy.stats import rankdata
 
-ALPHA101_SUPPORTED = frozenset(f"alpha{index:03d}" for index in range(1, 102))
-
-ALPHA101_SKIPPED: dict[str, str] = {}
+_ALPHA101_NAMES = frozenset(f"alpha{index:03d}" for index in range(1, 102))
 
 
 def alpha101(stock_data: pd.DataFrame, names: Iterable[str] | None = None) -> pd.DataFrame:
     """Return selected Alpha101 factors in reference-compatible long form."""
-    selected = list(names or sorted(ALPHA101_SUPPORTED))
-    unsupported = sorted(set(selected).difference(ALPHA101_SUPPORTED))
-    if unsupported:
-        skipped = [name for name in unsupported if name in ALPHA101_SKIPPED]
-        unknown = [name for name in unsupported if name not in ALPHA101_SKIPPED]
-        if skipped and not unknown:
-            details = "; ".join(
-                f"{name}: {ALPHA101_SKIPPED[name]}" for name in skipped
-            )
-            raise ValueError(f"skipped Alpha101 formulas are not supported: {details}")
-        raise ValueError(f"unsupported Alpha101 formulas: {unsupported}")
+    selected = list(names or sorted(_ALPHA101_NAMES))
+    unknown = sorted(set(selected).difference(_ALPHA101_NAMES))
+    if unknown:
+        raise ValueError(f"unknown Alpha101 formulas: {unknown}")
 
     factors = Alpha101Factors(_pivot_stock_data(stock_data))
     result = pd.DataFrame({"date": [], "code": []})

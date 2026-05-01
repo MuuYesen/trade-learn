@@ -7,8 +7,10 @@ import pytest
 from tradelearn.data.providers import (
     DataProvider,
     TdxProvider,
+    TdxSymbol,
     TradingViewProvider,
     infer_tdx_market,
+    resolve_tdx_symbol,
 )
 
 
@@ -156,9 +158,34 @@ def test_tdx_provider_fetches_and_normalizes_daily_bars() -> None:
         (1, "600519", 4, 0, 800)
     ]
     assert bars.index.names == ["timestamp", "symbol"]
-    assert list(bars.index.get_level_values("symbol")) == ["600519"]
+    assert list(bars.index.get_level_values("symbol")) == ["SH:600519"]
     assert str(bars.index.get_level_values("timestamp").tz) == "UTC"
     assert bars.iloc[0]["volume"] == 120.0
+    assert bars.attrs["market"] == "CN"
+    assert bars.attrs["freq"] == "1d"
+    assert bars.attrs["engine"] == "tdx"
+
+
+def test_tdx_provider_fetches_symbol_list_as_combined_bars() -> None:
+    """TdxProvider accepts a list of symbols and combines normalized Bars."""
+    client = FakeTdxClient()
+    provider = TdxProvider(client_factory=lambda: client)
+
+    bars = provider.history_ohlc(["600519", "000001"], freq="1d")
+
+    calls = [
+        (enum_value(market), code, enum_value(period), start, count)
+        for market, code, period, start, count in client.calls
+    ]
+    assert calls == [
+        (1, "600519", 4, 0, 800),
+        (0, "000001", 4, 0, 800),
+    ]
+    assert bars.index.names == ["timestamp", "symbol"]
+    assert sorted(set(bars.index.get_level_values("symbol"))) == [
+        "SH:600519",
+        "SZ:000001",
+    ]
     assert bars.attrs["market"] == "CN"
     assert bars.attrs["freq"] == "1d"
     assert bars.attrs["engine"] == "tdx"
@@ -236,19 +263,45 @@ def test_tdx_provider_reports_empty_live_response() -> None:
         provider.history_ohlc("000001")
 
 
-def test_infer_tdx_market_supports_explicit_exchange_prefix() -> None:
+def test_resolve_tdx_symbol_supports_explicit_exchange_prefix() -> None:
     """Symbol prefixes can explicitly select the TDX market."""
+    assert resolve_tdx_symbol("SH.600519") == TdxSymbol(
+        exchange="SH",
+        market=1,
+        code="600519",
+        canonical="SH:600519",
+    )
+    assert resolve_tdx_symbol("SZ:000001") == TdxSymbol(
+        exchange="SZ",
+        market=0,
+        code="000001",
+        canonical="SZ:000001",
+    )
+
+
+def test_resolve_tdx_symbol_maps_supported_bare_code_ranges() -> None:
+    """Known exchange code ranges map to canonical TDX symbols."""
+    assert resolve_tdx_symbol("600519").canonical == "SH:600519"
+    assert resolve_tdx_symbol("688001").canonical == "SH:688001"
+    assert resolve_tdx_symbol("510300").canonical == "SH:510300"
+    assert resolve_tdx_symbol("588000").canonical == "SH:588000"
+    assert resolve_tdx_symbol("900901").canonical == "SH:900901"
+    assert resolve_tdx_symbol("000001").canonical == "SZ:000001"
+    assert resolve_tdx_symbol("300750").canonical == "SZ:300750"
+    assert resolve_tdx_symbol("159919").canonical == "SZ:159919"
+    assert resolve_tdx_symbol("200012").canonical == "SZ:200012"
+
+
+def test_resolve_tdx_symbol_rejects_ambiguous_bare_codes() -> None:
+    """Ambiguous bare codes fail instead of defaulting to Shenzhen."""
+    with pytest.raises(ValueError, match="Ambiguous TDX symbol"):
+        resolve_tdx_symbol("123456")
+
+
+def test_infer_tdx_market_preserves_legacy_tuple_api() -> None:
+    """Legacy helper returns the request market and code."""
     assert infer_tdx_market("SH.600519") == (1, "600519")
-    assert infer_tdx_market("SZ.000001") == (0, "000001")
-
-
-def test_infer_tdx_market_maps_common_index_and_etf_symbols() -> None:
-    """Common index and ETF codes map to their documented TDX markets."""
-    assert infer_tdx_market("000001") == (0, "000001")
-    assert infer_tdx_market("600519") == (1, "600519")
-    assert infer_tdx_market("SH.000300") == (1, "000300")
-    assert infer_tdx_market("510300") == (1, "510300")
-    assert infer_tdx_market("159919") == (0, "159919")
+    assert infer_tdx_market("SZ:000001") == (0, "000001")
 
 
 def test_tradingview_provider_fetches_and_normalizes_bars() -> None:
@@ -278,6 +331,31 @@ def test_tradingview_provider_fetches_and_normalizes_bars() -> None:
     assert bars.attrs["engine"] == "tradingview"
 
 
+def test_tradingview_provider_fetches_symbol_list_as_combined_bars() -> None:
+    """TradingViewProvider accepts a list of namespaced symbols."""
+    client = FakeTvDatafeedClient()
+    provider = TradingViewProvider(client_factory=lambda: client, n_bars=50)
+
+    bars = provider.history_ohlc(["NASDAQ:AAPL", "NYSE:IBM"], freq="1d")
+
+    calls = [
+        (symbol, exchange, enum_name(interval), n_bars)
+        for symbol, exchange, interval, n_bars in client.calls
+    ]
+    assert calls == [
+        ("AAPL", "NASDAQ", "in_daily", 50),
+        ("IBM", "NYSE", "in_daily", 50),
+    ]
+    assert bars.index.names == ["timestamp", "symbol"]
+    assert sorted(set(bars.index.get_level_values("symbol"))) == [
+        "NASDAQ:AAPL",
+        "NYSE:IBM",
+    ]
+    assert bars.attrs["market"] == "GLOBAL"
+    assert bars.attrs["freq"] == "1d"
+    assert bars.attrs["engine"] == "tradingview"
+
+
 def test_tradingview_provider_accepts_exchange_keyword() -> None:
     """Symbols can be split into symbol plus exchange arguments."""
 
@@ -291,6 +369,22 @@ def test_tradingview_provider_accepts_exchange_keyword() -> None:
         for symbol, exchange, interval, n_bars in client.calls
     ]
     assert calls == [("AAPL", "NASDAQ", "in_1_hour", 5000)]
+
+
+def test_tradingview_provider_accepts_market_specific_symbols() -> None:
+    """TradingView preserves explicit exchange namespaces for non-stock symbols."""
+    client = FakeTvDatafeedClient()
+    provider = TradingViewProvider(client_factory=lambda: client)
+
+    provider.history_ohlc("BINANCE:BTCUSDT", freq="1d")
+    provider.history_ohlc("CME_MINI:ES1!", freq="1d")
+    provider.history_ohlc("FX:EURUSD", freq="1d")
+
+    assert [call[:2] for call in client.calls] == [
+        ("BTCUSDT", "BINANCE"),
+        ("ES1!", "CME_MINI"),
+        ("EURUSD", "FX"),
+    ]
 
 
 def test_tradingview_provider_rejects_unsupported_frequency() -> None:

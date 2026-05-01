@@ -156,12 +156,6 @@ class DataExplorer:
         output.write_text(_html_report(self), encoding="utf-8")
         return output
 
-
-def explore(data: pd.DataFrame) -> DataExplorer:
-    """Return a raw market data explorer."""
-    return DataExplorer(data)
-
-
 def _as_bars_like(data: pd.DataFrame) -> pd.DataFrame:
     frame = pd.DataFrame(data).copy()
     if isinstance(frame.index, pd.MultiIndex) and {"timestamp", "symbol"}.issubset(
@@ -276,4 +270,4 @@ def _mapping_table(values: dict[str, Any]) -> str:
     return "<table><tbody>" + "".join(rows) + "</tbody></table>"
 
 
-__all__ = ["DataExplorer", "explore"]
+__all__ = ["DataExplorer"]

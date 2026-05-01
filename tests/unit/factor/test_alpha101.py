@@ -121,7 +121,6 @@ def test_alpha101_exports_migrated_formulas_like_legacy_oracle() -> None:
 
 def test_alpha101_documents_skipped_legacy_formulas() -> None:
     """All Alpha101 formulas are executable in v2."""
-    alpha101_module = importlib.import_module("tradelearn.factor.alpha.alpha101")
     formerly_skipped = {
         "alpha048",
         "alpha056",
@@ -144,9 +143,6 @@ def test_alpha101_documents_skipped_legacy_formulas() -> None:
         "alpha100",
     }
 
-    assert alpha101_module.ALPHA101_SKIPPED == {}
-    assert formerly_skipped.issubset(alpha101_module.ALPHA101_SUPPORTED)
-
     result = alpha101(_stock_data(), names=sorted(formerly_skipped))
 
     assert set(result.columns) == {
@@ -156,13 +152,10 @@ def test_alpha101_documents_skipped_legacy_formulas() -> None:
     }
 
 
-def test_alpha101_skipped_formulas_are_exported_from_package() -> None:
-    """The package facade exposes skipped formulas for callers and docs."""
-    alpha_package = importlib.import_module("tradelearn.factor.alpha")
-    alpha101_module = importlib.import_module("tradelearn.factor.alpha.alpha101")
-
-    assert alpha101_module.ALPHA101_SKIPPED == alpha_package.ALPHA101_SKIPPED
-    assert "ALPHA101_SKIPPED" in alpha_package.__all__
+def test_alpha101_rejects_unknown_formula_names() -> None:
+    """Formula selection treats Alpha101 as complete and only rejects unknown names."""
+    with pytest.raises(ValueError, match="unknown Alpha101 formulas"):
+        alpha101(_stock_data(), names=["alpha999"])
 
 
 def _legacy_alpha101(data: pd.DataFrame, names: list[str]) -> pd.DataFrame:

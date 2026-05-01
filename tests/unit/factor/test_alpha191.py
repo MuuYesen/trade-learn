@@ -326,11 +326,7 @@ def test_alpha191_v2_facade_avoids_future_warning_for_missing_values() -> None:
 
 def test_alpha191_documents_skipped_legacy_formulas() -> None:
     """All Alpha191 formulas are executable in v2."""
-    alpha191_module = importlib.import_module("tradelearn.factor.alpha.alpha191")
     formerly_skipped = {"alpha030", "alpha143", "alpha149", "alpha190"}
-
-    assert alpha191_module.ALPHA191_SKIPPED == {}
-    assert formerly_skipped.issubset(alpha191_module.ALPHA191_SUPPORTED)
 
     result = alpha191(_stock_data(), _bench_data(), names=sorted(formerly_skipped))
 
@@ -341,13 +337,10 @@ def test_alpha191_documents_skipped_legacy_formulas() -> None:
     }
 
 
-def test_alpha191_skipped_formulas_are_exported_from_package() -> None:
-    """The package facade exposes skipped formulas for callers and docs."""
-    alpha_package = importlib.import_module("tradelearn.factor.alpha")
-    alpha191_module = importlib.import_module("tradelearn.factor.alpha.alpha191")
-
-    assert alpha191_module.ALPHA191_SKIPPED == alpha_package.ALPHA191_SKIPPED
-    assert "ALPHA191_SKIPPED" in alpha_package.__all__
+def test_alpha191_rejects_unknown_formula_names() -> None:
+    """Formula selection treats Alpha191 as complete and only rejects unknown names."""
+    with pytest.raises(ValueError, match="unknown Alpha191 formulas"):
+        alpha191(_stock_data(), _bench_data(), names=["alpha999"])
 
 
 def _legacy_alpha191(

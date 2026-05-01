@@ -11,9 +11,8 @@ from tradelearn.data import (
     BarsCache,
     CacheExpiredError,
     CacheMissError,
-    bars_fingerprint,
-    normalize_bars,
 )
+from tradelearn.data.bars import bars_fingerprint, normalize_bars
 
 
 def test_normalize_bars_builds_utc_multiindex_and_metadata() -> None:

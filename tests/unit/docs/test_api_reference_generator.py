@@ -108,6 +108,6 @@ def test_render_strategy_writing_guide_explains_strategy_workflow() -> None:
     assert "## Engine Strategy" in rendered
     assert "class SmaCross(bt.Strategy)" in rendered
     assert "## Lite Strategy" in rendered
-    assert "class SmaCross(Strategy)" in rendered
+    assert "class SmaCross(tl.Strategy)" in rendered
     assert "`line[0]` 是当前 bar" in rendered
     assert "uv run python benchmarks/runners/benchmark_bt.py" in rendered
