@@ -10,6 +10,7 @@ def select_top(
     k: int,
     reverse: bool = True,
     min_score: float | None = None,
+    max_score: float | None = None,
     exclude_nan: bool = True,
 ) -> list[Hashable]:
     """Return the top ``k`` keys by score.
@@ -24,6 +25,8 @@ def select_top(
         ``True`` selects highest scores first. ``False`` selects lowest scores.
     min_score:
         Optional lower score bound.
+    max_score:
+        Optional upper score bound.
     exclude_nan:
         Drop NaN values before ranking.
     """
@@ -36,6 +39,8 @@ def select_top(
         if exclude_nan and math.isnan(score):
             continue
         if min_score is not None and score < min_score:
+            continue
+        if max_score is not None and score > max_score:
             continue
         items.append((key, score))
 

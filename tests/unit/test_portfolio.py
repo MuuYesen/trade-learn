@@ -21,3 +21,9 @@ def test_select_top_can_select_lowest_when_reverse_is_false() -> None:
     scores = {"AAPL": 0.10, "MSFT": 0.25, "GOOG": 0.18}
 
     assert select_top(scores, k=2, reverse=False) == ["AAPL", "GOOG"]
+
+
+def test_select_top_can_filter_by_max_score() -> None:
+    scores = {"AAPL": 0.10, "MSFT": 0.25, "GOOG": 0.18}
+
+    assert select_top(scores, k=3, reverse=False, max_score=0.18) == ["AAPL", "GOOG"]

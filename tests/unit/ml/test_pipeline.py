@@ -81,6 +81,13 @@ def test_pipeline_can_use_precomputed_score_column() -> None:
     assert result.as_weight_dict() == {"B": 1.0}
 
 
+def test_topk_selector_ascending_threshold_uses_portfolio_filtering() -> None:
+    scores = pd.Series({"A": 0.10, "B": 0.30, "C": 0.20})
+    selector = TopKSelector(k=3, ascending=True, threshold=0.20)
+
+    assert selector.select(scores) == ["A", "C"]
+
+
 def test_risk_policy_normalizes_and_drops_small_weights() -> None:
     policy = RiskPolicy(max_weight=0.4, min_abs_weight=0.05)
     weights = pd.Series({"A": 0.9, "B": 0.2, "C": 0.01})

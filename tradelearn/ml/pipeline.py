@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+from tradelearn.portfolio import select_top
+
 if TYPE_CHECKING:
     from tradelearn.ml.features import FeatureStore
 
@@ -152,13 +154,16 @@ class TopKSelector:
 
     def select(self, scores: pd.Series) -> list[str]:
         """Return selected symbol labels."""
-        ranked = scores.dropna().sort_values(ascending=self.ascending)
-        if self.threshold is not None:
-            if self.ascending:
-                ranked = ranked[ranked <= self.threshold]
-            else:
-                ranked = ranked[ranked >= self.threshold]
-        return [str(symbol) for symbol in ranked.head(self.k).index]
+        return [
+            str(symbol)
+            for symbol in select_top(
+                scores.to_dict(),
+                k=self.k,
+                reverse=not self.ascending,
+                min_score=None if self.ascending else self.threshold,
+                max_score=self.threshold if self.ascending else None,
+            )
+        ]
 
     def get_params(self) -> dict[str, Any]:
         """Return serializable selector parameters for tracking."""
