@@ -20,8 +20,8 @@ def test_lite_no_longer_exports_legacy_ta_util() -> None:
     assert not hasattr(lite, "_TA")
 
 
-def test_talib_namespace_delegates_to_pandas_ta_classic() -> None:
-    """TA-Lib-style namespace should use pandas-ta-classic after vendor removal."""
+def test_pta_namespace_delegates_to_pandas_ta_classic() -> None:
+    """PTA namespace should use pandas-ta-classic after vendor removal."""
     import tradelearn as tl
 
     data = pd.DataFrame(
@@ -34,6 +34,6 @@ def test_talib_namespace_delegates_to_pandas_ta_classic() -> None:
         }
     )
 
-    result = tl.talib.SMA(data["close"], timeperiod=2)
+    result = tl.pta.SMA(data["close"], length=2)
 
     pd.testing.assert_series_equal(result, pta.sma(data["close"], length=2))

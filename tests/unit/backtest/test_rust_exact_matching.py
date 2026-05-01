@@ -1440,8 +1440,8 @@ def test_engine_vendor_indicators_run_without_strategy_i_api() -> None:
 
         def __init__(self) -> None:
             assert not hasattr(type(self), "I")
-            self.first = tl.talib.SMA(self.data.close, timeperiod=2)
-            self.second = tl.talib.SMA(self.data.close, timeperiod=2)
+            self.first = tl.pta.SMA(self.data.close, length=2)
+            self.second = tl.pta.SMA(self.data.close, length=2)
 
         def next(self) -> None:
             type(self).values.append(self.first[0] + self.second[0])

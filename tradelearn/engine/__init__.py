@@ -63,12 +63,14 @@ def date2num(dt):
 az = analyzers
 obs = observers
 CommissionInfo = CommInfoBase
-talib = importlib.import_module("tradelearn.indicators.talib")
+pta = importlib.import_module("tradelearn.indicators.pta")
 tdx = importlib.import_module("tradelearn.indicators.tdx")
 tv = importlib.import_module("tradelearn.indicators.tv")
 
 
 def __getattr__(name: str) -> Any:
+    if name == "talib":
+        return importlib.import_module("tradelearn.indicators.talib")
     if name == "MLStrategy":
         from tradelearn.ml import MLStrategy
 
@@ -106,6 +108,7 @@ __all__ = [
     "Observer",
     "obs",
     "CommissionInfo",
+    "pta",
     "talib",
     "tdx",
     "tv",

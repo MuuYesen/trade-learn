@@ -30,6 +30,7 @@ dependencies = [
     "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git",
     "pyarrow",
     "pandas-ta-classic",
+    "TA-Lib",
     "pynesys-pynecore; python_version >= '3.11'",
     "xlsxwriter",
     "bokeh",

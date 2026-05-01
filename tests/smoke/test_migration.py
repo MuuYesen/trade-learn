@@ -30,8 +30,16 @@ MIGRATION_CHECKPOINTS: tuple[MigrationCheckpoint, ...] = (
     MigrationCheckpoint("strategy_init", "Strategy.init", "Strategy.__init__"),
     MigrationCheckpoint("line_current", "self.data.close[-1]", "self.data.close[0]"),
     MigrationCheckpoint("params", "class attributes", "params + self.p"),
-    MigrationCheckpoint("indicator_registration", "self.I(func, ...)", "bt.talib / bt.tdx / bt.tv"),
-    MigrationCheckpoint("factor_analyzer", "removed Examine facade", "tradelearn.factor.FactorAnalyzer"),
+    MigrationCheckpoint(
+        "indicator_registration",
+        "self.I(func, ...)",
+        "bt.pta / bt.talib / bt.tdx / bt.tv",
+    ),
+    MigrationCheckpoint(
+        "factor_analyzer",
+        "removed Examine facade",
+        "tradelearn.factor.FactorAnalyzer",
+    ),
     MigrationCheckpoint("reporter", "removed Evaluate facade", "tradelearn.report.Reporter"),
     MigrationCheckpoint("ml", "AutoML / CausalGraph", "tradelearn.ml.MLStrategy"),
 )

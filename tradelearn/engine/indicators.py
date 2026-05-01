@@ -55,7 +55,7 @@ class Indicator(metaclass=MetaSimple):
     """Base class for Engine custom indicators.
 
     Built-in indicators are intentionally not exposed from ``tradelearn.engine``.
-    Use ``bt.talib`` / ``bt.tdx`` / ``bt.tv`` for built-in vector indicators, or
+    Use ``bt.pta`` / ``bt.talib`` / ``bt.tdx`` / ``bt.tv`` for built-in vector indicators, or
     subclass this class for strategy-specific custom indicators.
     """
 

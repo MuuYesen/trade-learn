@@ -1,10 +1,10 @@
-"""TA-Lib-style indicator namespace backed by pandas-ta-classic."""
+"""TA-Lib indicator namespace backed by the real TA-Lib package."""
 
 from __future__ import annotations
 
 from tradelearn.indicators.base import FunctionIndicator
-from tradelearn.indicators.talib.pandas_ta_adapter import _atr, _ema, _macd, _rsi, _sma
 
+from .ta_lib_adapter import _atr, _ema, _macd, _rsi, _sma
 
 SMA = FunctionIndicator("talib.SMA", _sma, {"timeperiod": 30})
 EMA = FunctionIndicator("talib.EMA", _ema, {"timeperiod": 30})
@@ -16,4 +16,10 @@ MACD = FunctionIndicator(
 )
 ATR = FunctionIndicator("talib.ATR", _atr, {"timeperiod": 14})
 
-__all__ = ["ATR", "EMA", "MACD", "RSI", "SMA"]
+sma = SMA
+ema = EMA
+rsi = RSI
+macd = MACD
+atr = ATR
+
+__all__ = ["ATR", "EMA", "MACD", "RSI", "SMA", "atr", "ema", "macd", "rsi", "sma"]

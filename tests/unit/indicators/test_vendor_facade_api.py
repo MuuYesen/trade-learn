@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 import tradelearn as tl
 import tradelearn.engine as bt
@@ -29,10 +30,10 @@ def test_engine_uses_vendor_indicator_namespaces_directly() -> None:
 
     class VendorStrategy(bt.Strategy):
         def __init__(self) -> None:
-            self.sma = bt.talib.SMA(self.data.close, timeperiod=2)
+            self.sma = bt.pta.SMA(self.data.close, length=2)
             self.tdx_ma = bt.tdx.MA(self.data.close, N=2)
             self.tv_sma = bt.tv.SMA(self.data.close, length=2)
-            self.macd = bt.talib.MACD(self.data.close, fastperiod=2, slowperiod=3, signalperiod=2)
+            self.macd = bt.pta.MACD(self.data.close, fast=2, slow=3, signal=2)
 
         def next(self) -> None:
             if len(self.data) == 3:
@@ -57,10 +58,10 @@ def test_lite_uses_vendor_indicator_namespaces_directly() -> None:
 
     class VendorStrategy(LiteStrategy):
         def init(self) -> None:
-            self.sma = tl.talib.SMA(self.data.close, timeperiod=2)
+            self.sma = tl.pta.SMA(self.data.close, length=2)
             self.tdx_ma = tl.tdx.MA(self.data.close, N=2)
             self.tv_sma = tl.tv.SMA(self.data.close, length=2)
-            self.macd = tl.talib.MACD(self.data.close, fastperiod=2, slowperiod=3, signalperiod=2)
+            self.macd = tl.pta.MACD(self.data.close, fast=2, slow=3, signal=2)
             self.start_on_bar(2)
 
         def next(self) -> None:
@@ -84,29 +85,64 @@ def test_engine_no_longer_exports_short_ind_alias() -> None:
 
 
 def test_root_and_engine_share_vendor_indicator_namespaces() -> None:
-    assert tl.talib is bt.talib
+    assert tl.pta is bt.pta
     assert tl.tdx is bt.tdx
     assert tl.tv is bt.tv
-    assert hasattr(tl.talib, "__path__")
+    assert hasattr(tl.pta, "__path__")
+    assert "pta" in tl.__all__
     assert "talib" in tl.__all__
     assert "tdx" in tl.__all__
     assert "tv" in tl.__all__
+    assert "pta" in tl.ta.__all__
     assert "tv" in tl.ta.__all__
+    assert "pta" in bt.__all__
     assert "talib" in bt.__all__
     assert "tdx" in bt.__all__
     assert "tv" in bt.__all__
 
 
 def test_vendor_indicator_namespaces_keep_init_files_as_facades() -> None:
-    assert tl.talib.SMA._func.__module__ == "tradelearn.indicators.talib.pandas_ta_adapter"
+    assert tl.pta.SMA._func.__module__ == "tradelearn.indicators.pta.pandas_ta_adapter"
     assert tl.tdx.MA._func.__module__ == "tradelearn.indicators.tdx.mytt_adapter"
     assert tl.tv.SMA._func.__module__ == "tradelearn.indicators.tv.pynecore_adapter"
+
+
+def test_vendor_indicator_namespaces_are_case_compatible() -> None:
+    close = _bars()["close"]
+
+    assert tl.pta.SMA is tl.pta.sma
+    assert tl.pta.EMA is tl.pta.ema
+    assert tl.pta.RSI is tl.pta.rsi
+    assert tl.pta.MACD is tl.pta.macd
+    assert tl.pta.ATR is tl.pta.atr
+
+    pd.testing.assert_series_equal(tl.tdx.MA(close, N=2), tl.tdx.ma(close, n=2))
+    pd.testing.assert_series_equal(tl.tdx.RSI(close, N=2), tl.tdx.rsi(close, n=2))
+    pd.testing.assert_frame_equal(tl.tdx.MACD(close), tl.tdx.macd(close))
+
+    assert tl.tv.SMA is tl.tv.sma
+    assert tl.tv.RSI is tl.tv.rsi
+    assert tl.tv.MACD is tl.tv.macd
+
+
+def test_real_talib_namespace_is_not_pandas_ta_fallback() -> None:
+    try:
+        import talib as _talib  # noqa: F401
+    except ImportError:
+        with pytest.raises(ImportError, match="requires TA-Lib"):
+            import importlib
+
+            importlib.import_module("tradelearn.indicators.talib")
+        return
+
+    assert tl.talib.SMA._func.__module__ == "tradelearn.indicators.talib.ta_lib_adapter"
 
 
 def test_vendor_indicator_adapter_files_are_named_by_backend() -> None:
     root = Path(__file__).resolve().parents[3] / "tradelearn" / "indicators"
 
-    assert (root / "talib" / "pandas_ta_adapter.py").exists()
+    assert (root / "pta" / "pandas_ta_adapter.py").exists()
+    assert (root / "talib" / "ta_lib_adapter.py").exists()
     assert (root / "tdx" / "mytt_adapter.py").exists()
     assert (root / "tv" / "pynecore_adapter.py").exists()
     assert not (root / "tdx" / "mytt.py").exists()
@@ -115,10 +151,11 @@ def test_vendor_indicator_adapter_files_are_named_by_backend() -> None:
 
 def test_lite_and_engine_share_vendor_indicator_namespaces() -> None:
     assert lite.ta is tl.ta
-    assert lite.talib is bt.talib
+    assert lite.pta is bt.pta
     assert lite.tdx is bt.tdx
     assert lite.tv is bt.tv
     assert "ta" in lite.__all__
+    assert "pta" in lite.__all__
     assert "talib" in lite.__all__
     assert "tdx" in lite.__all__
     assert "tv" in lite.__all__
