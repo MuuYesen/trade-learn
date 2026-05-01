@@ -65,6 +65,32 @@ def test_factor_transformer_accepts_callable_features() -> None:
     assert transformed.loc["A", "spread"] == 1.0
 
 
+def test_strategy_pipeline_fit_calls_plain_transformer_once() -> None:
+    class CountingTransformer:
+        def __init__(self) -> None:
+            self.transform_calls = 0
+
+        def fit(self, data: pd.DataFrame, y=None):
+            return self
+
+        def transform(self, data: pd.DataFrame) -> pd.DataFrame:
+            self.transform_calls += 1
+            return data.assign(value=data["value"] + 1)
+
+    transformer = CountingTransformer()
+    frame = pd.DataFrame({"value": [1.0, 2.0]}, index=["A", "B"])
+    pipeline = StrategyPipeline(
+        [
+            ("counting", transformer),
+            ("model", ModelAdapter(score_column="value")),
+        ]
+    )
+
+    pipeline.fit(frame, [0.0, 1.0])
+
+    assert transformer.transform_calls == 1
+
+
 def test_pipeline_can_use_precomputed_score_column() -> None:
     frame = pd.DataFrame({"score": [0.1, 0.8, 0.5]}, index=["A", "B", "C"])
     pipeline = StrategyPipeline(
