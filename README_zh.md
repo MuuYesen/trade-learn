@@ -1,10 +1,58 @@
 # trade-learn
 
-面向传统量化策略与机器学习策略的 Python 研究框架。
+从一个因子想法，到可复现的回测、报告和实验记录，trade-learn 想把量化研究里最零散、最容易断开的环节接成一条顺手的工作流。
 
-trade-learn 的目标不是再造一个只追求极限跑分的批处理回测器，而是提供一套**事件驱动**的投研到回测闭环：数据获取、指标计算、因子分析、研究流水线、策略回测、报告输出、实验追踪可以在同一个项目语义下协同工作。
+它不是一个只会“跑一段回测”的工具，而是一套从研究到验证的工作台。你可以像写 Backtrader 一样写完整的事件驱动策略，也可以用 Lite API 快速验证一个想法；你可以用 TDX、TA-Lib、TradingView、pandas-ta-classic 的指标，也可以把因子、预处理、选股、权重、回测、报告和 MLflow 记录串成完整投研流程。
 
-底层回测 runtime 使用 Rust 承担撮合、bar loop、订单推进和 portfolio 记账等高频路径；Python 层保留策略表达、指标生态、研究流程和兼容门面。这样既能保持事件驱动策略 API 的清晰度，也能把真正耗时的回测内核下沉。
+trade-learn 的目标很直接：让你把时间花在“策略是否有效”上，而不是反复处理数据切分、指标口径、订单记录、权益曲线、报告导出和实验追踪。它的核心取舍是：**Python 负责表达研究和策略，Rust 负责回测内核中真正高频、重复、容易慢的部分。**
+
+## 为什么会想用它
+
+量化研究常见的问题不是“算不出一个指标”，而是这些环节很难自然连起来：
+
+- 数据拿到了，但很快要自己补一套清洗、切分、profile。
+- 因子算出来了，但 alphalens 风格检验、回测、报告又是另一套代码。
+- 策略跑通了，但成交、订单、持仓、权益曲线和实验记录散在不同对象里。
+- 想迁移 Backtrader 策略，又希望有更现代的报告、研究流水线和 Rust 撮合内核。
+- 想做机器学习策略，却不想每个项目都重新搭一遍 train/test、preprocess、score、weight、backtest、MLflow。
+
+trade-learn 解决的是这条链路：
+
+```text
+数据 -> 指标/因子 -> 预处理 -> 选股/权重 -> 事件驱动回测 -> 报告 -> MLflow 追踪
+```
+
+你写的是策略和研究逻辑，不是重复搭胶水代码。
+
+如果你已经有 Backtrader 策略，可以先从 `tradelearn.engine` 迁移；如果你只是想快速验证一个因子或组合权重逻辑，可以从 `tradelearn.lite` 开始；如果你正在做机器学习策略，`tradelearn.research + MLflow + report` 可以把训练、评分、调仓、回测和结果追踪放在同一条线上。
+
+## 它适合谁
+
+- 已经会 Backtrader，但希望有更现代的报告、研究流水线和 Rust 回测内核。
+- 正在做因子研究，希望从 `alphalens` 风格分析自然走到事件驱动回测。
+- 正在做机器学习策略，希望把 train/test、预处理、评分、权重、回测和 MLflow 记录连起来。
+- 需要同时维护规则策略和模型策略，不想让两套策略使用完全不同的数据、报告和实验体系。
+- 想保留 Python 生态的灵活性，同时把撮合、订单推进和 portfolio 这类高频路径交给 Rust。
+
+## 一眼看懂
+
+| 你想做什么 | 用什么 |
+|---|---|
+| 迁移或编写 Backtrader 风格策略 | `tradelearn.engine` |
+| 快速验证轻量策略或 1.x 风格策略 | `tradelearn.lite` |
+| 比较单因子 / 多因子的预测能力 | `tradelearn.factor` |
+| 做训练集/测试集切分、预处理、选股、权重 | `tradelearn.research` |
+| 生成回测报告、收益/回撤/交易分析图 | `tradelearn.report` |
+| 记录参数、指标、HTML、CSV/XLSX artifacts | MLflow 集成 |
+| 用 TDX / TA-Lib / TradingView / pandas-ta-classic 指标 | `tl.tdx` / `tl.talib` / `tl.tv` / `tl.pta` |
+
+最短路径：
+
+```text
+Engine 用户：DataFrame -> Cerebro -> Strategy -> stats / plot / report
+Lite 用户：DataFrame -> Backtest -> Strategy -> stats / plot / report
+研究用户：DataFrame -> research/factor -> weights -> Backtest/Cerebro -> MLflow
+```
 
 ## 当前定位
 
