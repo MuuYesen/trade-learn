@@ -261,11 +261,34 @@ Lite 不是 Backtrader facade，它是更薄的策略语法层。Lite 与 Engine
 | Tradelearn Lite | ~273,334 | ~16.7x | Final Value / Fills / Closed Trades |
 | Backtrader | ~16,369 | 1.0x | reference |
 
+多标的组合 / 指数增强策略也走同一条 Backtrader 对齐链路。`benchmark_bt.py --include-portfolio` 会同时审计目标权重、资产类别目标权重、等权、趋势过滤、反波动率等多数据策略。最近一次本机审计结果如下，全部最终权益与订单数对齐：
+
+| 多标的策略 | Tradelearn Value | Backtrader Value | 相对 Backtrader | Orders |
+| --- | ---: | ---: | ---: | ---: |
+| TargetPercentPortfolioStrategy | 104447.50 | 104447.50 | 3.0x | 14 / 14 |
+| AssetClassTargetPortfolioStrategy | 104003.95 | 104003.95 | 3.2x | 21 / 21 |
+| UniformAssetClassPortfolioStrategy | 104155.45 | 104155.45 | 3.1x | 22 / 22 |
+| TrendFilteredPortfolioStrategy | 103430.20 | 103430.20 | 3.4x | 21 / 21 |
+| InverseVolatilityPortfolioStrategy | 104410.00 | 104410.00 | 2.9x | 9 / 9 |
+
+1000 标的、约 20 年日线、月频 top-50 目标权重策略的临时压力测试结果如下。这组用于观察大规模性能，不作为正式对齐门禁；当前三者最终权益和订单数尚未对齐，后续需要把它整理成正式 parity benchmark 后再纳入质量门禁。
+
+| 引擎 | 总 data bars | 总耗时 | bars/s | Final Value | Orders / Fills |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Tradelearn Lite | 5,040,000 | 30.14s | 167,209 | 3,065,979.65 | 23,799 |
+| Tradelearn Engine | 5,040,000 | 49.94s | 100,918 | 2,097,085.40 | 27,966 |
+| Backtrader | 5,040,000 | 257.03s | 19,609 | 2,847,745.54 | 18,353 |
+
+这组压力测试显示 Lite 约为 Backtrader 的 8.5x，Engine 约为 Backtrader 的 5.2x。差异主要来自大规模截面选股、排序、目标权重生成和订单提交仍在 Python 策略层；Rust 当前主要负责撮合、bar loop、订单推进和 portfolio。
+
 复现入口：
 
 ```bash
 # Engine vs Backtrader 严格数值审计
 uv run python benchmarks/runners/benchmark_bt.py smart --repeat 1 --warmup 0
+
+# Engine vs Backtrader 多标的组合 / 指数增强审计
+uv run python benchmarks/runners/benchmark_bt.py smart --repeat 1 --warmup 0 --include-portfolio
 
 # Engine / Lite / Backtrader 吞吐与统计口径对比
 uv run python benchmarks/runners/benchmark_throughput.py --bars 550000 --repeat 1 --warmup 0
