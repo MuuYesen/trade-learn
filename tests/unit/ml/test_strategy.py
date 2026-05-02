@@ -54,6 +54,15 @@ def test_ml_facade_exports_automl_next_to_causal_selector() -> None:
     assert ml.CausalSelector.__name__ == "CausalSelector"
 
 
+def test_ml_facade_does_not_export_feature_store() -> None:
+    """FeatureStore was removed from the ML public surface."""
+
+    assert "FeatureStore" not in ml.__all__
+    assert "feature" not in ml.__all__
+    assert not hasattr(ml, "FeatureStore")
+    assert not hasattr(ml, "feature")
+
+
 def test_mlstrategy_trains_predicts_and_places_orders() -> None:
     model = RecordingModel([0.8, 0.8, 0.8, 0.8])
 
