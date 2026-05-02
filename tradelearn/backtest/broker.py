@@ -238,6 +238,16 @@ class RustBroker:
             ):
                 _, _cash, size, price = self._rust_state_cache
                 return Position(size=size, price=price)
+            if (
+                self._buffer_order_submissions
+                and self._rust_state_cache is not None
+                and self._rust_state_cache[0] == self._curr_idx
+                and len(self._active_datas) > 1
+            ):
+                position = self._positions.get(data)
+                if position is not None:
+                    return Position(size=position.size, price=position.price)
+                return Position(size=0.0, price=0.0)
             get_position_for_symbol = getattr(self._engine, "get_position_for_symbol", None)
             if callable(get_position_for_symbol):
                 symbol = self._rust_symbol(data)

@@ -439,24 +439,14 @@ def test_lite_target_weights_batches_equity_and_orders_reductions_first() -> Non
             if len(self.data) == 2:
                 self.buy(ticker="CCC", size=3)
             elif len(self.data) == 3:
-                original_getvalue = self.broker.getvalue
-                calls = {"count": 0}
-
-                def counted_getvalue(*args, **kwargs):
-                    calls["count"] += 1
-                    return original_getvalue(*args, **kwargs)
-
-                self.broker.getvalue = counted_getvalue
                 before = len(self.orders)
                 self.target_weights({"AAA": 0.2, "BBB": 0.2}, close_missing=True)
                 new_orders = self.orders[before:]
-                seen["getvalue_calls"] = calls["count"]
                 seen["sides"] = ["buy" if order.isbuy() else "sell" for order in new_orders]
                 seen["tickers"] = [getattr(order.data, "_name", None) for order in new_orders]
 
-    Backtest(data, PortfolioLite, cash=1000.0).run()
+    Backtest(data, PortfolioLite, cash=1000.0, trade_on_close=True).run()
 
-    assert seen["getvalue_calls"] == 1
     assert seen["sides"][0] == "sell"
     assert seen["tickers"][0] == "CCC"
 
@@ -503,6 +493,72 @@ def test_lite_target_weights_routes_through_target_percent_semantics() -> None:
     Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run()
 
     assert seen == [("AAA", 0.25), ("BBB", 0.50)]
+
+
+def test_lite_target_weights_match_engine_when_previous_order_is_pending() -> None:
+    import tradelearn.engine as bt
+    from tradelearn.engine import IndexEnhanceStrategy
+
+    def frame(closes: list[float]) -> pd.DataFrame:
+        index = pd.date_range("2024-01-01", periods=len(closes), freq="D", tz="UTC")
+        return pd.DataFrame(
+            {
+                "open": closes,
+                "high": [value + 1.0 for value in closes],
+                "low": [value - 1.0 for value in closes],
+                "close": closes,
+                "volume": [1000.0] * len(closes),
+            },
+            index=index,
+        )
+
+    data = {
+        "AAA": frame([100.0, 100.0, 100.0, 100.0]),
+        "BBB": frame([100.0, 100.0, 100.0, 100.0]),
+    }
+
+    class LitePortfolio(Strategy):
+        def next(self) -> None:
+            if len(self.data) == 2:
+                self.buy(ticker="BBB", size=20)
+            elif len(self.data) == 3:
+                self.target_weights({"AAA": 0.5, "BBB": 0.5})
+
+    class EnginePortfolio(IndexEnhanceStrategy):
+        def next(self) -> None:
+            if len(self) == 2:
+                self.buy(data=self.getdatabyname("BBB"), size=20)
+            elif len(self) == 3:
+                self.target_weights({"AAA": 0.5, "BBB": 0.5})
+
+    lite_stats = Backtest(
+        data,
+        LitePortfolio,
+        cash=1000.0,
+        commission=0.0,
+        trade_on_close=True,
+    ).run()
+
+    cerebro = bt.Cerebro(trade_on_close=True)
+    cerebro.setcash(1000.0)
+    cerebro.setcommission(0.0)
+    for name, frame_data in data.items():
+        cerebro.adddata(frame_data, name=name)
+    cerebro.addstrategy(EnginePortfolio)
+    [engine_strategy] = cerebro.run()
+    engine_stats = engine_strategy.stats
+
+    pd.testing.assert_frame_equal(
+        lite_stats.orders[["data", "side", "size", "status"]].reset_index(drop=True),
+        engine_stats.orders[["data", "side", "size", "status"]].reset_index(drop=True),
+        check_dtype=False,
+    )
+    pd.testing.assert_frame_equal(
+        lite_stats.fills[["datetime", "data", "side", "size", "price"]].reset_index(drop=True),
+        engine_stats.fills[["datetime", "data", "side", "size", "price"]].reset_index(drop=True),
+        check_dtype=False,
+    )
+    assert lite_stats.summary["final_value"] == engine_stats.summary["final_value"]
 
 
 def test_lite_research_result_weights_current_bar_slice_records_result() -> None:

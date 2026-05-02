@@ -340,26 +340,6 @@ class Strategy(CoreStrategy):
             return float(self._pending_size.get(data, 0.0))
         return float(self.getposition(data).size + self._pending_size.get(data, 0.0))
 
-    def _portfolio_equity_snapshot(self) -> float:
-        equity = float(self.broker.getvalue())
-        if not bool(getattr(self.broker, "_buffer_order_submissions", False)):
-            return equity
-        rust_state_cache = getattr(self.broker, "_rust_state_cache", None)
-        current_idx = getattr(self.broker, "_curr_idx", None)
-        if rust_state_cache is None or rust_state_cache[0] != current_idx:
-            return equity
-        value = float(rust_state_cache[1])
-        seen: set[Any] = set()
-        for data, size in self._lite_target_size_by_data.items():
-            if size:
-                value += float(size) * self._current_price(data) * self._position_mult(data)
-            seen.add(data)
-        for data, position in getattr(self.broker, "_positions", {}).items():
-            if data in seen or not position.size:
-                continue
-            value += position.size * self._current_price(data) * self._position_mult(data)
-        return value
-
     def order_target_size(self, *, ticker: str = None, target: float = 0, **kwargs: Any):
         data = self._resolve_ticker_data(ticker)
         delta = float(target) - self._lite_position_size(data)
@@ -380,7 +360,7 @@ class Strategy(CoreStrategy):
         data = self._resolve_ticker_data(ticker)
         price = float(price if price is not None else self._current_price(data))
         mult = self._position_mult(data)
-        current_value = self._lite_position_size(data) * price * mult
+        current_value = float(self.broker.getvalue(datas=[data]))
         delta = float(target) - current_value
         if abs(delta) < 1e-12:
             return None
@@ -398,12 +378,7 @@ class Strategy(CoreStrategy):
         target: float = 0.0,
         **kwargs: Any,
     ):
-        snapshot_value = getattr(self, "_lite_target_portfolio_value", None)
-        portfolio_value = (
-            float(self.broker.getvalue())
-            if snapshot_value is None
-            else float(snapshot_value)
-        )
+        portfolio_value = float(self.broker.getvalue())
         return self.order_target_value(
             ticker=ticker,
             target=float(target) * portfolio_value,
@@ -549,7 +524,7 @@ class Strategy(CoreStrategy):
         ``cash`` is accepted as a reserved key and is not translated into an order.
         """
         data_by_ticker = self._target_weight_data_map()
-        equity = self._portfolio_equity_snapshot()
+        equity = float(self.broker.getvalue())
         snapshots = self._target_weight_snapshots(data_by_ticker)
         intent_snapshots = {
             ticker: TargetWeightSnapshot(
@@ -568,18 +543,13 @@ class Strategy(CoreStrategy):
             unknown_label="ticker(s)",
         )
         orders: list[Any] = []
-        previous_equity_snapshot = getattr(self, "_lite_target_portfolio_value", None)
-        self._lite_target_portfolio_value = equity
-        try:
-            for intent in intents:
-                order = self.order_target_percent(
-                    ticker=intent.symbol,
-                    target=intent.target_weight,
-                )
-                if order is not None:
-                    orders.append(order)
-        finally:
-            self._lite_target_portfolio_value = previous_equity_snapshot
+        for intent in intents:
+            order = self.order_target_percent(
+                ticker=intent.symbol,
+                target=intent.target_weight,
+            )
+            if order is not None:
+                orders.append(order)
         return orders
 
     def _target_weight_data_map(self) -> dict[str, Any]:
