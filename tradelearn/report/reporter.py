@@ -388,19 +388,30 @@ class Reporter:
         """Return a Bokeh factor events distribution chart."""
         return charts.factor_events_distribution(self.factor_events_distribution())
 
-    def excel(self, path: str, benchmark: pd.Series | None = None) -> Any:
+    def excel(
+        self,
+        path: str,
+        benchmark: pd.Series | None = None,
+        sections: list[Any] | tuple[Any, ...] | None = None,
+    ) -> Any:
         """Write an Excel report."""
-        return write_excel_report(self, path, benchmark=benchmark)
+        return write_excel_report(self, path, benchmark=benchmark, sections=sections)
 
-    def html(self, path: str, benchmark: pd.Series | None = None) -> Any:
+    def html(
+        self,
+        path: str,
+        benchmark: pd.Series | None = None,
+        sections: list[Any] | tuple[Any, ...] | None = None,
+    ) -> Any:
         """Write an HTML report."""
-        return write_html_report(self, path, benchmark=benchmark)
+        return write_html_report(self, path, benchmark=benchmark, sections=sections)
 
     def report(
         self,
         path: str | Path,
         benchmark: pd.Series | None = None,
         format: str | None = None,
+        sections: list[Any] | tuple[Any, ...] | None = None,
     ) -> Any:
         """Write a report, dispatching to HTML or Excel from suffix/format."""
         output = Path(path)
@@ -409,11 +420,11 @@ class Reporter:
         if chosen in {"htm", "html"}:
             if not output.suffix:
                 output = output.with_suffix(".html")
-            return self.html(output, benchmark=benchmark)
+            return self.html(output, benchmark=benchmark, sections=sections)
         if chosen in {"xls", "xlsx", "excel"}:
             if not output.suffix:
                 output = output.with_suffix(".xlsx")
-            return self.excel(output, benchmark=benchmark)
+            return self.excel(output, benchmark=benchmark, sections=sections)
         raise ValueError(f"Unsupported report format: {chosen}")
 
     def explore(self) -> Any:

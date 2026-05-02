@@ -183,9 +183,9 @@ class Backtest:
         chart = reporter.market_replay_chart()
         return [] if chart is None else [chart]
 
-    def report(self, path: str = "report.html", benchmark=None):
+    def report(self, path: str = "report.html", benchmark=None, sections=None):
         """Write a Tradelearn report for the most recent Lite run."""
-        return self._last_reporter().report(path, benchmark=benchmark)
+        return self._last_reporter().report(path, benchmark=benchmark, sections=sections)
 
     def log_mlflow(
         self,

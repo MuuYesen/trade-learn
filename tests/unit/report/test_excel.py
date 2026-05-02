@@ -42,6 +42,28 @@ def test_reporter_report_dispatches_excel_by_suffix(tmp_path) -> None:
     assert "summary" in _sheet_names(path)
 
 
+def test_reporter_excel_appends_custom_section_sheets(tmp_path) -> None:
+    """Reporter.excel appends DataFrame sheets from user-defined sections."""
+    path = tmp_path / "custom-report.xlsx"
+
+    class ExposureSection:
+        name = "custom_exposure"
+
+        def excel(self, ctx):
+            assert ctx.stats is not None
+            assert not ctx.returns.empty
+            return {
+                "custom_exposure": pd.DataFrame(
+                    {"symbol": ["AAA", "BBB"], "weight": [0.6, 0.4]}
+                )
+            }
+
+    Reporter(_stats(), periods=252).excel(path, sections=[ExposureSection()])
+
+    assert "custom_exposure" in _sheet_names(path)
+    assert "AAA" in _shared_strings(path)
+
+
 def test_reporter_excel_accepts_mapping_stats(tmp_path) -> None:
     """Reporter.excel accepts dict-shaped stats."""
     path = tmp_path / "mapping-report.xlsx"

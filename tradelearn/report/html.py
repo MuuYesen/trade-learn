@@ -15,6 +15,7 @@ from bokeh.resources import INLINE
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from tradelearn.report import charts
+from tradelearn.report.sections import build_context, render_html_sections
 
 TEMPLATE_DIR = Path(__file__).with_name("templates")
 TEMPLATE_NAME = "tear_sheet.html"
@@ -24,6 +25,7 @@ def write_html_report(
     reporter: Any,
     path: str | Path,
     benchmark: pd.Series | None = None,
+    sections: list[Any] | tuple[Any, ...] | None = None,
 ) -> Path:
     """Write a single-file HTML tear sheet and return the output path."""
     output = Path(path)
@@ -48,6 +50,10 @@ def write_html_report(
     factor_events_distribution = reporter.factor_events_distribution()
     summary = reporter.summary(benchmark=benchmark_returns)
     config = reporter._get("config", default={}) or {}
+    custom_sections = render_html_sections(
+        sections,
+        build_context(reporter, benchmark=benchmark_returns),
+    )
     metadata = _metadata(summary, returns, config)
     top_drawdowns = reporter.top_drawdowns(limit=10)
     plots = {}
@@ -143,6 +149,7 @@ def write_html_report(
             trades=trades,
             returns=returns,
             config=config,
+            custom_sections=custom_sections,
         )
     )
     _write_artifacts(
@@ -207,6 +214,7 @@ def _render_html(
     trades: pd.DataFrame,
     returns: pd.Series,
     config: dict[str, Any],
+    custom_sections: str = "",
 ) -> str:
     """Render the report HTML string."""
     template = _template_environment().get_template(TEMPLATE_NAME)
@@ -233,6 +241,7 @@ def _render_html(
         script=script,
         summary_table=_summary_cards(summary),
         trades_count=len(trades),
+        custom_sections=custom_sections,
     )
 
 

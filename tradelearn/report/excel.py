@@ -10,6 +10,7 @@ import pandas as pd
 import pandas.api.types as pd_types
 
 from tradelearn.report.analytics import monthly_returns_matrix
+from tradelearn.report.sections import build_context, collect_excel_sheets
 
 REPORT_SHEETS = [
     "summary",
@@ -27,6 +28,7 @@ def write_excel_report(
     reporter: Any,
     path: str | Path,
     benchmark: pd.Series | None = None,
+    sections: list[Any] | tuple[Any, ...] | None = None,
 ) -> Path:
     """Write a multi-sheet Excel report and return the output path."""
     output = Path(path)
@@ -48,6 +50,10 @@ def write_excel_report(
     factor_long_short_returns = reporter.factor_long_short_returns()
     factor_quantile_returns = reporter.factor_quantile_returns()
     config = reporter._get("config", default={}) or {}
+    custom_sheets = collect_excel_sheets(
+        sections,
+        build_context(reporter, benchmark=benchmark_returns),
+    )
 
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         _summary_frame(reporter.summary(benchmark=benchmark_returns)).to_excel(
@@ -105,6 +111,8 @@ def write_excel_report(
                 writer,
                 sheet_name="factor_quantiles",
             )
+        for sheet_name, frame in custom_sheets.items():
+            _excel_safe_frame(frame).to_excel(writer, sheet_name=sheet_name, index=False)
         _config_frame(config).to_excel(writer, sheet_name="config", index=False)
         _format_numeric_sheets(writer)
         _format_monthly_heatmap(writer)

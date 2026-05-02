@@ -68,6 +68,25 @@ def test_reporter_report_uses_format_when_suffix_missing(tmp_path) -> None:
     assert result.exists()
 
 
+def test_reporter_html_appends_custom_sections(tmp_path) -> None:
+    """Reporter.html appends user-defined report sections."""
+    path = tmp_path / "custom-report.html"
+
+    class ExposureSection:
+        name = "custom_exposure"
+
+        def html(self, ctx):
+            assert ctx.stats is not None
+            assert not ctx.returns.empty
+            return "<section><h2>Custom Exposure</h2><p>active weight</p></section>"
+
+    Reporter(_stats(), periods=252).html(path, sections=[ExposureSection()])
+
+    html = path.read_text()
+    assert "Custom Exposure" in html
+    assert "active weight" in html
+
+
 def test_reporter_html_adds_price_trades_chart_when_market_data_exists(tmp_path) -> None:
     """Reporter.html keeps the tear sheet and adds optional market replay."""
     path = tmp_path / "market-report.html"
