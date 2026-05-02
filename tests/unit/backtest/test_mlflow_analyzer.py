@@ -93,7 +93,9 @@ def test_mlflow_analyzer_logs_params_stats_and_artifacts() -> None:
     assert fake.experiments == ["stage4"]
     assert fake.runs == [{"run_name": "case-1", "nested": False}]
     assert fake.params[0]["strategy.fast"] == 5
-    assert fake.params[0]["broker.cash"] == 123.0
+    assert fake.params[0]["broker.initial_cash"] == 123.0
+    assert fake.params[0]["broker.final_cash"] == 123.0
+    assert fake.params[0]["broker.final_value"] == 123.0
     assert fake.params[0]["broker.commission"] == 0.001
     assert fake.metrics == [
         {
@@ -295,10 +297,10 @@ def test_mlflow_analyzer_logs_research_result_from_strategy_params() -> None:
     assert strategy.getpositionbyname("BBB").size > 0
     params = fake.params[0]
     assert params["research.name"] == "index_enhance_v1"
-    assert params["research.select_top.k"] == 1
+    assert params["research.select.k"] == 1
     assert params["research.artifacts.lookback"] == 20
-    assert params["research.artifacts.profile.rows"] == 3
-    assert params["research.artifacts.profile.numeric.open.25pct"] == 10.5
+    assert "research.artifacts.profile.rows" not in params
+    assert "research.artifacts.profile.numeric.open.25pct" not in params
     assert "strategy.research_results" not in params
     assert all(not str(value).startswith("ResearchResult(") for value in params.values())
     artifacts = {name: artifact_path for name, artifact_path in fake.artifacts}

@@ -6,6 +6,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+import tradelearn.engine as bt
+from tradelearn.engine.analyzers import MLflowAnalyzer
 from tradelearn.lite import Backtest, Strategy
 from tradelearn.research import ResearchResult
 
@@ -102,8 +104,8 @@ def test_lite_log_mlflow_logs_stats_config_params_and_artifacts() -> None:
     assert fake.experiments == ["lite-exp"]
     assert fake.runs == [{"run_name": "lite-run", "nested": False}]
     assert fake.params[0]["fast"] == 3
-    assert fake.params[0]["config.broker.cash"] == 1000.0
-    assert fake.params[0]["config.broker.commission"] == 0.001
+    assert fake.params[0]["broker.initial_cash"] == 1000.0
+    assert fake.params[0]["broker.commission"] == 0.001
     assert fake.params[0]["tag.mode"] == "lite"
     assert fake.metrics[0]["final_value"] == stats.summary["final_value"]
     assert fake.metrics[0]["total_orders"] == 1.0
@@ -173,10 +175,106 @@ def test_lite_log_mlflow_logs_research_result_params_and_artifacts() -> None:
     )
 
     assert fake.params[0]["research.name"] == "lite_research"
-    assert fake.params[0]["research.select_top.k"] == 1
+    assert fake.params[0]["research.select.k"] == 1
     assert fake.params[0]["research.artifacts.lookback"] == 20
-    assert fake.params[0]["research.artifacts.profile.rows"] == 4
-    assert fake.params[0]["research.artifacts.profile.numeric.open.25pct"] == 10.5
+    assert "research.artifacts.profile.rows" not in fake.params[0]
+    assert "research.artifacts.profile.numeric.open.25pct" not in fake.params[0]
     assert fake.dicts == []
     assert ("artifacts.xlsx", None) in fake.artifacts
     assert ("csv", "csv") in fake.artifact_dirs
+
+
+def test_lite_and_engine_mlflow_params_use_shared_schema() -> None:
+    result = ResearchResult(
+        name="index_enhance_research",
+        params={
+            "select_top.k": 2,
+            "select_top.reverse": True,
+            "equal_weight.gross": 0.95,
+            "apply_constraints.max_weight": 0.5,
+            "apply_constraints.normalize": True,
+        },
+        artifacts={"lookback": 20},
+        weights=pd.Series({"primary": 0.5}, name="weight"),
+    )
+
+    class LiteResearchStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(2)
+
+        def next(self) -> None:
+            if len(self.data) == 3:
+                self.record_research_result(self.research_result)
+
+    class EngineResearchStrategy(bt.Strategy):
+        params = (("research_result", None), ("lookback", 20))
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.addminperiod(self.p.lookback + 1)
+
+        def next(self) -> None:
+            if len(self.data) == 3:
+                self.record_research_result(self.research_result)
+
+    lite_mlflow = FakeMLflow()
+    lite = Backtest(_data(), LiteResearchStrategy, cash=1000.0, commission=0.001)
+    lite.run(research_result=result)
+    lite.log_mlflow(
+        experiment_name="shared-schema",
+        params={"runtime.mode": "lite", "runtime.pipeline": False},
+        upload_artifacts=False,
+        mlflow_module=lite_mlflow,
+    )
+
+    engine_mlflow = FakeMLflow()
+    cerebro = bt.Cerebro()
+    cerebro.setcash(1000.0)
+    cerebro.setcommission(0.001)
+    cerebro.adddata(_data())
+    cerebro.addstrategy(EngineResearchStrategy, research_result=result, lookback=20)
+    cerebro.addanalyzer(
+        MLflowAnalyzer,
+        name="mlflow",
+        experiment="shared-schema",
+        params={"runtime.mode": "engine", "runtime.pipeline": False},
+        upload_artifacts=False,
+        mlflow_module=engine_mlflow,
+    )
+    cerebro.run()
+
+    lite_params = lite_mlflow.params[0]
+    engine_params = engine_mlflow.params[0]
+    expected = {
+        "broker.initial_cash",
+        "broker.final_cash",
+        "broker.final_value",
+        "broker.commission",
+        "broker.trade_on_close",
+        "research.name",
+        "research.select.k",
+        "research.select.reverse",
+        "research.weight.gross",
+        "research.constraints.max_weight",
+        "research.constraints.normalize",
+        "research.artifacts.lookback",
+    }
+    assert expected <= lite_params.keys()
+    assert expected <= engine_params.keys()
+    assert lite_params["broker.initial_cash"] == engine_params["broker.initial_cash"] == 1000.0
+    assert lite_params["broker.commission"] == engine_params["broker.commission"] == 0.001
+    assert (
+        lite_params["research.name"]
+        == engine_params["research.name"]
+        == "index_enhance_research"
+    )
+    assert lite_params["research.select.k"] == engine_params["research.select.k"] == 2
+    assert lite_params["runtime.mode"] == "lite"
+    assert engine_params["runtime.mode"] == "engine"
+    assert lite_params["runtime.pipeline"] is False
+    assert engine_params["runtime.pipeline"] is False
+    assert "broker.cash" not in engine_params
+    assert "broker.value" not in engine_params
+    assert "config.broker.cash" not in lite_params
+    assert "research.select_top.k" not in lite_params
+    assert "research.equal_weight.gross" not in lite_params

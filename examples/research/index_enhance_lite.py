@@ -72,7 +72,7 @@ if __name__ == "__main__":
         }
     ).dropna()
 
-    with ResearchRun("lite_index_enhance_research") as run:
+    with ResearchRun("index_enhance_research") as run:
         data_profile = ex.profile(bars)
         train_features, test_features = research.time_split(
             features,
@@ -123,6 +123,7 @@ if __name__ == "__main__":
             backtest.log_mlflow(
                 experiment_name="tradelearn-research-examples",
                 run_name="lite-index-enhance",
+                params={"runtime.mode": "lite", "runtime.pipeline": False},
                 upload_artifacts=upload_artifacts,
             )
             print("MLflow logging finished")

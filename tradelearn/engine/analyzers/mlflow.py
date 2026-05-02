@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import logging
-import math
-import re
 import tempfile
 from collections import Counter
 from pathlib import Path
@@ -10,14 +8,12 @@ from typing import Any
 
 from tradelearn.core import BrokerEvent
 from tradelearn.report.artifacts import market_data_from_strategy, write_artifact_bundle
+from tradelearn.report.mlflow import build_run_metrics, build_run_params
 
 from ..analyzer import Analyzer
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_MLFLOW_URI = "http://127.0.0.1:5050"
-_MLFLOW_PARAM_KEY_RE = re.compile(r"[^0-9A-Za-z_\-. :/]+")
-_RESEARCH_PARAM_KEYS = {"research_result", "research_result_", "research_results"}
-
 class MLflowAnalyzer(Analyzer):
     """Log strategy params, broker settings, stats, and artifacts to MLflow."""
 
@@ -33,6 +29,7 @@ class MLflowAnalyzer(Analyzer):
         ("artifact_path", None),
         ("log_report", True),
         ("log_plot", False),
+        ("params", None),
     )
 
     def __init__(self, **kwargs) -> None:
@@ -61,8 +58,14 @@ class MLflowAnalyzer(Analyzer):
             if self.p.log_artifacts is not None:
                 upload_artifacts = bool(self.p.log_artifacts)
             with mlflow.start_run(run_name=self.p.run_name, nested=bool(self.p.nested)):
-                mlflow.log_params(_params_payload(self.strategy))
-                mlflow.log_metrics(_metrics_payload(stats))
+                mlflow.log_params(
+                    build_run_params(
+                        stats,
+                        strategy=self.strategy,
+                        params=self.p.params,
+                    )
+                )
+                mlflow.log_metrics(build_run_metrics(stats))
                 if upload_artifacts:
                     _log_artifact_bundle(
                         mlflow,
@@ -167,152 +170,5 @@ def _join_artifact_path(base: str | None, name: str) -> str:
     return f"{base}/{name}" if base else name
 
 
-def _params_payload(strategy: Any) -> dict[str, Any]:
-    payload: dict[str, Any] = {}
-    if strategy is None:
-        return payload
-    if hasattr(strategy, "p"):
-        payload.update(_strategy_params(strategy.p.asdict()))
-    broker = getattr(strategy, "broker", None)
-    if broker is not None:
-        payload["broker.cash"] = broker.getcash()
-        payload["broker.value"] = broker.getvalue()
-        payload["broker.commission"] = getattr(
-            broker, "commission", getattr(broker, "commission_ratio", 0.0)
-        )
-    research_params = _research_params(strategy)
-    if research_params:
-        payload.update(_flatten_params("research", research_params))
-    return payload
-
-
-def _strategy_params(values: dict[str, Any]) -> dict[str, Any]:
-    payload: dict[str, Any] = {}
-    for key, value in values.items():
-        if key in _RESEARCH_PARAM_KEYS:
-            continue
-        payload[f"strategy.{_mlflow_param_key(key)}"] = _json_scalar(value)
-    return payload
-
-
-def _metrics_payload(stats: Any) -> dict[str, float]:
-    summary = _stats_summary(stats)
-    payload: dict[str, float] = {}
-    for key, value in summary.items():
-        if isinstance(value, bool) or not isinstance(value, int | float):
-            continue
-        metric = float(value)
-        if math.isfinite(metric):
-            payload[key] = metric
-    return payload
-
-
-def _stats_payload(stats: Any) -> dict[str, Any]:
-    return {
-        "summary": _stats_summary(stats),
-        "analyzers": _stats_field(stats, "analyzers", {}),
-        "config": _stats_field(stats, "config", {}),
-    }
-
-
-def _research_payload(strategy: Any) -> dict[str, Any]:
-    result = _first_attr(strategy, ("research_result", "research_result_"))
-    if result is None:
-        return {}
-    if hasattr(result, "to_dict"):
-        payload = result.to_dict()
-        return payload if isinstance(payload, dict) else {}
-    return _result_payload(result)
-
-
-def _research_params(strategy: Any) -> dict[str, Any]:
-    result = _first_attr(strategy, ("research_result", "research_result_"))
-    if result is None:
-        return {}
-    payload: dict[str, Any] = {}
-    name = getattr(result, "name", None)
-    if name:
-        payload["name"] = str(name)
-    params = getattr(result, "params", None)
-    if isinstance(params, dict):
-        payload.update(params)
-    artifacts = getattr(result, "artifacts", None)
-    if isinstance(artifacts, dict):
-        payload["artifacts"] = artifacts
-    return payload
-
-
-def _result_payload(result: Any) -> dict[str, Any]:
-    payload: dict[str, Any] = {}
-    scores = getattr(result, "scores", None)
-    if scores is not None:
-        payload["scores"] = _series_dict(scores)
-    selected = getattr(result, "selected", None)
-    if selected is not None:
-        payload["selected"] = [str(item) for item in selected]
-    weights = getattr(result, "weights", None)
-    if weights is not None:
-        payload["weights"] = _series_dict(weights)
-    return payload
-
-
-def _first_attr(obj: Any, names: tuple[str, ...]) -> Any:
-    if obj is None:
-        return None
-    for name in names:
-        if hasattr(obj, name):
-            return getattr(obj, name)
-    return None
-
-
-def _series_dict(values: Any) -> dict[str, Any]:
-    if hasattr(values, "to_dict"):
-        return {str(key): _json_scalar(value) for key, value in values.to_dict().items()}
-    if isinstance(values, dict):
-        return {str(key): _json_scalar(value) for key, value in values.items()}
-    return {}
-
-
-def _flatten_params(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
-    flattened: dict[str, Any] = {}
-    for key, value in values.items():
-        name = f"{prefix}.{_mlflow_param_key(key)}"
-        if isinstance(value, dict):
-            flattened.update(_flatten_params(name, value))
-        elif isinstance(value, list | tuple):
-            flattened[name] = ",".join(str(item) for item in value)
-        else:
-            flattened[name] = _json_scalar(value)
-    return flattened
-
-
-def _mlflow_param_key(value: Any) -> str:
-    text = str(value).replace("%", "pct")
-    text = _MLFLOW_PARAM_KEY_RE.sub("_", text).strip("._ ")
-    return text or "value"
-
-
-def _json_scalar(value: Any) -> Any:
-    if hasattr(value, "item"):
-        return value.item()
-    if isinstance(value, list | tuple):
-        return [_json_scalar(item) for item in value]
-    if isinstance(value, dict):
-        return {str(key): _json_scalar(item) for key, item in value.items()}
-    return value
-
-
 def _coerce_broker_event(event: BrokerEvent | dict[str, Any]) -> BrokerEvent:
     return BrokerEvent.coerce(event)
-
-
-def _stats_summary(stats: Any) -> dict[str, Any]:
-    if isinstance(stats, dict):
-        return dict(stats)
-    return dict(_stats_field(stats, "summary", {}) or {})
-
-
-def _stats_field(stats: Any, name: str, default: Any) -> Any:
-    if isinstance(stats, dict):
-        return stats.get(name, default)
-    return getattr(stats, name, default)
