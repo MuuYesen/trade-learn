@@ -403,8 +403,7 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
     positions = _positions_frame(strategy, fills, index)
     final_cash = float(strategy.broker.getcash())
     final_value = float(strategy.broker.getvalue())
-    total_trades = float(len(trades))
-    _, winning_trades = _trade_summary(strategy.broker)
+    total_trades, winning_trades = _trade_summary(strategy.broker)
     summary = {
         "bars": float(len(index)),
         "final_cash": final_cash,

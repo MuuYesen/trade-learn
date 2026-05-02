@@ -391,10 +391,22 @@ class Strategy(CoreStrategy):
             return self._buy_data(data=data, size=size, **kwargs)
         return self._sell_data(data=data, size=size, **kwargs)
 
-    def order_target_percent(self, *, ticker: str = None, target: float = 0.0, **kwargs: Any):
+    def order_target_percent(
+        self,
+        *,
+        ticker: str = None,
+        target: float = 0.0,
+        **kwargs: Any,
+    ):
+        snapshot_value = getattr(self, "_lite_target_portfolio_value", None)
+        portfolio_value = (
+            float(self.broker.getvalue())
+            if snapshot_value is None
+            else float(snapshot_value)
+        )
         return self.order_target_value(
             ticker=ticker,
-            target=float(target) * float(self.broker.getvalue()),
+            target=float(target) * portfolio_value,
             **kwargs,
         )
 
@@ -556,11 +568,18 @@ class Strategy(CoreStrategy):
             unknown_label="ticker(s)",
         )
         orders: list[Any] = []
-        for intent in intents:
-            side = Order.Buy if intent.side == "buy" else Order.Sell
-            order = self._submit_lite_order(side, intent.data, intent.qty, None, None, None)
-            if order is not None:
-                orders.append(order)
+        previous_equity_snapshot = getattr(self, "_lite_target_portfolio_value", None)
+        self._lite_target_portfolio_value = equity
+        try:
+            for intent in intents:
+                order = self.order_target_percent(
+                    ticker=intent.symbol,
+                    target=intent.target_weight,
+                )
+                if order is not None:
+                    orders.append(order)
+        finally:
+            self._lite_target_portfolio_value = previous_equity_snapshot
         return orders
 
     def _target_weight_data_map(self) -> dict[str, Any]:

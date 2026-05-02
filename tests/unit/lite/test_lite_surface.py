@@ -137,7 +137,8 @@ def test_lite_uses_backtrader_bar_indexing_with_lite_position_call() -> None:
 
     stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
 
-    assert stats["total_trades"] == 2
+    assert stats["total_trades"] == 1
+    assert len(stats.trades) == 2
     assert seen == {
         "close_now": 12.0,
         "close_prev": 11.0,
@@ -478,6 +479,30 @@ def test_lite_target_weights_targets_multi_asset_weights() -> None:
     orders = stats.strategy.orders
 
     assert [(order.data._name, order.size) for order in orders] == [("AAA", 22.0), ("BBB", 23.0)]
+
+
+def test_lite_target_weights_routes_through_target_percent_semantics() -> None:
+    data = {
+        "AAA": _data(),
+        "BBB": _data().assign(close=[20.0, 21.0, 22.0, 23.0, 24.0]),
+    }
+    seen: list[tuple[str | None, float]] = []
+
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(1)
+
+        def order_target_percent(self, *, ticker: str = None, target: float = 0.0, **kwargs):
+            seen.append((ticker, target))
+            return super().order_target_percent(ticker=ticker, target=target, **kwargs)
+
+        def next(self) -> None:
+            if len(self.data) == 2:
+                self.target_weights({"AAA": 0.25, "BBB": 0.50, "cash": 0.25})
+
+    Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run()
+
+    assert seen == [("AAA", 0.25), ("BBB", 0.50)]
 
 
 def test_lite_research_result_weights_current_bar_slice_records_result() -> None:
