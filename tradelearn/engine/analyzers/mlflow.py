@@ -16,6 +16,7 @@ from ..analyzer import Analyzer
 LOGGER = logging.getLogger(__name__)
 DEFAULT_MLFLOW_URI = "http://127.0.0.1:5050"
 _MLFLOW_PARAM_KEY_RE = re.compile(r"[^0-9A-Za-z_\-. :/]+")
+_RESEARCH_PARAM_KEYS = {"research_result", "research_result_", "research_results"}
 
 class MLflowAnalyzer(Analyzer):
     """Log strategy params, broker settings, stats, and artifacts to MLflow."""
@@ -171,9 +172,7 @@ def _params_payload(strategy: Any) -> dict[str, Any]:
     if strategy is None:
         return payload
     if hasattr(strategy, "p"):
-        payload.update(
-            {f"strategy.{key}": value for key, value in strategy.p.asdict().items()}
-        )
+        payload.update(_strategy_params(strategy.p.asdict()))
     broker = getattr(strategy, "broker", None)
     if broker is not None:
         payload["broker.cash"] = broker.getcash()
@@ -184,6 +183,15 @@ def _params_payload(strategy: Any) -> dict[str, Any]:
     research_params = _research_params(strategy)
     if research_params:
         payload.update(_flatten_params("research", research_params))
+    return payload
+
+
+def _strategy_params(values: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for key, value in values.items():
+        if key in _RESEARCH_PARAM_KEYS:
+            continue
+        payload[f"strategy.{_mlflow_param_key(key)}"] = _json_scalar(value)
     return payload
 
 

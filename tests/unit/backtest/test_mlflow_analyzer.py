@@ -299,6 +299,8 @@ def test_mlflow_analyzer_logs_research_result_from_strategy_params() -> None:
     assert params["research.artifacts.lookback"] == 20
     assert params["research.artifacts.profile.rows"] == 3
     assert params["research.artifacts.profile.numeric.open.25pct"] == 10.5
+    assert "strategy.research_results" not in params
+    assert all(not str(value).startswith("ResearchResult(") for value in params.values())
     artifacts = {name: artifact_path for name, artifact_path in fake.artifacts}
     assert artifacts["artifacts.xlsx"] == "research-run"
     assert ("csv", "research-run/csv") in fake.artifact_dirs
