@@ -107,10 +107,11 @@ if __name__ == "__main__":
             },
         )
 
+    test_bars = research.split_bars(bars, split=split)
     cerebro = bt.Cerebro(trade_on_close=True)
     cerebro.setcash(cash)
     cerebro.setcommission(commission)
-    cerebro.adddata(bars)
+    cerebro.adddata(test_bars)
     cerebro.addstrategy(
         EngineResearchIndexEnhance,
         research_result=research_result,

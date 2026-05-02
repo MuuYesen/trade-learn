@@ -30,6 +30,24 @@ def time_split(
     return train, test
 
 
+def split_bars(
+    bars: pd.DataFrame | pd.Series,
+    *,
+    split: Any,
+    level: str | int | None = None,
+) -> pd.DataFrame | pd.Series:
+    """Return bar data on or after ``split`` for test-period backtests.
+
+    This keeps research workflows explicit: full bars can be used to build
+    factors and fit preprocessing, while only the test period enters backtest
+    performance statistics.
+    """
+
+    values = _datetime_values(bars.index, level=level)
+    split_ts = _align_timestamp(pd.Timestamp(split), values)
+    return bars.loc[values >= split_ts].copy()
+
+
 def _datetime_values(index: pd.Index, *, level: str | int | None) -> pd.Index:
     if isinstance(index, pd.MultiIndex):
         selected_level = _datetime_level(index, level=level)
@@ -73,4 +91,4 @@ def _align_timestamp(split: pd.Timestamp, values: pd.Index) -> pd.Timestamp:
     return split.tz_convert(tz)
 
 
-__all__ = ["time_split"]
+__all__ = ["split_bars", "time_split"]

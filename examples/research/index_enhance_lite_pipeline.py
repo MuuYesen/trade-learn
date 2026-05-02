@@ -108,8 +108,9 @@ if __name__ == "__main__":
             },
         )
 
+    test_bars = research.split_bars(bars, split=split)
     backtest = tl.Backtest(
-        bars,
+        test_bars,
         LiteResearchIndexEnhance,
         cash=cash,
         commission=commission,

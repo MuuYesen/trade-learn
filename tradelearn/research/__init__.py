@@ -9,7 +9,7 @@ from tradelearn.research.run import (
     tracked,
 )
 from tradelearn.research.pipeline import Pipeline
-from tradelearn.research.split import time_split
+from tradelearn.research.split import split_bars, time_split
 
 __all__ = [
     "Pipeline",
@@ -22,6 +22,7 @@ __all__ = [
     "portfolio",
     "preprocess",
     "split",
+    "split_bars",
     "time_split",
     "tracked",
 ]
