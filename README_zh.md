@@ -34,6 +34,16 @@ trade-learn 解决的是这条链路：
 - 需要同时维护规则策略和模型策略，不想让两套策略使用完全不同的数据、报告和实验体系。
 - 想保留 Python 生态的灵活性，同时把撮合、订单推进和 portfolio 这类高频路径交给 Rust。
 
+## 不只是回测器
+
+trade-learn 希望把研究、回测、复盘和自动化协作放在一起：
+
+- **JupyterLab 友好**：适合在 notebook 里做数据探索、因子实验、模型训练和报告查看。
+- **MLflow 追踪**：参数、指标、报告、图表、CSV/XLSX artifacts 可以跟随一次实验一起记录，方便回看和对比。
+- **MCP 接入**：为后续自动化投研、工具调用、实验查询和智能助手工作流预留接口。
+- **HTML 报告**：回测结果、权益曲线、回撤、交易分布、因子分析可以输出成可分享的报告。
+- **同一条策略链路**：从离线研究到 paper/live 语义，尽量复用同一套数据、指标、权重和事件驱动运行模型。
+
 ## 一眼看懂
 
 | 你想做什么 | 用什么 |
@@ -44,6 +54,8 @@ trade-learn 解决的是这条链路：
 | 做训练集/测试集切分、预处理、选股、权重 | `tradelearn.research` |
 | 生成回测报告、收益/回撤/交易分析图 | `tradelearn.report` |
 | 记录参数、指标、HTML、CSV/XLSX artifacts | MLflow 集成 |
+| 在 notebook / lab 环境里做交互式研究 | `tradelearn.lab` / JupyterLab |
+| 接入自动化工具和智能助手工作流 | `tradelearn.mcp` |
 | 用 TDX / TA-Lib / TradingView / pandas-ta-classic 指标 | `tl.tdx` / `tl.talib` / `tl.tv` / `tl.pta` |
 
 最短路径：
@@ -158,7 +170,54 @@ trade-learn 明确区分两种运行方式：
 
 投研语义更适合批量研究：你先在策略外完成训练、打分和权重生成，再把测试期 bars 和 weights 交给回测。它的好处是快、清晰、方便复盘；要求是必须用 `split_bars()` 只回测测试期，避免训练期空仓或训练数据进入评估。
 
+简单例子：
+
+```python
+# 策略外：训练、预测、生成测试期目标权重
+features = feature_set.fit_transform(bars, include_target=True).dropna()
+train, test = research.time_split(features, split="2023-09-01", level="timestamp")
+train = pipeline.fit_transform(train)
+test = pipeline.transform(test)
+scores = scorer.predict(test)
+weights = weight_builder.build(scores)
+
+research_result = run.finish(features=test, scores=scores, weights=weights)
+test_bars = research.split_bars(bars, split="2023-09-01")
+
+
+class Portfolio(tl.Strategy):
+    def next(self):
+        if len(self.data) % 20 == 0:
+            self.target_weights(self.research_result.weights[0], close_missing=True)
+
+
+stats = tl.Backtest(test_bars, Portfolio).run(research_result=research_result)
+```
+
 实盘语义更接近未来 paper/live：策略每次 `next()` 只能看到当前及历史 bar，通过 `history_panel(lookback)` 取可见窗口，在策略内部完成预处理、预测和调仓。它的好处是和真实交易心智一致；代价是运行时计算更多。
+
+简单例子：
+
+```python
+class LiveLikePortfolio(bt.Strategy):
+    params = (
+        ("history_window", 21),
+        ("runtime_pipeline", None),
+        ("scorer", None),
+        ("weight_builder", None),
+    )
+
+    def next(self):
+        # 这里只能看到当前 bar 之前已经出现的数据
+        features = self.p.runtime_pipeline.transform(
+            self.history_panel(self.p.history_window)
+        )
+        scores = self.p.scorer.predict(features)
+        weights = self.p.weight_builder.build(scores)
+
+        for data in self.datas:
+            self.order_target_percent(data=data, target=weights.get(data._name))
+```
 
 ```mermaid
 flowchart TB
@@ -176,6 +235,17 @@ flowchart TB
 ```
 
 因此，trade-learn 的实盘扩展不是把回测同步撮合语义硬套到真实 broker 上，而是保留同一条事件链：策略产生订单意图，broker 执行并通过事件回流状态。QMT、paper 或其他 live adapter 应该接入这条 broker event 语义，而不是让策略假设“下单后立即成交”。
+
+## 为什么选择 Backtrader 风格
+
+trade-learn 选择 Backtrader 风格作为 Engine 主入口，不是为了复刻旧 API，而是因为它的专业交易语义足够完整：`Cerebro` 管理运行，`Strategy` 只表达策略，`DataFeed`、`Broker`、`Sizer`、`Analyzer`、`Observer` 各司其职。这个模型天然适合事件驱动、组合策略、多数据源、订单生命周期和未来实盘 adapter。
+
+对用户来说，这带来两个好处：
+
+- **专业策略容易迁移**：已有 Backtrader 心智的用户可以继续使用 `next()`、`buy()`、`sell()`、`close()`、`order_target_percent()`、Analyzer、Sizer 等概念。
+- **扩展边界清楚**：要加数据源就扩展 `DataFeed`，要加统计就写 `Analyzer`，要加仓位规则就写 `Sizer`，要接 paper/live broker 就接 broker event，不需要把所有逻辑塞进一个策略类。
+
+Lite 则保留更轻的写法，用来快速验证和教学；当策略变复杂、需要完整订单生命周期和扩展点时，可以自然迁移到 Engine。
 
 ## 当前定位
 
