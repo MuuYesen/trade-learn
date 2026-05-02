@@ -103,6 +103,80 @@ flowchart LR
     bars --> factors --> prep --> weights --> bt --> stats --> artifacts
 ```
 
+## Pipeline 体系
+
+trade-learn 的 Pipeline 不是为了把策略写成黑盒，而是为了把机器学习策略里最容易混乱的部分固定下来：**训练期只 fit，运行期只 transform / predict / build weights**。
+
+它主要由三类对象组成：
+
+- `FeatureSet`：把原始 OHLCV / panel 数据转换成特征和标签。
+- `Pipeline`：串联 `Winsorizer`、`Neutralizer`、`StandardScaler` 等预处理组件，统一提供 `fit()`、`transform()`、`fit_transform()`。
+- `ResearchRun` / `ResearchResult`：记录每一步研究动作、参数、scores、weights 和 artifacts，之后可以交给 Engine 或 Lite 执行。
+
+典型流程是：
+
+```text
+历史数据
+  -> FeatureSet 生成特征/标签
+  -> time_split 切分训练集/测试集
+  -> Pipeline.fit(train)
+  -> Pipeline.transform(test)
+  -> model.predict(test)
+  -> WeightBuilder 生成目标权重
+  -> Engine/Lite 执行 target_weights 或 order_target_percent
+  -> Stats / Report / MLflow
+```
+
+对应代码心智：
+
+```python
+features = feature_set.fit_transform(bars, include_target=True).dropna()
+train, test = research.time_split(features, split="2023-09-01", level="timestamp")
+
+pipeline = research.Pipeline([
+    research.preprocess.Winsorizer(columns=["alpha"]),
+    research.preprocess.Neutralizer(columns=["alpha"], exposures=["size"]),
+    research.preprocess.StandardScaler(columns=["alpha"]),
+])
+
+train = pipeline.fit_transform(train)
+test = pipeline.transform(test)
+scores = scorer.predict(test)
+weights = weight_builder.build(scores)
+```
+
+这套设计的重点是可复现：同一套特征、预处理参数、模型、权重和回测结果可以被记录到 `ResearchResult` 和 MLflow，而不是散在脚本变量里。
+
+## 投研语义与实盘语义
+
+trade-learn 明确区分两种运行方式：
+
+| 语义 | 适合场景 | 计算位置 | 回测执行 |
+|---|---|---|---|
+| 投研语义 | 离线因子检验、指数增强、模型评估 | 策略外提前算好 features / scores / weights | 策略读取 `research_result.weights` 下单 |
+| 实盘语义 | paper/live、接近真实交易的逐 bar 推理 | 策略内用 `history_panel()` 取当前可见窗口，再 transform / predict / build weights | 策略当场生成目标权重并下单 |
+
+投研语义更适合批量研究：你先在策略外完成训练、打分和权重生成，再把测试期 bars 和 weights 交给回测。它的好处是快、清晰、方便复盘；要求是必须用 `split_bars()` 只回测测试期，避免训练期空仓或训练数据进入评估。
+
+实盘语义更接近未来 paper/live：策略每次 `next()` 只能看到当前及历史 bar，通过 `history_panel(lookback)` 取可见窗口，在策略内部完成预处理、预测和调仓。它的好处是和真实交易心智一致；代价是运行时计算更多。
+
+```mermaid
+flowchart TB
+    offline[投研语义\n策略外计算 weights]
+    live[实盘语义\n策略内逐 bar 推理]
+    engine[Engine / Lite 策略入口]
+    runtime[backtest / paper / live runtime]
+    broker[Broker events\n成交 / 拒单 / 撤单 / 状态回流]
+
+    offline --> engine
+    live --> engine
+    engine --> runtime
+    runtime --> broker
+    broker --> engine
+```
+
+因此，trade-learn 的实盘扩展不是把回测同步撮合语义硬套到真实 broker 上，而是保留同一条事件链：策略产生订单意图，broker 执行并通过事件回流状态。QMT、paper 或其他 live adapter 应该接入这条 broker event 语义，而不是让策略假设“下单后立即成交”。
+
 ## 当前定位
 
 trade-learn 2.x 当前定位为：
