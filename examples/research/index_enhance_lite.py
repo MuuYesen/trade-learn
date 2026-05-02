@@ -14,6 +14,8 @@ import logging
 import warnings
 from pathlib import Path
 
+import pandas as pd
+
 import tradelearn.lite as tl
 import tradelearn.research as research
 import tradelearn.research.explore as ex
@@ -97,14 +99,37 @@ if __name__ == "__main__":
             exposures=test_exposures,
         )
         test_features = scaler.transform(test_features)
-        scores = test_features["alpha"].droplevel("timestamp")
-        selected = pf.select_top(scores.to_dict(), k=2)
-        weights = pf.equal_weight(selected, gross=0.95)
-        weights = pf.apply_constraints(weights, max_weight=0.5, normalize=True)
+        scores = test_features["alpha"].rename("score")
+        weight_parts = []
+        for dt, daily_scores in scores.groupby(level="timestamp"):
+            daily_scores = daily_scores.droplevel("timestamp").dropna()
+            if daily_scores.empty:
+                continue
+            selected = pf.select_top(daily_scores, k=2)
+            daily_weights = pf.equal_weight(selected, gross=0.95)
+            daily_weights = pf.apply_constraints(
+                daily_weights,
+                max_weight=0.5,
+                normalize=True,
+            )
+            daily_weights.index = pd.MultiIndex.from_product(
+                [[dt], daily_weights.index],
+                names=["timestamp", "symbol"],
+            )
+            weight_parts.append(daily_weights)
+        weights = (
+            pd.concat(weight_parts).sort_index().rename("weight")
+            if weight_parts
+            else pd.Series(
+                dtype="float64",
+                index=pd.MultiIndex.from_arrays([[], []], names=["timestamp", "symbol"]),
+                name="weight",
+            )
+        )
         research_result = run.finish(
             features=test_features,
             scores=scores,
-            selected=selected,
+            selected=None,
             weights=weights,
             artifacts={
                 "symbols": list(symbols),
@@ -143,8 +168,12 @@ if __name__ == "__main__":
 
     print("Lite research index enhance")
     print(f"  symbols={','.join(symbols)}")
-    print(f"  selected={research_result.selected}")
-    print(f"  weights={research_result.weights.to_dict()}")
+    print(
+        f"  weight_dates={research_result.weights.index.get_level_values('timestamp').nunique()}"
+    )
+    print(
+        f"  latest_weights={research_result.weights.groupby(level='timestamp').tail(2).to_dict()}"
+    )
     print(f"  final_value={stats.summary['final_value']:.2f}")
     print(f"  return_pct={stats.summary['return_pct']:.2f}")
     print(f"  report={report_path}")

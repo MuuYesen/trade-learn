@@ -127,8 +127,8 @@ def _research_weights(strategy: Any | None) -> pd.Series | None:
     weights = getattr(result, "weights", None)
     if weights is None:
         return None
-    if hasattr(weights, "raw") and hasattr(weights, "__getitem__"):
-        weights = weights[0]
+    if hasattr(weights, "raw"):
+        weights = weights.raw
     return pd.Series(weights, dtype="float64", name="weight")
 
 
