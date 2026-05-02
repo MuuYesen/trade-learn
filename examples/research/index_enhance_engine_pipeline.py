@@ -80,23 +80,24 @@ if __name__ == "__main__":
             split=split,
             level="timestamp",
         )
-        winsorizer = pp.Winsorizer(columns=["alpha"], limits=(0.05, 0.95))
-        neutralizer = pp.Neutralizer(columns=["alpha"], exposures=["size"], method="ols")
-        scaler = pp.StandardScaler(columns=["alpha"])
-        train_features = winsorizer.fit_transform(train_features)
-        train_features = neutralizer.fit_transform(train_features)
-        train_features = scaler.fit_transform(train_features)
-        test_features = winsorizer.transform(test_features)
-        test_features = neutralizer.transform(test_features)
-        test_features = scaler.transform(test_features)
+        preprocess = research.Pipeline(
+            [
+                pp.Winsorizer(columns=["alpha"], limits=(0.05, 0.95)),
+                pp.Neutralizer(columns=["alpha"], exposures=["size"], method="ols"),
+                pp.StandardScaler(columns=["alpha"]),
+            ]
+        )
+        train_features = preprocess.fit_transform(train_features)
+        test_features = preprocess.transform(test_features)
         scores = test_features["alpha"].rename("score")
-        selected = pf.select_top(scores, k=2)
-        weights = pf.equal_weight(selected, gross=0.95)
-        weights = pf.apply_constraints(weights, max_weight=0.5, normalize=True)
+        weights = pf.WeightBuilder(
+            select=pf.TopK(k=2),
+            weight=pf.EqualWeight(gross=0.95),
+            constrain=pf.Constraints(max_weight=0.5, normalize=True),
+        ).build(scores)
         research_result = run.finish(
             features=test_features,
             scores=scores,
-            selected=selected,
             weights=weights,
             artifacts={
                 "symbols": list(symbols),

@@ -49,7 +49,6 @@ if __name__ == "__main__":
     commission = 0.0003
     log_mlflow = True
     upload_artifacts = True
-    mlflow_uri = "http://127.0.0.1:5050"
 
     warnings.filterwarnings(
         "ignore",
@@ -84,24 +83,21 @@ if __name__ == "__main__":
         neutralizer = pp.Neutralizer(columns=["alpha"], exposures=["size"], method="ols")
         scaler = pp.StandardScaler(columns=["alpha"])
         train_features = winsorizer.fit_transform(train_features)
-        train_features = pp.winsorize_mad(train_features, columns=["alpha"], scale=5.0)
         train_features = neutralizer.fit_transform(train_features)
         train_features = scaler.fit_transform(train_features)
         test_features = winsorizer.transform(test_features)
-        test_features = pp.winsorize_mad(test_features, columns=["alpha"], scale=5.0)
         test_features = neutralizer.transform(test_features)
         test_features = scaler.transform(test_features)
         scores = test_features["alpha"].rename("score")
-        weights = pf.build_weights(
-            scores,
-            select=lambda s: pf.select_top(s, k=2),
-            optimize=lambda selected, s: pf.equal_weight(selected, gross=0.95),
-            constrain=lambda w: pf.apply_constraints(w, max_weight=0.5, normalize=True),
-        )
+
+        selected = pf.select_top(scores, k=2)
+        weights = pf.equal_weight(selected, gross=0.95)
+        weights = pf.apply_constraints(weights, max_weight=0.5, normalize=True)
+
         research_result = run.finish(
             features=test_features,
             scores=scores,
-            selected=None,
+            selected=selected,
             weights=weights,
             artifacts={
                 "symbols": list(symbols),
@@ -127,13 +123,7 @@ if __name__ == "__main__":
             backtest.log_mlflow(
                 experiment_name="tradelearn-research-examples",
                 run_name="lite-index-enhance",
-                uri=mlflow_uri,
-                params=research_result.params,
-                tags={"mode": "lite", "workflow": "research"},
-                log_mlflow=log_mlflow,
                 upload_artifacts=upload_artifacts,
-                log_report=upload_artifacts,
-                log_plot=False,
             )
             print("MLflow logging finished")
         except Exception as exc:

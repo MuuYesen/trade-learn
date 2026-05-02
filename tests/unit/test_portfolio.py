@@ -8,14 +8,11 @@ import pandas as pd
 import pytest
 
 from tradelearn.research.portfolio import (
-    EqualWeightOptimizer,
-    PortfolioConstraints,
     RiskfolioOptimizer,
-    RiskPolicy,
-    TopKSelector,
     apply_constraints,
     equal_weight,
     select_top,
+    topk_equal_weights,
 )
 
 
@@ -43,17 +40,7 @@ def test_select_top_can_filter_by_max_score() -> None:
     assert select_top(scores, k=3, reverse=False, max_score=0.18) == ["AAPL", "GOOG"]
 
 
-def test_portfolio_selector_optimizer_and_risk_policy_are_public() -> None:
-    scores = pd.Series({"AAPL": 0.10, "MSFT": 0.25, "GOOG": 0.18})
-    selected = TopKSelector(k=2).select(scores)
-    weights = EqualWeightOptimizer(gross=0.8).optimize(selected, scores)
-    adjusted = PortfolioConstraints(max_weight=0.4, normalize=True).apply(weights)
-
-    assert selected == ["MSFT", "GOOG"]
-    assert adjusted.to_dict() == {"MSFT": 0.5, "GOOG": 0.5}
-
-
-def test_portfolio_functions_build_weights_without_pipeline_classes() -> None:
+def test_portfolio_functions_compose_without_pipeline_classes() -> None:
     selected = ["MSFT", "GOOG"]
 
     weights = equal_weight(selected, gross=0.8)
@@ -62,8 +49,16 @@ def test_portfolio_functions_build_weights_without_pipeline_classes() -> None:
     assert adjusted.to_dict() == {"MSFT": 0.5, "GOOG": 0.5}
 
 
-def test_risk_policy_remains_compatibility_alias() -> None:
-    assert RiskPolicy is PortfolioConstraints
+def test_portfolio_topk_equal_weights_records_function_params() -> None:
+    index = pd.MultiIndex.from_product(
+        [["2026-01-01"], ["AAPL", "MSFT", "GOOG"]],
+        names=["timestamp", "symbol"],
+    )
+    scores = pd.Series([0.10, 0.25, 0.18], index=index)
+
+    weights = topk_equal_weights(scores, k=2, gross=0.8, max_weight=0.4, normalize=True)
+
+    assert weights.droplevel("timestamp").to_dict() == {"GOOG": 0.5, "MSFT": 0.5}
 
 
 def test_riskfolio_optimizer_requires_optional_dependency(monkeypatch) -> None:

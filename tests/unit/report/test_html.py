@@ -146,7 +146,7 @@ def test_reporter_html_expands_research_parameters_in_experiment_section(tmp_pat
                         "columns": ["value", "quality"],
                         "method": "ols",
                     },
-                    "selector": {"type": "TopKSelector", "k": 10},
+                    "select_top": {"k": 10},
                 },
             },
         },
@@ -157,9 +157,9 @@ def test_reporter_html_expands_research_parameters_in_experiment_section(tmp_pat
     assert "Research Parameters" in html
     assert "research.preprocess.columns" in html
     assert "value, quality" in html
-    assert "research.selector.k" in html
+    assert "research.select_top.k" in html
     stats = json.loads((tmp_path / "stats.json").read_text())
-    assert stats["config"]["research"]["selector"]["k"] == 10
+    assert stats["config"]["research"]["select_top"]["k"] == 10
 
 
 def test_reporter_html_adds_exposure_chart_for_multi_asset_positions(tmp_path) -> None:

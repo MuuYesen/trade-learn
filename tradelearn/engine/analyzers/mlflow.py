@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import tempfile
 from collections import Counter
 from pathlib import Path
@@ -14,6 +15,7 @@ from ..analyzer import Analyzer
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_MLFLOW_URI = "http://127.0.0.1:5050"
+_MLFLOW_PARAM_KEY_RE = re.compile(r"[^0-9A-Za-z_\-. :/]+")
 
 class MLflowAnalyzer(Analyzer):
     """Log strategy params, broker settings, stats, and artifacts to MLflow."""
@@ -266,7 +268,7 @@ def _series_dict(values: Any) -> dict[str, Any]:
 def _flatten_params(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
     flattened: dict[str, Any] = {}
     for key, value in values.items():
-        name = f"{prefix}.{key}"
+        name = f"{prefix}.{_mlflow_param_key(key)}"
         if isinstance(value, dict):
             flattened.update(_flatten_params(name, value))
         elif isinstance(value, list | tuple):
@@ -274,6 +276,12 @@ def _flatten_params(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
         else:
             flattened[name] = _json_scalar(value)
     return flattened
+
+
+def _mlflow_param_key(value: Any) -> str:
+    text = str(value).replace("%", "pct")
+    text = _MLFLOW_PARAM_KEY_RE.sub("_", text).strip("._ ")
+    return text or "value"
 
 
 def _json_scalar(value: Any) -> Any:

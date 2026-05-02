@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Hashable, Mapping, Sequence
+from collections.abc import Hashable, Mapping, Sequence
 from importlib import import_module
 from typing import Any
 
 import pandas as pd
 
-from tradelearn.research.run import suspend_tracking, tracked
+from tradelearn.research.run import current_run, suspend_tracking, tracked
 
 
 @tracked(category="portfolio")
@@ -19,8 +19,36 @@ def select_top(
     min_score: float | None = None,
     max_score: float | None = None,
     exclude_nan: bool = True,
+) -> list[Hashable] | pd.Series:
+    """Return top-k symbols, or a panel selection mask for panel scores."""
+    if _is_panel_series(scores):
+        return _select_top_panel(
+            pd.Series(scores),
+            k=k,
+            reverse=reverse,
+            min_score=min_score,
+            max_score=max_score,
+            exclude_nan=exclude_nan,
+        )
+    return _select_top_single(
+        scores,
+        k=k,
+        reverse=reverse,
+        min_score=min_score,
+        max_score=max_score,
+        exclude_nan=exclude_nan,
+    )
+
+
+def _select_top_single(
+    scores: Mapping[Hashable, float],
+    *,
+    k: int,
+    reverse: bool = True,
+    min_score: float | None = None,
+    max_score: float | None = None,
+    exclude_nan: bool = True,
 ) -> list[Hashable]:
-    """Return the top ``k`` keys by score."""
     if k <= 0:
         return []
 
@@ -41,13 +69,79 @@ def select_top(
     ]
 
 
+def _select_top_panel(
+    scores: pd.Series,
+    *,
+    k: int,
+    reverse: bool,
+    min_score: float | None,
+    max_score: float | None,
+    exclude_nan: bool,
+) -> pd.Series:
+    if k <= 0:
+        return _empty_panel_series("selected", dtype="bool")
+
+    parts: list[pd.Series] = []
+    time_level = _time_level(scores.index)
+    for timestamp, daily_scores in scores.groupby(level=time_level):
+        selected = _select_top_single(
+            daily_scores.droplevel(time_level),
+            k=k,
+            reverse=reverse,
+            min_score=min_score,
+            max_score=max_score,
+            exclude_nan=exclude_nan,
+        )
+        if not selected:
+            continue
+        index = pd.MultiIndex.from_product(
+            [[timestamp], [str(symbol) for symbol in selected]],
+            names=["timestamp", "symbol"],
+        )
+        parts.append(pd.Series(True, index=index, name="selected", dtype="bool"))
+    if not parts:
+        return _empty_panel_series("selected", dtype="bool")
+    return pd.concat(parts).sort_index().rename("selected")
+
+
 @tracked(category="portfolio")
-def equal_weight(selected: Sequence[Hashable], *, gross: float = 1.0) -> pd.Series:
-    """Return equal positive weights for selected symbols."""
-    if not selected:
+def equal_weight(
+    selected: Sequence[Hashable] | pd.Series,
+    *,
+    gross: float = 1.0,
+) -> pd.Series:
+    """Return equal positive weights for selected symbols or panel selections."""
+    if _is_panel_series(selected):
+        return _equal_weight_panel(pd.Series(selected), gross=gross)
+    if len(selected) == 0:
         return pd.Series(dtype="float64")
     weight = float(gross) / len(selected)
     return pd.Series({str(symbol): weight for symbol in selected}, dtype="float64")
+
+
+def _equal_weight_panel(selected: pd.Series, *, gross: float = 1.0) -> pd.Series:
+    if selected.empty:
+        return _empty_panel_series("weight")
+
+    selected = selected[selected.astype(bool)]
+    if selected.empty:
+        return _empty_panel_series("weight")
+
+    parts: list[pd.Series] = []
+    time_level = _time_level(selected.index)
+    for timestamp, daily_selected in selected.groupby(level=time_level):
+        symbols = daily_selected.index.droplevel(time_level).astype(str)
+        if symbols.empty:
+            continue
+        weight = float(gross) / len(symbols)
+        index = pd.MultiIndex.from_product(
+            [[timestamp], symbols],
+            names=["timestamp", "symbol"],
+        )
+        parts.append(pd.Series(weight, index=index, name="weight", dtype="float64"))
+    if not parts:
+        return _empty_panel_series("weight")
+    return pd.concat(parts).sort_index().rename("weight")
 
 
 @tracked(category="portfolio")
@@ -59,6 +153,28 @@ def apply_constraints(
     normalize: bool = False,
 ) -> pd.Series:
     """Apply clipping, pruning, and optional gross normalization."""
+    if _is_panel_series(weights):
+        return _apply_constraints_panel(
+            pd.Series(weights),
+            max_weight=max_weight,
+            min_abs_weight=min_abs_weight,
+            normalize=normalize,
+        )
+    return _apply_constraints_single(
+        weights,
+        max_weight=max_weight,
+        min_abs_weight=min_abs_weight,
+        normalize=normalize,
+    )
+
+
+def _apply_constraints_single(
+    weights: Mapping[Hashable, float] | pd.Series,
+    *,
+    max_weight: float | None,
+    min_abs_weight: float,
+    normalize: bool,
+) -> pd.Series:
     adjusted = pd.Series(weights, dtype="float64").copy()
     adjusted.index = adjusted.index.astype(str)
     if max_weight is not None:
@@ -73,23 +189,35 @@ def apply_constraints(
     return adjusted
 
 
-@tracked(category="portfolio")
-def build_weights(
-    scores: pd.Series,
+def _apply_constraints_panel(
+    weights: pd.Series,
     *,
-    select: Callable[[pd.Series], Sequence[Hashable]],
-    optimize: Callable[[Sequence[Hashable], pd.Series], Mapping[Hashable, float] | pd.Series],
-    constrain: Callable[[pd.Series], Mapping[Hashable, float] | pd.Series] | None = None,
+    max_weight: float | None,
+    min_abs_weight: float,
+    normalize: bool,
 ) -> pd.Series:
-    """Build MultiIndex(timestamp, symbol) weights from panel scores."""
+    if weights.empty:
+        return _empty_panel_series("weight")
 
-    return _build_weights(
-        scores,
-        select=select,
-        optimize=optimize,
-        constrain=constrain,
-        error_label="build_weights",
-    )
+    parts: list[pd.Series] = []
+    time_level = _time_level(weights.index)
+    for timestamp, daily_weights in weights.groupby(level=time_level):
+        adjusted = _apply_constraints_single(
+            daily_weights.droplevel(time_level),
+            max_weight=max_weight,
+            min_abs_weight=min_abs_weight,
+            normalize=normalize,
+        )
+        if adjusted.empty:
+            continue
+        index = pd.MultiIndex.from_product(
+            [[timestamp], adjusted.index.astype(str)],
+            names=["timestamp", "symbol"],
+        )
+        parts.append(pd.Series(adjusted.to_numpy(), index=index, name="weight"))
+    if not parts:
+        return _empty_panel_series("weight")
+    return pd.concat(parts).sort_index().astype("float64").rename("weight")
 
 
 @tracked(category="portfolio")
@@ -103,118 +231,70 @@ def topk_equal_weights(
     normalize: bool = False,
 ) -> pd.Series:
     """Build MultiIndex(timestamp, symbol) equal weights from panel scores."""
-
-    return _build_weights(
-        scores,
-        select=lambda daily_scores: select_top(daily_scores, k=k),
-        optimize=lambda selected, _daily_scores: equal_weight(selected, gross=gross),
-        constrain=lambda weights: apply_constraints(
+    with suspend_tracking():
+        selected = select_top(scores, k=k)
+        weights = equal_weight(selected, gross=gross)
+        return apply_constraints(
             weights,
             max_weight=max_weight,
             min_abs_weight=min_abs_weight,
             normalize=normalize,
-        ),
-        error_label="topk_equal_weights",
+        )
+
+
+def _is_panel_series(value: object) -> bool:
+    return (
+        isinstance(value, pd.Series)
+        and isinstance(value.index, pd.MultiIndex)
+        and value.index.nlevels >= 2
     )
 
 
-def _build_weights(
-    scores: pd.Series,
-    *,
-    select: Callable[[pd.Series], Sequence[Hashable]],
-    optimize: Callable[[Sequence[Hashable], pd.Series], Mapping[Hashable, float] | pd.Series],
-    constrain: Callable[[pd.Series], Mapping[Hashable, float] | pd.Series] | None = None,
-    error_label: str,
-) -> pd.Series:
-    score_series = pd.Series(scores, name=getattr(scores, "name", "score"))
-    if not isinstance(score_series.index, pd.MultiIndex) or score_series.index.nlevels < 2:
-        raise ValueError(f"{error_label} requires MultiIndex(timestamp, symbol) scores")
-
-    parts: list[pd.Series] = []
-    time_level = score_series.index.names[0] if score_series.index.names[0] is not None else 0
-    for timestamp, daily_scores in score_series.groupby(level=time_level):
-        daily_scores = daily_scores.droplevel(time_level).dropna()
-        if daily_scores.empty:
-            continue
-        with suspend_tracking():
-            selected = [str(symbol) for symbol in select(daily_scores)]
-        if not selected:
-            continue
-        with suspend_tracking():
-            daily_weights = pd.Series(optimize(selected, daily_scores), dtype="float64")
-        if constrain is not None:
-            with suspend_tracking():
-                daily_weights = pd.Series(constrain(daily_weights), dtype="float64")
-        daily_weights.index = daily_weights.index.astype(str)
-        daily_weights.index = pd.MultiIndex.from_product(
-            [[timestamp], daily_weights.index.astype(str)],
-            names=["timestamp", "symbol"],
-        )
-        parts.append(daily_weights)
-
-    if not parts:
-        return pd.Series(
-            dtype="float64",
-            index=pd.MultiIndex.from_arrays([[], []], names=["timestamp", "symbol"]),
-            name="weight",
-        )
-    return pd.concat(parts).sort_index().astype("float64").rename("weight")
+def _time_level(index: pd.MultiIndex) -> str | int:
+    return index.names[0] if index.names[0] is not None else 0
 
 
-class TopKSelector:
-    """Select the top-k symbols by score."""
+def _empty_panel_series(name: str, *, dtype: str = "float64") -> pd.Series:
+    return pd.Series(
+        dtype=dtype,
+        index=pd.MultiIndex.from_arrays([[], []], names=["timestamp", "symbol"]),
+        name=name,
+    )
 
-    def __init__(
-        self,
-        k: int,
-        *,
-        ascending: bool = False,
-        threshold: float | None = None,
-    ) -> None:
+
+class TopK:
+    """Object interface for top-k portfolio selection."""
+
+    def __init__(self, k: int, *, reverse: bool = True) -> None:
         self.k = int(k)
-        self.ascending = bool(ascending)
-        self.threshold = threshold
+        self.reverse = bool(reverse)
 
-    def select(self, scores: pd.Series) -> list[str]:
-        """Return selected symbol labels."""
-        return [
-            str(symbol)
-            for symbol in select_top(
-                scores.to_dict(),
-                k=self.k,
-                reverse=not self.ascending,
-                min_score=None if self.ascending else self.threshold,
-                max_score=self.threshold if self.ascending else None,
-            )
-        ]
+    def select(self, scores: Mapping[Hashable, float] | pd.Series) -> list[Hashable] | pd.Series:
+        """Return selected symbols or a panel selection mask."""
+        return select_top(scores, k=self.k, reverse=self.reverse)
 
     def get_params(self) -> dict[str, Any]:
-        """Return serializable selector parameters for tracking."""
-        return {
-            "type": type(self).__name__,
-            "k": self.k,
-            "ascending": self.ascending,
-            "threshold": self.threshold,
-        }
+        """Return serializable selector parameters."""
+        return {"type": type(self).__name__, "k": self.k, "reverse": self.reverse}
 
 
-class EqualWeightOptimizer:
-    """Build equal weights for selected symbols."""
+class EqualWeight:
+    """Object interface for equal-weight allocation."""
 
-    def __init__(self, gross: float = 1.0) -> None:
+    def __init__(self, *, gross: float = 1.0) -> None:
         self.gross = float(gross)
 
-    def optimize(self, selected: Sequence[str], scores: pd.Series | None = None) -> pd.Series:
-        """Return equal positive weights for selected symbols."""
+    def allocate(self, selected: Sequence[Hashable] | pd.Series) -> pd.Series:
+        """Return equal weights for selected symbols."""
         return equal_weight(selected, gross=self.gross)
 
     def get_params(self) -> dict[str, Any]:
-        """Return serializable optimizer parameters for tracking."""
+        """Return serializable allocation parameters."""
         return {"type": type(self).__name__, "gross": self.gross}
 
 
-class PortfolioConstraints:
-    """Post-process portfolio weights with simple portfolio constraints."""
+class Constraints:
+    """Object interface for portfolio weight constraints."""
 
     def __init__(
         self,
@@ -227,8 +307,8 @@ class PortfolioConstraints:
         self.min_abs_weight = float(min_abs_weight)
         self.normalize = bool(normalize)
 
-    def apply(self, weights: pd.Series) -> pd.Series:
-        """Apply clipping, pruning, and optional normalization."""
+    def apply(self, weights: Mapping[Hashable, float] | pd.Series) -> pd.Series:
+        """Apply clipping, pruning, and optional gross normalization."""
         return apply_constraints(
             weights,
             max_weight=self.max_weight,
@@ -237,7 +317,7 @@ class PortfolioConstraints:
         )
 
     def get_params(self) -> dict[str, Any]:
-        """Return serializable constraint parameters for tracking."""
+        """Return serializable constraint parameters."""
         return {
             "type": type(self).__name__,
             "max_weight": self.max_weight,
@@ -246,7 +326,53 @@ class PortfolioConstraints:
         }
 
 
-RiskPolicy = PortfolioConstraints
+class WeightBuilder:
+    """Build portfolio weights from scores with object-style components."""
+
+    def __init__(
+        self,
+        *,
+        select: Any,
+        weight: Any,
+        constrain: Any | None = None,
+    ) -> None:
+        self.select = select
+        self.weight = weight
+        self.constrain = constrain
+
+    def build(self, scores: Mapping[Hashable, float] | pd.Series) -> pd.Series:
+        """Build target weights from scores."""
+        _record_weight_builder_step(self)
+        with suspend_tracking():
+            selected = self.select.select(scores)
+            weights = self.weight.allocate(selected)
+            if self.constrain is not None:
+                weights = self.constrain.apply(weights)
+        return pd.Series(weights, dtype="float64", name="weight")
+
+    def get_params(self) -> dict[str, Any]:
+        """Return flat serializable builder parameters for tracking."""
+        params: dict[str, Any] = {}
+        params.update(_component_params("select", self.select))
+        params.update(_component_params("weight", self.weight))
+        if self.constrain is not None:
+            params.update(_component_params("constrain", self.constrain))
+        return params
+
+
+def _component_params(prefix: str, component: Any) -> dict[str, Any]:
+    raw = (
+        component.get_params()
+        if hasattr(component, "get_params")
+        else {"type": type(component).__name__}
+    )
+    return {f"{prefix}.{key}": value for key, value in raw.items()}
+
+
+def _record_weight_builder_step(builder: WeightBuilder) -> None:
+    run = current_run()
+    if run is not None:
+        run.record_step("WeightBuilder", "portfolio", builder.get_params())
 
 
 class RiskfolioOptimizer:
@@ -351,13 +477,12 @@ def _weights_series(result: Any) -> pd.Series:
 
 
 __all__ = [
-    "EqualWeightOptimizer",
-    "PortfolioConstraints",
-    "RiskPolicy",
+    "Constraints",
+    "EqualWeight",
     "RiskfolioOptimizer",
-    "TopKSelector",
+    "TopK",
+    "WeightBuilder",
     "apply_constraints",
-    "build_weights",
     "equal_weight",
     "select_top",
     "topk_equal_weights",

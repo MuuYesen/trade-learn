@@ -3,15 +3,20 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+import tradelearn.research as research
 from tradelearn.research import ResearchRun, ResearchStep
 from tradelearn.research.portfolio import (
+    Constraints,
+    EqualWeight,
+    TopK,
+    WeightBuilder,
     apply_constraints,
-    build_weights,
     equal_weight,
     select_top,
     topk_equal_weights,
 )
 from tradelearn.research.preprocess import (
+    MADWinsorizer,
     Neutralizer,
     StandardScaler,
     Winsorizer,
@@ -20,7 +25,6 @@ from tradelearn.research.preprocess import (
     fill_missing,
     label_by_quantile,
     rank,
-    winsorize_mad,
 )
 
 
@@ -107,7 +111,7 @@ def test_topk_equal_weights_builds_multi_period_weight_panel() -> None:
     assert [step.name for step in result.steps] == ["topk_equal_weights"]
 
 
-def test_build_weights_composes_selection_optimization_and_constraints() -> None:
+def test_portfolio_functions_pipe_multi_period_scores_to_weights() -> None:
     scores = pd.Series(
         [0.1, 0.3, 0.4, 0.2],
         index=pd.MultiIndex.from_tuples(
@@ -122,13 +126,12 @@ def test_build_weights_composes_selection_optimization_and_constraints() -> None
         name="score",
     )
 
-    weights = build_weights(
-        scores,
-        select=lambda s: select_top(s, k=1),
-        optimize=lambda selected, s: equal_weight(selected, gross=0.9),
-        constrain=lambda w: apply_constraints(w, max_weight=0.8),
-    )
+    selected = select_top(scores, k=1)
+    weights = equal_weight(selected, gross=0.9)
+    weights = apply_constraints(weights, max_weight=0.8)
 
+    assert selected.index.names == ["timestamp", "symbol"]
+    assert selected.name == "selected"
     assert weights.index.names == ["timestamp", "symbol"]
     assert weights.name == "weight"
     assert weights.to_dict() == {
@@ -136,15 +139,15 @@ def test_build_weights_composes_selection_optimization_and_constraints() -> None
         (pd.Timestamp("2024-01-02", tz="UTC"), "AAA"): 0.8,
     }
 
-    with ResearchRun("weights-builder") as run:
-        build_weights(
-            scores,
-            select=lambda s: select_top(s, k=1),
-            optimize=lambda selected, s: equal_weight(selected, gross=0.9),
-        )
-        result = run.finish()
+    with ResearchRun("panel-selected") as run:
+        result = run.finish(selected=selected, weights=weights)
 
-    assert [step.name for step in result.steps] == ["build_weights"]
+    assert isinstance(result.selected, pd.Series)
+    assert result.selected.index.names == ["timestamp", "symbol"]
+    assert result.to_dict()["result"]["selected"] == {
+        str((pd.Timestamp("2024-01-01", tz="UTC"), "BBB")): True,
+        str((pd.Timestamp("2024-01-02", tz="UTC"), "AAA")): True,
+    }
 
 
 def test_research_run_supports_static_method_tracking() -> None:
@@ -242,7 +245,7 @@ def test_preprocess_migrates_1x_group_fill_mad_winsorize_and_quantile_labels() -
             group="ind_code",
             fallback="mean",
         )
-        clipped = winsorize_mad(filled, columns=["alpha"], scale=1.0)
+        clipped = MADWinsorizer(columns=["alpha"], scale=1.0).fit_transform(filled)
         labeled = label_by_quantile(
             clipped,
             target="return",
@@ -258,11 +261,11 @@ def test_preprocess_migrates_1x_group_fill_mad_winsorize_and_quantile_labels() -
     assert labeled["label"].dropna().tolist() == [1, 0]
     assert [step.name for step in result.steps] == [
         "fill_by_group",
-        "winsorize_mad",
+        "MADWinsorizer",
         "label_by_quantile",
     ]
     assert result.params["fill_by_group.group"] == "ind_code"
-    assert result.params["winsorize_mad.scale"] == 1.0
+    assert result.params["MADWinsorizer.scale"] == 1.0
     assert result.params["label_by_quantile.target"] == "return"
 
 
@@ -282,6 +285,94 @@ def test_winsorizer_uses_train_bounds_on_test_data() -> None:
         "limits": (0.0, 0.5),
         "by": None,
     }
+
+
+def test_mad_winsorizer_uses_train_bounds_on_test_data() -> None:
+    train = pd.DataFrame({"alpha": [1.0, 2.0, 100.0]})
+    test = pd.DataFrame({"alpha": [-100.0, 3.0, 200.0]})
+
+    transformer = MADWinsorizer(columns=["alpha"], scale=1.0)
+    fitted = transformer.fit(train)
+    transformed = transformer.transform(test)
+
+    assert fitted is transformer
+    assert transformed["alpha"].tolist() == [1.0, 3.0, 3.0]
+    assert transformer.get_params() == {
+        "type": "MADWinsorizer",
+        "columns": ["alpha"],
+        "scale": 1.0,
+        "by": None,
+    }
+
+
+def test_research_pipeline_fits_train_and_transforms_test() -> None:
+    train = pd.DataFrame(
+        {"alpha": [1.0, 2.0, 100.0], "size": [1.0, 2.0, 3.0]}
+    )
+    test = pd.DataFrame(
+        {"alpha": [-100.0, 3.0, 200.0], "size": [1.0, 2.0, 3.0]}
+    )
+
+    with ResearchRun("pipeline") as run:
+        preprocess = research.Pipeline(
+            [
+                Winsorizer(columns=["alpha"], limits=(0.0, 0.5)),
+                Neutralizer(columns=["alpha"], exposures=["size"]),
+                StandardScaler(columns=["alpha"]),
+            ]
+        )
+        train_out = preprocess.fit_transform(train)
+        test_out = preprocess.transform(test)
+        result = run.finish(features=test_out)
+
+    assert list(train_out.columns) == ["alpha", "size"]
+    assert list(test_out.columns) == ["alpha", "size"]
+    assert [step.name for step in result.steps] == [
+        "Pipeline",
+        "Winsorizer",
+        "Neutralizer",
+        "StandardScaler",
+    ]
+    assert result.params["Pipeline.steps"] == [
+        "Winsorizer",
+        "Neutralizer",
+        "StandardScaler",
+    ]
+    assert preprocess.get_params()["steps"][0]["type"] == "Winsorizer"
+
+
+def test_weight_builder_builds_panel_weights_from_scores() -> None:
+    scores = pd.Series(
+        [0.1, 0.3, 0.4, 0.2],
+        index=pd.MultiIndex.from_tuples(
+            [
+                (pd.Timestamp("2024-01-01", tz="UTC"), "AAA"),
+                (pd.Timestamp("2024-01-01", tz="UTC"), "BBB"),
+                (pd.Timestamp("2024-01-02", tz="UTC"), "AAA"),
+                (pd.Timestamp("2024-01-02", tz="UTC"), "BBB"),
+            ],
+            names=["timestamp", "symbol"],
+        ),
+        name="score",
+    )
+
+    with ResearchRun("weights") as run:
+        builder = WeightBuilder(
+            select=TopK(k=1),
+            weight=EqualWeight(gross=0.9),
+            constrain=Constraints(max_weight=0.8),
+        )
+        weights = builder.build(scores)
+        result = run.finish(scores=scores, weights=weights)
+
+    assert weights.to_dict() == {
+        (pd.Timestamp("2024-01-01", tz="UTC"), "BBB"): 0.8,
+        (pd.Timestamp("2024-01-02", tz="UTC"), "AAA"): 0.8,
+    }
+    assert [step.name for step in result.steps] == ["WeightBuilder"]
+    assert result.params["WeightBuilder.select.type"] == "TopK"
+    assert result.params["WeightBuilder.weight.type"] == "EqualWeight"
+    assert result.params["WeightBuilder.constrain.type"] == "Constraints"
 
 
 def test_standard_scaler_fit_transform_matches_fit_then_transform() -> None:

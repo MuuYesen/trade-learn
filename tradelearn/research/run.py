@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import contextvars
 import inspect
-from contextlib import contextmanager
 from collections.abc import Callable, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any
@@ -45,7 +45,7 @@ class ResearchResult:
     selected_features: Sequence[str] | None = None
     model: Any | None = None
     scores: pd.Series | None = None
-    selected: Sequence[Any] | None = None
+    selected: Any | None = None
     weights: pd.Series | None = None
     artifacts: dict[str, Any] = field(default_factory=dict)
 
@@ -66,7 +66,7 @@ class ResearchResult:
         if self.scores is not None:
             result["scores"] = _series_dict(self.scores)
         if self.selected is not None:
-            result["selected"] = [str(item) for item in self.selected]
+            result["selected"] = _selected_payload(self.selected)
         if self.weights is not None:
             result["weights"] = _series_dict(self.weights)
         if result:
@@ -193,7 +193,7 @@ class ResearchRun:
         selected_features: Sequence[str] | None = None,
         model: Any | None = None,
         scores: Any | None = None,
-        selected: Sequence[Any] | None = None,
+        selected: Any | None = None,
         weights: Any | None = None,
         artifacts: dict[str, Any] | None = None,
     ) -> ResearchResult:
@@ -211,7 +211,7 @@ class ResearchRun:
                 if scores is None
                 else pd.Series(scores, name=getattr(scores, "name", "score"))
             ),
-            selected=None if selected is None else [str(item) for item in selected],
+            selected=_coerce_selected(selected),
             weights=None if weights is None else pd.Series(weights, dtype="float64", name="weight"),
             artifacts=dict(artifacts or {}),
         )
@@ -230,12 +230,6 @@ class ResearchRun:
             from tradelearn.research.preprocess import fill_by_group
 
             return fill_by_group(*args, **kwargs)
-
-        @staticmethod
-        def winsorize_mad(*args: Any, **kwargs: Any) -> Any:
-            from tradelearn.research.preprocess import winsorize_mad
-
-            return winsorize_mad(*args, **kwargs)
 
         @staticmethod
         def clip_outliers(*args: Any, **kwargs: Any) -> Any:
@@ -455,6 +449,20 @@ def _flatten_step_params(steps: Sequence[ResearchStep]) -> dict[str, Any]:
 def _series_dict(values: Any) -> dict[str, Any]:
     series = pd.Series(values)
     return {str(key): _json_safe(value) for key, value in series.to_dict().items()}
+
+
+def _coerce_selected(selected: Any | None) -> Any | None:
+    if selected is None:
+        return None
+    if isinstance(selected, pd.Series):
+        return pd.Series(selected, name=getattr(selected, "name", "selected"))
+    return [str(item) for item in selected]
+
+
+def _selected_payload(selected: Any) -> Any:
+    if isinstance(selected, pd.Series):
+        return _series_dict(selected)
+    return [str(item) for item in selected]
 
 
 def _json_safe(value: Any) -> Any:

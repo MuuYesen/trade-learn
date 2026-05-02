@@ -250,7 +250,10 @@ def test_mlflow_analyzer_logs_research_result_from_strategy_params() -> None:
             ResearchStep("select_top", "portfolio", {"k": 1}),
         ],
         params={"winsorize.columns": ["alpha"], "select_top.k": 1},
-        artifacts={"lookback": 20, "profile": {"rows": 3}},
+        artifacts={
+            "lookback": 20,
+            "profile": {"rows": 3, "numeric": {"open": {"25%": 10.5}}},
+        },
         scores=pd.Series({"AAA": 0.2, "BBB": 0.8}, name="score"),
         selected=["BBB"],
         weights=pd.Series({"BBB": 0.5}, name="weight"),
@@ -295,6 +298,7 @@ def test_mlflow_analyzer_logs_research_result_from_strategy_params() -> None:
     assert params["research.select_top.k"] == 1
     assert params["research.artifacts.lookback"] == 20
     assert params["research.artifacts.profile.rows"] == 3
+    assert params["research.artifacts.profile.numeric.open.25pct"] == 10.5
     artifacts = {name: artifact_path for name, artifact_path in fake.artifacts}
     assert artifacts["artifacts.xlsx"] == "research-run"
     assert ("csv", "research-run/csv") in fake.artifact_dirs

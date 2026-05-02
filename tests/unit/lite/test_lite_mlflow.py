@@ -141,7 +141,10 @@ def test_lite_log_mlflow_logs_research_result_params_and_artifacts() -> None:
     result = ResearchResult(
         name="lite_research",
         params={"select_top.k": 1},
-        artifacts={"lookback": 20, "profile": {"rows": 4}},
+        artifacts={
+            "lookback": 20,
+            "profile": {"rows": 4, "numeric": {"open": {"25%": 10.5}}},
+        },
         scores=pd.Series({"primary": 1.0}, name="score"),
         selected=["primary"],
         weights=pd.Series({"primary": 0.5}, name="weight"),
@@ -173,6 +176,7 @@ def test_lite_log_mlflow_logs_research_result_params_and_artifacts() -> None:
     assert fake.params[0]["research.select_top.k"] == 1
     assert fake.params[0]["research.artifacts.lookback"] == 20
     assert fake.params[0]["research.artifacts.profile.rows"] == 4
+    assert fake.params[0]["research.artifacts.profile.numeric.open.25pct"] == 10.5
     assert fake.dicts == []
     assert ("artifacts.xlsx", None) in fake.artifacts
     assert ("csv", "csv") in fake.artifact_dirs

@@ -42,12 +42,16 @@ def test_research_examples_cover_lite_and_engine_workflows() -> None:
     root = Path(__file__).parents[3]
     examples = root / "examples" / "research"
 
-    expected = {
+    direct_expected = {
         "index_enhance_lite.py": ("import tradelearn.lite as tl", "tl.Backtest"),
         "index_enhance_engine.py": ("import tradelearn.engine as bt", "bt.Cerebro"),
     }
+    pipeline_expected = {
+        "index_enhance_lite_pipeline.py": ("import tradelearn.lite as tl", "tl.Backtest"),
+        "index_enhance_engine_pipeline.py": ("import tradelearn.engine as bt", "bt.Cerebro"),
+    }
 
-    for name, api_markers in expected.items():
+    for name, api_markers in {**direct_expected, **pipeline_expected}.items():
         source = (examples / name).read_text()
         assert "TradingViewProvider" in source
         assert "MarketPanel" in source
@@ -58,25 +62,31 @@ def test_research_examples_cover_lite_and_engine_workflows() -> None:
         assert "import tradelearn.research.portfolio as pf" in source
         assert "ex.profile" in source
         assert "pp.Winsorizer" in source
-        assert "pp.winsorize_mad" in source
         assert "pp.Neutralizer" in source
         assert "pp.StandardScaler" in source
         assert "research.time_split" in source
         assert ".fit_transform(train_features" in source
         assert ".transform(test_features" in source
-        assert "pf.build_weights" in source
-        assert "pf.select_top" in source
-        assert "pf.equal_weight" in source
-        assert "pf.apply_constraints" in source
+        if name in pipeline_expected:
+            assert "research.Pipeline" in source
+            assert "pf.WeightBuilder" in source
+            assert "pf.TopK" in source
+            assert "pf.EqualWeight" in source
+            assert "pf.Constraints" in source
+        else:
+            assert "research.Pipeline" not in source
+            assert "pf.select_top" in source
+            assert "pf.equal_weight" in source
+            assert "pf.apply_constraints" in source
         assert "research_result.weights[0]" in source
         assert "target_weights" in source
         assert ".report(" in source
         assert "os.getenv" not in source
         assert "TRADELEARN_DEMO_MLFLOW" not in source
-        assert "mlflow_uri" in source
+        assert "mlflow_uri" not in source
         assert "mlflow_username" not in source
         assert "mlflow_password" not in source
-        assert "127.0.0.1:5050" in source
+        assert "127.0.0.1:5050" not in source
         assert "MLFLOW_TRACKING_USERNAME" not in source
         assert "MLFLOW_TRACKING_PASSWORD" not in source
         assert "os.environ" not in source
@@ -87,7 +97,12 @@ def test_research_examples_cover_lite_and_engine_workflows() -> None:
 def test_research_examples_keep_runtime_flow_in_main() -> None:
     root = Path(__file__).parents[3]
 
-    for name in ("index_enhance_lite.py", "index_enhance_engine.py"):
+    for name in (
+        "index_enhance_lite.py",
+        "index_enhance_engine.py",
+        "index_enhance_lite_pipeline.py",
+        "index_enhance_engine_pipeline.py",
+    ):
         path = root / "examples" / "research" / name
         tree = ast.parse(path.read_text())
         body = list(tree.body)

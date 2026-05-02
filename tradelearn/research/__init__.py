@@ -8,9 +8,11 @@ from tradelearn.research.run import (
     current_run,
     tracked,
 )
+from tradelearn.research.pipeline import Pipeline
 from tradelearn.research.split import time_split
 
 __all__ = [
+    "Pipeline",
     "ResearchResult",
     "ResearchRun",
     "ResearchStep",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,7 @@ from typing import Any
 from tradelearn.report.artifacts import market_data_from_strategy, write_artifact_bundle
 
 DEFAULT_MLFLOW_URI = "http://127.0.0.1:5050"
+_MLFLOW_PARAM_KEY_RE = re.compile(r"[^0-9A-Za-z_\-. :/]+")
 
 
 def log_lite_run(
@@ -187,7 +189,7 @@ def _stats_payload(stats: Any) -> dict[str, Any]:
 def _flatten_params(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
     payload: dict[str, Any] = {}
     for key, value in values.items():
-        name = f"{prefix}.{key}"
+        name = f"{prefix}.{_mlflow_param_key(key)}"
         if isinstance(value, dict):
             payload.update(_flatten_params(name, value))
         elif isinstance(value, list | tuple):
@@ -195,6 +197,12 @@ def _flatten_params(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
         else:
             payload[name] = _json_scalar(value)
     return payload
+
+
+def _mlflow_param_key(value: Any) -> str:
+    text = str(value).replace("%", "pct")
+    text = _MLFLOW_PARAM_KEY_RE.sub("_", text).strip("._ ")
+    return text or "value"
 
 
 def _json_scalar(value: Any) -> Any:

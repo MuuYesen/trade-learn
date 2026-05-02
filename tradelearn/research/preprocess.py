@@ -84,30 +84,6 @@ def clip_outliers(
 
 
 @tracked(category="preprocess")
-def winsorize_mad(
-    data: pd.DataFrame,
-    *,
-    columns: Sequence[str] | None = None,
-    scale: float = 5.0,
-) -> pd.DataFrame:
-    """Clip selected columns by median absolute deviation.
-
-    This is the current API equivalent of 1.x ``Outlier.winorize_med``.
-    """
-    frame = pd.DataFrame(data).copy()
-    for column in _columns(frame, columns):
-        values = frame[column].astype("float64")
-        median = values.median()
-        mad = (values - median).abs().median()
-        if pd.isna(mad):
-            continue
-        lower = median - float(scale) * mad
-        upper = median + float(scale) * mad
-        frame[column] = values.clip(lower=lower, upper=upper)
-    return frame
-
-
-@tracked(category="preprocess")
 def rank(
     data: pd.DataFrame | pd.Series,
     *,
@@ -254,6 +230,87 @@ class Winsorizer:
         }
 
 
+class MADWinsorizer:
+    """Train/test-safe median absolute deviation clipping transformer."""
+
+    def __init__(
+        self,
+        *,
+        columns: Sequence[str] | None = None,
+        scale: float = 5.0,
+        by: str | Sequence[str] | None = None,
+    ) -> None:
+        self.columns = None if columns is None else [str(column) for column in columns]
+        self.scale = float(scale)
+        self.by = by
+        self.columns_: list[str] | None = None
+        self.lower_: dict[str, float] | None = None
+        self.upper_: dict[str, float] | None = None
+        self.group_lower_: dict[tuple[Any, ...], dict[str, float]] | None = None
+        self.group_upper_: dict[tuple[Any, ...], dict[str, float]] | None = None
+
+    def fit(self, data: pd.DataFrame | pd.Series) -> MADWinsorizer:
+        """Fit MAD clipping bounds from training data."""
+        _record_transformer_step(self)
+        frame, _ = _as_frame(data)
+        self.columns_ = _columns(frame, self.columns)
+        self.lower_, self.upper_ = _mad_bounds(frame, self.columns_, self.scale)
+        if self.by is not None:
+            self.group_lower_ = {}
+            self.group_upper_ = {}
+            keys = _group_keys(frame, self.by)
+            for key, group in frame.groupby(keys, sort=False, dropna=False):
+                normalized = _normalise_group_key(key)
+                lower, upper = _mad_bounds(group, self.columns_, self.scale)
+                self.group_lower_[normalized] = lower
+                self.group_upper_[normalized] = upper
+        return self
+
+    def transform(self, data: pd.DataFrame | pd.Series) -> pd.DataFrame | pd.Series:
+        """Clip data using fitted training MAD bounds."""
+        _require_fitted(self.columns_, self.lower_, self.upper_)
+        frame, restore = _as_frame(data)
+        assert self.columns_ is not None
+        assert self.lower_ is not None
+        assert self.upper_ is not None
+
+        def transform_group(
+            group: pd.DataFrame,
+            key: tuple[Any, ...] | None = None,
+        ) -> pd.DataFrame:
+            group = group.copy()
+            lower = self.lower_
+            upper = self.upper_
+            if key is not None and self.group_lower_ is not None and self.group_upper_ is not None:
+                lower = self.group_lower_.get(key, self.lower_)
+                upper = self.group_upper_.get(key, self.upper_)
+            for column in self.columns_:
+                group[column] = group[column].clip(lower=lower[column], upper=upper[column])
+            return group
+
+        if self.by is None:
+            return restore(transform_group(frame))
+        keys = _group_keys(frame, self.by)
+        pieces = [
+            transform_group(group, _normalise_group_key(key))
+            for key, group in frame.groupby(keys, sort=False, dropna=False)
+        ]
+        return restore(pd.concat(pieces).reindex(frame.index))
+
+    def fit_transform(self, data: pd.DataFrame | pd.Series) -> pd.DataFrame | pd.Series:
+        """Fit MAD bounds and return transformed data."""
+        return self.fit(data).transform(data)
+
+    def get_params(self) -> dict[str, Any]:
+        """Return serializable transformer parameters for tracking artifacts."""
+        return {
+            "type": type(self).__name__,
+            "columns": self.columns,
+            "scale": self.scale,
+            "by": self.by,
+        }
+
+
 class StandardScaler:
     """Train/test-safe z-score transformer."""
 
@@ -388,7 +445,12 @@ class Neutralizer:
             self.coef_[column] = beta
         return self
 
-    def transform(self, data: pd.DataFrame, *, exposures: pd.DataFrame | None = None) -> pd.DataFrame:
+    def transform(
+        self,
+        data: pd.DataFrame,
+        *,
+        exposures: pd.DataFrame | None = None,
+    ) -> pd.DataFrame:
         """Neutralize data using fitted training exposure coefficients."""
         _require_fitted(self.columns_, self.exposure_columns_, self.coef_)
         frame = pd.DataFrame(data).copy()
@@ -405,7 +467,12 @@ class Neutralizer:
             frame[column] = y - design @ self.coef_[column]
         return frame
 
-    def fit_transform(self, data: pd.DataFrame, *, exposures: pd.DataFrame | None = None) -> pd.DataFrame:
+    def fit_transform(
+        self,
+        data: pd.DataFrame,
+        *,
+        exposures: pd.DataFrame | None = None,
+    ) -> pd.DataFrame:
         """Fit coefficients and return neutralized data."""
         return self.fit(data, exposures=exposures).transform(data, exposures=exposures)
 
@@ -461,6 +528,26 @@ def _winsorize_impl(
         return group
 
     return restore(_apply_by(frame, by, transform))
+
+
+def _mad_bounds(
+    frame: pd.DataFrame,
+    columns: Sequence[str],
+    scale: float,
+) -> tuple[dict[str, float], dict[str, float]]:
+    lower: dict[str, float] = {}
+    upper: dict[str, float] = {}
+    for column in columns:
+        values = frame[column].astype("float64")
+        median = values.median()
+        mad = (values - median).abs().median()
+        if pd.isna(mad):
+            lower[column] = float("-inf")
+            upper[column] = float("inf")
+            continue
+        lower[column] = float(median - float(scale) * mad)
+        upper[column] = float(median + float(scale) * mad)
+    return lower, upper
 
 
 def _as_frame(
@@ -531,6 +618,7 @@ def _record_transformer_step(transformer: Any) -> None:
 
 
 __all__ = [
+    "MADWinsorizer",
     "Neutralizer",
     "StandardScaler",
     "Winsorizer",
@@ -539,5 +627,4 @@ __all__ = [
     "fill_missing",
     "label_by_quantile",
     "rank",
-    "winsorize_mad",
 ]

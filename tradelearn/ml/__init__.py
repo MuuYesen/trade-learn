@@ -5,20 +5,12 @@ from __future__ import annotations
 from tradelearn.ml.causal import CausalSelector
 from tradelearn.ml.registry import ModelRegistry, model_uri
 from tradelearn.ml.strategy import MLStrategy
-from tradelearn.research.portfolio import (
-    EqualWeightOptimizer,
-    PortfolioConstraints,
-    TopKSelector,
-)
 
 __all__ = [
     "CausalSelector",
-    "EqualWeightOptimizer",
     "AutoML",
     "MLStrategy",
     "ModelRegistry",
-    "PortfolioConstraints",
-    "TopKSelector",
     "model_uri",
 ]
 

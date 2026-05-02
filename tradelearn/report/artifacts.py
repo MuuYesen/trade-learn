@@ -139,9 +139,10 @@ def _research_payload(strategy: Any | None) -> dict[str, Any]:
     payload = result.to_dict()
     if not isinstance(payload, dict):
         return {}
+    selected = payload.get("result", {}).get("selected", [])
     research = {
         "name": payload.get("name"),
-        "selected": ",".join(payload.get("result", {}).get("selected", [])),
+        "selected": _display_value(selected),
         "steps": ",".join(step.get("name", "") for step in payload.get("steps", [])),
     }
     artifacts = payload.get("artifacts")
