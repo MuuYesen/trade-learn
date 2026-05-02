@@ -54,6 +54,88 @@ Lite 用户：DataFrame -> Backtest -> Strategy -> stats / plot / report
 研究用户：DataFrame -> research/factor -> weights -> Backtest/Cerebro -> MLflow
 ```
 
+## 架构速览
+
+trade-learn 的结构分成三条清晰的线：用户写策略，Python 组织研究流程，Rust 负责高频回测内核。
+
+```mermaid
+flowchart TB
+    user[用户策略 / 研究代码]
+
+    subgraph facade[用户入口]
+        engine[tradelearn.engine\nBacktrader 风格高级 API]
+        lite[tradelearn.lite\n轻量研究 API]
+    end
+
+    subgraph app[投研能力]
+        data[tradelearn.data\n数据接入 / panel]
+        indicators[tradelearn.indicators\ntalib / tdx / tv / pta]
+        factor[tradelearn.factor\nalphalens 风格分析]
+        research[tradelearn.research\n切分 / 预处理 / 选股 / 权重]
+        report[tradelearn.report\npyfolio 风格报告]
+        mlflow[MLflow\n参数 / 指标 / artifacts]
+    end
+
+    subgraph runtime[共享回测 runtime]
+        backtest[tradelearn.backtest\nbar loop / broker / stats / orders]
+    end
+
+    subgraph rust[Rust 内核]
+        matcher[撮合]
+        portfolio[portfolio / cash / position]
+        runner[bar runner / order queue]
+    end
+
+    user --> engine
+    user --> lite
+    engine --> backtest
+    lite --> backtest
+    data --> engine
+    data --> lite
+    indicators --> engine
+    indicators --> lite
+    factor --> research
+    research --> engine
+    research --> lite
+    backtest --> matcher
+    backtest --> portfolio
+    backtest --> runner
+    backtest --> report
+    backtest --> mlflow
+```
+
+运行路径可以理解成：
+
+```mermaid
+sequenceDiagram
+    participant S as Strategy.next()
+    participant BT as Python backtest runtime
+    participant R as Rust broker/core
+    participant ST as Stats / Report / MLflow
+
+    BT->>S: 推进到当前 bar
+    S->>BT: buy / sell / close / target_weights
+    BT->>R: 提交订单与当前 bar
+    R->>R: 撮合、成交、更新现金和持仓
+    R-->>BT: fills / portfolio state
+    BT->>ST: 生成 summary、equity、trades、orders
+```
+
+投研闭环则是：
+
+```mermaid
+flowchart LR
+    bars[OHLCV / panel 数据]
+    factors[指标 / 因子]
+    prep[训练集切分\nwinsorize / neutralize / scale]
+    weights[选股 / 权重 / 约束]
+    bt[Engine 或 Lite 回测]
+    stats[Stats]
+    artifacts[plot.html / report.html\nCSV / XLSX / MLflow]
+
+    bars --> factors --> prep --> weights --> bt --> stats --> artifacts
+```
+
 ## 当前定位
 
 trade-learn 2.x 当前定位为：
