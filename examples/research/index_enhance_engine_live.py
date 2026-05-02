@@ -16,7 +16,6 @@ import logging
 import warnings
 from pathlib import Path
 
-import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor
 
 import tradelearn.engine as bt
@@ -60,38 +59,6 @@ class EngineLiveIndexEnhance(bt.Strategy):
                 data=data,
                 target=weights.get(data._name),
             )
-
-    def history_panel(self, lookback: int) -> pd.DataFrame:
-        """Return recent multi-feed OHLCV bars as MultiIndex(timestamp, symbol)."""
-        rows = []
-        for data in self.datas:
-            cursor = int(getattr(data, "_cursor", -1))
-            if cursor < 0:
-                continue
-            end = cursor + 1
-            start = max(0, end - int(lookback))
-            frame = pd.DataFrame(getattr(data, "_frame", pd.DataFrame())).iloc[start:end]
-            if frame.empty:
-                continue
-            frame = frame.loc[
-                :,
-                [
-                    column
-                    for column in ("open", "high", "low", "close", "volume")
-                    if column in frame.columns
-                ],
-            ].copy()
-            frame["timestamp"] = frame.index
-            frame["symbol"] = data._name
-            rows.append(frame.reset_index(drop=True))
-
-        if not rows:
-            return pd.DataFrame(
-                columns=["timestamp", "symbol", "open", "high", "low", "close", "volume"]
-            ).set_index(["timestamp", "symbol"])
-        bars = pd.concat(rows, ignore_index=True).set_index(["timestamp", "symbol"])
-        bars.index.names = ["timestamp", "symbol"]
-        return bars.sort_index()
 
 
 if __name__ == "__main__":

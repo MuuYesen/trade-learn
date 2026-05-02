@@ -43,6 +43,37 @@ def test_backtrader_strategy_import_path_preserves_params_and_line_indexing() ->
     assert strategy.values == [(10.0, None), (11.0, 10.0), (12.0, 11.0)]
 
 
+def test_backtrader_strategy_history_panel_returns_multi_data_window() -> None:
+    data_b = bars().assign(
+        open=[19.0, 20.0, 21.0],
+        high=[21.0, 22.0, 23.0],
+        low=[18.0, 19.0, 20.0],
+        close=[20.0, 21.0, 22.0],
+    )
+
+    class RecordingStrategy(bt.Strategy):
+        history = None
+
+        def next(self) -> None:
+            if len(self.data) == 3:
+                self.history = self.history_panel(lookback=2)
+
+    cerebro = Cerebro()
+    cerebro.adddata(bars(), name="AAA")
+    cerebro.adddata(data_b, name="BBB")
+    cerebro.addstrategy(RecordingStrategy)
+
+    [strategy] = cerebro.run()
+    history = strategy.history
+
+    assert history.index.names == ["timestamp", "symbol"]
+    assert list(history.index.get_level_values("symbol").unique()) == ["AAA", "BBB"]
+    assert list(history.index.get_level_values("timestamp").unique()) == list(
+        pd.to_datetime(["2026-01-02", "2026-01-03"], utc=True)
+    )
+    assert history.loc[(pd.Timestamp("2026-01-03", tz="UTC"), "BBB"), "close"] == 22.0
+
+
 def test_backtrader_strategy_module_exports_order_and_line_types() -> None:
     line = bt.LineSeries([1.0, 2.0, 3.0])
     line._advance(1)

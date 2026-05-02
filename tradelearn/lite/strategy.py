@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from tradelearn.backtest.history import build_history_panel
 from tradelearn.backtest.indicator_cache import BatchIndicatorCache
 from tradelearn.backtest.models import Order
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
@@ -515,30 +516,10 @@ class Strategy(CoreStrategy):
 
     def history_panel(self, lookback: int | None = None) -> Any:
         """Return recent multi-asset OHLCV bars."""
-        feeds = self._bt_data_by_ticker or {self.data.the_ticker: self._bt_primary_data}
-        rows = []
-        for symbol, feed in feeds.items():
-            cursor = int(getattr(feed, "_cursor", -1))
-            if cursor < 0:
-                continue
-            end = cursor + 1
-            start = 0 if lookback is None else max(0, end - int(lookback))
-            frame = pd.DataFrame(getattr(feed, "_frame", pd.DataFrame())).iloc[start:end]
-            if frame.empty:
-                continue
-            frame = frame.loc[:, [column for column in ("open", "high", "low", "close", "volume") if column in frame.columns]]
-            frame = frame.copy()
-            frame["timestamp"] = frame.index
-            frame["symbol"] = str(symbol)
-            rows.append(frame.reset_index(drop=True))
-        if not rows:
-            empty = pd.DataFrame(
-                columns=["timestamp", "symbol", "open", "high", "low", "close", "volume"]
-            ).set_index(["timestamp", "symbol"])
-            return empty
-        bars = pd.concat(rows, ignore_index=True).set_index(["timestamp", "symbol"]).sort_index()
-        bars.index.names = ["timestamp", "symbol"]
-        return bars
+        feeds = tuple((self._bt_data_by_ticker or {}).values())
+        if not feeds and self._bt_primary_data is not None:
+            feeds = (self._bt_primary_data,)
+        return build_history_panel(feeds, lookback=lookback)
 
     def target_weights(
         self,

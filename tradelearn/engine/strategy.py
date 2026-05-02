@@ -5,6 +5,7 @@ The core backtest API already follows backtrader's line convention:
 module exposes that implementation under ``tradelearn.engine``.
 """
 
+from tradelearn.backtest.history import build_history_panel
 from tradelearn.backtest.models import ExecutedInfo, Order, Position, Trade
 from tradelearn.backtest.strategy import Strategy as _BaseStrategy
 from tradelearn.engine.base import _G, LineRoot, LineSeries, Params, set_current_data
@@ -41,6 +42,11 @@ class Strategy(_BaseStrategy, LineRoot):
     def datetime(self):
         """Shortcut for self.data.datetime to match backtrader behavior."""
         return self.data.datetime
+
+    def history_panel(self, lookback: int | None = None):
+        """Return recent multi-data OHLCV bars as a timestamp/symbol panel."""
+
+        return build_history_panel(self.datas, lookback=lookback)
 
     def buy_bracket(
         self,
