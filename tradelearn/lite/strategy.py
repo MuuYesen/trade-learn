@@ -531,6 +531,7 @@ class Strategy(CoreStrategy):
 
         ``cash`` is accepted as a reserved key and is not translated into an order.
         """
+        self._lite_target_size_by_data.clear()
         data_by_ticker = self._target_weight_data_map()
         equity = float(self.broker.getvalue())
         snapshots = self._target_weight_snapshots(data_by_ticker)

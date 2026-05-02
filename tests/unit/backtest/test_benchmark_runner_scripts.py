@@ -8,6 +8,7 @@ from benchmarks.runners.benchmark_bt import _benchmark_passed
 from benchmarks.runners.benchmark_target_weights import (
     run_benchmark as run_target_weights_benchmark,
 )
+from benchmarks.runners.benchmark_target_weight_parity import run_parity_benchmark
 from benchmarks.runners.benchmark_throughput import make_data, run_benchmark, run_engine, run_lite
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -134,3 +135,25 @@ def test_target_weights_benchmark_reports_profile_segments() -> None:
     assert profile.target_weights_seconds >= profile.order_submit_seconds >= 0.0
     assert profile.order_count >= 3
     assert float(stats["final_value"]) > 0.0
+
+
+def test_target_weight_parity_benchmark_uses_same_sell_first_semantics() -> None:
+    results = run_parity_benchmark(
+        symbols=20,
+        bars=80,
+        holdings=5,
+        rebalance_every=11,
+        cash=100_000.0,
+        seed=11,
+    )
+
+    by_name = {result.name: result for result in results}
+    engine = by_name["Tradelearn Engine"]
+    lite = by_name["Tradelearn Lite"]
+    backtrader = by_name["Backtrader"]
+
+    assert engine.order_count == backtrader.order_count
+    assert abs(engine.final_value - backtrader.final_value) < 1e-2
+    assert lite.target_history == engine.target_history
+    assert lite.order_count > 0
+    assert all(result.bars_per_sec > 0 for result in results)
