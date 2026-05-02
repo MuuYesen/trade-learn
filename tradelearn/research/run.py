@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextvars
 import inspect
+from contextlib import contextmanager
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from functools import wraps
@@ -282,6 +283,17 @@ def tracked(
 def current_run() -> ResearchRun | None:
     """Return the current research run, if any."""
     return _CURRENT_RUN.get()
+
+
+@contextmanager
+def suspend_tracking():
+    """Temporarily disable nested ResearchRun step recording."""
+
+    token = _CURRENT_RUN.set(None)
+    try:
+        yield
+    finally:
+        _CURRENT_RUN.reset(token)
 
 
 def _strategy_timestamp(strategy: Any) -> pd.Timestamp:

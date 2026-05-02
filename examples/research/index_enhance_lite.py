@@ -14,14 +14,12 @@ import logging
 import warnings
 from pathlib import Path
 
-import pandas as pd
-
 import tradelearn.lite as tl
 import tradelearn.research as research
 import tradelearn.research.explore as ex
 import tradelearn.research.portfolio as pf
 import tradelearn.research.preprocess as pp
-from tradelearn.data import TradingViewProvider
+from tradelearn.data import MarketPanel, TradingViewProvider
 from tradelearn.research import ResearchRun
 
 
@@ -45,6 +43,7 @@ if __name__ == "__main__":
     symbols = ("NASDAQ:AAPL", "NASDAQ:MSFT", "NASDAQ:GOOG")
     start = "2023-01-01"
     end = "2024-01-01"
+    split = "2023-09-01"
     lookback = 20
     cash = 100_000.0
     commission = 0.0003
@@ -65,66 +64,39 @@ if __name__ == "__main__":
     provider = TradingViewProvider(n_bars=1500)
     bars = provider.history_ohlc(list(symbols), start=start, end=end, freq="1d")
 
-    close = bars["close"].unstack("symbol")
-    returns = close.pct_change()
-    alpha = close.pct_change(lookback) / returns.rolling(lookback).std()
-    features = alpha.stack().rename("alpha").to_frame().dropna()
-    features.index.names = ["timestamp", "symbol"]
-    exposures = close.stack().rename("size").to_frame().reindex(features.index)
-    split_at = features.index.get_level_values("timestamp").max()
+    panel = MarketPanel(bars)
+    features = panel.to_dataset(
+        {
+            "alpha": lambda p: p.close.pct_change(lookback)
+            / p.close.pct_change().rolling(lookback).std(),
+            "size": lambda p: p.close,
+        }
+    ).dropna()
 
     with ResearchRun("lite_index_enhance_research") as run:
         data_profile = ex.profile(bars)
         train_features, test_features = research.time_split(
             features,
-            split=split_at,
+            split=split,
             level="timestamp",
         )
-        train_exposures = exposures.reindex(train_features.index)
-        test_exposures = exposures.reindex(test_features.index)
         winsorizer = pp.Winsorizer(columns=["alpha"], limits=(0.05, 0.95))
-        neutralizer = pp.Neutralizer(columns=["alpha"], method="ols")
+        neutralizer = pp.Neutralizer(columns=["alpha"], exposures=["size"], method="ols")
         scaler = pp.StandardScaler(columns=["alpha"])
         train_features = winsorizer.fit_transform(train_features)
         train_features = pp.winsorize_mad(train_features, columns=["alpha"], scale=5.0)
-        train_features = neutralizer.fit_transform(
-            train_features,
-            exposures=train_exposures,
-        )
+        train_features = neutralizer.fit_transform(train_features)
         train_features = scaler.fit_transform(train_features)
         test_features = winsorizer.transform(test_features)
         test_features = pp.winsorize_mad(test_features, columns=["alpha"], scale=5.0)
-        test_features = neutralizer.transform(
-            test_features,
-            exposures=test_exposures,
-        )
+        test_features = neutralizer.transform(test_features)
         test_features = scaler.transform(test_features)
         scores = test_features["alpha"].rename("score")
-        weight_parts = []
-        for dt, daily_scores in scores.groupby(level="timestamp"):
-            daily_scores = daily_scores.droplevel("timestamp").dropna()
-            if daily_scores.empty:
-                continue
-            selected = pf.select_top(daily_scores, k=2)
-            daily_weights = pf.equal_weight(selected, gross=0.95)
-            daily_weights = pf.apply_constraints(
-                daily_weights,
-                max_weight=0.5,
-                normalize=True,
-            )
-            daily_weights.index = pd.MultiIndex.from_product(
-                [[dt], daily_weights.index],
-                names=["timestamp", "symbol"],
-            )
-            weight_parts.append(daily_weights)
-        weights = (
-            pd.concat(weight_parts).sort_index().rename("weight")
-            if weight_parts
-            else pd.Series(
-                dtype="float64",
-                index=pd.MultiIndex.from_arrays([[], []], names=["timestamp", "symbol"]),
-                name="weight",
-            )
+        weights = pf.build_weights(
+            scores,
+            select=lambda s: pf.select_top(s, k=2),
+            optimize=lambda selected, s: pf.equal_weight(selected, gross=0.95),
+            constrain=lambda w: pf.apply_constraints(w, max_weight=0.5, normalize=True),
         )
         research_result = run.finish(
             features=test_features,
@@ -133,6 +105,7 @@ if __name__ == "__main__":
             weights=weights,
             artifacts={
                 "symbols": list(symbols),
+                "split": split,
                 "lookback": lookback,
                 "profile": data_profile.to_dict(),
             },

@@ -11,6 +11,7 @@ from tradelearn.data import (
     BarsCache,
     CacheExpiredError,
     CacheMissError,
+    MarketPanel,
 )
 from tradelearn.data.bars import bars_fingerprint, normalize_bars
 
@@ -41,6 +42,35 @@ def test_normalize_bars_builds_utc_multiindex_and_metadata() -> None:
         "source": "fixture",
     }
     assert bars["open"].dtype == "float64"
+
+
+def test_market_panel_exposes_wide_fields_and_dataset() -> None:
+    raw = pd.DataFrame(
+        {
+            "timestamp": ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
+            "symbol": ["AAA", "BBB", "AAA", "BBB"],
+            "open": [10.0, 20.0, 11.0, 22.0],
+            "high": [11.0, 21.0, 12.0, 23.0],
+            "low": [9.0, 19.0, 10.0, 17.0],
+            "close": [10.0, 20.0, 12.0, 18.0],
+            "volume": [100.0, 200.0, 120.0, 180.0],
+        }
+    )
+    bars = normalize_bars(raw, market="US", freq="1d", engine="test", source="fixture")
+
+    panel = MarketPanel(bars)
+    dataset = panel.to_dataset(
+        {
+            "ret_1d": lambda p: p.close.pct_change(),
+            "label": lambda p: p.close.shift(-1) / p.close - 1,
+        }
+    )
+
+    assert panel.close.columns.tolist() == ["AAA", "BBB"]
+    assert dataset.index.names == ["timestamp", "symbol"]
+    assert dataset.columns.tolist() == ["ret_1d", "label"]
+    assert dataset.loc[(pd.Timestamp("2024-01-02", tz="UTC"), "AAA"), "ret_1d"] == pytest.approx(0.2)
+    assert dataset.loc[(pd.Timestamp("2024-01-01", tz="UTC"), "BBB"), "label"] == pytest.approx(-0.1)
 
 
 def test_normalize_bars_applies_pre_adjustment() -> None:

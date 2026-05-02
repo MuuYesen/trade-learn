@@ -4,7 +4,13 @@ import pandas as pd
 import pytest
 
 from tradelearn.research import ResearchRun, ResearchStep
-from tradelearn.research.portfolio import apply_constraints, equal_weight, select_top
+from tradelearn.research.portfolio import (
+    apply_constraints,
+    build_weights,
+    equal_weight,
+    select_top,
+    topk_equal_weights,
+)
 from tradelearn.research.preprocess import (
     Neutralizer,
     StandardScaler,
@@ -68,6 +74,77 @@ def test_research_run_records_preprocess_and_portfolio_function_params() -> None
         str(symbol): float(weight)
         for symbol, weight in result.weights.items()
     }
+
+
+def test_topk_equal_weights_builds_multi_period_weight_panel() -> None:
+    scores = pd.Series(
+        [0.1, 0.3, 0.4, 0.2],
+        index=pd.MultiIndex.from_tuples(
+            [
+                (pd.Timestamp("2024-01-01", tz="UTC"), "AAA"),
+                (pd.Timestamp("2024-01-01", tz="UTC"), "BBB"),
+                (pd.Timestamp("2024-01-02", tz="UTC"), "AAA"),
+                (pd.Timestamp("2024-01-02", tz="UTC"), "BBB"),
+            ],
+            names=["timestamp", "symbol"],
+        ),
+        name="score",
+    )
+
+    weights = topk_equal_weights(scores, k=1, gross=0.9, max_weight=0.8)
+
+    assert weights.index.names == ["timestamp", "symbol"]
+    assert weights.name == "weight"
+    assert weights.to_dict() == {
+        (pd.Timestamp("2024-01-01", tz="UTC"), "BBB"): 0.8,
+        (pd.Timestamp("2024-01-02", tz="UTC"), "AAA"): 0.8,
+    }
+
+    with ResearchRun("weights-helper") as run:
+        topk_equal_weights(scores, k=1, gross=0.9)
+        result = run.finish()
+
+    assert [step.name for step in result.steps] == ["topk_equal_weights"]
+
+
+def test_build_weights_composes_selection_optimization_and_constraints() -> None:
+    scores = pd.Series(
+        [0.1, 0.3, 0.4, 0.2],
+        index=pd.MultiIndex.from_tuples(
+            [
+                (pd.Timestamp("2024-01-01", tz="UTC"), "AAA"),
+                (pd.Timestamp("2024-01-01", tz="UTC"), "BBB"),
+                (pd.Timestamp("2024-01-02", tz="UTC"), "AAA"),
+                (pd.Timestamp("2024-01-02", tz="UTC"), "BBB"),
+            ],
+            names=["timestamp", "symbol"],
+        ),
+        name="score",
+    )
+
+    weights = build_weights(
+        scores,
+        select=lambda s: select_top(s, k=1),
+        optimize=lambda selected, s: equal_weight(selected, gross=0.9),
+        constrain=lambda w: apply_constraints(w, max_weight=0.8),
+    )
+
+    assert weights.index.names == ["timestamp", "symbol"]
+    assert weights.name == "weight"
+    assert weights.to_dict() == {
+        (pd.Timestamp("2024-01-01", tz="UTC"), "BBB"): 0.8,
+        (pd.Timestamp("2024-01-02", tz="UTC"), "AAA"): 0.8,
+    }
+
+    with ResearchRun("weights-builder") as run:
+        build_weights(
+            scores,
+            select=lambda s: select_top(s, k=1),
+            optimize=lambda selected, s: equal_weight(selected, gross=0.9),
+        )
+        result = run.finish()
+
+    assert [step.name for step in result.steps] == ["build_weights"]
 
 
 def test_research_run_supports_static_method_tracking() -> None:
@@ -239,6 +316,24 @@ def test_neutralizer_fits_train_exposures_and_reuses_coefficients() -> None:
     assert transformer.get_params() == {
         "type": "Neutralizer",
         "columns": ["alpha"],
+        "exposures": None,
+        "method": "ols",
+    }
+
+
+def test_neutralizer_can_use_exposure_columns_from_same_frame() -> None:
+    train = pd.DataFrame({"alpha": [3.0, 5.0, 7.0], "size": [1.0, 2.0, 3.0]})
+    test = pd.DataFrame({"alpha": [9.0], "size": [4.0]})
+
+    transformer = Neutralizer(columns=["alpha"], exposures=["size"]).fit(train)
+    transformed = transformer.transform(test)
+
+    assert abs(transformed.loc[0, "alpha"]) < 1e-12
+    assert transformer.exposure_columns_ == ["size"]
+    assert transformer.get_params() == {
+        "type": "Neutralizer",
+        "columns": ["alpha"],
+        "exposures": ["size"],
         "method": "ols",
     }
 

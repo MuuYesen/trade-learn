@@ -50,6 +50,7 @@ def test_research_examples_cover_lite_and_engine_workflows() -> None:
     for name, api_markers in expected.items():
         source = (examples / name).read_text()
         assert "TradingViewProvider" in source
+        assert "MarketPanel" in source
         assert "ResearchRun" in source
         assert "import tradelearn.research as research" in source
         assert "import tradelearn.research.explore as ex" in source
@@ -63,6 +64,7 @@ def test_research_examples_cover_lite_and_engine_workflows() -> None:
         assert "research.time_split" in source
         assert ".fit_transform(train_features" in source
         assert ".transform(test_features" in source
+        assert "pf.build_weights" in source
         assert "pf.select_top" in source
         assert "pf.equal_weight" in source
         assert "pf.apply_constraints" in source

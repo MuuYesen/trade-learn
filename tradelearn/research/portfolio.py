@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Hashable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Mapping, Sequence
 from importlib import import_module
 from typing import Any
 
 import pandas as pd
 
-from tradelearn.research.run import tracked
+from tradelearn.research.run import suspend_tracking, tracked
 
 
 @tracked(category="portfolio")
@@ -71,6 +71,94 @@ def apply_constraints(
         if gross > 0:
             adjusted = adjusted / gross
     return adjusted
+
+
+@tracked(category="portfolio")
+def build_weights(
+    scores: pd.Series,
+    *,
+    select: Callable[[pd.Series], Sequence[Hashable]],
+    optimize: Callable[[Sequence[Hashable], pd.Series], Mapping[Hashable, float] | pd.Series],
+    constrain: Callable[[pd.Series], Mapping[Hashable, float] | pd.Series] | None = None,
+) -> pd.Series:
+    """Build MultiIndex(timestamp, symbol) weights from panel scores."""
+
+    return _build_weights(
+        scores,
+        select=select,
+        optimize=optimize,
+        constrain=constrain,
+        error_label="build_weights",
+    )
+
+
+@tracked(category="portfolio")
+def topk_equal_weights(
+    scores: pd.Series,
+    *,
+    k: int,
+    gross: float = 1.0,
+    max_weight: float | None = None,
+    min_abs_weight: float = 0.0,
+    normalize: bool = False,
+) -> pd.Series:
+    """Build MultiIndex(timestamp, symbol) equal weights from panel scores."""
+
+    return _build_weights(
+        scores,
+        select=lambda daily_scores: select_top(daily_scores, k=k),
+        optimize=lambda selected, _daily_scores: equal_weight(selected, gross=gross),
+        constrain=lambda weights: apply_constraints(
+            weights,
+            max_weight=max_weight,
+            min_abs_weight=min_abs_weight,
+            normalize=normalize,
+        ),
+        error_label="topk_equal_weights",
+    )
+
+
+def _build_weights(
+    scores: pd.Series,
+    *,
+    select: Callable[[pd.Series], Sequence[Hashable]],
+    optimize: Callable[[Sequence[Hashable], pd.Series], Mapping[Hashable, float] | pd.Series],
+    constrain: Callable[[pd.Series], Mapping[Hashable, float] | pd.Series] | None = None,
+    error_label: str,
+) -> pd.Series:
+    score_series = pd.Series(scores, name=getattr(scores, "name", "score"))
+    if not isinstance(score_series.index, pd.MultiIndex) or score_series.index.nlevels < 2:
+        raise ValueError(f"{error_label} requires MultiIndex(timestamp, symbol) scores")
+
+    parts: list[pd.Series] = []
+    time_level = score_series.index.names[0] if score_series.index.names[0] is not None else 0
+    for timestamp, daily_scores in score_series.groupby(level=time_level):
+        daily_scores = daily_scores.droplevel(time_level).dropna()
+        if daily_scores.empty:
+            continue
+        with suspend_tracking():
+            selected = [str(symbol) for symbol in select(daily_scores)]
+        if not selected:
+            continue
+        with suspend_tracking():
+            daily_weights = pd.Series(optimize(selected, daily_scores), dtype="float64")
+        if constrain is not None:
+            with suspend_tracking():
+                daily_weights = pd.Series(constrain(daily_weights), dtype="float64")
+        daily_weights.index = daily_weights.index.astype(str)
+        daily_weights.index = pd.MultiIndex.from_product(
+            [[timestamp], daily_weights.index.astype(str)],
+            names=["timestamp", "symbol"],
+        )
+        parts.append(daily_weights)
+
+    if not parts:
+        return pd.Series(
+            dtype="float64",
+            index=pd.MultiIndex.from_arrays([[], []], names=["timestamp", "symbol"]),
+            name="weight",
+        )
+    return pd.concat(parts).sort_index().astype("float64").rename("weight")
 
 
 class TopKSelector:
@@ -269,6 +357,8 @@ __all__ = [
     "RiskfolioOptimizer",
     "TopKSelector",
     "apply_constraints",
+    "build_weights",
     "equal_weight",
     "select_top",
+    "topk_equal_weights",
 ]

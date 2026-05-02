@@ -349,22 +349,24 @@ class Neutralizer:
         self,
         *,
         columns: Sequence[str],
+        exposures: Sequence[str] | None = None,
         method: str = "ols",
     ) -> None:
         self.columns = [str(column) for column in columns]
+        self.exposures = None if exposures is None else [str(column) for column in exposures]
         self.method = method
         self.columns_: list[str] | None = None
         self.exposure_columns_: list[str] | None = None
         self.exposure_fill_values_: pd.Series | None = None
         self.coef_: dict[str, np.ndarray] | None = None
 
-    def fit(self, data: pd.DataFrame, *, exposures: pd.DataFrame) -> Neutralizer:
+    def fit(self, data: pd.DataFrame, *, exposures: pd.DataFrame | None = None) -> Neutralizer:
         """Fit exposure coefficients from training data."""
         _record_transformer_step(self)
         if self.method != "ols":
             raise ValueError(f"Unsupported neutralize method: {self.method}")
         frame = pd.DataFrame(data)
-        exposure_frame = pd.DataFrame(exposures).reindex(frame.index)
+        exposure_frame = self._resolve_exposures(frame, exposures)
         self.columns_ = list(self.columns)
         self.exposure_columns_ = [str(column) for column in exposure_frame.columns]
         x = exposure_frame.astype("float64")
@@ -386,14 +388,14 @@ class Neutralizer:
             self.coef_[column] = beta
         return self
 
-    def transform(self, data: pd.DataFrame, *, exposures: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, data: pd.DataFrame, *, exposures: pd.DataFrame | None = None) -> pd.DataFrame:
         """Neutralize data using fitted training exposure coefficients."""
         _require_fitted(self.columns_, self.exposure_columns_, self.coef_)
         frame = pd.DataFrame(data).copy()
         assert self.columns_ is not None
         assert self.exposure_columns_ is not None
         assert self.coef_ is not None
-        exposure_frame = pd.DataFrame(exposures).reindex(frame.index)
+        exposure_frame = self._resolve_exposures(frame, exposures)
         x = exposure_frame[self.exposure_columns_].astype("float64")
         if self.exposure_fill_values_ is not None:
             x = x.fillna(self.exposure_fill_values_)
@@ -403,7 +405,7 @@ class Neutralizer:
             frame[column] = y - design @ self.coef_[column]
         return frame
 
-    def fit_transform(self, data: pd.DataFrame, *, exposures: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, data: pd.DataFrame, *, exposures: pd.DataFrame | None = None) -> pd.DataFrame:
         """Fit coefficients and return neutralized data."""
         return self.fit(data, exposures=exposures).transform(data, exposures=exposures)
 
@@ -412,8 +414,26 @@ class Neutralizer:
         return {
             "type": type(self).__name__,
             "columns": self.columns,
+            "exposures": self.exposures,
             "method": self.method,
         }
+
+    def _resolve_exposures(
+        self,
+        frame: pd.DataFrame,
+        exposures: pd.DataFrame | None,
+    ) -> pd.DataFrame:
+        if exposures is not None:
+            return pd.DataFrame(exposures).reindex(frame.index)
+        if self.exposures is None:
+            raise ValueError(
+                "Neutralizer requires exposures=... or exposure columns declared in "
+                "Neutralizer(..., exposures=[...])."
+            )
+        missing = [column for column in self.exposures if column not in frame.columns]
+        if missing:
+            raise KeyError(f"exposure column(s) not found: {missing}")
+        return frame.loc[:, self.exposures]
 
 
 def _columns(frame: pd.DataFrame, columns: Sequence[str] | None) -> list[str]:
