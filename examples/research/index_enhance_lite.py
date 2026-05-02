@@ -14,12 +14,14 @@ import logging
 import warnings
 from pathlib import Path
 
+from sklearn.ensemble import GradientBoostingRegressor
+
 import tradelearn.lite as tl
 import tradelearn.research as research
 import tradelearn.research.explore as ex
 import tradelearn.research.portfolio as pf
 import tradelearn.research.preprocess as pp
-from tradelearn.data import MarketPanel, TradingViewProvider
+from tradelearn.data import TradingViewProvider
 from tradelearn.research import ResearchRun
 
 
@@ -63,14 +65,17 @@ if __name__ == "__main__":
     provider = TradingViewProvider(n_bars=1500)
     bars = provider.history_ohlc(list(symbols), start=start, end=end, freq="1d")
 
-    panel = MarketPanel(bars)
-    features = panel.to_dataset(
+    feature_set = research.FeatureSet(
         {
             "alpha": lambda p: p.close.pct_change(lookback)
             / p.close.pct_change().rolling(lookback).std(),
             "size": lambda p: p.close,
-        }
-    ).dropna()
+        },
+        target={
+            "label": lambda p: p.close.shift(-lookback) / p.close - 1.0,
+        },
+    )
+    features = feature_set.fit_transform(bars, include_target=True).dropna()
 
     with ResearchRun("index_enhance_research") as run:
         data_profile = ex.profile(bars)
@@ -88,7 +93,16 @@ if __name__ == "__main__":
         test_features = winsorizer.transform(test_features)
         test_features = neutralizer.transform(test_features)
         test_features = scaler.transform(test_features)
-        scores = test_features["alpha"].rename("score")
+
+        model = GradientBoostingRegressor(
+            random_state=7,
+            n_estimators=50,
+            max_depth=3,
+        )
+        model.fit(train_features[["alpha"]], train_features["label"])
+        scores = research.ModelScorer(model, features=("alpha",), current=False).predict(
+            test_features
+        )
 
         selected = pf.select_top(scores, k=2)
         weights = pf.equal_weight(selected, gross=0.95)
@@ -96,6 +110,8 @@ if __name__ == "__main__":
 
         research_result = run.finish(
             features=test_features,
+            target=test_features["label"],
+            model=model,
             scores=scores,
             selected=selected,
             weights=weights,

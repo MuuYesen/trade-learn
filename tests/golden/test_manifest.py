@@ -17,7 +17,7 @@ MANIFEST = ROOT / "tests" / "golden" / "manifest.json"
 def test_manifest_matches_documented_shape() -> None:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
 
-    assert manifest["source"] == "docs/specs/CONSISTENCY.md"
+    assert manifest["source"] == "design/specs/CONSISTENCY.md"
     assert len(manifest["datasets"]) == 10
     assert len(manifest["strategies"]) == 10
     assert {item["engine"] for item in manifest["datasets"]} == {"tv", "tdx"}

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from tradelearn.ml.causal import CausalSelector
-from tradelearn.ml.registry import ModelRegistry, model_uri
+from tradelearn.ml.registry import ModelLoader, ModelRegistry, model_uri
 from tradelearn.ml.strategy import MLStrategy
 
 __all__ = [
     "CausalSelector",
     "AutoML",
     "MLStrategy",
+    "ModelLoader",
     "ModelRegistry",
     "model_uri",
 ]

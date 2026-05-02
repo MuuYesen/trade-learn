@@ -40,14 +40,16 @@ def test_write_artifact_bundle_writes_tables_report_plot_and_weights(tmp_path) -
     names = {path.name for path in files}
     assert {
         "artifacts.xlsx",
-        "csv",
+        "weights.csv",
+        "trades.csv",
         "report.html",
         "plot.html",
     }.issubset(names)
+    assert not (tmp_path / "csv").exists()
     assert (tmp_path / "artifacts.xlsx").is_file()
-    weights_csv = pd.read_csv(tmp_path / "csv" / "weights.csv").set_index("symbol")["weight"]
+    weights_csv = pd.read_csv(tmp_path / "weights.csv").set_index("symbol")["weight"]
     assert weights_csv.to_dict() == {"AAA": 0.6, "BBB": 0.4}
-    trades_csv = pd.read_csv(tmp_path / "csv" / "trades.csv")
+    trades_csv = pd.read_csv(tmp_path / "trades.csv")
     assert trades_csv["pnl"].tolist() == [100.0, -25.0]
 
 
@@ -71,12 +73,14 @@ def test_write_artifact_bundle_writes_research_result_weights(tmp_path) -> None:
 
     names = {path.name for path in files}
     assert "artifacts.xlsx" in names
-    assert "csv" in names
+    assert "weights.csv" in names
+    assert "research.csv" in names
     assert "report.html" in names
+    assert not (tmp_path / "csv").exists()
     assert (tmp_path / "artifacts.xlsx").is_file()
-    weights_csv = pd.read_csv(tmp_path / "csv" / "weights.csv").set_index("symbol")["weight"]
+    weights_csv = pd.read_csv(tmp_path / "weights.csv").set_index("symbol")["weight"]
     assert weights_csv.to_dict() == {"AAA": 0.7, "BBB": 0.3}
-    research = pd.read_csv(tmp_path / "csv" / "research.csv").set_index("key")["value"]
+    research = pd.read_csv(tmp_path / "research.csv").set_index("key")["value"]
     assert research["name"] == "research"
     assert research["selected"] == "AAA"
     assert research["artifacts.name"] == "custom-name"

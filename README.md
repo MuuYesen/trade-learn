@@ -4,11 +4,11 @@
 
 The functions it gives including factor collection, factor processing, factor evaluation, <b>causal analysis</b>, model definition, and strategy backtesting, and supports visualization results saved as <b>HTML files</b> for sharing.
 
-<img src="docs/assets/flow.png" alt="img" width="100%">
+<img src="design/assets/flow.png" alt="img" width="100%">
 
 Summary of visualizations:
 
-<img src="docs/assets/plot_list.png" alt="img" width="100%">
+<img src="design/assets/plot_list.png" alt="img" width="100%">
 
 
 ## Key Features
@@ -122,8 +122,8 @@ _orders                              Ticke...
 _positions                {'Asset': -1154,...
 _trade_start_bar                           19
 ```
-![docs/res2.png](docs/single_res1.png)
-![docs/res3.png](docs/single_res2.png)
+![design/assets/single_res1.png](design/assets/single_res1.png)
+![design/assets/single_res2.png](design/assets/single_res2.png)
 
 ## Further Example
 
@@ -246,7 +246,7 @@ _positions                {'600520': 0, '6...
 _trade_start_bar                          731
 dtype: object
 ```
-![docs/res4.png](docs/port_res1.png)
+![design/assets/port_res1.png](design/assets/port_res1.png)
 
 ## Method Guide
 ### Retrieving Raw Data

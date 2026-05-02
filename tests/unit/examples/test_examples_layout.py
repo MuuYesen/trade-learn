@@ -54,7 +54,11 @@ def test_research_examples_cover_lite_and_engine_workflows() -> None:
     for name, api_markers in {**direct_expected, **pipeline_expected}.items():
         source = (examples / name).read_text()
         assert "TradingViewProvider" in source
-        assert "MarketPanel" in source
+        assert "research.FeatureSet" in source
+        assert "GradientBoostingRegressor" in source
+        assert "target={" in source
+        assert ".fit(train_features" in source
+        assert "research.ModelScorer" in source
         assert "ResearchRun" in source
         assert "import tradelearn.research as research" in source
         assert "import tradelearn.research.explore as ex" in source
@@ -79,7 +83,12 @@ def test_research_examples_cover_lite_and_engine_workflows() -> None:
             assert "pf.equal_weight" in source
             assert "pf.apply_constraints" in source
         assert "research_result.weights[0]" in source
-        assert "target_weights" in source
+        if name.startswith("index_enhance_lite"):
+            assert "target_weights" in source
+        else:
+            assert "class EngineResearchIndexEnhance(bt.Strategy)" in source
+            assert "order_target_percent" in source
+            assert "target=weights.get(data._name)" in source
         assert ".report(" in source
         assert "os.getenv" not in source
         assert "TRADELEARN_DEMO_MLFLOW" not in source
@@ -94,6 +103,66 @@ def test_research_examples_cover_lite_and_engine_workflows() -> None:
             assert marker in source
 
 
+def test_lite_live_research_example_keeps_inference_inside_strategy() -> None:
+    root = Path(__file__).parents[3]
+    source = (root / "examples" / "research" / "index_enhance_lite_live.py").read_text()
+    tree = ast.parse(source)
+
+    strategy = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "LiteLiveIndexEnhance"
+    )
+    main_guard = next(node for node in tree.body if isinstance(node, ast.If) and _is_main_guard(node))
+
+    assert "GradientBoostingRegressor" in source
+    assert "research.FeatureSet" in source
+    assert "research.ModelScorer" in source
+    assert "pf.WeightBuilder" in source
+    assert "research_result.weights[0]" not in source
+    assert _contains_call(strategy, "transform")
+    assert _contains_call(strategy, "predict")
+    assert _contains_call(strategy, "build")
+    assert _contains_call(strategy, "target_weights")
+    assert not _contains_call(main_guard, "select_top")
+    assert not _contains_call(main_guard, "equal_weight")
+    assert not _contains_call(main_guard, "apply_constraints")
+
+
+def test_engine_live_research_example_keeps_inference_inside_strategy() -> None:
+    root = Path(__file__).parents[3]
+    source = (root / "examples" / "research" / "index_enhance_engine_live.py").read_text()
+    tree = ast.parse(source)
+
+    strategy = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "EngineLiveIndexEnhance"
+    )
+    main_guard = next(node for node in tree.body if isinstance(node, ast.If) and _is_main_guard(node))
+
+    assert "GradientBoostingRegressor" in source
+    assert "research.FeatureSet" in source
+    assert "research.ModelScorer" in source
+    assert "pf.WeightBuilder" in source
+    assert "research_result.weights[0]" not in source
+    assert "class EngineLiveIndexEnhance(bt.Strategy)" in source
+    assert "target=weights.get(data._name)" in source
+    assert _contains_call(strategy, "transform")
+    assert _contains_call(strategy, "predict")
+    assert _contains_call(strategy, "build")
+    assert _contains_call(strategy, "order_target_percent")
+    assert not _contains_call(main_guard, "select_top")
+    assert not _contains_call(main_guard, "equal_weight")
+    assert not _contains_call(main_guard, "apply_constraints")
+    assert "os.getenv" not in source
+    assert "TRADELEARN_DEMO_MLFLOW" not in source
+    assert "mlflow_uri" not in source
+    assert "MLFLOW_TRACKING_USERNAME" not in source
+    assert "MLFLOW_TRACKING_PASSWORD" not in source
+    assert "os.environ" not in source
+
+
 def test_research_examples_keep_runtime_flow_in_main() -> None:
     root = Path(__file__).parents[3]
 
@@ -102,6 +171,8 @@ def test_research_examples_keep_runtime_flow_in_main() -> None:
         "index_enhance_engine.py",
         "index_enhance_lite_pipeline.py",
         "index_enhance_engine_pipeline.py",
+        "index_enhance_lite_live.py",
+        "index_enhance_engine_live.py",
     ):
         path = root / "examples" / "research" / name
         tree = ast.parse(path.read_text())
@@ -139,3 +210,15 @@ def _is_main_guard(node: ast.If) -> bool:
         and isinstance(node.test.comparators[0], ast.Constant)
         and node.test.comparators[0].value == "__main__"
     )
+
+
+def _contains_call(node: ast.AST, name: str) -> bool:
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        func = child.func
+        if isinstance(func, ast.Name) and func.id == name:
+            return True
+        if isinstance(func, ast.Attribute) and func.attr == name:
+            return True
+    return False

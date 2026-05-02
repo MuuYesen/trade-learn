@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 from tradelearn import metrics
-from tradelearn.report import Reporter
+from tradelearn.report import ReportSection, Reporter
 
 
 def test_html_template_exists() -> None:
@@ -85,6 +85,19 @@ def test_reporter_html_appends_custom_sections(tmp_path) -> None:
     html = path.read_text()
     assert "Custom Exposure" in html
     assert "active weight" in html
+
+
+def test_report_section_protocol_accepts_plain_classes() -> None:
+    class ExposureSection:
+        name = "custom_exposure"
+
+        def html(self, ctx):
+            return "<section></section>"
+
+        def excel(self, ctx):
+            return {"custom_exposure": pd.DataFrame({"weight": [1.0]})}
+
+    assert isinstance(ExposureSection(), ReportSection)
 
 
 def test_reporter_html_adds_price_trades_chart_when_market_data_exists(tmp_path) -> None:

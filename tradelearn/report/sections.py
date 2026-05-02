@@ -2,9 +2,24 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import pandas as pd
+
+
+@runtime_checkable
+class ReportSection(Protocol):
+    """Protocol for user-defined report sections."""
+
+    name: str
+
+    def html(self, ctx: ReportContext) -> str | None:
+        """Return HTML to append to an HTML report."""
+        ...
+
+    def excel(self, ctx: ReportContext) -> Mapping[str, Any] | pd.DataFrame | pd.Series | None:
+        """Return sheets to append to an Excel report."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -109,4 +124,4 @@ def _research_result(stats: Any) -> Any | None:
     return None
 
 
-__all__ = ["ReportContext"]
+__all__ = ["ReportContext", "ReportSection"]

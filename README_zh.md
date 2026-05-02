@@ -2,11 +2,11 @@
 
 trade-learn 是一个基于 alphalens、backtrader、pyfolio 和 quantstats 的机器学习策略研发工具包，提供因子采集、因子处理、因子评估、因果分析、模型定义和策略回测的全套策略研发流程，并支持可视化结果以 html 文件进行存档分享。
 
-<img src="docs/assets/flow_zh.png" alt="img" width="100%">
+<img src="design/assets/flow_zh.png" alt="img" width="100%">
 
 可视化图汇总：
 
-<img src="docs/assets/plot_list.png" alt="img" width="100%">
+<img src="design/assets/plot_list.png" alt="img" width="100%">
 
 ## 主要特性
 
@@ -119,8 +119,8 @@ _orders                              Ticke...
 _positions                {'Asset': -1154,...
 _trade_start_bar                           19
 ```
-![docs/assets/single_res1.png](docs/assets/single_res1.png)
-![docs/assets/single_res2.png](docs/assets/single_res2.png)
+![design/assets/single_res1.png](design/assets/single_res1.png)
+![design/assets/single_res2.png](design/assets/single_res2.png)
 
 ## 更多例子
 
@@ -243,7 +243,7 @@ _positions                {'600520': 0, '6...
 _trade_start_bar                          731
 dtype: object
 ```
-![docs/assets/port_res1.png](docs/assets/port_res1.png)
+![design/assets/port_res1.png](design/assets/port_res1.png)
 
 ## 方法指南
 ### 原始数据获取

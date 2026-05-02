@@ -1,9 +1,26 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from tradelearn.research.run import current_run
+
+
+@runtime_checkable
+class Transformer(Protocol):
+    """Protocol for user-defined research preprocessing steps."""
+
+    def fit(self, data: Any) -> Any:
+        """Fit state from training data."""
+        ...
+
+    def transform(self, data: Any) -> Any:
+        """Transform data using fitted state."""
+        ...
+
+    def get_params(self) -> dict[str, Any]:
+        """Return serializable parameters for tracking."""
+        ...
 
 
 class Pipeline:
@@ -17,11 +34,10 @@ class Pipeline:
         _record_pipeline_step(self)
         current = data
         for _name, step in self.steps:
-            if not hasattr(step, "fit") or not hasattr(step, "transform"):
-                raise TypeError(
-                    f"Pipeline step {type(step).__name__} must provide fit() and transform()"
-                )
-            step.fit(current)
+            if not hasattr(step, "transform"):
+                raise TypeError(f"Pipeline step {type(step).__name__} must provide transform()")
+            if hasattr(step, "fit"):
+                step.fit(current)
             current = step.transform(current)
         return self
 
@@ -42,11 +58,10 @@ class Pipeline:
             if hasattr(step, "fit_transform"):
                 current = step.fit_transform(current)
                 continue
-            if not hasattr(step, "fit") or not hasattr(step, "transform"):
-                raise TypeError(
-                    f"Pipeline step {type(step).__name__} must provide fit() and transform()"
-                )
-            step.fit(current)
+            if not hasattr(step, "transform"):
+                raise TypeError(f"Pipeline step {type(step).__name__} must provide transform()")
+            if hasattr(step, "fit"):
+                step.fit(current)
             current = step.transform(current)
         return current
 
@@ -79,4 +94,4 @@ def _record_pipeline_step(pipeline: Pipeline) -> None:
         )
 
 
-__all__ = ["Pipeline"]
+__all__ = ["Pipeline", "Transformer"]

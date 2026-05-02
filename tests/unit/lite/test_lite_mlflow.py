@@ -110,9 +110,16 @@ def test_lite_log_mlflow_logs_stats_config_params_and_artifacts() -> None:
     assert fake.metrics[0]["final_value"] == stats.summary["final_value"]
     assert fake.metrics[0]["total_orders"] == 1.0
     assert fake.dicts == []
-    assert sorted(name for name, _ in fake.artifacts) == ["artifacts.xlsx"]
+    assert sorted(name for name, _ in fake.artifacts) == [
+        "artifacts.xlsx",
+        "equity.csv",
+        "fills.csv",
+        "positions.csv",
+        "summary.csv",
+        "trades.csv",
+    ]
     assert {artifact_path for _, artifact_path in fake.artifacts} == {None}
-    assert fake.artifact_dirs == [("csv", "csv")]
+    assert fake.artifact_dirs == []
 
 
 def test_lite_log_mlflow_can_skip_artifact_uploads() -> None:
@@ -181,7 +188,9 @@ def test_lite_log_mlflow_logs_research_result_params_and_artifacts() -> None:
     assert "research.artifacts.profile.numeric.open.25pct" not in fake.params[0]
     assert fake.dicts == []
     assert ("artifacts.xlsx", None) in fake.artifacts
-    assert ("csv", "csv") in fake.artifact_dirs
+    assert ("weights.csv", None) in fake.artifacts
+    assert ("research.csv", None) in fake.artifacts
+    assert fake.artifact_dirs == []
 
 
 def test_lite_and_engine_mlflow_params_use_shared_schema() -> None:

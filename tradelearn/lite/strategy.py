@@ -513,6 +513,33 @@ class Strategy(CoreStrategy):
         """Move one ticker toward a target portfolio weight."""
         return self.order_target_percent(ticker=ticker, target=float(target))
 
+    def history_panel(self, lookback: int | None = None) -> Any:
+        """Return recent multi-asset OHLCV bars."""
+        feeds = self._bt_data_by_ticker or {self.data.the_ticker: self._bt_primary_data}
+        rows = []
+        for symbol, feed in feeds.items():
+            cursor = int(getattr(feed, "_cursor", -1))
+            if cursor < 0:
+                continue
+            end = cursor + 1
+            start = 0 if lookback is None else max(0, end - int(lookback))
+            frame = pd.DataFrame(getattr(feed, "_frame", pd.DataFrame())).iloc[start:end]
+            if frame.empty:
+                continue
+            frame = frame.loc[:, [column for column in ("open", "high", "low", "close", "volume") if column in frame.columns]]
+            frame = frame.copy()
+            frame["timestamp"] = frame.index
+            frame["symbol"] = str(symbol)
+            rows.append(frame.reset_index(drop=True))
+        if not rows:
+            empty = pd.DataFrame(
+                columns=["timestamp", "symbol", "open", "high", "low", "close", "volume"]
+            ).set_index(["timestamp", "symbol"])
+            return empty
+        bars = pd.concat(rows, ignore_index=True).set_index(["timestamp", "symbol"]).sort_index()
+        bars.index.names = ["timestamp", "symbol"]
+        return bars
+
     def target_weights(
         self,
         weights: Mapping[str, float] | pd.Series,

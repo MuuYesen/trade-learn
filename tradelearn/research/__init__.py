@@ -1,6 +1,8 @@
 """Strategy research workflow helpers."""
 
 from tradelearn.research import derive, explore, portfolio, preprocess, split
+from tradelearn.research.features import FeatureBuilder, FeatureSet
+from tradelearn.research.pipeline import Pipeline, Transformer
 from tradelearn.research.run import (
     ResearchResult,
     ResearchRun,
@@ -8,14 +10,18 @@ from tradelearn.research.run import (
     current_run,
     tracked,
 )
-from tradelearn.research.pipeline import Pipeline
+from tradelearn.research.scoring import ModelScorer
 from tradelearn.research.split import split_bars, time_split
 
 __all__ = [
     "Pipeline",
+    "FeatureBuilder",
+    "FeatureSet",
+    "ModelScorer",
     "ResearchResult",
     "ResearchRun",
     "ResearchStep",
+    "Transformer",
     "current_run",
     "derive",
     "explore",

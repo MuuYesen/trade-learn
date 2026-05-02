@@ -28,4 +28,4 @@ def test_golden_manifest_available_for_consistency_suite() -> None:
     ],
 )
 def test_future_consistency_checks_are_stage_gated(future_check: str) -> None:
-    pytest.skip(f"{future_check} is specified in docs/specs/CONSISTENCY.md for later stages")
+    pytest.skip(f"{future_check} is specified in design/specs/CONSISTENCY.md for later stages")

@@ -404,7 +404,12 @@ def test_lite_exports_mlstrategy_with_shared_ml_runtime() -> None:
 def test_lite_accepts_dict_data_and_ticker_orders() -> None:
     data = {
         "AAA": _data(),
-        "BBB": _data().assign(close=[20.0, 21.0, 22.0, 23.0, 24.0]),
+        "BBB": _data().assign(
+            open=[20.0, 21.0, 22.0, 23.0, 24.0],
+            high=[21.0, 22.0, 23.0, 24.0, 25.0],
+            low=[19.0, 20.0, 21.0, 22.0, 23.0],
+            close=[20.0, 21.0, 22.0, 23.0, 24.0],
+        ),
     }
     seen: dict[str, float] = {}
 
@@ -454,7 +459,12 @@ def test_lite_target_weights_batches_equity_and_orders_reductions_first() -> Non
 def test_lite_target_weights_targets_multi_asset_weights() -> None:
     data = {
         "AAA": _data(),
-        "BBB": _data().assign(close=[20.0, 21.0, 22.0, 23.0, 24.0]),
+        "BBB": _data().assign(
+            open=[20.0, 21.0, 22.0, 23.0, 24.0],
+            high=[21.0, 22.0, 23.0, 24.0, 25.0],
+            low=[19.0, 20.0, 21.0, 22.0, 23.0],
+            close=[20.0, 21.0, 22.0, 23.0, 24.0],
+        ),
     }
 
     class LiteStrategy(Strategy):
@@ -623,6 +633,38 @@ def test_lite_research_result_weights_current_bar_requires_time_panel() -> None:
         Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run(
             research_result=research
         )
+
+
+def test_lite_strategy_history_panel_returns_current_window() -> None:
+    data = {
+        "AAA": _data(),
+        "BBB": _data().assign(
+            open=[20.0, 21.0, 22.0, 23.0, 24.0],
+            high=[21.0, 22.0, 23.0, 24.0, 25.0],
+            low=[19.0, 20.0, 21.0, 22.0, 23.0],
+            close=[20.0, 21.0, 22.0, 23.0, 24.0],
+        ),
+    }
+
+    class LiteStrategy(Strategy):
+        history = None
+
+        def init(self) -> None:
+            self.start_on_bar(2)
+
+        def next(self) -> None:
+            if len(self.data) == 3:
+                self.history = self.history_panel(lookback=2)
+
+    stats = Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run()
+    history = stats.strategy.history
+
+    assert history.index.names == ["timestamp", "symbol"]
+    assert list(history.index.get_level_values("symbol").unique()) == ["AAA", "BBB"]
+    assert list(history.index.get_level_values("timestamp").unique()) == list(
+        pd.date_range("2026-01-02", periods=2, freq="D", tz="UTC")
+    )
+    assert history.loc[(pd.Timestamp("2026-01-03", tz="UTC"), "BBB"), "close"] == 22.0
 
 
 def test_lite_target_equal_and_close_all_are_target_position_sugar() -> None:

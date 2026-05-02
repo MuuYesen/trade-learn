@@ -1,6 +1,6 @@
 {
   "version": "0.1-alpha",
-  "source": "docs/specs/CONSISTENCY.md",
+  "source": "design/specs/CONSISTENCY.md",
   "datasets": [
     {"symbol": "GOOG", "exchange": "NASDAQ", "engine": "tv", "start": "2020-01-01", "end": "2024-12-31", "freq": "1d"},
     {"symbol": "AAPL", "exchange": "NASDAQ", "engine": "tv", "start": "2020-01-01", "end": "2024-12-31", "freq": "1d"},

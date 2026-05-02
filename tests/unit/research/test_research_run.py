@@ -6,10 +6,13 @@ import pytest
 import tradelearn.research as research
 from tradelearn.research import ResearchRun, ResearchStep
 from tradelearn.research.portfolio import (
+    Constraint,
     Constraints,
     EqualWeight,
+    Selector,
     TopK,
     WeightBuilder,
+    Weighter,
     apply_constraints,
     equal_weight,
     select_top,
@@ -109,6 +112,41 @@ def test_topk_equal_weights_builds_multi_period_weight_panel() -> None:
         result = run.finish()
 
     assert [step.name for step in result.steps] == ["topk_equal_weights"]
+
+
+def test_feature_set_can_be_nested_in_pipeline() -> None:
+    bars = pd.DataFrame(
+        {
+            "open": [10.0, 20.0, 11.0, 21.0, 12.0, 22.0],
+            "high": [11.0, 21.0, 12.0, 22.0, 13.0, 23.0],
+            "low": [9.0, 19.0, 10.0, 20.0, 11.0, 21.0],
+            "close": [10.0, 20.0, 11.0, 21.0, 12.0, 22.0],
+            "volume": [100.0, 200.0, 100.0, 200.0, 100.0, 200.0],
+        },
+        index=pd.MultiIndex.from_product(
+            [pd.date_range("2024-01-01", periods=3, freq="D", tz="UTC"), ["AAA", "BBB"]],
+            names=["timestamp", "symbol"],
+        ),
+    )
+    feature_set = research.FeatureSet(
+        features={
+            "alpha": lambda p: p.close.pct_change(),
+            "size": lambda p: p.close,
+        },
+        target={"label": lambda p: p.close.shift(-1) / p.close - 1.0},
+    )
+    preprocess = research.Pipeline([StandardScaler(columns=["alpha"])])
+    runtime_pipeline = research.Pipeline([feature_set, preprocess])
+
+    dataset = feature_set.fit_transform(bars, include_target=True)
+    assert set(dataset.columns) == {"alpha", "size", "label"}
+    assert not hasattr(feature_set, "dataset")
+
+    transformed = runtime_pipeline.fit_transform(bars)
+
+    assert set(transformed.columns) == {"alpha", "size"}
+    assert transformed.index.names == ["timestamp", "symbol"]
+    assert "FeatureSet" in [name for name, _step in runtime_pipeline.steps]
 
 
 def test_portfolio_functions_pipe_multi_period_scores_to_weights() -> None:
@@ -341,6 +379,27 @@ def test_research_pipeline_fits_train_and_transforms_test() -> None:
     assert preprocess.get_params()["steps"][0]["type"] == "Winsorizer"
 
 
+def test_research_pipeline_accepts_transformer_protocol_without_inheritance() -> None:
+    class AddOne:
+        def fit(self, data):
+            return self
+
+        def transform(self, data):
+            result = data.copy()
+            result["alpha"] = result["alpha"] + 1
+            return result
+
+        def get_params(self):
+            return {"type": "AddOne"}
+
+    assert isinstance(AddOne(), research.Transformer)
+
+    data = pd.DataFrame({"alpha": [1.0]})
+    transformed = research.Pipeline([AddOne()]).fit_transform(data)
+
+    assert transformed["alpha"].tolist() == [2.0]
+
+
 def test_weight_builder_builds_panel_weights_from_scores() -> None:
     scores = pd.Series(
         [0.1, 0.3, 0.4, 0.2],
@@ -373,6 +432,41 @@ def test_weight_builder_builds_panel_weights_from_scores() -> None:
     assert result.params["WeightBuilder.select.type"] == "TopK"
     assert result.params["WeightBuilder.weight.type"] == "EqualWeight"
     assert result.params["WeightBuilder.constrain.type"] == "Constraints"
+
+
+def test_weight_builder_accepts_protocol_components_without_inheritance() -> None:
+    class FirstSelector:
+        def select(self, scores):
+            return [next(iter(scores))]
+
+        def get_params(self):
+            return {"type": "FirstSelector"}
+
+    class FullWeight:
+        def allocate(self, selected):
+            return pd.Series({selected[0]: 1.0}, name="weight")
+
+        def get_params(self):
+            return {"type": "FullWeight"}
+
+    class Cap:
+        def apply(self, weights):
+            return weights.clip(upper=0.5)
+
+        def get_params(self):
+            return {"type": "Cap"}
+
+    assert isinstance(FirstSelector(), Selector)
+    assert isinstance(FullWeight(), Weighter)
+    assert isinstance(Cap(), Constraint)
+
+    weights = WeightBuilder(
+        select=FirstSelector(),
+        weight=FullWeight(),
+        constrain=Cap(),
+    ).build({"AAA": 0.2, "BBB": 0.1})
+
+    assert weights.to_dict() == {"AAA": 0.5}
 
 
 def test_standard_scaler_fit_transform_matches_fit_then_transform() -> None:

@@ -115,9 +115,15 @@ def test_mlflow_analyzer_logs_params_stats_and_artifacts() -> None:
     ]
     assert "sharpe" not in fake.metrics[0]
     assert fake.dicts == []
-    assert sorted(name for name, _ in fake.artifacts) == ["artifacts.xlsx", "report.html"]
+    assert sorted(name for name, _ in fake.artifacts) == [
+        "artifacts.xlsx",
+        "equity.csv",
+        "report.html",
+        "summary.csv",
+        "trades.csv",
+    ]
     assert {artifact_path for _, artifact_path in fake.artifacts} == {None}
-    assert fake.artifact_dirs == [("csv", "csv")]
+    assert fake.artifact_dirs == []
     assert strategy.analyzer_results["mlflow"]["status"] == "logged"
 
 
@@ -158,9 +164,11 @@ def test_mlflow_analyzer_logs_report_plot_and_table_artifacts() -> None:
         "report.html",
         "plot.html",
         "artifacts.xlsx",
+        "weights.csv",
+        "research.csv",
     }.issubset(artifacts)
     assert all(artifact_path == "bundle" for artifact_path in artifacts.values())
-    assert ("csv", "bundle/csv") in fake.artifact_dirs
+    assert fake.artifact_dirs == []
 
 
 def test_mlflow_analyzer_logs_research_target_weight_artifacts() -> None:
@@ -214,9 +222,11 @@ def test_mlflow_analyzer_logs_research_target_weight_artifacts() -> None:
         "artifacts.xlsx",
         "report.html",
         "plot.html",
+        "weights.csv",
+        "research.csv",
     }.issubset(artifacts)
     assert all(artifact_path == "research-run" for artifact_path in artifacts.values())
-    assert ("csv", "research-run/csv") in fake.artifact_dirs
+    assert fake.artifact_dirs == []
 
 
 def test_mlflow_analyzer_can_skip_artifact_uploads() -> None:
@@ -305,7 +315,9 @@ def test_mlflow_analyzer_logs_research_result_from_strategy_params() -> None:
     assert all(not str(value).startswith("ResearchResult(") for value in params.values())
     artifacts = {name: artifact_path for name, artifact_path in fake.artifacts}
     assert artifacts["artifacts.xlsx"] == "research-run"
-    assert ("csv", "research-run/csv") in fake.artifact_dirs
+    assert artifacts["weights.csv"] == "research-run"
+    assert artifacts["research.csv"] == "research-run"
+    assert fake.artifact_dirs == []
 
 
 def test_mlflow_analyzer_uses_default_uri_and_warns_without_interrupt(caplog) -> None:

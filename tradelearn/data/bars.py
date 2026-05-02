@@ -18,42 +18,6 @@ REQUIRED_COLUMNS = ("open", "high", "low", "close", "volume")
 PRICE_COLUMNS = ("open", "high", "low", "close")
 
 
-class MarketPanel:
-    """Wide-table view over MultiIndex(timestamp, symbol) market bars."""
-
-    def __init__(self, bars: pd.DataFrame) -> None:
-        self.bars = validate_bars(pd.DataFrame(bars).copy())
-
-    def __getattr__(self, name: str) -> pd.DataFrame:
-        if name in self.bars.columns:
-            return self.field(name)
-        raise AttributeError(name)
-
-    def field(self, name: str) -> pd.DataFrame:
-        """Return one bars column as timestamp x symbol wide data."""
-
-        if name not in self.bars.columns:
-            raise KeyError(f"bars column not found: {name}")
-        wide = self.bars[name].unstack("symbol")
-        wide.index.name = "timestamp"
-        return wide.sort_index()
-
-    def to_dataset(self, features: dict[str, object]) -> pd.DataFrame:
-        """Build a MultiIndex(timestamp, symbol) research dataset.
-
-        Feature callables receive this ``MarketPanel`` and must return either a
-        timestamp x symbol DataFrame or a compatible Series.
-        """
-
-        columns: dict[str, pd.Series] = {}
-        for name, spec in features.items():
-            value = spec(self) if callable(spec) else spec
-            columns[str(name)] = _feature_series(value, name=str(name))
-        dataset = pd.concat(columns, axis=1)
-        dataset.index.names = ["timestamp", "symbol"]
-        return dataset.sort_index()
-
-
 def normalize_bars(
     raw: pd.DataFrame,
     *,
@@ -155,18 +119,3 @@ def _require_columns(frame: pd.DataFrame, columns: tuple[str, ...]) -> None:
 def _optional_numeric_columns(frame: pd.DataFrame) -> list[str]:
     """Return optional numeric Bars columns present in a frame."""
     return [column for column in ("vwap", "amount", "adj_factor") if column in frame.columns]
-
-
-def _feature_series(value: object, *, name: str) -> pd.Series:
-    if isinstance(value, pd.DataFrame):
-        series = value.stack(future_stack=True)
-    else:
-        series = pd.Series(value)
-    if not isinstance(series.index, pd.MultiIndex) or series.index.nlevels != 2:
-        raise ContractError(
-            f"MarketPanel feature {name!r} must produce MultiIndex(timestamp, symbol) values"
-        )
-    series = series.copy()
-    series.index.names = ["timestamp", "symbol"]
-    series.name = name
-    return series

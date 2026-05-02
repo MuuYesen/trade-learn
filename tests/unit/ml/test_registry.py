@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from tradelearn.engine import Cerebro
-from tradelearn.ml import MLStrategy, ModelRegistry, model_uri
+from tradelearn.ml import MLStrategy, ModelLoader, ModelRegistry, model_uri
 
 
 class FakePyfunc:
@@ -63,6 +63,14 @@ def test_model_registry_loads_mlflow_pyfunc_model() -> None:
     assert model is mlflow.pyfunc.model
     assert mlflow.tracking_uris == ["https://mlflow.example"]
     assert mlflow.pyfunc.loaded == ["models:/alpha_model/production"]
+
+
+def test_model_loader_protocol_accepts_plain_registry() -> None:
+    class PlainRegistry:
+        def load(self, reference: str):
+            return ConstantModel()
+
+    assert isinstance(PlainRegistry(), ModelLoader)
 
 
 def test_mlstrategy_loads_string_model_reference_from_registry() -> None:

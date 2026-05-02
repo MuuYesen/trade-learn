@@ -3,7 +3,7 @@ site_author: MuuYesen
 site_description: Python quantitative research framework for traditional and ML strategies.
 repo_url: https://github.com/MuuYesen/trade-learn
 repo_name: MuuYesen/trade-learn
-docs_dir: docs
+docs_dir: design
 exclude_docs: |
   PROGRESS.md
   BACKTESTING_COMPAT.md
@@ -13,7 +13,7 @@ exclude_docs: |
 
 theme:
   name: material
-  custom_dir: docs/mkdocs/overrides
+  custom_dir: design/mkdocs/overrides
   language: zh
   palette:
     - scheme: default
@@ -41,7 +41,7 @@ theme:
     - search.share
   icon:
     repo: fontawesome/brands/github-alt
-edit_uri: edit/main/docs
+edit_uri: edit/main/design
 copyright: Copyright &copy; 2026 trade-learn
 extra:
   social:

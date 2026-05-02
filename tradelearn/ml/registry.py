@@ -3,7 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
+
+
+@runtime_checkable
+class ModelLoader(Protocol):
+    """Protocol for user-defined model registries used by MLStrategy."""
+
+    def load(self, reference: str) -> Any:
+        """Load a model object from a user-facing reference."""
+        ...
 
 
 def model_uri(reference: str) -> str:
@@ -42,3 +51,6 @@ def _import_mlflow() -> Any:
     import mlflow
 
     return mlflow
+
+
+__all__ = ["ModelLoader", "ModelRegistry", "model_uri"]

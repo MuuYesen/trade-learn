@@ -5,7 +5,8 @@ Run from the repository root:
     python examples/research/index_enhance_engine.py
 
 The example keeps research outside the strategy, passes the final
-ResearchResult into the strategy, and lets Engine execute target_weights().
+ResearchResult into the strategy, and lets Engine execute Backtrader-style
+order_target_percent() calls.
 """
 
 from __future__ import annotations
@@ -14,18 +15,20 @@ import logging
 import warnings
 from pathlib import Path
 
+from sklearn.ensemble import GradientBoostingRegressor
+
 import tradelearn.engine as bt
 import tradelearn.research as research
 import tradelearn.research.explore as ex
 import tradelearn.research.portfolio as pf
 import tradelearn.research.preprocess as pp
-from tradelearn.data import MarketPanel, TradingViewProvider
+from tradelearn.data import TradingViewProvider
 from tradelearn.engine.analyzers import MLflowAnalyzer
 from tradelearn.research import ResearchRun
 
 
-class EngineResearchIndexEnhance(bt.IndexEnhanceStrategy):
-    """Execute precomputed research weights through Engine target_weights()."""
+class EngineResearchIndexEnhance(bt.Strategy):
+    """Execute precomputed research weights through Engine order_target_percent()."""
 
     params = (("lookback", 20), ("rebalance_bars", 20))
 
@@ -36,7 +39,12 @@ class EngineResearchIndexEnhance(bt.IndexEnhanceStrategy):
     def next(self) -> None:
         if len(self) % self.p.rebalance_bars != 0:
             return
-        self.target_weights(self.research_result.weights[0], close_missing=True)
+        weights = self.research_result.weights[0]
+        for data in self.datas:
+            self.order_target_percent(
+                data=data,
+                target=weights.get(data._name),
+            )
 
 
 if __name__ == "__main__":
@@ -64,14 +72,17 @@ if __name__ == "__main__":
     provider = TradingViewProvider(n_bars=1500)
     bars = provider.history_ohlc(list(symbols), start=start, end=end, freq="1d")
 
-    panel = MarketPanel(bars)
-    features = panel.to_dataset(
+    feature_set = research.FeatureSet(
         {
             "alpha": lambda p: p.close.pct_change(lookback)
             / p.close.pct_change().rolling(lookback).std(),
             "size": lambda p: p.close,
-        }
-    ).dropna()
+        },
+        target={
+            "label": lambda p: p.close.shift(-lookback) / p.close - 1.0,
+        },
+    )
+    features = feature_set.fit_transform(bars, include_target=True).dropna()
 
     with ResearchRun("index_enhance_research") as run:
         data_profile = ex.profile(bars)
@@ -80,6 +91,7 @@ if __name__ == "__main__":
             split=split,
             level="timestamp",
         )
+
         winsorizer = pp.Winsorizer(columns=["alpha"], limits=(0.05, 0.95))
         neutralizer = pp.Neutralizer(columns=["alpha"], exposures=["size"], method="ols")
         scaler = pp.StandardScaler(columns=["alpha"])
@@ -89,12 +101,23 @@ if __name__ == "__main__":
         test_features = winsorizer.transform(test_features)
         test_features = neutralizer.transform(test_features)
         test_features = scaler.transform(test_features)
-        scores = test_features["alpha"].rename("score")
+
+        model = GradientBoostingRegressor(
+            random_state=7,
+            n_estimators=50,
+            max_depth=3,
+        )
+        model.fit(train_features[["alpha"]], train_features["label"])
+        scores = research.ModelScorer(model, features=("alpha",), current=False).predict(
+            test_features
+        )
         selected = pf.select_top(scores, k=2)
         weights = pf.equal_weight(selected, gross=0.95)
         weights = pf.apply_constraints(weights, max_weight=0.5, normalize=True)
         research_result = run.finish(
             features=test_features,
+            target=test_features["label"],
+            model=model,
             scores=scores,
             selected=selected,
             weights=weights,

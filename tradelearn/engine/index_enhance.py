@@ -15,8 +15,8 @@ class IndexEnhanceStrategy(Strategy):
     """Engine cross-sectional strategy helper.
 
     Subclasses keep the normal ``next`` lifecycle. This class only provides
-    utilities for building a current cross section and translating symbol
-    weights into existing ``order_target_percent`` calls.
+    utilities for building a current cross section, checking rebalance
+    windows, and translating symbol weights into order_target_percent() calls.
     """
 
     rebalance_freq: str | int = "monthly"

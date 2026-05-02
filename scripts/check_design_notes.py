@@ -59,19 +59,19 @@ SECTION_PROMPTS = {
 
 SOURCE_CHECKLISTS = {
     "matching-design.md": (
-        "docs/specs/BACKTEST_SPEC.md: order matching rules",
-        "docs/specs/STRATEGY_SPEC.md: user-facing order API",
-        "docs/specs/CONSISTENCY.md: decision-layer tolerance",
+        "design/specs/BACKTEST_SPEC.md: order matching rules",
+        "design/specs/STRATEGY_SPEC.md: user-facing order API",
+        "design/specs/CONSISTENCY.md: decision-layer tolerance",
     ),
     "event-loop.md": (
-        "docs/specs/BACKTEST_SPEC.md: event loop ordering",
-        "docs/specs/ARCHITECTURE.md: Python/Rust boundary",
-        "docs/specs/STRATEGY_SPEC.md: callback lifecycle",
+        "design/specs/BACKTEST_SPEC.md: event loop ordering",
+        "design/specs/ARCHITECTURE.md: Python/Rust boundary",
+        "design/specs/STRATEGY_SPEC.md: callback lifecycle",
     ),
     "portfolio.md": (
-        "docs/specs/BACKTEST_SPEC.md: portfolio accounting",
-        "docs/specs/CONTRACTS.md: Broker contract",
-        "docs/specs/REPORT_SPEC.md: downstream report artifacts",
+        "design/specs/BACKTEST_SPEC.md: portfolio accounting",
+        "design/specs/CONTRACTS.md: Broker contract",
+        "design/specs/REPORT_SPEC.md: downstream report artifacts",
     ),
 }
 
@@ -354,7 +354,7 @@ def main(argv: list[str] | None = None) -> int:
         "directory",
         nargs="?",
         type=Path,
-        default=Path("docs/internal"),
+        default=Path("design/internal"),
         help="Directory containing Stage 2 clean-room design notes.",
     )
     parser.add_argument(

@@ -1,4 +1,4 @@
-"""Core contract objects and validators from ``docs/specs/CONTRACTS.md``.
+"""Core contract objects and validators from ``design/specs/CONTRACTS.md``.
 
 Only cross-runtime contracts belong here. Backtest-specific runtime models such
 as ``Order``, ``Trade``, and ``ExecutedInfo`` stay in the backtest package until

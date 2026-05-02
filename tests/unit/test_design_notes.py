@@ -363,13 +363,13 @@ def test_check_design_notes_init_templates_include_source_checklists(
         check=True,
     )
 
-    assert "- [ ] docs/specs/BACKTEST_SPEC.md: order matching rules" in (
+    assert "- [ ] design/specs/BACKTEST_SPEC.md: order matching rules" in (
         docs_internal / "matching-design.md"
     ).read_text(encoding="utf-8")
-    assert "- [ ] docs/specs/BACKTEST_SPEC.md: event loop ordering" in (
+    assert "- [ ] design/specs/BACKTEST_SPEC.md: event loop ordering" in (
         docs_internal / "event-loop.md"
     ).read_text(encoding="utf-8")
-    assert "- [ ] docs/specs/BACKTEST_SPEC.md: portfolio accounting" in (
+    assert "- [ ] design/specs/BACKTEST_SPEC.md: portfolio accounting" in (
         docs_internal / "portfolio.md"
     ).read_text(encoding="utf-8")
 

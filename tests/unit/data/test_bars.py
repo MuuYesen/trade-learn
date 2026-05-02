@@ -11,9 +11,9 @@ from tradelearn.data import (
     BarsCache,
     CacheExpiredError,
     CacheMissError,
-    MarketPanel,
 )
 from tradelearn.data.bars import bars_fingerprint, normalize_bars
+from tradelearn.research import FeatureSet
 
 
 def test_normalize_bars_builds_utc_multiindex_and_metadata() -> None:
@@ -44,7 +44,7 @@ def test_normalize_bars_builds_utc_multiindex_and_metadata() -> None:
     assert bars["open"].dtype == "float64"
 
 
-def test_market_panel_exposes_wide_fields_and_dataset() -> None:
+def test_feature_set_exposes_wide_fields_and_dataset() -> None:
     raw = pd.DataFrame(
         {
             "timestamp": ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
@@ -58,15 +58,15 @@ def test_market_panel_exposes_wide_fields_and_dataset() -> None:
     )
     bars = normalize_bars(raw, market="US", freq="1d", engine="test", source="fixture")
 
-    panel = MarketPanel(bars)
-    dataset = panel.to_dataset(
+    features = FeatureSet(
         {
             "ret_1d": lambda p: p.close.pct_change(),
-            "label": lambda p: p.close.shift(-1) / p.close - 1,
-        }
+        },
+        target={"label": lambda p: p.close.shift(-1) / p.close - 1},
     )
+    dataset = features.fit_transform(bars, include_target=True)
 
-    assert panel.close.columns.tolist() == ["AAA", "BBB"]
+    assert not hasattr(features, "dataset")
     assert dataset.index.names == ["timestamp", "symbol"]
     assert dataset.columns.tolist() == ["ret_1d", "label"]
     assert dataset.loc[(pd.Timestamp("2024-01-02", tz="UTC"), "AAA"), "ret_1d"] == pytest.approx(0.2)

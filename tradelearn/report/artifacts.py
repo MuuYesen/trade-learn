@@ -59,11 +59,11 @@ def market_data_from_strategy(strategy: Any) -> pd.DataFrame | None:
 
 def _remove_report_sidecars(output_dir: Path) -> None:
     keep = {"artifacts.xlsx", "report.html", "plot.html"}
-    keep_dirs = {"csv"}
+    keep.update(path.name for path in output_dir.glob("*.csv"))
     for path in output_dir.iterdir():
         if path.is_file() and path.name not in keep:
             path.unlink()
-        elif path.is_dir() and path.name not in keep_dirs:
+        elif path.is_dir():
             shutil.rmtree(path)
 
 
@@ -75,13 +75,11 @@ def _write_tables(output_dir: Path, stats: Any, strategy: Any | None) -> None:
     sheets = _artifact_sheets(stats, strategy)
     if not sheets:
         return
-    csv_dir = output_dir / "csv"
-    csv_dir.mkdir(exist_ok=True)
     with pd.ExcelWriter(output_dir / "artifacts.xlsx") as writer:
         for name, frame in sheets.items():
             safe = _excel_safe_frame(frame)
             safe.to_excel(writer, sheet_name=name, index=False)
-            safe.to_csv(csv_dir / f"{_csv_name(name)}.csv", index=False)
+            safe.to_csv(output_dir / f"{_csv_name(name)}.csv", index=False)
 
 
 def _csv_name(name: str) -> str:

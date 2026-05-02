@@ -1,6 +1,5 @@
 """Market data contracts, adapters, and cache helpers."""
 
-from tradelearn.data.bars import MarketPanel
 from tradelearn.data.cache import BarsCache, CacheEntry, CacheExpiredError, CacheMissError
 from tradelearn.data.duckdb_backend import DuckDBBarsBackend
 from tradelearn.data.explorer import DataExplorer
@@ -18,7 +17,6 @@ __all__ = [
     "DataExplorer",
     "DataProvider",
     "DuckDBBarsBackend",
-    "MarketPanel",
     "TdxProvider",
     "TradingViewProvider",
 ]

@@ -3,11 +3,50 @@ from __future__ import annotations
 import math
 from collections.abc import Hashable, Mapping, Sequence
 from importlib import import_module
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import pandas as pd
 
 from tradelearn.research.run import current_run, suspend_tracking, tracked
+
+
+@runtime_checkable
+class Selector(Protocol):
+    """Protocol for user-defined score-to-selection components."""
+
+    def select(self, scores: Mapping[Hashable, float] | pd.Series) -> Any:
+        """Return selected symbols or a panel selection mask."""
+        ...
+
+    def get_params(self) -> dict[str, Any]:
+        """Return serializable parameters for tracking."""
+        ...
+
+
+@runtime_checkable
+class Weighter(Protocol):
+    """Protocol for user-defined selection-to-weight components."""
+
+    def allocate(self, selected: Any) -> pd.Series:
+        """Return portfolio weights for selected symbols."""
+        ...
+
+    def get_params(self) -> dict[str, Any]:
+        """Return serializable parameters for tracking."""
+        ...
+
+
+@runtime_checkable
+class Constraint(Protocol):
+    """Protocol for user-defined weight post-processors."""
+
+    def apply(self, weights: Mapping[Hashable, float] | pd.Series) -> pd.Series:
+        """Return constrained weights."""
+        ...
+
+    def get_params(self) -> dict[str, Any]:
+        """Return serializable parameters for tracking."""
+        ...
 
 
 @tracked(category="portfolio")
@@ -332,9 +371,9 @@ class WeightBuilder:
     def __init__(
         self,
         *,
-        select: Any,
-        weight: Any,
-        constrain: Any | None = None,
+        select: Selector,
+        weight: Weighter,
+        constrain: Constraint | None = None,
     ) -> None:
         self.select = select
         self.weight = weight
@@ -477,11 +516,14 @@ def _weights_series(result: Any) -> pd.Series:
 
 
 __all__ = [
+    "Constraint",
     "Constraints",
     "EqualWeight",
     "RiskfolioOptimizer",
+    "Selector",
     "TopK",
     "WeightBuilder",
+    "Weighter",
     "apply_constraints",
     "equal_weight",
     "select_top",
