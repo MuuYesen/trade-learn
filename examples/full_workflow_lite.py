@@ -115,7 +115,7 @@ if __name__ == "__main__":
                 "gross": LiteMomentumPortfolio.gross,
             },
             tags={"mode": "lite"},
-            artifact_bundle=True,
+            upload_artifacts=True,
             log_report=True,
             log_plot=True,
         )

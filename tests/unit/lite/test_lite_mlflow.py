@@ -32,6 +32,7 @@ class FakeMLflow:
         self.metrics: list[dict[str, float]] = []
         self.dicts: list[tuple[dict[str, object], str]] = []
         self.artifacts: list[tuple[str, str | None]] = []
+        self.artifact_dirs: list[tuple[str, str | None]] = []
 
     def set_tracking_uri(self, uri: str) -> None:
         self.tracking_uris.append(uri)
@@ -55,6 +56,9 @@ class FakeMLflow:
 
     def log_artifact(self, local_path: str, artifact_path: str | None = None) -> None:
         self.artifacts.append((Path(local_path).name, artifact_path))
+
+    def log_artifacts(self, local_dir: str, artifact_path: str | None = None) -> None:
+        self.artifact_dirs.append((Path(local_dir).name, artifact_path))
 
 
 def test_lite_log_mlflow_requires_run_first() -> None:
@@ -88,8 +92,6 @@ def test_lite_log_mlflow_logs_stats_config_params_and_artifacts() -> None:
         params={"fast": 3},
         tags={"mode": "lite"},
         uri="https://mlflow.example",
-        artifact_path="lite",
-        artifact_bundle=True,
         log_report=False,
         log_plot=False,
         mlflow_module=fake,
@@ -105,21 +107,41 @@ def test_lite_log_mlflow_logs_stats_config_params_and_artifacts() -> None:
     assert fake.params[0]["tag.mode"] == "lite"
     assert fake.metrics[0]["final_value"] == stats.summary["final_value"]
     assert fake.metrics[0]["total_orders"] == 1.0
-    payload, artifact_file = fake.dicts[0]
-    assert artifact_file == "stats.json"
-    assert payload["summary"] == stats.summary
-    assert payload["config"] == stats.config
-    assert sorted(name for name, _ in fake.artifacts) == [
-        "equity.parquet",
-        "trades.parquet",
-    ]
-    assert {artifact_path for _, artifact_path in fake.artifacts} == {"lite"}
+    assert fake.dicts == []
+    assert sorted(name for name, _ in fake.artifacts) == ["artifacts.xlsx"]
+    assert {artifact_path for _, artifact_path in fake.artifacts} == {None}
+    assert fake.artifact_dirs == [("csv", "csv")]
+
+
+def test_lite_log_mlflow_can_skip_artifact_uploads() -> None:
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(2)
+
+        def next(self) -> None:
+            pass
+
+    fake = FakeMLflow()
+    bt = Backtest(_data(), LiteStrategy, cash=1000.0)
+    stats = bt.run()
+
+    bt.log_mlflow(
+        experiment_name="lite-exp",
+        uri="https://mlflow.example",
+        upload_artifacts=False,
+        mlflow_module=fake,
+    )
+
+    assert fake.metrics[0]["final_value"] == stats.summary["final_value"]
+    assert fake.dicts == []
+    assert fake.artifacts == []
 
 
 def test_lite_log_mlflow_logs_research_result_params_and_artifacts() -> None:
     result = ResearchResult(
         name="lite_research",
         params={"select_top.k": 1},
+        artifacts={"lookback": 20, "profile": {"rows": 4}},
         scores=pd.Series({"primary": 1.0}, name="score"),
         selected=["primary"],
         weights=pd.Series({"primary": 0.5}, name="weight"),
@@ -142,8 +164,6 @@ def test_lite_log_mlflow_logs_research_result_params_and_artifacts() -> None:
 
     bt.log_mlflow(
         experiment_name="lite-research",
-        artifact_path="lite",
-        artifact_bundle=True,
         log_report=False,
         log_plot=False,
         mlflow_module=fake,
@@ -151,6 +171,8 @@ def test_lite_log_mlflow_logs_research_result_params_and_artifacts() -> None:
 
     assert fake.params[0]["research.name"] == "lite_research"
     assert fake.params[0]["research.select_top.k"] == 1
-    payloads = {artifact_file: payload for payload, artifact_file in fake.dicts}
-    assert payloads["research.json"]["result"]["weights"] == {"primary": 0.5}
-    assert ("weights.parquet", "lite") in fake.artifacts
+    assert fake.params[0]["research.artifacts.lookback"] == 20
+    assert fake.params[0]["research.artifacts.profile.rows"] == 4
+    assert fake.dicts == []
+    assert ("artifacts.xlsx", None) in fake.artifacts
+    assert ("csv", "csv") in fake.artifact_dirs

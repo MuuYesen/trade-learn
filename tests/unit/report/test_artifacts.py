@@ -5,15 +5,16 @@ from types import SimpleNamespace
 import pandas as pd
 
 from tradelearn import metrics
-from tradelearn.research import ResearchResult
 from tradelearn.report.artifacts import write_artifact_bundle
+from tradelearn.research import ResearchResult
 
 
 def test_write_artifact_bundle_writes_tables_report_plot_and_weights(tmp_path) -> None:
     stats = _stats()
     strategy = SimpleNamespace(
-        pipeline_result=SimpleNamespace(
-            weights=pd.Series({"AAA": 0.6, "BBB": 0.4}, name="weight")
+        research_result=ResearchResult(
+            name="artifact_research",
+            weights=pd.Series({"AAA": 0.6, "BBB": 0.4}, name="weight"),
         )
     )
     market_data = pd.DataFrame(
@@ -38,15 +39,16 @@ def test_write_artifact_bundle_writes_tables_report_plot_and_weights(tmp_path) -
 
     names = {path.name for path in files}
     assert {
-        "equity.parquet",
-        "trades.parquet",
-        "weights.parquet",
-        "stats.json",
+        "artifacts.xlsx",
+        "csv",
         "report.html",
         "plot.html",
     }.issubset(names)
-    weights = pd.read_parquet(tmp_path / "weights.parquet")["weight"]
-    assert weights.to_dict() == {"AAA": 0.6, "BBB": 0.4}
+    assert (tmp_path / "artifacts.xlsx").is_file()
+    weights_csv = pd.read_csv(tmp_path / "csv" / "weights.csv").set_index("symbol")["weight"]
+    assert weights_csv.to_dict() == {"AAA": 0.6, "BBB": 0.4}
+    trades_csv = pd.read_csv(tmp_path / "csv" / "trades.csv")
+    assert trades_csv["pnl"].tolist() == [100.0, -25.0]
 
 
 def test_write_artifact_bundle_writes_research_result_weights(tmp_path) -> None:
@@ -54,16 +56,33 @@ def test_write_artifact_bundle_writes_research_result_weights(tmp_path) -> None:
     strategy = SimpleNamespace(
         research_result=ResearchResult(
             name="research",
+            selected=["AAA"],
             weights=pd.Series({"AAA": 0.7, "BBB": 0.3}, name="weight"),
+            artifacts={
+                "name": "custom-name",
+                "lookback": 20,
+                "symbols": ["AAA", "BBB"],
+                "profile": {"rows": 3},
+            },
         )
     )
 
     files = write_artifact_bundle(stats, tmp_path, strategy=strategy)
 
     names = {path.name for path in files}
-    assert "weights.parquet" in names
-    weights = pd.read_parquet(tmp_path / "weights.parquet")["weight"]
-    assert weights.to_dict() == {"AAA": 0.7, "BBB": 0.3}
+    assert "artifacts.xlsx" in names
+    assert "csv" in names
+    assert "report.html" in names
+    assert (tmp_path / "artifacts.xlsx").is_file()
+    weights_csv = pd.read_csv(tmp_path / "csv" / "weights.csv").set_index("symbol")["weight"]
+    assert weights_csv.to_dict() == {"AAA": 0.7, "BBB": 0.3}
+    research = pd.read_csv(tmp_path / "csv" / "research.csv").set_index("key")["value"]
+    assert research["name"] == "research"
+    assert research["selected"] == "AAA"
+    assert research["artifacts.name"] == "custom-name"
+    assert int(research["artifacts.lookback"]) == 20
+    assert research["artifacts.symbols"] == "AAA,BBB"
+    assert int(research["artifacts.profile.rows"]) == 3
 
 
 def _stats() -> SimpleNamespace:

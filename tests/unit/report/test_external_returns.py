@@ -24,7 +24,7 @@ def test_reporter_from_returns_writes_external_returns_report(tmp_path: Path) ->
     assert "Equity Curve" in html
     assert "Benchmark" in html
     assert (tmp_path / "stats.json").exists()
-    assert (tmp_path / "trades.parquet").exists()
+    assert not list(tmp_path.glob("*.parquet"))
 
 
 def test_reporter_from_returns_adds_default_html_suffix(tmp_path: Path) -> None:

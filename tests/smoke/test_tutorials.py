@@ -161,7 +161,7 @@ def run_mlflow_tutorial() -> dict[str, Any]:
 
 
 def run_jupyterlab_tutorial() -> dict[str, Any]:
-    """Build the JupyterLab dry-run plan used by the lab tutorial."""
+    """Build the JupyterLab launch plan used by the lab tutorial."""
     plan = build_lab_plan(
         TradelearnConfig(mlflow_tracking_uri="file:///tmp/tradelearn-mlflow"),
         no_browser=True,

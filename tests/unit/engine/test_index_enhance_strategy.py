@@ -3,7 +3,8 @@ from __future__ import annotations
 import pandas as pd
 
 from tradelearn.engine import Cerebro, IndexEnhanceStrategy
-from tradelearn.ml import EqualWeightOptimizer, ModelAdapter, StrategyPipeline, TopKSelector
+from tradelearn.research import ResearchResult
+import tradelearn.research.portfolio as pf
 
 
 def _frame(closes: list[float]) -> pd.DataFrame:
@@ -76,32 +77,55 @@ def test_index_enhance_strategy_integer_rebalance_frequency() -> None:
     assert len(strategy.calls) == 3
 
 
-def test_index_enhance_strategy_can_consume_pipeline_weights() -> None:
-    class PipelineWeights(IndexEnhanceStrategy):
+def test_index_enhance_strategy_can_consume_research_weight_functions() -> None:
+    class ResearchWeights(IndexEnhanceStrategy):
         rebalance_freq = 1
-
-        def __init__(self) -> None:
-            super().__init__()
-            self.pipeline = StrategyPipeline(
-                [
-                    ("model", ModelAdapter(score_column="close")),
-                    ("selector", TopKSelector(k=1)),
-                    ("optimizer", EqualWeightOptimizer(gross=0.5)),
-                ]
-            )
 
         def next(self) -> None:
             if not self.should_rebalance():
                 return
             universe = self.current_universe()
-            self.target_weights(self.pipeline.predict_weights(universe).as_weight_dict())
+            selected = pf.select_top(universe["close"], k=1)
+            weights = pf.equal_weight(selected, gross=0.5)
+            self.target_weights(weights.to_dict())
 
     cerebro = Cerebro(trade_on_close=True)
     cerebro.setcash(100_000.0)
     cerebro.adddata(_frame([10, 10, 10]), name="AAA")
     cerebro.adddata(_frame([20, 20, 20]), name="BBB")
-    cerebro.addstrategy(PipelineWeights)
+    cerebro.addstrategy(ResearchWeights)
 
     strategy = cerebro.run()[0]
 
+    assert strategy.getpositionbyname("BBB").size > 0
+
+
+def test_index_enhance_strategy_can_consume_research_result_current_weights() -> None:
+    index = pd.MultiIndex.from_product(
+        [pd.date_range("2024-01-29", periods=3, freq="D", tz="UTC"), ["AAA", "BBB"]],
+        names=["timestamp", "symbol"],
+    )
+    research = ResearchResult(
+        name="engine-research-weights",
+        weights=pd.Series([0.0, 0.5, 0.0, 0.5, 0.0, 0.5], index=index),
+    )
+
+    class ResearchWeights(IndexEnhanceStrategy):
+        rebalance_freq = 1
+
+        def next(self) -> None:
+            if not self.should_rebalance():
+                return
+            self.target_weights(self.research_result.weights[0])
+
+    cerebro = Cerebro(trade_on_close=True)
+    cerebro.setcash(100_000.0)
+    cerebro.adddata(_frame([10, 10, 10]), name="AAA")
+    cerebro.adddata(_frame([20, 20, 20]), name="BBB")
+    cerebro.addstrategy(ResearchWeights, research_result=research)
+
+    strategy = cerebro.run()[0]
+
+    assert strategy.research_result.raw is research
+    assert [item.raw for item in strategy.research_results_history] == [research]
     assert strategy.getpositionbyname("BBB").size > 0

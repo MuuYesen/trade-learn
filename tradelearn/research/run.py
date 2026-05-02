@@ -79,6 +79,90 @@ class ResearchResult:
         return payload
 
 
+class BoundResearchResult:
+    """Strategy-bound research result view."""
+
+    def __init__(self, result: ResearchResult, strategy: Any) -> None:
+        self._result = result
+        self._strategy = strategy
+        self.weights = ResearchWeights(result.weights, strategy)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._result, name)
+
+    @property
+    def raw(self) -> ResearchResult:
+        """Return the original research result."""
+        return self._result
+
+    def as_weight_dict(self) -> dict[str, float]:
+        """Return current weights as a plain dict suitable for target_weights()."""
+        current = self.weights[0]
+        if current is None:
+            return {}
+        return {str(symbol): float(weight) for symbol, weight in current.items()}
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-friendly research payload."""
+        return self._result.to_dict()
+
+
+class ResearchWeights:
+    """Strategy-bound weights supporting TradeLearn ``[0]`` current-bar access."""
+
+    def __init__(self, raw: Any, strategy: Any) -> None:
+        self.raw = raw
+        self._strategy = strategy
+
+    def __getitem__(self, offset: int) -> Any:
+        if not isinstance(offset, int):
+            return self.raw[offset]
+        return self._slice_for_offset(offset)
+
+    def items(self):
+        current = self[0]
+        return current.items() if hasattr(current, "items") else dict(current).items()
+
+    def to_dict(self) -> dict[str, float]:
+        return {str(symbol): float(weight) for symbol, weight in self.items()}
+
+    def _slice_for_offset(self, offset: int) -> Any:
+        weights = self.raw
+        if weights is None:
+            return pd.Series(dtype="float64", name="weight")
+        if isinstance(weights, pd.Series):
+            if isinstance(weights.index, pd.MultiIndex) and weights.index.nlevels >= 2:
+                return _slice_multiindex_weights(
+                    weights,
+                    _strategy_timestamp(self._strategy),
+                    offset,
+                )
+            raise ValueError(
+                "research_result.weights[0] requires MultiIndex(timestamp, symbol) weights. "
+                "For static weights, call target_weights(weights) directly."
+            )
+        if isinstance(weights, pd.DataFrame):
+            if {"timestamp", "symbol", "weight"}.issubset(weights.columns):
+                return _slice_long_weights(weights, _strategy_timestamp(self._strategy), offset)
+            return _slice_wide_weights(weights, _strategy_timestamp(self._strategy), offset)
+        if isinstance(weights, dict):
+            raise ValueError(
+                "research_result.weights[0] requires MultiIndex(timestamp, symbol) weights. "
+                "For static weights, call target_weights(weights) directly."
+            )
+        return weights
+
+
+def bind_research_result(result: Any, strategy: Any) -> Any:
+    """Return a strategy-bound research result view when possible."""
+
+    if isinstance(result, BoundResearchResult):
+        return result
+    if isinstance(result, ResearchResult):
+        return BoundResearchResult(result, strategy)
+    return result
+
+
 class ResearchRun:
     """Context manager that records tracked research function calls."""
 
@@ -121,7 +205,11 @@ class ResearchRun:
             target=target,
             selected_features=selected_features,
             model=model,
-            scores=None if scores is None else pd.Series(scores, name=getattr(scores, "name", "score")),
+            scores=(
+                None
+                if scores is None
+                else pd.Series(scores, name=getattr(scores, "name", "score"))
+            ),
             selected=None if selected is None else [str(item) for item in selected],
             weights=None if weights is None else pd.Series(weights, dtype="float64", name="weight"),
             artifacts=dict(artifacts or {}),
@@ -137,25 +225,40 @@ class ResearchRun:
             return fill_missing(*args, **kwargs)
 
         @staticmethod
-        def winsorize(*args: Any, **kwargs: Any) -> Any:
-            from tradelearn.research.preprocess import winsorize
+        def fill_by_group(*args: Any, **kwargs: Any) -> Any:
+            from tradelearn.research.preprocess import fill_by_group
 
-            return winsorize(*args, **kwargs)
-
-        @staticmethod
-        def neutralize(*args: Any, **kwargs: Any) -> Any:
-            from tradelearn.research.preprocess import neutralize
-
-            return neutralize(*args, **kwargs)
+            return fill_by_group(*args, **kwargs)
 
         @staticmethod
-        def standardize(*args: Any, **kwargs: Any) -> Any:
-            from tradelearn.research.preprocess import standardize
+        def winsorize_mad(*args: Any, **kwargs: Any) -> Any:
+            from tradelearn.research.preprocess import winsorize_mad
 
-            return standardize(*args, **kwargs)
+            return winsorize_mad(*args, **kwargs)
+
+        @staticmethod
+        def clip_outliers(*args: Any, **kwargs: Any) -> Any:
+            from tradelearn.research.preprocess import clip_outliers
+
+            return clip_outliers(*args, **kwargs)
+
+        @staticmethod
+        def rank(*args: Any, **kwargs: Any) -> Any:
+            from tradelearn.research.preprocess import rank
+
+            return rank(*args, **kwargs)
+
+        @staticmethod
+        def label_by_quantile(*args: Any, **kwargs: Any) -> Any:
+            from tradelearn.research.preprocess import label_by_quantile
+
+            return label_by_quantile(*args, **kwargs)
 
 
-def tracked(category: str, name: str | None = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def tracked(
+    category: str,
+    name: str | None = None,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorate a function so calls inside ResearchRun are recorded."""
 
     def decorate(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -181,6 +284,125 @@ def current_run() -> ResearchRun | None:
     return _CURRENT_RUN.get()
 
 
+def _strategy_timestamp(strategy: Any) -> pd.Timestamp:
+    current_datetime = getattr(strategy, "current_datetime", None)
+    if callable(current_datetime):
+        try:
+            return pd.Timestamp(current_datetime())
+        except Exception:
+            pass
+    data = getattr(strategy, "data", None)
+    now = getattr(data, "now", None)
+    if now is not None:
+        try:
+            return pd.Timestamp(now)
+        except Exception:
+            pass
+    datetime_line = getattr(data, "datetime", None)
+    if datetime_line is not None:
+        try:
+            return pd.Timestamp(datetime_line[0])
+        except Exception:
+            pass
+    index = getattr(data, "index", None)
+    if index is not None:
+        try:
+            position = max(0, len(data) - 1)
+            return pd.Timestamp(index[position])
+        except Exception:
+            pass
+    return pd.NaT
+
+
+def _slice_multiindex_weights(
+    weights: pd.Series,
+    timestamp: pd.Timestamp,
+    offset: int,
+) -> pd.Series:
+    level = weights.index.names[0] if weights.index.names[0] is not None else 0
+    selected = _select_weight_timestamp(weights.index.get_level_values(0), timestamp, offset)
+    if selected is None:
+        return pd.Series(dtype="float64", name=weights.name or "weight")
+    sliced = weights.xs(selected, level=level)
+    sliced.name = weights.name or "weight"
+    return sliced
+
+
+def _slice_wide_weights(
+    weights: pd.DataFrame,
+    timestamp: pd.Timestamp,
+    offset: int,
+) -> pd.Series:
+    selected = _select_weight_timestamp(weights.index, timestamp, offset)
+    if selected is None:
+        return pd.Series(dtype="float64", name="weight")
+    return weights.loc[selected].dropna().rename("weight")
+
+
+def _slice_long_weights(
+    weights: pd.DataFrame,
+    timestamp: pd.Timestamp,
+    offset: int,
+) -> pd.Series:
+    selected = _select_weight_timestamp(pd.Index(weights["timestamp"]), timestamp, offset)
+    if selected is None:
+        return pd.Series(dtype="float64", name="weight")
+    mask = _timestamp_match_mask(pd.Index(weights["timestamp"]), selected)
+    frame = weights.loc[mask]
+    if frame.empty:
+        return pd.Series(dtype="float64", name="weight")
+    return pd.Series(
+        frame["weight"].to_numpy(dtype="float64"),
+        index=frame["symbol"].astype(str),
+        name="weight",
+    )
+
+
+def _select_weight_timestamp(
+    values: pd.Index,
+    timestamp: pd.Timestamp,
+    offset: int,
+) -> Any | None:
+    if pd.isna(timestamp):
+        return None
+    unique_values = pd.Index(values).drop_duplicates()
+    if len(unique_values) == 0:
+        return None
+    date_matches = [value for value in unique_values if _same_date(value, timestamp)]
+    if date_matches:
+        ordered = sorted(date_matches, key=_timestamp_sort_key)
+        idx = len(ordered) - 1 + offset
+        return ordered[idx] if 0 <= idx < len(ordered) else None
+    eligible = [
+        value
+        for value in unique_values
+        if _timestamp_sort_key(value) <= _timestamp_sort_key(timestamp)
+    ]
+    if not eligible:
+        return None
+    ordered = sorted(eligible, key=_timestamp_sort_key)
+    idx = len(ordered) - 1 + offset
+    return ordered[idx] if 0 <= idx < len(ordered) else None
+
+
+def _same_date(value: Any, timestamp: pd.Timestamp) -> bool:
+    try:
+        return pd.Timestamp(value).date() == pd.Timestamp(timestamp).date()
+    except Exception:
+        return False
+
+
+def _timestamp_sort_key(value: Any) -> pd.Timestamp:
+    ts = pd.Timestamp(value)
+    if ts.tzinfo is not None:
+        return ts.tz_convert("UTC").tz_localize(None)
+    return ts
+
+
+def _timestamp_match_mask(values: pd.Index, selected: Any) -> list[bool]:
+    return [_timestamp_sort_key(value) == _timestamp_sort_key(selected) for value in values]
+
+
 def _recordable_params(arguments: dict[str, Any]) -> dict[str, Any]:
     skipped = {
         "data",
@@ -191,7 +413,6 @@ def _recordable_params(arguments: dict[str, Any]) -> dict[str, Any]:
         "weights",
         "exposures",
         "returns",
-        "target",
     }
     return {
         name: _json_safe(value)

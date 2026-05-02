@@ -61,7 +61,18 @@ def run_tutorial_smoke() -> dict[str, object]:
             "final_value": float(summary["final_value"]),
         },
         "mlflow": {"status": "logged"},
-        "jupyterlab": {"mcp_command": ["tradelearn", "mcp", "--dry-run"]},
+        "jupyterlab": {
+            "mcp_command": [
+                "tradelearn",
+                "mcp",
+                "--transport",
+                "streamable-http",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8765",
+            ]
+        },
         "backtrader_migration": {"fills": int(summary["total_fills"])},
     }
 

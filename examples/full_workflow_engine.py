@@ -101,10 +101,9 @@ if __name__ == "__main__":
             name="mlflow",
             experiment="tradelearn-full-workflow",
             run_name="engine-full-workflow",
-            artifact_bundle=True,
+            upload_artifacts=True,
             log_report=True,
             log_plot=True,
-            artifact_path="engine",
         )
 
     [strategy] = cerebro.run()

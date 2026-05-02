@@ -3,12 +3,6 @@
 from __future__ import annotations
 
 from tradelearn.ml.causal import CausalSelector
-from tradelearn.ml.pipeline import (
-    FactorTransformer,
-    ModelAdapter,
-    PipelineResult,
-    StrategyPipeline,
-)
 from tradelearn.ml.registry import ModelRegistry, model_uri
 from tradelearn.ml.strategy import MLStrategy
 from tradelearn.research.portfolio import (
@@ -21,13 +15,9 @@ __all__ = [
     "CausalSelector",
     "EqualWeightOptimizer",
     "AutoML",
-    "FactorTransformer",
     "MLStrategy",
-    "ModelAdapter",
     "ModelRegistry",
-    "PipelineResult",
     "PortfolioConstraints",
-    "StrategyPipeline",
     "TopKSelector",
     "model_uri",
 ]

@@ -123,30 +123,28 @@ def test_reporter_html_writes_report_artifacts(tmp_path) -> None:
 
     Reporter(_stats(), periods=252).html(path)
 
-    assert (tmp_path / "equity.parquet").exists()
-    assert (tmp_path / "trades.parquet").exists()
+    assert not list(tmp_path.glob("*.parquet"))
     stats = json.loads((tmp_path / "stats.json").read_text())
     assert stats["summary"]["strategy_name"] == "demo-strategy"
     assert stats["config"]["strategy"] == "demo"
 
 
-def test_reporter_html_expands_pipeline_parameters_in_experiment_section(tmp_path) -> None:
-    """Reporter.html renders pipeline config as readable experiment parameters."""
-    path = tmp_path / "pipeline-report.html"
+def test_reporter_html_expands_research_parameters_in_experiment_section(tmp_path) -> None:
+    """Reporter.html renders research config as readable experiment parameters."""
+    path = tmp_path / "research-report.html"
 
     Reporter(
         {
             "returns": _returns(),
             "trades": _trades(),
-            "summary": {"strategy_name": "pipeline-demo"},
+            "summary": {"strategy_name": "research-demo"},
             "config": {
-                "strategy": "pipeline-demo",
-                "pipeline": {
-                    "steps": ["features", "model", "selector"],
-                    "features": {
-                        "type": "FactorTransformer",
-                        "features": ["value", "quality"],
-                        "feature_store": True,
+                "strategy": "research-demo",
+                "research": {
+                    "steps": ["winsorize", "neutralize", "select_top"],
+                    "preprocess": {
+                        "columns": ["value", "quality"],
+                        "method": "ols",
                     },
                     "selector": {"type": "TopKSelector", "k": 10},
                 },
@@ -156,12 +154,12 @@ def test_reporter_html_expands_pipeline_parameters_in_experiment_section(tmp_pat
     ).html(path)
 
     html = path.read_text()
-    assert "Pipeline Parameters" in html
-    assert "pipeline.features.features" in html
+    assert "Research Parameters" in html
+    assert "research.preprocess.columns" in html
     assert "value, quality" in html
-    assert "pipeline.selector.k" in html
+    assert "research.selector.k" in html
     stats = json.loads((tmp_path / "stats.json").read_text())
-    assert stats["config"]["pipeline"]["selector"]["k"] == 10
+    assert stats["config"]["research"]["selector"]["k"] == 10
 
 
 def test_reporter_html_adds_exposure_chart_for_multi_asset_positions(tmp_path) -> None:
@@ -223,7 +221,7 @@ def test_reporter_html_accepts_benchmark_series(tmp_path) -> None:
     assert "beta" in html
     assert "information_ratio" in html
     assert "Rolling Beta" not in html
-    assert (tmp_path / "rolling_beta.parquet").exists()
+    assert not list(tmp_path.glob("*.parquet"))
 
 
 def test_reporter_html_adds_factor_quantile_chart_when_analyzer_exists(tmp_path) -> None:
@@ -254,12 +252,7 @@ def test_reporter_html_adds_factor_quantile_chart_when_analyzer_exists(tmp_path)
     assert "Factor Rank IC" in html
     assert "Factor Turnover" in html
     assert "Factor Long-Short Returns" in html
-    assert (tmp_path / "factor_ic.parquet").exists()
-    assert (tmp_path / "factor_rank_ic.parquet").exists()
-    assert (tmp_path / "factor_turnover.parquet").exists()
-    assert (tmp_path / "factor_autocorrelation.parquet").exists()
-    assert (tmp_path / "factor_long_short_returns.parquet").exists()
-    assert (tmp_path / "factor_quantile_returns.parquet").exists()
+    assert not list(tmp_path.glob("*.parquet"))
 
 
 class _FactorAnalyzerStub:

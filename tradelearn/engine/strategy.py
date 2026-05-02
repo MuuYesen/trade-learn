@@ -14,6 +14,9 @@ from tradelearn.engine.sizers import Sizer
 
 class Strategy(_BaseStrategy, LineRoot):
     """Backtrader-compatible Strategy that maintains data context."""
+
+    params = (("research_result", None),)
+
     def __init__(self, *args, **kwargs):
         # 1. Sync datas from global context if not already set (for BT facade)
         if not getattr(self, 'datas', None) and _G.current_datas:
@@ -30,6 +33,9 @@ class Strategy(_BaseStrategy, LineRoot):
         # Note: _BaseStrategy.__init__ handles internal dicts
         # LineRoot handled by metaclass already, but we ensure order
         _BaseStrategy.__init__(self, *args, **kwargs)
+        research_result = getattr(getattr(self, "p", None), "research_result", None)
+        if research_result is not None:
+            self.research_result = research_result
         
     @property
     def datetime(self):

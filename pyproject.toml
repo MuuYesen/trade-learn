@@ -35,8 +35,6 @@ dependencies = [
     "xlsxwriter",
     "bokeh",
     "causal-learn",
-    "mlflow",
-    "mcp>=1.8.0",
     "httpx",
     "tqdm",
     "typer",
@@ -58,6 +56,22 @@ lab = [
     "ipywidgets",
     "jupyter-ai",
     "pygwalker",
+    "mcp>=1.8.0",
+]
+mlflow = [
+    "mlflow",
+]
+all = [
+    "jupyterlab",
+    "jupyterlab-git",
+    "ipywidgets",
+    "jupyter-ai",
+    "pygwalker",
+    "mcp>=1.8.0",
+    "mlflow",
+    "Riskfolio-Lib",
+    "optuna",
+    "duckdb",
 ]
 dev = [
     "pytest",

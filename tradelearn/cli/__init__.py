@@ -9,8 +9,14 @@ import typer
 
 from tradelearn import __version__
 from tradelearn.core.config import TradelearnConfig, load_config
-from tradelearn.lab import build_lab_plan, check_lab_dependencies, start_lab_stack
-from tradelearn.mcp import run_server
+from tradelearn.lab import (
+    build_lab_plan,
+    build_mlflow_command,
+    check_lab_dependencies,
+    check_mlflow_dependencies,
+    start_lab_stack,
+    start_mlflow_server,
+)
 
 app = typer.Typer(help="trade-learn research workflow CLI.", no_args_is_help=True)
 
@@ -38,6 +44,10 @@ def doctor(
         bool,
         typer.Option("--lab", help="Include JupyterLab optional dependency diagnostics."),
     ] = False,
+    mlflow: Annotated[
+        bool,
+        typer.Option("--mlflow", help="Include MLflow optional dependency diagnostics."),
+    ] = False,
 ) -> None:
     """Print runtime configuration and basic environment diagnostics."""
 
@@ -46,37 +56,12 @@ def doctor(
     _print_config(resolved)
     if lab:
         missing = check_lab_dependencies()
-        typer.echo("lab_required=jupyterlab,jupyterlab-git,ipywidgets,jupyter-ai,pygwalker")
+        typer.echo("lab_required=jupyterlab,jupyterlab-git,ipywidgets,jupyter-ai,pygwalker,mcp")
         typer.echo(f"lab_missing={','.join(missing) if missing else 'none'}")
-
-
-@app.command()
-def data(
-    config: Annotated[Path | None, typer.Option("--config", help="Config file path.")] = None,
-) -> None:
-    """Show data-cache configuration."""
-
-    resolved = _load(config)
-    typer.echo(f"cache_dir={resolved.data_cache_dir}")
-    typer.echo(f"offline={resolved.data_offline}")
-    typer.echo(f"cache_ttl_seconds={resolved.cache_ttl_seconds}")
-
-
-@app.command()
-def run(
-    config: Annotated[Path | None, typer.Option("--config", help="Config file path.")] = None,
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print resolved run config.")] = False,
-) -> None:
-    """Run or inspect a configured backtest."""
-
-    resolved = _load(config)
-    if not dry_run:
-        typer.echo(
-            "Backtest execution requires a strategy module; rerun with --dry-run for config."
-        )
-        raise typer.Exit(2)
-    typer.echo("tradelearn run dry-run")
-    _print_config(resolved)
+    if mlflow:
+        missing_mlflow = check_mlflow_dependencies()
+        typer.echo("mlflow_required=mlflow")
+        typer.echo(f"mlflow_missing={','.join(missing_mlflow) if missing_mlflow else 'none'}")
 
 
 @app.command()
@@ -92,34 +77,74 @@ def lab(
         bool,
         typer.Option("--no-browser", help="Pass --no-browser to JupyterLab."),
     ] = False,
-    dry_run: Annotated[
-        bool,
-        typer.Option("--dry-run", help="Print commands without starting."),
-    ] = False,
-    skip_dependency_check: Annotated[
-        bool,
-        typer.Option("--skip-dependency-check", help="Start even if lab extras are missing."),
-    ] = False,
+    mlflow_host: Annotated[
+        str,
+        typer.Option("--mlflow-host", help="MLflow bind host."),
+    ] = "127.0.0.1",
+    mlflow_port: Annotated[
+        int,
+        typer.Option("--mlflow-port", help="MLflow port."),
+    ] = 5050,
 ) -> None:
     """Start the lab stack."""
 
     resolved = _load(config)
     missing = check_lab_dependencies()
+    missing_mlflow = check_mlflow_dependencies()
     plan = build_lab_plan(
         resolved,
         host=host,
         port=port,
+        mlflow_host=mlflow_host,
+        mlflow_port=mlflow_port,
         notebook_dir=notebook_dir,
         no_browser=no_browser,
         missing_packages=missing,
+        missing_mlflow_packages=missing_mlflow,
     )
     _print_lab_plan(plan)
-    if dry_run:
-        return
-    if missing and not skip_dependency_check:
+    if missing:
         typer.echo("Install lab extras before starting: pip install 'trade-learn[lab]'")
         raise typer.Exit(2)
+    if missing_mlflow:
+        typer.echo("MLflow is not installed. Skipping MLflow server.")
+        typer.echo("Install MLflow extras with: pip install 'trade-learn[mlflow]'")
     raise typer.Exit(start_lab_stack(plan))
+
+
+@app.command("mlflow")
+def mlflow_server(
+    config: Annotated[Path | None, typer.Option("--config", help="Config file path.")] = None,
+    host: Annotated[str, typer.Option("--host", help="MLflow bind host.")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port", help="MLflow port.")] = 5050,
+    backend_store_uri: Annotated[
+        str | None,
+        typer.Option("--backend-store-uri", help="MLflow backend store URI."),
+    ] = None,
+    artifacts_destination: Annotated[
+        str | None,
+        typer.Option("--artifacts-destination", help="MLflow artifact destination URI."),
+    ] = None,
+) -> None:
+    """Start the local MLflow tracking server."""
+
+    resolved = _load(config)
+    command = build_mlflow_command(
+        resolved,
+        host=host,
+        port=port,
+        project_dir=Path.cwd(),
+        backend_store_uri=backend_store_uri,
+        artifacts_destination=artifacts_destination,
+    )
+    typer.echo(f"mlflow_tracking_uri=http://{host}:{port}")
+    typer.echo(f"mlflow_command={' '.join(command.args)}")
+    missing = check_mlflow_dependencies()
+    typer.echo(f"mlflow_missing={','.join(missing) if missing else 'none'}")
+    if missing:
+        typer.echo("Install MLflow extras before starting: pip install 'trade-learn[mlflow]'")
+        raise typer.Exit(2)
+    raise typer.Exit(start_mlflow_server(command))
 
 
 @app.command()
@@ -128,23 +153,14 @@ def mcp(
     transport: Annotated[str, typer.Option("--transport", help="MCP transport.")] = "stdio",
     host: Annotated[str, typer.Option("--host", help="MCP HTTP bind host.")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", help="MCP HTTP port.")] = 8765,
-    dry_run: Annotated[
-        bool,
-        typer.Option("--dry-run", help="Print command without starting."),
-    ] = False,
 ) -> None:
     """Start the MCP server entrypoint."""
 
     if transport not in {"stdio", "sse", "streamable-http"}:
         typer.echo("Unsupported MCP transport. Choose: stdio, sse, streamable-http", err=True)
         raise typer.Exit(2)
-    if dry_run:
-        typer.echo(
-            "tradelearn mcp "
-            f"--transport {transport} --host {host} --port {port}"
-            + (f" --config {config}" if config else "")
-        )
-        return
+    from tradelearn.mcp import run_server
+
     run_server(
         transport=transport,
         host=host,
@@ -196,17 +212,28 @@ def _print_config(config: TradelearnConfig) -> None:
 
 def _print_lab_plan(plan) -> None:
     typer.echo(f"mlflow_tracking_uri={plan.mlflow_tracking_uri}")
+    if plan.mlflow is None:
+        if plan.missing_mlflow_packages:
+            typer.echo("mlflow_command=skipped (missing mlflow)")
+        else:
+            typer.echo("mlflow_command=skipped")
+    else:
+        typer.echo(f"mlflow_command={' '.join(plan.mlflow.args)}")
     typer.echo(f"mcp_command={' '.join(plan.mcp.args)}")
     typer.echo(f"jupyter_command={' '.join(plan.jupyter.args)}")
     typer.echo(f"lab_required={','.join(plan.required_packages)}")
     missing = ",".join(plan.missing_packages) if plan.missing_packages else "none"
     typer.echo(f"lab_missing={missing}")
+    mlflow_missing = (
+        ",".join(plan.missing_mlflow_packages) if plan.missing_mlflow_packages else "none"
+    )
+    typer.echo(f"mlflow_missing={mlflow_missing}")
 
 
 def _starter_config() -> str:
     return (
         "mlflow:\n"
-        "  tracking_uri: https://mlflow.leafquant.com\n"
+        "  tracking_uri: http://127.0.0.1:5050\n"
         "data:\n"
         "  cache_dir: ./data\n"
         "  offline: false\n"

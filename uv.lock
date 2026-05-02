@@ -6759,8 +6759,6 @@ dependencies = [
     { name = "bokeh" },
     { name = "causal-learn" },
     { name = "httpx" },
-    { name = "mcp" },
-    { name = "mlflow" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "opentdx", marker = "python_full_version >= '3.12'" },
@@ -6783,6 +6781,19 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "duckdb" },
+    { name = "ipywidgets" },
+    { name = "jupyter-ai" },
+    { name = "jupyterlab" },
+    { name = "jupyterlab-git" },
+    { name = "mcp" },
+    { name = "mlflow" },
+    { name = "optuna" },
+    { name = "pygwalker" },
+    { name = "riskfolio-lib", version = "7.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "riskfolio-lib", version = "7.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
 dev = [
     { name = "cibuildwheel", version = "2.23.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "cibuildwheel", version = "3.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -6803,7 +6814,11 @@ lab = [
     { name = "jupyter-ai" },
     { name = "jupyterlab" },
     { name = "jupyterlab-git" },
+    { name = "mcp" },
     { name = "pygwalker" },
+]
+mlflow = [
+    { name = "mlflow" },
 ]
 optuna = [
     { name = "optuna" },
@@ -6831,30 +6846,40 @@ requires-dist = [
     { name = "bokeh" },
     { name = "causal-learn" },
     { name = "cibuildwheel", marker = "extra == 'dev'" },
+    { name = "duckdb", marker = "extra == 'all'" },
     { name = "duckdb", marker = "extra == 'duckdb'" },
     { name = "httpx" },
     { name = "interrogate", marker = "extra == 'dev'" },
+    { name = "ipywidgets", marker = "extra == 'all'" },
     { name = "ipywidgets", marker = "extra == 'lab'" },
+    { name = "jupyter-ai", marker = "extra == 'all'" },
     { name = "jupyter-ai", marker = "extra == 'lab'" },
+    { name = "jupyterlab", marker = "extra == 'all'" },
     { name = "jupyterlab", marker = "extra == 'lab'" },
+    { name = "jupyterlab-git", marker = "extra == 'all'" },
     { name = "jupyterlab-git", marker = "extra == 'lab'" },
-    { name = "mcp", specifier = ">=1.8.0" },
+    { name = "mcp", marker = "extra == 'all'", specifier = ">=1.8.0" },
+    { name = "mcp", marker = "extra == 'lab'", specifier = ">=1.8.0" },
     { name = "mkdocs-material", marker = "extra == 'docs'" },
     { name = "mkdocstrings-python", marker = "extra == 'docs'" },
-    { name = "mlflow" },
+    { name = "mlflow", marker = "extra == 'all'" },
+    { name = "mlflow", marker = "extra == 'mlflow'" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "opentdx", marker = "python_full_version >= '3.12'" },
+    { name = "optuna", marker = "extra == 'all'" },
     { name = "optuna", marker = "extra == 'optuna'" },
     { name = "optuna", marker = "extra == 'research'" },
     { name = "pandas" },
     { name = "pandas-ta-classic" },
     { name = "pyarrow" },
     { name = "pydantic" },
+    { name = "pygwalker", marker = "extra == 'all'" },
     { name = "pygwalker", marker = "extra == 'lab'" },
     { name = "pynesys-pynecore", marker = "python_full_version >= '3.11'" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "pyyaml" },
+    { name = "riskfolio-lib", marker = "extra == 'all'" },
     { name = "riskfolio-lib", marker = "extra == 'research'" },
     { name = "riskfolio-lib", marker = "extra == 'riskfolio'" },
     { name = "ruff", marker = "extra == 'dev'" },
@@ -6867,7 +6892,7 @@ requires-dist = [
     { name = "typer" },
     { name = "xlsxwriter" },
 ]
-provides-extras = ["lab", "dev", "docs", "duckdb", "riskfolio", "optuna", "research"]
+provides-extras = ["lab", "mlflow", "all", "dev", "docs", "duckdb", "riskfolio", "optuna", "research"]
 
 [package.metadata.requires-dev]
 oracle = [

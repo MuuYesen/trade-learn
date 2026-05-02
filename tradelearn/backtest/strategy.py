@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from tradelearn.backtest.models import Order, Position
+from tradelearn.research.run import bind_research_result
 
 
 class Strategy:
@@ -29,6 +30,20 @@ class Strategy:
             self._indicators = []
         if not hasattr(self, "_manual_min_period"):
             self._manual_min_period = 0
+        if not hasattr(self, "_research_result"):
+            self._research_result = None
+
+    @property
+    def research_result(self) -> Any:
+        """Return the current strategy-bound research result."""
+        return getattr(self, "_research_result", None)
+
+    @research_result.setter
+    def research_result(self, result: Any) -> None:
+        bound = bind_research_result(result, self) if result is not None else None
+        self._research_result = bound
+        if bound is not None:
+            self._append_research_result(bound)
 
     def start(self):
         pass
@@ -48,12 +63,14 @@ class Strategy:
     def record_research_result(self, result: Any) -> Any:
         """Expose the research result executed on the current bar to analyzers."""
         self.research_result = result
+        return self.research_result
+
+    def _append_research_result(self, result: Any) -> None:
         history = getattr(self, "research_results_history", None)
         if history is None:
             history = []
             self.research_results_history = history
         history.append(result)
-        return result
 
     def notify_order(self, order: Any):
         pass

@@ -3,11 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 import tradelearn as tl
 import tradelearn.engine as bt
 from tradelearn.lite import Backtest, MLStrategy, Strategy
 from tradelearn.lite.backtest import _can_skip_normalize_data
+from tradelearn.research import ResearchResult
 
 
 def _data() -> pd.DataFrame:
@@ -476,6 +478,70 @@ def test_lite_target_weights_targets_multi_asset_weights() -> None:
     orders = stats.strategy.orders
 
     assert [(order.data._name, order.size) for order in orders] == [("AAA", 22.0), ("BBB", 23.0)]
+
+
+def test_lite_research_result_weights_current_bar_slice_records_result() -> None:
+    data = {
+        "AAA": _data(),
+        "BBB": _data().assign(close=[20.0, 21.0, 22.0, 23.0, 24.0]),
+    }
+    weights = pd.Series(
+        [0.25, 0.25, 0.10, 0.40],
+        index=pd.MultiIndex.from_tuples(
+            [
+                (pd.Timestamp("2026-01-01", tz="UTC"), "AAA"),
+                (pd.Timestamp("2026-01-01", tz="UTC"), "BBB"),
+                (pd.Timestamp("2026-01-02", tz="UTC"), "AAA"),
+                (pd.Timestamp("2026-01-02", tz="UTC"), "BBB"),
+            ],
+            names=["timestamp", "symbol"],
+        ),
+        name="weight",
+    )
+    research = ResearchResult(name="panel-weights", weights=weights)
+
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(1)
+
+        def next(self) -> None:
+            if len(self.data) == 2:
+                self.target_weights(self.research_result.weights[0], close_missing=True)
+
+    stats = Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run(
+        research_result=research
+    )
+
+    assert stats.strategy.research_result.raw is research
+    assert [item.raw for item in stats.strategy.research_results_history] == [research]
+    assert [(order.data._name, order.size) for order in stats.strategy.orders] == [
+        ("AAA", 9.0),
+        ("BBB", 19.0),
+    ]
+
+
+def test_lite_research_result_weights_current_bar_requires_time_panel() -> None:
+    data = {
+        "AAA": _data(),
+        "BBB": _data().assign(close=[20.0, 21.0, 22.0, 23.0, 24.0]),
+    }
+    research = ResearchResult(
+        name="static-weights",
+        weights=pd.Series({"AAA": 0.25, "BBB": 0.25}, name="weight"),
+    )
+
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(1)
+
+        def next(self) -> None:
+            if len(self.data) == 2:
+                self.target_weights(self.research_result.weights[0], close_missing=True)
+
+    with pytest.raises(ValueError, match="MultiIndex"):
+        Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run(
+            research_result=research
+        )
 
 
 def test_lite_target_equal_and_close_all_are_target_position_sugar() -> None:

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import math
-import os
 import tempfile
 from collections import Counter
 from pathlib import Path
@@ -14,7 +13,7 @@ from tradelearn.report.artifacts import market_data_from_strategy, write_artifac
 from ..analyzer import Analyzer
 
 LOGGER = logging.getLogger(__name__)
-DEFAULT_MLFLOW_URI = "https://mlflow.leafquant.com"
+DEFAULT_MLFLOW_URI = "http://127.0.0.1:5050"
 
 class MLflowAnalyzer(Analyzer):
     """Log strategy params, broker settings, stats, and artifacts to MLflow."""
@@ -25,10 +24,11 @@ class MLflowAnalyzer(Analyzer):
         ("uri", None),
         ("nested", False),
         ("mlflow_module", None),
-        ("artifact_file", "stats.json"),
-        ("artifact_bundle", False),
-        ("artifact_path", "tradelearn"),
-        ("log_report", False),
+        ("log_mlflow", True),
+        ("upload_artifacts", True),
+        ("log_artifacts", None),
+        ("artifact_path", None),
+        ("log_report", True),
         ("log_plot", False),
     )
 
@@ -45,23 +45,22 @@ class MLflowAnalyzer(Analyzer):
         self._last_live_order_id: Any = None
 
     def on_end(self, stats: Any) -> None:
+        if not self.p.log_mlflow:
+            self._status = "skipped"
+            return
         try:
             mlflow = self.p.mlflow_module or _import_mlflow()
-            uri = self.p.uri or os.environ.get("MLFLOW_TRACKING_URI") or DEFAULT_MLFLOW_URI
+            uri = self.p.uri or DEFAULT_MLFLOW_URI
             mlflow.set_tracking_uri(uri)
             if self.p.experiment:
                 mlflow.set_experiment(self.p.experiment)
+            upload_artifacts = self.p.upload_artifacts
+            if self.p.log_artifacts is not None:
+                upload_artifacts = bool(self.p.log_artifacts)
             with mlflow.start_run(run_name=self.p.run_name, nested=bool(self.p.nested)):
                 mlflow.log_params(_params_payload(self.strategy))
                 mlflow.log_metrics(_metrics_payload(stats))
-                mlflow.log_dict(_stats_payload(stats), self.p.artifact_file)
-                pipeline_payload = _pipeline_payload(self.strategy)
-                if pipeline_payload:
-                    mlflow.log_dict(pipeline_payload, "pipeline.json")
-                research_payload = _research_payload(self.strategy)
-                if research_payload:
-                    mlflow.log_dict(research_payload, "research.json")
-                if self.p.artifact_bundle:
+                if upload_artifacts:
                     _log_artifact_bundle(
                         mlflow,
                         strategy=self.strategy,
@@ -145,7 +144,24 @@ def _log_artifact_bundle(
             log_plot=log_plot,
         )
         for artifact in artifacts:
-            mlflow.log_artifact(str(artifact), artifact_path=artifact_path)
+            _log_path(mlflow, artifact, artifact_path)
+
+
+def _log_path(mlflow: Any, path: Path, artifact_path: str | None) -> None:
+    if path.is_dir():
+        destination = _join_artifact_path(artifact_path, path.name)
+        if hasattr(mlflow, "log_artifacts"):
+            mlflow.log_artifacts(str(path), artifact_path=destination)
+            return
+        for child in sorted(path.iterdir()):
+            if child.is_file():
+                mlflow.log_artifact(str(child), artifact_path=destination)
+        return
+    mlflow.log_artifact(str(path), artifact_path=artifact_path)
+
+
+def _join_artifact_path(base: str | None, name: str) -> str:
+    return f"{base}/{name}" if base else name
 
 
 def _params_payload(strategy: Any) -> dict[str, Any]:
@@ -163,9 +179,6 @@ def _params_payload(strategy: Any) -> dict[str, Any]:
         payload["broker.commission"] = getattr(
             broker, "commission", getattr(broker, "commission_ratio", 0.0)
         )
-    pipeline_params = _pipeline_params(strategy)
-    if pipeline_params:
-        payload.update(_flatten_params("pipeline", pipeline_params))
     research_params = _research_params(strategy)
     if research_params:
         payload.update(_flatten_params("research", research_params))
@@ -192,21 +205,6 @@ def _stats_payload(stats: Any) -> dict[str, Any]:
     }
 
 
-def _pipeline_payload(strategy: Any) -> dict[str, Any]:
-    pipeline = _first_attr(strategy, ("pipeline", "pipeline_"))
-    params = _pipeline_params(strategy)
-    result = _pipeline_result(strategy)
-    explanation = _pipeline_explanation(pipeline)
-    payload: dict[str, Any] = {}
-    if params:
-        payload["params"] = params
-    if result:
-        payload["result"] = result
-    if explanation:
-        payload["explanation"] = explanation
-    return payload
-
-
 def _research_payload(strategy: Any) -> dict[str, Any]:
     result = _first_attr(strategy, ("research_result", "research_result_"))
     if result is None:
@@ -228,22 +226,10 @@ def _research_params(strategy: Any) -> dict[str, Any]:
     params = getattr(result, "params", None)
     if isinstance(params, dict):
         payload.update(params)
+    artifacts = getattr(result, "artifacts", None)
+    if isinstance(artifacts, dict):
+        payload["artifacts"] = artifacts
     return payload
-
-
-def _pipeline_params(strategy: Any) -> dict[str, Any]:
-    pipeline = _first_attr(strategy, ("pipeline", "pipeline_"))
-    if pipeline is None or not hasattr(pipeline, "get_params"):
-        return {}
-    params = pipeline.get_params()
-    return params if isinstance(params, dict) else {}
-
-
-def _pipeline_result(strategy: Any) -> dict[str, Any]:
-    result = _first_attr(strategy, ("pipeline_result", "pipeline_result_"))
-    if result is None:
-        return {}
-    return _result_payload(result)
 
 
 def _result_payload(result: Any) -> dict[str, Any]:
@@ -258,16 +244,6 @@ def _result_payload(result: Any) -> dict[str, Any]:
     if weights is not None:
         payload["weights"] = _series_dict(weights)
     return payload
-
-
-def _pipeline_explanation(pipeline: Any) -> dict[str, Any]:
-    if pipeline is None or not hasattr(pipeline, "explain"):
-        return {}
-    try:
-        explanation = pipeline.explain()
-    except Exception:
-        return {}
-    return _series_dict(explanation)
 
 
 def _first_attr(obj: Any, names: tuple[str, ...]) -> Any:

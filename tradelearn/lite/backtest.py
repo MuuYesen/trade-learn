@@ -196,14 +196,17 @@ class Backtest:
         params: dict[str, Any] | None = None,
         tags: dict[str, Any] | None = None,
         nested: bool = False,
-        artifact_file: str = "stats.json",
-        artifact_path: str = "tradelearn",
-        artifact_bundle: bool = True,
+        log_mlflow: bool = True,
+        upload_artifacts: bool = True,
+        log_artifacts: bool | None = None,
+        artifact_path: str | None = None,
         log_report: bool = True,
-        log_plot: bool = True,
+        log_plot: bool = False,
         mlflow_module: Any | None = None,
     ) -> str:
         """Log the most recent Lite run to MLflow."""
+        if not log_mlflow:
+            return "skipped"
         from .mlflow import log_lite_run
 
         return log_lite_run(
@@ -214,9 +217,9 @@ class Backtest:
             params=params,
             tags=tags,
             nested=nested,
-            artifact_file=artifact_file,
+            upload_artifacts=upload_artifacts,
+            log_artifacts=log_artifacts,
             artifact_path=artifact_path,
-            artifact_bundle=artifact_bundle,
             log_report=log_report,
             log_plot=log_plot,
             mlflow_module=mlflow_module,

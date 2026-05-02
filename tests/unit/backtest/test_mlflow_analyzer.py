@@ -1,23 +1,15 @@
 from __future__ import annotations
 
-import math
 from contextlib import contextmanager
 from pathlib import Path
 
 import pandas as pd
 
+import tradelearn.research.portfolio as pf
 from tradelearn.core import BrokerEvent, StreamBar
 from tradelearn.engine import Cerebro, IndexEnhanceStrategy, Strategy, grid_search
 from tradelearn.engine.analyzer import Analyzer
 from tradelearn.engine.analyzers import MLflowAnalyzer
-from tradelearn.ml import (
-    EqualWeightOptimizer,
-    FactorTransformer,
-    ModelAdapter,
-    PipelineResult,
-    StrategyPipeline,
-    TopKSelector,
-)
 from tradelearn.research import ResearchResult, ResearchStep
 
 
@@ -43,6 +35,7 @@ class FakeMLflow:
         self.metrics: list[dict[str, float]] = []
         self.dicts: list[tuple[dict[str, object], str]] = []
         self.artifacts: list[tuple[str, str | None]] = []
+        self.artifact_dirs: list[tuple[str, str | None]] = []
 
     def set_tracking_uri(self, uri: str) -> None:
         self.tracking_uris.append(uri)
@@ -67,8 +60,11 @@ class FakeMLflow:
     def log_artifact(self, local_path: str, artifact_path: str | None = None) -> None:
         self.artifacts.append((Path(local_path).name, artifact_path))
 
+    def log_artifacts(self, local_dir: str, artifact_path: str | None = None) -> None:
+        self.artifact_dirs.append((Path(local_dir).name, artifact_path))
 
-def test_mlflow_analyzer_logs_params_stats_and_artifacts(monkeypatch) -> None:
+
+def test_mlflow_analyzer_logs_params_stats_and_artifacts() -> None:
     class NoopStrategy(Strategy):
         params = (("fast", 3),)
 
@@ -76,7 +72,6 @@ def test_mlflow_analyzer_logs_params_stats_and_artifacts(monkeypatch) -> None:
             pass
 
     fake = FakeMLflow()
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", "https://env.example")
 
     cerebro = Cerebro()
     cerebro.broker.setcash(123.0)
@@ -117,117 +112,19 @@ def test_mlflow_analyzer_logs_params_stats_and_artifacts(monkeypatch) -> None:
         }
     ]
     assert "sharpe" not in fake.metrics[0]
-    [artifact] = fake.dicts
-    payload, artifact_file = artifact
-    summary = payload["summary"]
-    assert summary["max_drawdown"] == 0.0
-    assert math.isnan(summary["sharpe"])
-    assert fake.dicts == [
-        (
-            {
-                "summary": summary,
-                "analyzers": {},
-                "config": {
-                    "callback_batch": 1,
-                    "trade_on_close": False,
-                    "exactbars": False,
-                    "stdstats": True,
-                    "broker": {"cash": 123.0, "commission": 0.001},
-                },
-            },
-            artifact_file,
-        )
-    ]
-    assert artifact_file == "stats.json"
+    assert fake.dicts == []
+    assert sorted(name for name, _ in fake.artifacts) == ["artifacts.xlsx", "report.html"]
+    assert {artifact_path for _, artifact_path in fake.artifacts} == {None}
+    assert fake.artifact_dirs == [("csv", "csv")]
     assert strategy.analyzer_results["mlflow"]["status"] == "logged"
-
-
-def test_mlflow_analyzer_logs_strategy_pipeline_params_and_artifacts() -> None:
-    class ImportanceModel:
-        feature_importances_ = [0.25, 0.75]
-
-        def fit(self, X, y):
-            return self
-
-        def predict(self, X):
-            return [row[0] for row in X]
-
-    class PipelineStrategy(Strategy):
-        def __init__(self) -> None:
-            super().__init__()
-            self.pipeline = StrategyPipeline(
-                [
-                    ("features", FactorTransformer(["value", "quality"])),
-                    ("model", ModelAdapter(ImportanceModel())),
-                    ("selector", TopKSelector(k=1)),
-                    ("optimizer", EqualWeightOptimizer(gross=0.9)),
-                ]
-            )
-            self.pipeline.fit(
-                pd.DataFrame({"value": [0.8, 0.2], "quality": [0.1, 0.7]}),
-                [1.0, 0.0],
-            )
-            self.pipeline_result = PipelineResult(
-                scores=pd.Series({"AAA": 0.8, "BBB": 0.2}, name="score"),
-                selected=["AAA"],
-                weights=pd.Series({"AAA": 0.9}, name="weight"),
-            )
-
-        def next(self) -> None:
-            pass
-
-    fake = FakeMLflow()
-    cerebro = Cerebro()
-    cerebro.adddata(bars())
-    cerebro.addstrategy(PipelineStrategy)
-    cerebro.addanalyzer(MLflowAnalyzer, name="mlflow", mlflow_module=fake)
-
-    cerebro.run()
-
-    params = fake.params[0]
-    assert params["pipeline.features.features"] == "value,quality"
-    assert params["pipeline.model.estimator"] == "ImportanceModel"
-    assert params["pipeline.selector.k"] == 1
-    assert params["pipeline.optimizer.gross"] == 0.9
-    artifacts = {artifact_file: payload for payload, artifact_file in fake.dicts}
-    assert artifacts["pipeline.json"] == {
-        "params": {
-            "steps": ["features", "model", "selector", "optimizer"],
-            "features": {
-                "type": "FactorTransformer",
-                "features": ["value", "quality"],
-                "feature_store": False,
-            },
-            "model": {
-                "type": "ModelAdapter",
-                "estimator": "ImportanceModel",
-                "score_column": None,
-            },
-            "selector": {
-                "type": "TopKSelector",
-                "k": 1,
-                "ascending": False,
-                "threshold": None,
-            },
-            "optimizer": {
-                "type": "EqualWeightOptimizer",
-                "gross": 0.9,
-            },
-        },
-        "result": {
-            "scores": {"AAA": 0.8, "BBB": 0.2},
-            "selected": ["AAA"],
-            "weights": {"AAA": 0.9},
-        },
-        "explanation": {"value": 0.25, "quality": 0.75},
-    }
 
 
 def test_mlflow_analyzer_logs_report_plot_and_table_artifacts() -> None:
     class BundleStrategy(Strategy):
         def __init__(self) -> None:
             super().__init__()
-            self.pipeline_result = PipelineResult(
+            self.research_result = ResearchResult(
+                name="bundle",
                 scores=pd.Series({"AAA": 0.7, "BBB": 0.3}, name="score"),
                 selected=["AAA"],
                 weights=pd.Series({"AAA": 0.8, "BBB": 0.2}, name="weight"),
@@ -247,7 +144,6 @@ def test_mlflow_analyzer_logs_report_plot_and_table_artifacts() -> None:
         MLflowAnalyzer,
         name="mlflow",
         mlflow_module=fake,
-        artifact_bundle=True,
         log_report=True,
         log_plot=True,
         artifact_path="bundle",
@@ -259,33 +155,31 @@ def test_mlflow_analyzer_logs_report_plot_and_table_artifacts() -> None:
     assert {
         "report.html",
         "plot.html",
-        "trades.parquet",
-        "equity.parquet",
-        "weights.parquet",
+        "artifacts.xlsx",
     }.issubset(artifacts)
     assert all(artifact_path == "bundle" for artifact_path in artifacts.values())
+    assert ("csv", "bundle/csv") in fake.artifact_dirs
 
 
-def test_mlflow_analyzer_logs_pipeline_target_weight_artifacts() -> None:
-    class PipelineWeights(IndexEnhanceStrategy):
+def test_mlflow_analyzer_logs_research_target_weight_artifacts() -> None:
+    class ResearchWeights(IndexEnhanceStrategy):
         rebalance_freq = 1
-
-        def __init__(self) -> None:
-            super().__init__()
-            self.pipeline = StrategyPipeline(
-                [
-                    ("model", ModelAdapter(score_column="close")),
-                    ("selector", TopKSelector(k=1)),
-                    ("optimizer", EqualWeightOptimizer(gross=0.5)),
-                ]
-            )
 
         def next(self) -> None:
             if not self.should_rebalance():
                 return
             universe = self.current_universe()
-            self.pipeline_result = self.pipeline.predict_weights(universe)
-            self.target_weights(self.pipeline_result.as_weight_dict())
+            scores = universe["close"]
+            selected = pf.select_top(scores, k=1)
+            weights = pf.equal_weight(selected, gross=0.5)
+            result = ResearchResult(
+                name="function_research",
+                scores=scores,
+                selected=selected,
+                weights=weights,
+            )
+            self.record_research_result(result)
+            self.target_weights(result.as_weight_dict())
 
     fake = FakeMLflow()
     cerebro = Cerebro(trade_on_close=True)
@@ -300,32 +194,52 @@ def test_mlflow_analyzer_logs_pipeline_target_weight_artifacts() -> None:
         ),
         name="BBB",
     )
-    cerebro.addstrategy(PipelineWeights)
+    cerebro.addstrategy(ResearchWeights)
     cerebro.addanalyzer(
         MLflowAnalyzer,
         name="mlflow",
         mlflow_module=fake,
-        artifact_bundle=True,
         log_report=True,
         log_plot=True,
-        artifact_path="pipeline-run",
+        artifact_path="research-run",
     )
 
     [strategy] = cerebro.run()
 
     assert strategy.getpositionbyname("BBB").size > 0
-    payloads = {artifact_file: payload for payload, artifact_file in fake.dicts}
-    assert payloads["pipeline.json"]["result"]["selected"] == ["BBB"]
-    assert payloads["pipeline.json"]["result"]["weights"] == {"BBB": 0.5}
     artifacts = {name: artifact_path for name, artifact_path in fake.artifacts}
     assert {
-        "equity.parquet",
-        "trades.parquet",
-        "weights.parquet",
+        "artifacts.xlsx",
         "report.html",
         "plot.html",
     }.issubset(artifacts)
-    assert all(artifact_path == "pipeline-run" for artifact_path in artifacts.values())
+    assert all(artifact_path == "research-run" for artifact_path in artifacts.values())
+    assert ("csv", "research-run/csv") in fake.artifact_dirs
+
+
+def test_mlflow_analyzer_can_skip_artifact_uploads() -> None:
+    class NoopStrategy(Strategy):
+        def next(self) -> None:
+            pass
+
+    fake = FakeMLflow()
+    cerebro = Cerebro()
+    cerebro.adddata(bars())
+    cerebro.addstrategy(NoopStrategy)
+    cerebro.addanalyzer(
+        MLflowAnalyzer,
+        name="mlflow",
+        experiment="stage4",
+        uri="https://mlflow.example",
+        upload_artifacts=False,
+        mlflow_module=fake,
+    )
+
+    cerebro.run()
+
+    assert fake.metrics[0]["final_value"] == 100000.0
+    assert fake.dicts == []
+    assert fake.artifacts == []
 
 
 def test_mlflow_analyzer_logs_research_result_from_strategy_params() -> None:
@@ -336,6 +250,7 @@ def test_mlflow_analyzer_logs_research_result_from_strategy_params() -> None:
             ResearchStep("select_top", "portfolio", {"k": 1}),
         ],
         params={"winsorize.columns": ["alpha"], "select_top.k": 1},
+        artifacts={"lookback": 20, "profile": {"rows": 3}},
         scores=pd.Series({"AAA": 0.2, "BBB": 0.8}, name="score"),
         selected=["BBB"],
         weights=pd.Series({"BBB": 0.5}, name="weight"),
@@ -369,7 +284,6 @@ def test_mlflow_analyzer_logs_research_result_from_strategy_params() -> None:
         MLflowAnalyzer,
         name="mlflow",
         mlflow_module=fake,
-        artifact_bundle=True,
         artifact_path="research-run",
     )
 
@@ -379,15 +293,14 @@ def test_mlflow_analyzer_logs_research_result_from_strategy_params() -> None:
     params = fake.params[0]
     assert params["research.name"] == "index_enhance_v1"
     assert params["research.select_top.k"] == 1
-    payloads = {artifact_file: payload for payload, artifact_file in fake.dicts}
-    assert payloads["research.json"]["result"]["selected"] == ["BBB"]
-    assert payloads["research.json"]["result"]["weights"] == {"BBB": 0.5}
-    assert payloads["research.json"]["steps"][1]["name"] == "select_top"
+    assert params["research.artifacts.lookback"] == 20
+    assert params["research.artifacts.profile.rows"] == 3
     artifacts = {name: artifact_path for name, artifact_path in fake.artifacts}
-    assert artifacts["weights.parquet"] == "research-run"
+    assert artifacts["artifacts.xlsx"] == "research-run"
+    assert ("csv", "research-run/csv") in fake.artifact_dirs
 
 
-def test_mlflow_analyzer_uses_env_uri_and_warns_without_interrupt(monkeypatch, caplog) -> None:
+def test_mlflow_analyzer_uses_default_uri_and_warns_without_interrupt(caplog) -> None:
     class FailingMLflow(FakeMLflow):
         def start_run(self, *, run_name: str | None = None, nested: bool = False):
             raise RuntimeError("mlflow down")
@@ -395,8 +308,6 @@ def test_mlflow_analyzer_uses_env_uri_and_warns_without_interrupt(monkeypatch, c
     class NoopStrategy(Strategy):
         def next(self) -> None:
             pass
-
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", "https://env.example")
 
     cerebro = Cerebro()
     cerebro.adddata(bars())
@@ -493,7 +404,7 @@ def test_cerebro_event_mode_dispatches_broker_events_to_analyzers() -> None:
     }
 
 
-def test_grid_search_runs_nested_mlflow_runs(monkeypatch) -> None:
+def test_grid_search_runs_nested_mlflow_runs() -> None:
     class ParamStrategy(Strategy):
         params = (("fast", 1),)
 
@@ -501,7 +412,6 @@ def test_grid_search_runs_nested_mlflow_runs(monkeypatch) -> None:
             pass
 
     fake = FakeMLflow()
-    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
 
     results = grid_search(
         ParamStrategy,

@@ -12,7 +12,7 @@ import yaml
 
 from tradelearn.core.errors import ConfigurationError
 
-DEFAULT_MLFLOW_TRACKING_URI = "https://mlflow.leafquant.com"
+DEFAULT_MLFLOW_TRACKING_URI = "http://127.0.0.1:5050"
 DEFAULT_DATA_CACHE_DIR = Path("./data")
 DEFAULT_LOG_LEVEL = "INFO"
 

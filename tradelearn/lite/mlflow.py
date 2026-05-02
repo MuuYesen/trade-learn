@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import math
-import os
 import tempfile
 from pathlib import Path
 from typing import Any
 
 from tradelearn.report.artifacts import market_data_from_strategy, write_artifact_bundle
 
-DEFAULT_MLFLOW_URI = "https://mlflow.leafquant.com"
+DEFAULT_MLFLOW_URI = "http://127.0.0.1:5050"
 
 
 def log_lite_run(
@@ -20,11 +19,11 @@ def log_lite_run(
     params: dict[str, Any] | None = None,
     tags: dict[str, Any] | None = None,
     nested: bool = False,
-    artifact_file: str = "stats.json",
-    artifact_path: str = "tradelearn",
-    artifact_bundle: bool = True,
+    upload_artifacts: bool = True,
+    log_artifacts: bool | None = None,
+    artifact_path: str | None = None,
     log_report: bool = True,
-    log_plot: bool = True,
+    log_plot: bool = False,
     mlflow_module: Any | None = None,
 ) -> str:
     """Log the latest Lite run to MLflow.
@@ -39,10 +38,12 @@ def log_lite_run(
         raise RuntimeError("run() must be called before log_mlflow()")
 
     mlflow = mlflow_module or _import_mlflow()
-    tracking_uri = uri or os.environ.get("MLFLOW_TRACKING_URI") or DEFAULT_MLFLOW_URI
+    tracking_uri = uri or DEFAULT_MLFLOW_URI
     mlflow.set_tracking_uri(tracking_uri)
     if experiment_name:
         mlflow.set_experiment(experiment_name)
+    if log_artifacts is not None:
+        upload_artifacts = bool(log_artifacts)
 
     with mlflow.start_run(run_name=run_name, nested=bool(nested)):
         tag_payload = dict(tags or {})
@@ -52,11 +53,7 @@ def log_lite_run(
             _params_payload(stats, strategy=strategy, params=params, tags=tag_payload)
         )
         mlflow.log_metrics(_metrics_payload(stats))
-        mlflow.log_dict(_stats_payload(stats), artifact_file)
-        research_payload = _research_payload(strategy)
-        if research_payload:
-            mlflow.log_dict(research_payload, "research.json")
-        if artifact_bundle:
+        if upload_artifacts:
             _log_artifact_bundle(
                 mlflow,
                 stats=stats,
@@ -96,7 +93,7 @@ def _log_artifact_bundle(
             log_plot=log_plot,
         )
         for artifact in artifacts:
-            mlflow.log_artifact(str(artifact), artifact_path=artifact_path)
+            _log_path(mlflow, artifact, artifact_path)
 
 
 def _params_payload(
@@ -113,6 +110,23 @@ def _params_payload(
     if tags:
         payload.update({f"tag.{key}": value for key, value in tags.items()})
     return payload
+
+
+def _log_path(mlflow: Any, path: Path, artifact_path: str | None) -> None:
+    if path.is_dir():
+        destination = _join_artifact_path(artifact_path, path.name)
+        if hasattr(mlflow, "log_artifacts"):
+            mlflow.log_artifacts(str(path), artifact_path=destination)
+            return
+        for child in sorted(path.iterdir()):
+            if child.is_file():
+                mlflow.log_artifact(str(child), artifact_path=destination)
+        return
+    mlflow.log_artifact(str(path), artifact_path=artifact_path)
+
+
+def _join_artifact_path(base: str | None, name: str) -> str:
+    return f"{base}/{name}" if base else name
 
 
 def _research_payload(strategy: Any) -> dict[str, Any]:
@@ -136,6 +150,9 @@ def _research_params(strategy: Any) -> dict[str, Any]:
     params = getattr(result, "params", None)
     if isinstance(params, dict):
         payload.update(params)
+    artifacts = getattr(result, "artifacts", None)
+    if isinstance(artifacts, dict):
+        payload["artifacts"] = artifacts
     return payload
 
 
@@ -173,6 +190,14 @@ def _flatten_params(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
         name = f"{prefix}.{key}"
         if isinstance(value, dict):
             payload.update(_flatten_params(name, value))
+        elif isinstance(value, list | tuple):
+            payload[name] = ",".join(str(_json_scalar(item)) for item in value)
         else:
-            payload[name] = value
+            payload[name] = _json_scalar(value)
     return payload
+
+
+def _json_scalar(value: Any) -> Any:
+    if hasattr(value, "item"):
+        return value.item()
+    return value

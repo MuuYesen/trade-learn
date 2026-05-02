@@ -148,17 +148,8 @@ def write_html_report(
     _write_artifacts(
         directory=output.parent,
         config=config,
-        equity=reporter.equity_curve(),
         metadata=metadata,
         summary=summary,
-        trades=trades,
-        factor_ic=factor_ic,
-        factor_rank_ic=factor_rank_ic,
-        factor_turnover=factor_turnover,
-        factor_autocorrelation=factor_autocorrelation,
-        factor_long_short_returns=factor_long_short_returns,
-        factor_quantile_returns=factor_quantile_returns,
-        rolling_beta=rolling_beta,
     )
     return output
 
@@ -167,37 +158,10 @@ def _write_artifacts(
     *,
     directory: Path,
     config: dict[str, Any],
-    equity: pd.Series,
     metadata: dict[str, str],
     summary: dict[str, Any],
-    trades: pd.DataFrame,
-    factor_ic: pd.Series,
-    factor_rank_ic: pd.Series,
-    factor_turnover: pd.Series,
-    factor_autocorrelation: pd.Series,
-    factor_long_short_returns: pd.DataFrame,
-    factor_quantile_returns: pd.DataFrame,
-    rolling_beta: pd.Series,
 ) -> None:
-    """Write colocated machine-readable report artifacts."""
-    equity.to_frame("equity").to_parquet(directory / "equity.parquet")
-    trades.to_parquet(directory / "trades.parquet", index=False)
-    if not factor_ic.empty:
-        factor_ic.to_frame("ic").to_parquet(directory / "factor_ic.parquet")
-    if not factor_rank_ic.empty:
-        factor_rank_ic.to_frame("rank_ic").to_parquet(directory / "factor_rank_ic.parquet")
-    if not factor_turnover.empty:
-        factor_turnover.to_frame("turnover").to_parquet(directory / "factor_turnover.parquet")
-    if not factor_autocorrelation.empty:
-        factor_autocorrelation.to_frame("autocorrelation").to_parquet(
-            directory / "factor_autocorrelation.parquet"
-        )
-    if not factor_long_short_returns.empty:
-        factor_long_short_returns.to_parquet(directory / "factor_long_short_returns.parquet")
-    if not factor_quantile_returns.empty:
-        factor_quantile_returns.to_parquet(directory / "factor_quantile_returns.parquet")
-    if not rolling_beta.empty:
-        rolling_beta.to_frame("rolling_beta").to_parquet(directory / "rolling_beta.parquet")
+    """Write colocated machine-readable report metadata."""
     (directory / "stats.json").write_text(
         json.dumps(
             {
@@ -246,7 +210,7 @@ def _render_html(
 ) -> str:
     """Render the report HTML string."""
     template = _template_environment().get_template(TEMPLATE_NAME)
-    display_config = {key: value for key, value in config.items() if key != "pipeline"}
+    display_config = {key: value for key, value in config.items() if key != "research"}
     return template.render(
         benchmark_section=_benchmark_section(benchmark),
         bokeh_resources=bokeh_resources,
@@ -264,7 +228,7 @@ def _render_html(
         factor_long_short_section=_factor_long_short_section(factor_long_short_returns),
         factor_section=_factor_section(factor_quantile_returns),
         metadata={key: escape(value) for key, value in metadata.items()},
-        pipeline_section=_pipeline_section(config),
+        research_section=_research_section(config),
         returns_count=len(returns),
         script=script,
         summary_table=_summary_cards(summary),
@@ -309,17 +273,17 @@ def _summary_cards(values: dict[str, Any]) -> str:
     return f"<table class=\"summary-table\"><tbody>{''.join(rows)}</tbody></table>"
 
 
-def _pipeline_section(config: dict[str, Any]) -> str:
-    """Render pipeline parameters as a readable experiment subsection."""
-    pipeline = config.get("pipeline")
-    if not isinstance(pipeline, dict) or not pipeline:
+def _research_section(config: dict[str, Any]) -> str:
+    """Render research parameters as a readable experiment subsection."""
+    research = config.get("research")
+    if not isinstance(research, dict) or not research:
         return ""
     rows = "".join(
         f"<tr><td>{escape(key)}</td><td>{escape(_format_value(value))}</td></tr>"
-        for key, value in _flatten_display("pipeline", pipeline).items()
+        for key, value in _flatten_display("research", research).items()
     )
     return (
-        "<h3>Pipeline Parameters</h3>"
+        "<h3>Research Parameters</h3>"
         "<table><thead><tr><th>parameter</th><th>value</th></tr></thead>"
         f"<tbody>{rows}</tbody></table>"
     )
