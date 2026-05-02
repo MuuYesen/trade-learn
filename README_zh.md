@@ -247,6 +247,30 @@ trade-learn 选择 Backtrader 风格作为 Engine 主入口，不是为了复刻
 
 Lite 则保留更轻的写法，用来快速验证和教学；当策略变复杂、需要完整订单生命周期和扩展点时，可以自然迁移到 Engine。
 
+## 对齐与性能基线
+
+trade-learn 的正确性先看 Engine。`tradelearn.engine` 以 Backtrader 为 oracle，`benchmarks/runners/benchmark_bt.py` 会对代表性策略做最终权益、交易明细和 PnL 对齐；当前主线要求 Engine 与 Backtrader 保持 `EXACT`。
+
+Lite 不是 Backtrader facade，它是更薄的策略语法层。Lite 与 Engine 共用 `tradelearn.backtest` runtime 和 Rust 撮合内核，因此 Lite 的验收重点是：API 能正确接入同一 runtime，返回统计字段与 Engine 一致，最终权益 / 成交数 / 平仓交易数与同一策略语义保持一致。
+
+最近一次 55 万根 bar 吞吐基线如下，数值会随机器、数据规模和策略复杂度波动；工程约束是“Engine 对 Backtrader 严格对齐，Lite 与 Engine 共用 runtime 并保持统计口径一致”。
+
+| 引擎 | bars/s | 相对 Backtrader | 对齐字段 |
+| --- | ---: | ---: | --- |
+| Tradelearn Engine | ~180,364 | ~11.0x | Final Value / Fills / Closed Trades |
+| Tradelearn Lite | ~273,334 | ~16.7x | Final Value / Fills / Closed Trades |
+| Backtrader | ~16,369 | 1.0x | reference |
+
+复现入口：
+
+```bash
+# Engine vs Backtrader 严格数值审计
+uv run python benchmarks/runners/benchmark_bt.py smart --repeat 1 --warmup 0
+
+# Engine / Lite / Backtrader 吞吐与统计口径对比
+uv run python benchmarks/runners/benchmark_throughput.py --bars 550000 --repeat 1 --warmup 0
+```
+
 ## 当前定位
 
 trade-learn 2.x 当前定位为：
