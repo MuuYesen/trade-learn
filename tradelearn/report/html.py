@@ -138,6 +138,7 @@ def write_html_report(
             metadata=metadata,
             drawdowns=top_drawdowns,
             benchmark=benchmark_returns,
+            benchmark_metrics=_benchmark_metrics(summary, benchmark_returns),
             correlation=correlation,
             exposure=exposure,
             factor_ic=factor_ic,
@@ -203,6 +204,7 @@ def _render_html(
     metadata: dict[str, str],
     drawdowns: pd.DataFrame,
     benchmark: pd.Series | None,
+    benchmark_metrics: dict[str, Any],
     correlation: pd.DataFrame,
     exposure: pd.DataFrame,
     factor_ic: pd.Series,
@@ -220,7 +222,7 @@ def _render_html(
     template = _template_environment().get_template(TEMPLATE_NAME)
     display_config = {key: value for key, value in config.items() if key != "research"}
     return template.render(
-        benchmark_section=_benchmark_section(benchmark),
+        benchmark_section=_benchmark_section(benchmark, benchmark_metrics),
         bokeh_resources=bokeh_resources,
         charts=charts,
         config_table=_summary_table(display_config),
@@ -256,30 +258,29 @@ def _template_environment() -> Environment:
 def _summary_table(values: dict[str, Any]) -> str:
     """Render a dict as an HTML table."""
     if not values:
-        return "<table><tbody></tbody></table>"
+        return "<div class=\"table-scroll\"><table><tbody></tbody></table></div>"
     rows = "".join(
         f"<tr><td>{escape(str(key))}</td><td>{escape(_format_value(value))}</td></tr>"
         for key, value in values.items()
     )
     return (
-        "<table><thead><tr><th>metric</th><th>value</th></tr></thead>"
-        f"<tbody>{rows}</tbody></table>"
+        "<div class=\"table-scroll\"><table><thead><tr><th>metric</th><th>value</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table></div>"
     )
 
 
 def _summary_cards(values: dict[str, Any]) -> str:
-    """Render summary values as a compact multi-column table."""
-    items = list(values.items())
-    columns = 3
-    rows = []
-    for start in range(0, len(items), columns):
-        cells = []
-        for key, value in items[start : start + columns]:
-            cells.append(f"<th>{escape(str(key))}</th><td>{escape(_format_value(value))}</td>")
-        missing = columns - len(cells)
-        cells.extend("<th></th><td></td>" for _ in range(missing))
-        rows.append(f"<tr>{''.join(cells)}</tr>")
-    return f"<table class=\"summary-table\"><tbody>{''.join(rows)}</tbody></table>"
+    """Render summary values as responsive KPI cards."""
+    cards = "".join(
+        "<div class=\"kpi-card\""
+        f" data-metric=\"{escape(str(key))}\">"
+        f"<div class=\"kpi-label\">{escape(_metric_label(str(key)))}</div>"
+        f"<div class=\"kpi-value\">{escape(_format_metric_value(str(key), value))}</div>"
+        "</div>"
+        for key, value in values.items()
+        if str(key) != "strategy_name"
+    )
+    return f"<div class=\"kpi-grid\">{cards}</div>"
 
 
 def _research_section(config: dict[str, Any]) -> str:
@@ -293,8 +294,8 @@ def _research_section(config: dict[str, Any]) -> str:
     )
     return (
         "<h3>Research Parameters</h3>"
-        "<table><thead><tr><th>parameter</th><th>value</th></tr></thead>"
-        f"<tbody>{rows}</tbody></table>"
+        "<div class=\"table-scroll\"><table><thead><tr><th>parameter</th><th>value</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table></div>"
     )
 
 
@@ -312,7 +313,7 @@ def _flatten_display(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
 def _frame_table(frame: pd.DataFrame) -> str:
     """Render a frame as an HTML table."""
     if frame.empty:
-        return "<table><tbody></tbody></table>"
+        return "<div class=\"table-scroll\"><table><tbody></tbody></table></div>"
     headers = "".join(f"<th>{escape(str(column))}</th>" for column in frame.columns)
     rows = "".join(
         "<tr>"
@@ -320,7 +321,7 @@ def _frame_table(frame: pd.DataFrame) -> str:
         + "</tr>"
         for row in frame.itertuples(index=False, name=None)
     )
-    return f"<table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>"
+    return f"<div class=\"table-scroll\"><table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table></div>"
 
 
 def _metadata(
@@ -359,12 +360,25 @@ def _correlation_section(correlation: pd.DataFrame) -> str:
     return f"<h2>Correlation Matrix</h2><p>Symbols: {symbols}</p>"
 
 
-def _benchmark_section(benchmark: pd.Series | None) -> str:
+def _benchmark_metrics(summary: dict[str, Any], benchmark: pd.Series | None) -> dict[str, Any]:
+    """Return benchmark-relative metrics for the side panel."""
+    if benchmark is None:
+        return {}
+    keys = ["alpha", "beta", "information_ratio", "active_return", "tracking_error"]
+    return {key: summary[key] for key in keys if key in summary}
+
+
+def _benchmark_section(benchmark: pd.Series | None, metrics: dict[str, Any]) -> str:
     """Return the optional benchmark section heading."""
     if benchmark is None:
         return ""
     name = escape(str(benchmark.name or "benchmark"))
-    return f"<section><h2>Benchmark</h2><p>{name}</p></section>"
+    table = _summary_table(metrics) if metrics else ""
+    return (
+        "<section><h2>Benchmark-Aware Metrics</h2>"
+        f"<p>Benchmark: {name}</p>"
+        f"{table}</section>"
+    )
 
 
 def _factor_section(factor_quantile_returns: pd.DataFrame) -> str:
@@ -448,3 +462,33 @@ def _format_value(value: Any) -> str:
     if isinstance(value, float):
         return f"{value:.6f}"
     return str(value)
+
+
+def _metric_label(key: str) -> str:
+    """Return a readable label for summary metric keys."""
+    aliases = {
+        "max_dd_duration": "Max DD Duration",
+        "return_pct": "Return",
+        "pnlcomm": "PnL After Commission",
+    }
+    if key in aliases:
+        return aliases[key]
+    return key.replace("_", " ").title()
+
+
+def _format_metric_value(key: str, value: Any) -> str:
+    """Format KPI values compactly without losing raw metric identity."""
+    if isinstance(value, float):
+        if pd.isna(value):
+            return "-"
+        lowered = key.lower()
+        if any(token in lowered for token in ("return", "drawdown", "rate", "turnover")):
+            return f"{value:.2%}"
+        if "ratio" in lowered or lowered in {"alpha", "beta"}:
+            return f"{value:.3f}"
+        if abs(value) >= 1000:
+            return f"{value:,.2f}"
+        return f"{value:.4f}"
+    if isinstance(value, int):
+        return f"{value:,}"
+    return _format_value(value)

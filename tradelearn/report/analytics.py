@@ -64,6 +64,75 @@ def rolling_beta(returns: pd.Series, benchmark: pd.Series, window: int) -> pd.Se
     return pd.Series(values, index=aligned.index, name="rolling_beta")
 
 
+def active_returns(returns: pd.Series, benchmark: pd.Series) -> pd.Series:
+    """Return strategy returns minus benchmark returns on aligned dates."""
+    aligned = pd.concat([returns, benchmark], axis=1, join="inner")
+    aligned.columns = ["returns", "benchmark"]
+    return (aligned["returns"] - aligned["benchmark"]).rename("active_return")
+
+
+def active_return(returns: pd.Series, benchmark: pd.Series) -> float:
+    """Return compounded strategy excess return over benchmark."""
+    aligned = pd.concat([returns, benchmark], axis=1, join="inner").dropna()
+    if aligned.empty:
+        return np.nan
+    aligned.columns = ["returns", "benchmark"]
+    strategy_return = float((1.0 + aligned["returns"]).prod() - 1.0)
+    benchmark_return = float((1.0 + aligned["benchmark"]).prod() - 1.0)
+    return strategy_return - benchmark_return
+
+
+def tracking_error(returns: pd.Series, benchmark: pd.Series, periods: int) -> float:
+    """Return annualized active return volatility."""
+    active = active_returns(returns, benchmark).dropna()
+    if active.empty:
+        return np.nan
+    return float(active.std(ddof=1) * periods ** 0.5)
+
+
+def active_weights(
+    positions: pd.DataFrame,
+    benchmark_weights: pd.DataFrame | pd.Series | None = None,
+) -> pd.DataFrame:
+    """Return active position weights against optional benchmark weights."""
+    exposure = exposure_weights(positions)
+    if exposure.empty:
+        return pd.DataFrame()
+    if benchmark_weights is None:
+        return exposure.rename_axis(index="date")
+    benchmark = pd.DataFrame(benchmark_weights).copy()
+    if isinstance(benchmark_weights, pd.Series):
+        benchmark = benchmark_weights.to_frame().T
+    benchmark = benchmark.apply(pd.to_numeric, errors="coerce").fillna(0.0)
+    columns = sorted(set(exposure.columns) | set(benchmark.columns))
+    aligned_exposure = exposure.reindex(columns=columns, fill_value=0.0)
+    aligned_benchmark = benchmark.reindex(
+        index=aligned_exposure.index,
+        columns=columns,
+        fill_value=0.0,
+    )
+    return (aligned_exposure - aligned_benchmark).rename_axis(index="date")
+
+
+def performance_attribution(returns: pd.Series, benchmark: pd.Series) -> pd.DataFrame:
+    """Return high-level benchmark-relative return attribution rows."""
+    aligned = pd.concat([returns, benchmark], axis=1, join="inner").dropna()
+    aligned.columns = ["returns", "benchmark"]
+    if aligned.empty:
+        strategy_return = np.nan
+        benchmark_return = np.nan
+    else:
+        strategy_return = float((1.0 + aligned["returns"]).prod() - 1.0)
+        benchmark_return = float((1.0 + aligned["benchmark"]).prod() - 1.0)
+    return pd.DataFrame(
+        [
+            {"component": "strategy_return", "value": strategy_return},
+            {"component": "benchmark_return", "value": benchmark_return},
+            {"component": "active_return", "value": strategy_return - benchmark_return},
+        ]
+    )
+
+
 def top_drawdowns(returns: pd.Series, limit: int = 10) -> pd.DataFrame:
     """Return the largest drawdown episodes."""
     drawdown = metrics.drawdown_series(returns)

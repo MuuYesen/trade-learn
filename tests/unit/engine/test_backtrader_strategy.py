@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pandas as pd
 
 import tradelearn.engine as bt
@@ -72,6 +74,31 @@ def test_backtrader_strategy_history_panel_returns_multi_data_window() -> None:
         pd.to_datetime(["2026-01-02", "2026-01-03"], utc=True)
     )
     assert history.loc[(pd.Timestamp("2026-01-03", tz="UTC"), "BBB"), "close"] == 22.0
+
+
+def test_engine_cerebro_logs_run_start_and_summary(caplog) -> None:
+    class LoggingStrategy(bt.Strategy):
+        def next(self) -> None:
+            if len(self.data) == 2:
+                self.buy(size=1)
+
+    caplog.set_level(logging.INFO, logger="tradelearn.engine.cerebro")
+    cerebro = Cerebro()
+    cerebro.setcash(1000.0)
+    cerebro.setcommission(0.001)
+    cerebro.adddata(bars(), name="daily")
+    cerebro.addstrategy(LoggingStrategy)
+
+    cerebro.run()
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("Cerebro run started" in message and "LoggingStrategy" in message for message in messages)
+    assert any(
+        "Cerebro run finished" in message
+        and "final_value=" in message
+        and "return_pct=" in message
+        for message in messages
+    )
 
 
 def test_backtrader_strategy_module_exports_order_and_line_types() -> None:

@@ -128,11 +128,11 @@ class RuntimeDataFeed(DataContainer):
             self.close,
             self.volume,
         ]
+        for line in self._lines_list:
+            line._cursor_source = self
 
     def _advance(self, cursor: int) -> None:
         self._cursor = cursor
-        for line in self._lines_list:
-            line._cursor = cursor
 
 
 def build_data_feeds(

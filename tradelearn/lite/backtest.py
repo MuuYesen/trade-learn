@@ -15,8 +15,11 @@ from tradelearn.backtest.feed import (
 from tradelearn.backtest.models import Stats
 from tradelearn.backtest.optimize import expand_grid
 from tradelearn.backtest.reporting import reporter_from_stats
+from tradelearn.core import get_logger
 
 from .strategy import Strategy
+
+LOGGER = get_logger("lite.backtest")
 
 
 class LiteStats(Mapping[str, Any]):
@@ -128,6 +131,14 @@ class Backtest:
 
     def run(self, **kwargs) -> LiteStats:
         """Run the backtest and return statistics."""
+        LOGGER.info(
+            "Backtest started strategy=%s feeds=%s rows=%s cash=%s commission=%s",
+            self._strategy_cls.__name__,
+            len(self.datas),
+            _feed_rows(self.datas),
+            self._cash,
+            self._commission,
+        )
         # Reset broker for fresh run
         self.broker = RustBroker(
             cash=self._cash,
@@ -153,7 +164,16 @@ class Backtest:
             key: value.copy()
             for key, value in getattr(strategy_instance, "_records", {}).items()
         }
-        return LiteStats(self._last_stats, strategy_instance, records)
+        result = LiteStats(self._last_stats, strategy_instance, records)
+        LOGGER.info(
+            "Backtest finished strategy=%s final_value=%s return_pct=%s total_trades=%s total_fills=%s",
+            self._strategy_cls.__name__,
+            _summary_value(result.summary, "final_value"),
+            _summary_value(result.summary, "return_pct"),
+            _summary_value(result.summary, "total_trades"),
+            _summary_value(result.summary, "total_fills"),
+        )
+        return result
 
     def optimize(self, **kwargs) -> LiteStats:
         """Simple grid search optimization."""
@@ -240,3 +260,11 @@ def _can_skip_normalize_data(data: pd.DataFrame | dict[str, pd.DataFrame]) -> bo
     if isinstance(data, dict):
         return bool(data) and all(is_normalized_ohlcv_frame(frame) for frame in data.values())
     return is_normalized_ohlcv_frame(data)
+
+
+def _feed_rows(datas: list[Any]) -> int:
+    return int(sum(len(getattr(data, "_frame", ())) for data in datas))
+
+
+def _summary_value(summary: Mapping[str, Any], key: str) -> Any:
+    return summary.get(key, "n/a")

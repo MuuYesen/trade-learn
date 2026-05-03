@@ -10,6 +10,10 @@ from typing import Any
 
 import pandas as pd
 
+from tradelearn.core import get_logger
+
+LOGGER = get_logger("research")
+
 _CURRENT_RUN: contextvars.ContextVar[ResearchRun | None] = contextvars.ContextVar(
     "tradelearn_research_run",
     default=None,
@@ -164,6 +168,15 @@ def bind_research_result(result: Any, strategy: Any) -> Any:
     return result
 
 
+def _object_size(value: Any) -> int | str:
+    if value is None:
+        return "none"
+    try:
+        return int(len(value))
+    except TypeError:
+        return "present"
+
+
 class ResearchRun:
     """Context manager that records tracked research function calls."""
 
@@ -174,6 +187,7 @@ class ResearchRun:
 
     def __enter__(self) -> ResearchRun:
         self._token = _CURRENT_RUN.set(self)
+        LOGGER.info("ResearchRun started name=%s", self.name)
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
@@ -198,7 +212,7 @@ class ResearchRun:
         artifacts: dict[str, Any] | None = None,
     ) -> ResearchResult:
         """Build the final structured result."""
-        return ResearchResult(
+        result = ResearchResult(
             name=self.name,
             steps=list(self.steps),
             params=_flatten_step_params(self.steps),
@@ -215,6 +229,15 @@ class ResearchRun:
             weights=None if weights is None else pd.Series(weights, dtype="float64", name="weight"),
             artifacts=dict(artifacts or {}),
         )
+        LOGGER.info(
+            "ResearchRun finished name=%s steps=%s features=%s scores=%s weights=%s",
+            self.name,
+            len(result.steps),
+            _object_size(result.features),
+            _object_size(result.scores),
+            _object_size(result.weights),
+        )
+        return result
 
     class preprocess:
         """Static-method convenience facade for tracked preprocess functions."""

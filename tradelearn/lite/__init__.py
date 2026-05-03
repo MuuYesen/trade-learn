@@ -10,7 +10,6 @@ from .strategy import Strategy
 
 __all__ = [
     "Backtest",
-    "MLStrategy",
     "Strategy",
     "ta",
     "pta",
@@ -21,10 +20,6 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
-    if name == "MLStrategy":
-        from .ml_strategy import MLStrategy
-
-        return MLStrategy
     if name == "ta":
         return importlib.import_module("tradelearn.indicators")
     if name == "pta":

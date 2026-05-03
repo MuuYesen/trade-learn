@@ -18,6 +18,17 @@ def test_html_template_exists() -> None:
     assert "Summary Stats" in template.read_text()
 
 
+def test_html_template_uses_modern_responsive_report_layout() -> None:
+    """HTML template keeps summary metrics readable in narrow report columns."""
+    text = Path("tradelearn/report/templates/tear_sheet.html").read_text()
+
+    assert "kpi-grid" in text
+    assert "report-layout" in text
+    assert "table-scroll" in text
+    assert "grid-template-columns: repeat(auto-fit" in text
+    assert "overflow-x: auto" in text
+
+
 def test_reporter_html_writes_single_file_tear_sheet(tmp_path) -> None:
     """Reporter.html writes a shareable HTML tear sheet."""
     path = tmp_path / "report.html"
@@ -46,6 +57,9 @@ def test_reporter_html_writes_single_file_tear_sheet(tmp_path) -> None:
     assert "Tradelearn" in html
     assert "Bokeh" in html
     assert "annual_return" in html
+    assert "kpi-grid" in html
+    assert "Annual Return" in html
+    assert 'data-metric="strategy_name"' not in html
 
 
 def test_reporter_report_dispatches_html_by_suffix(tmp_path) -> None:
@@ -252,6 +266,9 @@ def test_reporter_html_accepts_benchmark_series(tmp_path) -> None:
     assert "alpha" in html
     assert "beta" in html
     assert "information_ratio" in html
+    assert "Benchmark-Aware Metrics" in html
+    assert "active_return" in html
+    assert "tracking_error" in html
     assert "Rolling Beta" not in html
     assert not list(tmp_path.glob("*.parquet"))
 

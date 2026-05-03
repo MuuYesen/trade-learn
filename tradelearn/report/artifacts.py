@@ -19,6 +19,7 @@ def write_artifact_bundle(
     *,
     strategy: Any | None = None,
     market_data: pd.DataFrame | None = None,
+    benchmark: pd.Series | None = None,
     log_report: bool = True,
     log_plot: bool = False,
 ) -> list[Path]:
@@ -32,10 +33,10 @@ def write_artifact_bundle(
     output_dir.mkdir(parents=True, exist_ok=True)
     reporter = Reporter(stats, market_data=market_data)
 
-    _write_tables(output_dir, stats, strategy)
+    _write_tables(output_dir, stats, strategy, benchmark=benchmark)
 
     if log_report:
-        reporter.report(output_dir / "report.html")
+        reporter.report(output_dir / "report.html", benchmark=benchmark)
     if log_plot:
         chart = reporter.market_replay_chart()
         if chart is not None:
@@ -71,8 +72,14 @@ def _write_core_tables(output_dir: Path, stats: Any) -> None:
     _write_tables(output_dir, stats, strategy=None)
 
 
-def _write_tables(output_dir: Path, stats: Any, strategy: Any | None) -> None:
-    sheets = _artifact_sheets(stats, strategy)
+def _write_tables(
+    output_dir: Path,
+    stats: Any,
+    strategy: Any | None,
+    *,
+    benchmark: pd.Series | None = None,
+) -> None:
+    sheets = _artifact_sheets(stats, strategy, benchmark=benchmark)
     if not sheets:
         return
     with pd.ExcelWriter(output_dir / "artifacts.xlsx") as writer:
@@ -86,8 +93,14 @@ def _csv_name(name: str) -> str:
     return "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in name)
 
 
-def _artifact_sheets(stats: Any, strategy: Any | None) -> dict[str, pd.DataFrame]:
+def _artifact_sheets(
+    stats: Any,
+    strategy: Any | None,
+    *,
+    benchmark: pd.Series | None = None,
+) -> dict[str, pd.DataFrame]:
     sheets: dict[str, pd.DataFrame] = {}
+    reporter = Reporter(stats)
     summary = _stats_field(stats, "summary", {})
     if summary:
         sheets["summary"] = pd.DataFrame(
@@ -112,6 +125,16 @@ def _artifact_sheets(stats: Any, strategy: Any | None) -> dict[str, pd.DataFrame
         sheets["research"] = pd.DataFrame(
             [{"key": key, "value": value} for key, value in research.items()]
         )
+    if benchmark is not None:
+        active_returns = reporter.active_returns(benchmark)
+        sheets["active_returns"] = _series_frame(
+            active_returns,
+            index_name="datetime",
+            value_name="active_return",
+        )
+        active_weights = reporter.active_weights()
+        sheets["active_weights"] = active_weights.reset_index()
+        sheets["performance_attr"] = reporter.performance_attribution(benchmark)
     return sheets
 
 

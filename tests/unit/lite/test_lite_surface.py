@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import logging
 
 import pandas as pd
 import pytest
 
 import tradelearn as tl
 import tradelearn.engine as bt
-from tradelearn.lite import Backtest, MLStrategy, Strategy
+from tradelearn.lite import Backtest, Strategy
 from tradelearn.lite.backtest import _can_skip_normalize_data
 from tradelearn.research import ResearchResult
 
@@ -62,6 +63,29 @@ def test_lite_backtest_accepts_provider_panel_dataframe() -> None:
 
     assert [data._name for data in stats.strategy.datas] == ["AAA", "BBB"]
     assert seen == {"prices": {"AAA": 11.0, "BBB": 21.0}}
+
+
+def test_lite_backtest_logs_run_start_and_summary(caplog) -> None:
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(2)
+
+        def next(self) -> None:
+            if len(self.data) == 3:
+                self.buy(size=1)
+
+    caplog.set_level(logging.INFO, logger="tradelearn.lite.backtest")
+
+    Backtest(_data(), LiteStrategy, cash=1000.0, commission=0.001).run()
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("Backtest started" in message and "LiteStrategy" in message for message in messages)
+    assert any(
+        "Backtest finished" in message
+        and "final_value=" in message
+        and "return_pct=" in message
+        for message in messages
+    )
 
 
 def test_lite_normalizes_extra_columns_to_lowercase_even_on_fast_path() -> None:
@@ -204,7 +228,6 @@ def test_lite_fractional_size_is_order_quantity_not_equity_fraction() -> None:
     assert stats.fills.iloc[0]["size"] == 0.5
 
 
-
 def test_lite_ignores_orders_created_on_terminal_bar() -> None:
     class LiteStrategy(Strategy):
         def init(self) -> None:
@@ -219,6 +242,7 @@ def test_lite_ignores_orders_created_on_terminal_bar() -> None:
     assert stats["final_value"] == 1000.0
     assert stats.orders.empty
     assert stats.fills.empty
+
 
 def test_lite_and_engine_stats_summary_keys_match() -> None:
     class LiteStrategy(Strategy):
@@ -383,38 +407,11 @@ def test_lite_supports_explicit_bracket_helpers() -> None:
     assert len(stats.strategy.orders) == 3
 
 
-def test_lite_exports_mlstrategy_with_shared_ml_runtime() -> None:
-    class RecordingModel:
-        def __init__(self) -> None:
-            self.fit_X = None
-            self.fit_y = None
-            self.predict_X = []
+def test_lite_does_not_export_mlstrategy() -> None:
+    import tradelearn.lite as lite
 
-        def fit(self, X, y):
-            self.fit_X = X
-            self.fit_y = y
-            return self
-
-        def predict(self, X):
-            self.predict_X.extend(X)
-            return [1.0]
-
-    class LiteML(MLStrategy):
-        model = RecordingModel()
-        features = ("close",)
-
-        @staticmethod
-        def target(data: pd.DataFrame) -> pd.Series:
-            return (data["close"].shift(-1) > data["close"]).astype(float)
-
-    stats = Backtest(_data(), LiteML, cash=1000.0, trade_on_close=True).run()
-    strategy = stats.strategy
-
-    assert strategy.model_.fit_X == [[10.0], [11.0], [12.0], [13.0], [14.0]]
-    assert strategy.model_.fit_y == [1.0, 1.0, 1.0, 1.0, 0.0]
-    assert strategy.model_.predict_X == [[10.0], [11.0], [12.0], [13.0], [14.0]]
-    assert len(strategy.orders) == 1
-    assert strategy.orders[0].isbuy()
+    assert "MLStrategy" not in lite.__all__
+    assert not hasattr(lite, "MLStrategy")
 
 
 def test_lite_accepts_dict_data_and_ticker_orders() -> None:
@@ -524,7 +521,6 @@ def test_lite_target_weights_submit_shared_intents_without_recomputing_targets()
 
 def test_lite_target_weights_match_engine_when_previous_order_is_pending() -> None:
     import tradelearn.engine as bt
-    from tradelearn.engine import IndexEnhanceStrategy
 
     def frame(closes: list[float]) -> pd.DataFrame:
         index = pd.date_range("2024-01-01", periods=len(closes), freq="D", tz="UTC")
@@ -551,7 +547,7 @@ def test_lite_target_weights_match_engine_when_previous_order_is_pending() -> No
             elif len(self.data) == 3:
                 self.target_weights({"AAA": 0.5, "BBB": 0.5})
 
-    class EnginePortfolio(IndexEnhanceStrategy):
+    class EnginePortfolio(bt.Strategy):
         def next(self) -> None:
             if len(self) == 2:
                 self.buy(data=self.getdatabyname("BBB"), size=20)

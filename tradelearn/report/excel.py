@@ -40,6 +40,17 @@ def write_excel_report(
         if benchmark_returns is None
         else reporter.rolling_beta(benchmark_returns)
     )
+    active_returns = (
+        pd.Series(dtype="float64", name="active_return")
+        if benchmark_returns is None
+        else reporter.active_returns(benchmark_returns)
+    )
+    active_weights = pd.DataFrame() if benchmark_returns is None else reporter.active_weights()
+    performance_attr = (
+        pd.DataFrame()
+        if benchmark_returns is None
+        else reporter.performance_attribution(benchmark_returns)
+    )
     trades = _frame(reporter._get("trades", default=pd.DataFrame()))
     positions = _frame(reporter._get("positions", default=pd.DataFrame()))
     orders = _frame(reporter._get("orders", default=pd.DataFrame()))
@@ -72,6 +83,20 @@ def write_excel_report(
             _excel_safe_frame(rolling_beta.to_frame()).to_excel(
                 writer,
                 sheet_name="rolling_beta",
+            )
+        if benchmark_returns is not None:
+            _excel_safe_frame(active_returns.to_frame()).to_excel(
+                writer,
+                sheet_name="active_returns",
+            )
+            _excel_safe_frame(active_weights).to_excel(
+                writer,
+                sheet_name="active_weights",
+            )
+            _excel_safe_frame(performance_attr).to_excel(
+                writer,
+                sheet_name="performance_attr",
+                index=False,
             )
         monthly_returns_matrix(returns).to_excel(writer, sheet_name="monthly_returns")
         _excel_safe_frame(_drawdowns(reporter)).to_excel(
@@ -194,6 +219,9 @@ def _format_numeric_sheets(writer: pd.ExcelWriter) -> None:
         "daily_returns",
         "benchmark_returns",
         "rolling_beta",
+        "active_returns",
+        "active_weights",
+        "performance_attr",
         "monthly_returns",
         "drawdowns",
         "positions",

@@ -78,7 +78,7 @@ if __name__ == "__main__":
     features = feature_set.fit_transform(bars, include_target=True).dropna()
 
     with ResearchRun("index_enhance_research") as run:
-        data_profile = ex.profile(bars)
+
         train_features, test_features = research.time_split(
             features,
             split=split,
@@ -120,7 +120,7 @@ if __name__ == "__main__":
                 "symbols": list(symbols),
                 "split": split,
                 "lookback": lookback,
-                "profile": data_profile.to_dict(),
+                "profile": ex.profile(bars).to_dict(),
             },
         )
 

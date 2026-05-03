@@ -88,10 +88,18 @@ def _orders_frame(broker: Any) -> pd.DataFrame:
 
 
 def _fills_frame(broker: Any) -> pd.DataFrame:
-    fills = broker.fills_frame() if hasattr(broker, "fills_frame") else pd.DataFrame()
+    fills = pd.DataFrame(getattr(broker, "_fills", []))
+    if fills.empty and hasattr(broker, "fills_frame") and not hasattr(broker, "_fills"):
+        fills = broker.fills_frame()
     if fills.empty:
         return pd.DataFrame(columns=["order_ref", "data", "size", "price"])
     rows = fills.rename(columns={"ref": "order_ref"}).copy()
+    if "datetime" in rows.columns:
+        datetimes = rows["datetime"]
+        if pd.api.types.is_numeric_dtype(datetimes):
+            rows["datetime"] = pd.to_datetime(datetimes, unit="s", utc=True)
+        else:
+            rows["datetime"] = pd.to_datetime(datetimes, utc=True)
     if "data" not in rows.columns:
         rows["data"] = None
     return rows
@@ -472,6 +480,13 @@ def _build_data_advance_plan(datas: list[Any]) -> Any | None:
     """Build a Rust primary-clock cursor runner for multi-data runs."""
     if len(datas) <= 1:
         return None
+    primary_timestamps = np.asarray(datas[0]._datetime, dtype=np.int64)
+    if all(
+        len(data._datetime) == len(primary_timestamps)
+        and np.array_equal(np.asarray(data._datetime, dtype=np.int64), primary_timestamps)
+        for data in datas[1:]
+    ):
+        return None
     try:
         from tradelearn._rust import RustBarRunner
     except (ImportError, AttributeError):
@@ -480,7 +495,7 @@ def _build_data_advance_plan(datas: list[Any]) -> Any | None:
         except (ImportError, AttributeError):
             return None
     return RustBarRunner(
-        np.asarray(datas[0]._datetime, dtype=np.int64),
+        primary_timestamps,
         [np.asarray(data._datetime, dtype=np.int64) for data in datas[1:]],
     )
 
@@ -676,6 +691,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
         isinstance(broker, RustBroker)
         and getattr(broker, "_engine", None) is not None
         and hasattr(broker._engine, "run_bar_loop")
+        and len(cerebro.datas) <= 1
         and not bool(getattr(cerebro, "trade_on_close", False))
     )
     min_start = max(min_period - 1, explicit_strategy_min_period)

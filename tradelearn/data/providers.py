@@ -8,7 +8,10 @@ from typing import Any, Protocol
 
 import pandas as pd
 
+from tradelearn.core import get_logger
 from tradelearn.data.bars import Frequency, normalize_bars
+
+LOGGER = get_logger("data.providers")
 
 TDX_PERIOD: dict[str, str] = {
     "5m": "MIN_5",
@@ -93,6 +96,13 @@ class TdxProvider:
         if freq not in TDX_PERIOD:
             raise ValueError(f"Unsupported TDX frequency: {freq}")
         if _is_symbol_collection(symbol):
+            LOGGER.info(
+                "TDX history_ohlc started symbols=%s start=%s end=%s freq=%s",
+                len(symbol),
+                start,
+                end,
+                freq,
+            )
             return _combine_bars(
                 [
                     self.history_ohlc(item, start=start, end=end, freq=freq)
@@ -101,6 +111,15 @@ class TdxProvider:
             )
 
         tdx_symbol = resolve_tdx_symbol(symbol)
+        LOGGER.info(
+            "TDX history_ohlc started symbol=%s request=%s:%s start=%s end=%s freq=%s",
+            symbol,
+            tdx_symbol.exchange,
+            tdx_symbol.code,
+            start,
+            end,
+            freq,
+        )
         client = self._make_client()
         self._prepare_client(client)
         rows = client.stock_kline(
@@ -116,7 +135,7 @@ class TdxProvider:
 
         raw = _normalize_tdx_columns(raw, tdx_symbol.canonical)
         raw = _filter_dates(raw, start=start, end=end)
-        return normalize_bars(
+        bars = normalize_bars(
             raw,
             market="CN",
             freq=freq,
@@ -124,6 +143,14 @@ class TdxProvider:
             source=self._source_label(client),
             adjust="none",
         )
+        LOGGER.info(
+            "TDX history_ohlc finished symbol=%s rows=%s columns=%s index=%s",
+            tdx_symbol.canonical,
+            len(bars),
+            len(bars.columns),
+            type(bars.index).__name__,
+        )
+        return bars
 
     def _make_client(self) -> object:
         """Create the underlying TDX client."""
@@ -237,6 +264,13 @@ class TradingViewProvider:
         if freq not in TRADINGVIEW_INTERVAL:
             raise ValueError(f"Unsupported TradingView frequency: {freq}")
         if _is_symbol_collection(symbol):
+            LOGGER.info(
+                "TradingView history_ohlc started symbols=%s start=%s end=%s freq=%s",
+                len(symbol),
+                start,
+                end,
+                freq,
+            )
             return _combine_bars(
                 [
                     self.history_ohlc(
@@ -251,6 +285,15 @@ class TradingViewProvider:
             )
 
         exchange_name, tv_symbol = _split_tradingview_symbol(symbol, exchange=exchange)
+        LOGGER.info(
+            "TradingView history_ohlc started symbol=%s request=%s:%s start=%s end=%s freq=%s",
+            symbol,
+            exchange_name,
+            tv_symbol,
+            start,
+            end,
+            freq,
+        )
         client = self._make_client()
         rows = client.get_hist(
             symbol=tv_symbol,
@@ -262,7 +305,7 @@ class TradingViewProvider:
             raise ConnectionError(f"TradingView returned no rows for {symbol}")
         raw = _normalize_tradingview_columns(pd.DataFrame(rows), exchange_name, tv_symbol)
         raw = _filter_dates(raw, start=start, end=end)
-        return normalize_bars(
+        bars = normalize_bars(
             raw,
             market="GLOBAL",
             freq=freq,
@@ -270,6 +313,14 @@ class TradingViewProvider:
             source="tvdatafeed",
             adjust="none",
         )
+        LOGGER.info(
+            "TradingView history_ohlc finished symbol=%s rows=%s columns=%s index=%s",
+            f"{exchange_name}:{tv_symbol}",
+            len(bars),
+            len(bars.columns),
+            type(bars.index).__name__,
+        )
+        return bars
 
     def _make_client(self) -> object:
         if self._client_factory is not None:

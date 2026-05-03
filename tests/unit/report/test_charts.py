@@ -2,6 +2,8 @@
 
 import pandas as pd
 from bokeh.plotting import figure
+from bokeh.models import GlyphRenderer
+from bokeh.models.glyphs import MultiLine
 
 from tradelearn.report.charts import (
     annual_returns,
@@ -106,6 +108,14 @@ def test_support_charts_are_static_but_market_replay_keeps_toolbar() -> None:
     assert static_plot.toolbar.tools == []
     assert replay.toolbar_location == "right"
     assert replay.toolbar.tools
+
+
+def test_market_replay_does_not_connect_trade_markers_with_multiline() -> None:
+    """OHLC / Trades should not draw diagonal entry-exit trade connector lines."""
+    replay = market_replay(_market_data(), fills=_fills(), equity=_series("equity"))
+    renderers = _collect_glyph_renderers(replay)
+
+    assert not any(isinstance(renderer.glyph, MultiLine) for renderer in renderers)
 
 
 def _series(name: str) -> pd.Series:
@@ -223,6 +233,18 @@ def _market_data() -> pd.DataFrame:
         },
         index=pd.date_range("2024-01-01", periods=3, tz="UTC"),
     )
+
+
+def _collect_glyph_renderers(layout) -> list[GlyphRenderer]:
+    renderers: list[GlyphRenderer] = []
+    if hasattr(layout, "renderers"):
+        renderers.extend(
+            renderer for renderer in layout.renderers if isinstance(renderer, GlyphRenderer)
+        )
+    for child in getattr(layout, "children", []):
+        item = child[0] if isinstance(child, tuple) else child
+        renderers.extend(_collect_glyph_renderers(item))
+    return renderers
 
 
 def _fills() -> pd.DataFrame:

@@ -65,12 +65,14 @@ def test_cli_mcp_help_has_no_preview_option() -> None:
     assert "--transport" in result.output
 
 
-def test_cli_lab_dependency_check_prevents_starting_when_missing(tmp_path) -> None:
+def test_cli_lab_dependency_check_prevents_starting_when_missing(tmp_path, monkeypatch) -> None:
     config = tmp_path / "config.yaml"
     config.write_text(
         "mlflow:\n  tracking_uri: http://mlflow.local\n",
         encoding="utf-8",
     )
+    monkeypatch.setattr("tradelearn.cli.check_lab_dependencies", lambda: ("jupyterlab",))
+    monkeypatch.setattr("tradelearn.cli.check_mlflow_dependencies", lambda: ())
 
     result = runner.invoke(
         app,

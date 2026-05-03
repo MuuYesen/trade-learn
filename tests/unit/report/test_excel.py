@@ -106,11 +106,16 @@ def test_reporter_excel_accepts_benchmark_series(tmp_path) -> None:
 
     Reporter(_stats(), periods=252).excel(path, benchmark=_benchmark())
 
+    assert "active_returns" in _sheet_names(path)
+    assert "active_weights" in _sheet_names(path)
+    assert "performance_attr" in _sheet_names(path)
     assert "rolling_beta" in _sheet_names(path)
     workbook_text = _workbook_text(path)
     assert "alpha" in workbook_text
     assert "beta" in workbook_text
     assert "information_ratio" in workbook_text
+    assert "active_return" in workbook_text
+    assert "tracking_error" in workbook_text
 
 
 def test_reporter_excel_drawdowns_sheet_uses_top_drawdown_table(tmp_path) -> None:

@@ -51,6 +51,13 @@ class MLflowAnalyzer(Analyzer):
         try:
             mlflow = self.p.mlflow_module or _import_mlflow()
             uri = self.p.uri or DEFAULT_MLFLOW_URI
+            LOGGER.info(
+                "MLflow logging started experiment=%s run=%s uri=%s artifacts=%s",
+                self.p.experiment or "default",
+                self.p.run_name or "auto",
+                uri,
+                self.p.upload_artifacts if self.p.log_artifacts is None else bool(self.p.log_artifacts),
+            )
             mlflow.set_tracking_uri(uri)
             if self.p.experiment:
                 mlflow.set_experiment(self.p.experiment)
@@ -76,6 +83,12 @@ class MLflowAnalyzer(Analyzer):
                         log_plot=bool(self.p.log_plot),
                     )
             self._status = "logged"
+            LOGGER.info(
+                "MLflow logging finished experiment=%s run=%s artifacts=%s",
+                self.p.experiment or "default",
+                self.p.run_name or "auto",
+                upload_artifacts,
+            )
         except Exception as exc:  # pragma: no cover - exercised through fake module
             self._status = "warning"
             self._message = str(exc)

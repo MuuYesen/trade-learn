@@ -10,22 +10,30 @@ import numpy as np
 import pandas as pd
 
 from tradelearn import metrics
+from tradelearn.core import get_logger
 from tradelearn.report import charts
 from tradelearn.report.analytics import (
+    active_return,
+    active_returns,
+    active_weights,
     annual_returns,
     exposure_correlation,
     exposure_weights,
     monthly_returns_matrix,
+    performance_attribution,
     rolling_beta,
     rolling_returns,
     rolling_sharpe,
     rolling_volatility,
     top_drawdowns,
+    tracking_error,
     trade_distribution,
 )
 from tradelearn.report.excel import write_excel_report
 from tradelearn.report.explore import explore_trades
 from tradelearn.report.html import write_html_report
+
+LOGGER = get_logger("report")
 
 
 class Reporter:
@@ -92,6 +100,8 @@ class Reporter:
                         benchmark,
                         self.periods,
                     ),
+                    "active_return": active_return(returns, benchmark),
+                    "tracking_error": tracking_error(returns, benchmark, self.periods),
                 }
             )
         computed.update(
@@ -138,6 +148,28 @@ class Reporter:
     def rolling_beta(self, benchmark: pd.Series, window: int = 126) -> pd.Series:
         """Return rolling beta to a benchmark."""
         return rolling_beta(self._get("returns"), benchmark=benchmark, window=window)
+
+    def active_returns(self, benchmark: pd.Series) -> pd.Series:
+        """Return daily active returns against a benchmark."""
+        return active_returns(self._get("returns"), benchmark)
+
+    def tracking_error(self, benchmark: pd.Series) -> float:
+        """Return annualized tracking error against a benchmark."""
+        return tracking_error(self._get("returns"), benchmark, self.periods)
+
+    def active_weights(
+        self,
+        benchmark_weights: pd.DataFrame | pd.Series | None = None,
+    ) -> pd.DataFrame:
+        """Return active exposure weights against optional benchmark weights."""
+        return active_weights(
+            self._get("positions", default=pd.DataFrame()),
+            benchmark_weights=benchmark_weights,
+        )
+
+    def performance_attribution(self, benchmark: pd.Series) -> pd.DataFrame:
+        """Return benchmark-relative return attribution rows."""
+        return performance_attribution(self._get("returns"), benchmark)
 
     def top_drawdowns(self, limit: int = 10) -> pd.DataFrame:
         """Return the largest drawdown episodes."""
@@ -420,11 +452,23 @@ class Reporter:
         if chosen in {"htm", "html"}:
             if not output.suffix:
                 output = output.with_suffix(".html")
-            return self.html(output, benchmark=benchmark, sections=sections)
+            result = self.html(output, benchmark=benchmark, sections=sections)
+            LOGGER.info(
+                "Report written path=%s format=html benchmark=%s",
+                result,
+                benchmark is not None,
+            )
+            return result
         if chosen in {"xls", "xlsx", "excel"}:
             if not output.suffix:
                 output = output.with_suffix(".xlsx")
-            return self.excel(output, benchmark=benchmark, sections=sections)
+            result = self.excel(output, benchmark=benchmark, sections=sections)
+            LOGGER.info(
+                "Report written path=%s format=excel benchmark=%s",
+                result,
+                benchmark is not None,
+            )
+            return result
         raise ValueError(f"Unsupported report format: {chosen}")
 
     def explore(self) -> Any:

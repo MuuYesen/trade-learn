@@ -10,7 +10,6 @@ from tradelearn.engine.analyzer import Analyzer
 from tradelearn.engine.base import TimeFrame
 from tradelearn.engine.cerebro import Cerebro, OptReturn
 from tradelearn.engine.grid import GridSearchResult, grid_search
-from tradelearn.engine.index_enhance import IndexEnhanceStrategy
 from tradelearn.engine.indicators import Indicator
 from tradelearn.engine.observers import Observer
 from tradelearn.engine.signal import (
@@ -71,10 +70,6 @@ tv = importlib.import_module("tradelearn.indicators.tv")
 def __getattr__(name: str) -> Any:
     if name == "talib":
         return importlib.import_module("tradelearn.indicators.talib")
-    if name == "MLStrategy":
-        from tradelearn.ml import MLStrategy
-
-        return MLStrategy
     raise AttributeError(f"module 'tradelearn.engine' has no attribute {name!r}")
 
 __all__ = [
@@ -89,10 +84,8 @@ __all__ = [
     "Position",
     "Sizer",
     "Strategy",
-    "MLStrategy",
     "Trade",
     "Indicator",
-    "IndexEnhanceStrategy",
     "TimeFrame",
     "FixedSize",
     "PercentSizer",

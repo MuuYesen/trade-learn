@@ -74,6 +74,7 @@ class RustBroker:
         self._fills_frame_cache_len = -1
         self._pending_orders: list[Order] = []
         self._deferred_child_orders: dict[int, list[tuple[Order, bool, float, float | None]]] = {}
+        self._oco_order_count = 0
         self._order_count = 0
         self._closed_trade_count = 0
         self._winning_trade_count = 0
@@ -710,6 +711,8 @@ class RustBroker:
         order.status = Order.Submitted
         self._orders.append(order)
         self._orders_by_ref[order.ref] = order
+        if order.oco is not None:
+            self._oco_order_count += 1
         self._notify_order_event(owner, order)
 
         if order.parent is not None and order.parent.status != Order.Completed:
@@ -758,6 +761,8 @@ class RustBroker:
 
     def _cancel_oco_siblings(self, owner: Strategy, completed: Order) -> None:
         """Cancel live OCO siblings after one order in the OCO pair fills."""
+        if completed.oco is None and self._oco_order_count == 0:
+            return
         for candidate in self._orders:
             if candidate is completed or not candidate.alive():
                 continue

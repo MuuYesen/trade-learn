@@ -9,9 +9,9 @@ import pandas as pd
 
 import tradelearn.engine as bt
 from examples.engine import MigratedSmaCross
-from tradelearn.backtest import LineSeries
+from tradelearn.engine import LineSeries
 from tradelearn.factor import FactorAnalyzer
-from tradelearn.ml import CausalSelector, MLStrategy
+from tradelearn.ml import CausalSelector, ModelRegistry
 from tradelearn.report import Reporter
 
 
@@ -41,7 +41,7 @@ MIGRATION_CHECKPOINTS: tuple[MigrationCheckpoint, ...] = (
         "tradelearn.factor.FactorAnalyzer",
     ),
     MigrationCheckpoint("reporter", "removed Evaluate facade", "tradelearn.report.Reporter"),
-    MigrationCheckpoint("ml", "AutoML / CausalGraph", "tradelearn.ml.MLStrategy"),
+    MigrationCheckpoint("ml", "AutoML / CausalGraph", "tradelearn.ml"),
 )
 
 def run_migration_smoke() -> dict[str, Any]:
@@ -66,7 +66,7 @@ def run_migration_smoke() -> dict[str, Any]:
             "final_value": float(strategy.stats.summary["final_value"]),
         },
         "factor": {"analyzer": FactorAnalyzer.__name__},
-        "ml": {"strategy": MLStrategy.__name__, "selector": CausalSelector.__name__},
+        "ml": {"registry": ModelRegistry.__name__, "selector": CausalSelector.__name__},
         "report": {"reporter": Reporter.__name__},
     }
 

@@ -30,7 +30,7 @@ COMPARISON_PROJECTS: tuple[ComparisonProject, ...] = (
     ComparisonProject(
         "backtrader",
         "成熟的事件驱动回测 API",
-        "trade-learn 提供 tradelearn.engine 高级事件驱动 API,同时接入 MLStrategy 与现代报告体系",
+        "trade-learn 提供 tradelearn.engine 高级事件驱动 API,同时接入模型组件与现代报告体系",
     ),
     ComparisonProject(
         "nautilus",

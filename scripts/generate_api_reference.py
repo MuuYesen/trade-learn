@@ -32,7 +32,7 @@ API_REFERENCE_MODULES: tuple[ApiReferenceModule, ...] = (
         "Lite",
         "tradelearn.lite",
         "Tradelearn 1.x 风格轻量 API。",
-        ("Backtest", "Strategy", "MLStrategy", "talib", "pta", "tdx", "tv"),
+        ("Backtest", "Strategy", "talib", "pta", "tdx", "tv"),
     ),
     ApiReferenceModule(
         "Data",
@@ -73,8 +73,8 @@ API_REFERENCE_MODULES: tuple[ApiReferenceModule, ...] = (
     ApiReferenceModule(
         "ML",
         "tradelearn.ml",
-        "机器学习策略、特征存储、模型注册与特征筛选。",
-        ("MLStrategy", "FeatureStore", "ModelRegistry", "FeatureSelector"),
+        "机器学习、模型注册与特征筛选。",
+        ("AutoML", "CausalSelector", "ModelRegistry", "ModelLoader"),
     ),
 )
 

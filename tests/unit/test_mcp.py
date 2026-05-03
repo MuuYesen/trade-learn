@@ -76,7 +76,14 @@ def test_mcp_list_mlflow_runs_uses_configured_tracking_uri(tmp_path: Path) -> No
 
 
 def _call_json(server, name: str, arguments: dict[str, object]) -> dict[str, object]:
-    [content] = asyncio.run(server.call_tool(name, arguments))
+    result = asyncio.run(server.call_tool(name, arguments))
+    if isinstance(result, tuple):
+        content, structured = result
+        if isinstance(structured, dict):
+            return structured
+    else:
+        content = result
+    [content] = content
     return json.loads(content.text)
 
 

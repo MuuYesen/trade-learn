@@ -95,9 +95,11 @@ if __name__ == "__main__":
         winsorizer = pp.Winsorizer(columns=["alpha"], limits=(0.05, 0.95))
         neutralizer = pp.Neutralizer(columns=["alpha"], exposures=["size"], method="ols")
         scaler = pp.StandardScaler(columns=["alpha"])
+
         train_features = winsorizer.fit_transform(train_features)
         train_features = neutralizer.fit_transform(train_features)
         train_features = scaler.fit_transform(train_features)
+
         test_features = winsorizer.transform(test_features)
         test_features = neutralizer.transform(test_features)
         test_features = scaler.transform(test_features)
@@ -114,6 +116,7 @@ if __name__ == "__main__":
         selected = pf.select_top(scores, k=2)
         weights = pf.equal_weight(selected, gross=0.95)
         weights = pf.apply_constraints(weights, max_weight=0.5, normalize=True)
+
         research_result = run.finish(
             features=test_features,
             target=test_features["label"],

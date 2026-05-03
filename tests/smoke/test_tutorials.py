@@ -128,7 +128,7 @@ def run_portfolio_tutorial() -> dict[str, Any]:
 
 
 def run_ml_strategy_tutorial() -> dict[str, Any]:
-    """Run the sklearn GBM + Alpha101 MLStrategy tutorial."""
+    """Run the sklearn GBM + Alpha101 model strategy tutorial."""
     result = run_ml_example()
     return {
         "selected_features": result.selected_features,

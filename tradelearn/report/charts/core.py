@@ -268,42 +268,45 @@ def market_replay(
         )
         _add_close_index_hover(price_plot, [price_renderer])
 
-    if not trades_frame.empty:
-        trade_source = ColumnDataSource(trades_frame)
-        price_plot.multi_line(
-            xs="line_xs",
-            ys="line_ys",
-            source=trade_source,
-            line_color="line_color",
-            line_width=4,
-            line_alpha=0.62,
-            line_dash="dotted",
-            legend_label=f"Trades ({len(trades_frame)})",
-        )
     if not fills_frame.empty:
         buys = fills_frame[fills_frame["side"].str.lower().eq("buy")]
         sells = fills_frame[fills_frame["side"].str.lower().eq("sell")]
+        fill_renderers = []
         if not buys.empty:
-            price_plot.scatter(
+            fill_renderers.append(price_plot.scatter(
                 "bar_index",
                 "price",
                 source=ColumnDataSource(buys),
                 marker="triangle",
-                size=17,
+                size=11,
                 color=MARKET_UP,
                 line_color="white",
                 legend_label="Buy",
-            )
+            ))
         if not sells.empty:
-            price_plot.scatter(
+            fill_renderers.append(price_plot.scatter(
                 "bar_index",
                 "price",
                 source=ColumnDataSource(sells),
                 marker="inverted_triangle",
-                size=17,
+                size=11,
                 color=MARKET_DOWN,
                 line_color="white",
                 legend_label="Sell",
+            ))
+        if fill_renderers:
+            _add_passive_hover(
+                price_plot,
+                HoverTool(
+                    renderers=fill_renderers,
+                    formatters={"@date": "datetime"},
+                    tooltips=[
+                        ("Date", "@date{%F %T}"),
+                        ("Side", "@side"),
+                        ("Price", "@price{0,0.####}"),
+                        ("Size", "@size{0,0.####}"),
+                    ],
+                ),
             )
     price_plot.yaxis.axis_label = "Price"
     plots.append(price_plot)

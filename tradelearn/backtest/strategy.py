@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from tradelearn.backtest.models import Order, Position
+from tradelearn.backtest.targets import TargetWeightSnapshot, build_target_weight_intents
 from tradelearn.research.run import bind_research_result
 
 
@@ -268,6 +270,46 @@ class Strategy:
             target=float(target) * float(self.broker.getvalue()),
             **kwargs,
         )
+
+    def target_weights(
+        self,
+        weights: Mapping[str, float],
+        *,
+        close_missing: bool = True,
+    ) -> list[Any]:
+        """Move all data feeds toward symbol target weights."""
+        data_by_name = self._target_weight_data_map()
+        snapshots = {
+            name: TargetWeightSnapshot(
+                price=self._current_price(data),
+                size=float(self.getposition(data).size + self._pending_size.get(data, 0.0)),
+                mult=self._position_mult(data),
+            )
+            for name, data in data_by_name.items()
+        }
+        intents = build_target_weight_intents(
+            weights,
+            data_by_symbol=data_by_name,
+            snapshots=snapshots,
+            equity=float(self.broker.getvalue()) if self.broker is not None else 0.0,
+            close_missing=close_missing,
+            unknown_label="symbol(s)",
+        )
+        orders: list[Any] = []
+        for intent in intents:
+            if intent.side == "buy":
+                order = self._buy_data(data=intent.data, size=intent.qty)
+            else:
+                order = self._sell_data(data=intent.data, size=intent.qty)
+            if order is not None:
+                orders.append(order)
+        return orders
+
+    def _target_weight_data_map(self) -> dict[str, Any]:
+        return {
+            str(getattr(data, "_name", None) or f"data{i}"): data
+            for i, data in enumerate(self.datas)
+        }
 
     def buy_bracket(
         self,

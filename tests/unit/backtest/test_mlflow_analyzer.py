@@ -7,7 +7,7 @@ import pandas as pd
 
 import tradelearn.research.portfolio as pf
 from tradelearn.core import BrokerEvent, StreamBar
-from tradelearn.engine import Cerebro, IndexEnhanceStrategy, Strategy, grid_search
+from tradelearn.engine import Cerebro, Strategy, grid_search
 from tradelearn.engine.analyzer import Analyzer
 from tradelearn.engine.analyzers import MLflowAnalyzer
 from tradelearn.research import ResearchResult, ResearchStep
@@ -172,14 +172,12 @@ def test_mlflow_analyzer_logs_report_plot_and_table_artifacts() -> None:
 
 
 def test_mlflow_analyzer_logs_research_target_weight_artifacts() -> None:
-    class ResearchWeights(IndexEnhanceStrategy):
-        rebalance_freq = 1
-
+    class ResearchWeights(Strategy):
         def next(self) -> None:
-            if not self.should_rebalance():
-                return
-            universe = self.current_universe()
-            scores = universe["close"]
+            scores = pd.Series(
+                {data._name: float(data.close[0]) for data in self.datas},
+                name="close",
+            )
             selected = pf.select_top(scores, k=1)
             weights = pf.equal_weight(selected, gross=0.5)
             result = ResearchResult(
@@ -271,17 +269,14 @@ def test_mlflow_analyzer_logs_research_result_from_strategy_params() -> None:
         weights=pd.Series({"BBB": 0.5}, name="weight"),
     )
 
-    class ResearchWeights(IndexEnhanceStrategy):
+    class ResearchWeights(Strategy):
         params = (("research_results", None),)
-        rebalance_freq = 1
 
         def __init__(self) -> None:
             super().__init__()
             self.research_results = self.p.research_results
 
         def next(self) -> None:
-            if not self.should_rebalance():
-                return
             current = self.research_results["2026-01-01"]
             self.record_research_result(current)
             self.target_weights(current.as_weight_dict())

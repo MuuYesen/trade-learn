@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pandas as pd
 import pytest
 
@@ -81,6 +83,25 @@ def test_research_run_records_preprocess_and_portfolio_function_params() -> None
         str(symbol): float(weight)
         for symbol, weight in result.weights.items()
     }
+
+
+def test_research_run_logs_start_and_finish(caplog) -> None:
+    caplog.set_level(logging.INFO, logger="tradelearn.research")
+
+    with ResearchRun("logged-research") as run:
+        scores = pd.Series({"AAA": 0.2, "BBB": 0.1}, name="score")
+        weights = equal_weight(["AAA"], gross=0.9)
+        run.finish(scores=scores, weights=weights)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("ResearchRun started" in message and "logged-research" in message for message in messages)
+    assert any(
+        "ResearchRun finished" in message
+        and "steps=1" in message
+        and "scores=2" in message
+        and "weights=1" in message
+        for message in messages
+    )
 
 
 def test_topk_equal_weights_builds_multi_period_weight_panel() -> None:

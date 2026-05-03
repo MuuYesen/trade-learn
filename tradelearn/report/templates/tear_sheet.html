@@ -6,97 +6,182 @@
   {{ bokeh_resources | safe }}
   <style>
     :root {
-      --ink: #1f2d33;
-      --muted: #66757f;
-      --line: #d9e1e6;
-      --panel: #f7fafc;
-      --accent: #54717b;
+      --ink: #172026;
+      --muted: #697782;
+      --line: #e2e8ee;
+      --panel: #f8fafc;
+      --panel-strong: #f2f5f8;
+      --accent: #0f766e;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: #f3f6f8;
+      background: #f7f9fb;
       color: var(--ink);
       font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
-      line-height: 1.5;
+      line-height: 1.45;
     }
-    .shell { max-width: 1180px; margin: 28px auto; padding: 0 22px; }
+    .shell {
+      max-width: 1480px;
+      margin: 0 auto;
+      padding: 28px 28px 36px;
+    }
     header, section, footer {
       width: 100%;
-      margin: 0 0 28px;
-      padding: 22px 26px;
+      margin: 0 0 14px;
+      padding: 20px 22px;
       background: white;
       border: 1px solid var(--line);
       border-radius: 6px;
-      box-shadow: 0 1px 2px rgba(31, 45, 51, 0.04);
     }
-    header { border-top: 4px solid var(--accent); }
+    header {
+      padding: 22px 24px;
+      border-top: 3px solid var(--accent);
+    }
     h1, h2 {
-      margin: 0 0 16px;
+      margin: 0;
       line-height: 1.2;
+      letter-spacing: 0;
     }
-    h1 { font-size: 32px; }
-    h2 { font-size: 24px; }
+    h1 {
+      font-size: 30px;
+      font-weight: 750;
+    }
+    h2 {
+      font-size: 18px;
+      font-weight: 700;
+    }
+    h3 {
+      margin: 16px 0 8px;
+      font-size: 13px;
+      letter-spacing: 0;
+    }
     p { margin: 4px 0; color: var(--muted); }
     .eyebrow {
       color: var(--accent);
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
-      letter-spacing: .08em;
+      letter-spacing: .1em;
       margin: 0 0 6px;
       text-transform: uppercase;
     }
-    .meta-grid {
+    .report-header {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 10px;
-      margin-top: 18px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: end;
+    }
+    .meta-grid {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 12px 18px;
+      max-width: 760px;
     }
     .meta-item {
-      padding: 10px 12px;
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 6px;
+      min-width: 0;
+      text-align: right;
     }
     .meta-label {
       color: var(--muted);
-      font-size: 12px;
+      font-size: 10px;
       font-weight: 700;
+      letter-spacing: .08em;
       text-transform: uppercase;
     }
     .meta-value {
-      margin-top: 3px;
+      margin-top: 2px;
       color: var(--ink);
-      font-weight: 700;
+      font-size: 13px;
+      font-weight: 600;
       overflow-wrap: anywhere;
     }
-    table { border-collapse: collapse; width: 100%; margin: 12px 0 0; font-size: 13px; }
-    th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; }
-    th { background: var(--panel); font-weight: 700; }
-    .section-note {
-      margin: -6px 0 10px;
-      color: var(--muted);
-      font-size: 14px;
-    }
-    .summary-table th {
-      width: 18%;
-      color: var(--muted);
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 540px;
+      margin: 0;
       font-size: 12px;
-      text-transform: uppercase;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }
+    th {
+      background: var(--panel);
+      color: #53626e;
+      font-weight: 700;
       letter-spacing: .02em;
     }
-    .summary-table td {
-      width: 15%;
+    .table-scroll {
+      width: 100%;
+      margin-top: 10px;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+    .section-note {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 0;
+      margin-top: 16px;
+      border-top: 1px solid var(--line);
+      border-left: 1px solid var(--line);
+    }
+    .kpi-card {
+      min-width: 0;
+      padding: 13px 14px;
+      background: white;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .kpi-label {
+      color: var(--muted);
+      font-size: 10px;
       font-weight: 700;
+      letter-spacing: .08em;
+      line-height: 1.35;
+      text-transform: uppercase;
+    }
+    .kpi-value {
+      margin-top: 6px;
       color: var(--ink);
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.2;
       overflow-wrap: anywhere;
     }
-    .summary-table th:empty,
-    .summary-table td:empty {
-      background: var(--panel);
+    .report-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 14px;
+    }
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 14px;
+      align-items: stretch;
+    }
+    .detail-grid > section {
+      height: 100%;
     }
     .chart {
       overflow: hidden;
+    }
+    .chart h2 {
+      margin-bottom: 14px;
     }
     .chart > div,
     .chart .bk-root,
@@ -104,69 +189,70 @@
       width: 100% !important;
       max-width: 100% !important;
     }
-    .tear-sheet {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 340px;
-      gap: 24px;
-      align-items: start;
-    }
-    .tear-sheet-main section,
-    .tear-sheet-side section {
-      margin-bottom: 22px;
-    }
-    .tear-sheet-side {
-      position: sticky;
-      top: 18px;
+    .bk-root,
+    .bk-root * {
+      outline: none !important;
     }
     .compact-section h2 {
-      font-size: 20px;
-      margin-bottom: 10px;
+      font-size: 18px;
     }
-    @media (max-width: 980px) {
-      .tear-sheet { grid-template-columns: 1fr; }
-      .tear-sheet-side { position: static; }
+    footer {
+      padding: 14px 0 0;
+      color: var(--muted);
+      background: transparent;
+      border: 0;
+      border-top: 1px solid var(--line);
+      border-radius: 0;
+    }
+    @media (max-width: 760px) {
+      .shell { padding: 14px; }
+      header, section { padding: 17px 16px; }
+      h1 { font-size: 26px; }
+      .report-header { grid-template-columns: 1fr; align-items: start; }
+      .meta-grid { justify-content: flex-start; }
+      .meta-item { text-align: left; }
+      .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(138px, 1fr)); }
+      .chart-grid { grid-template-columns: 1fr; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .kpi-value { font-size: 18px; }
     }
   </style>
 </head>
 <body>
   <main class="shell">
     <header>
-      <p class="eyebrow">Tradelearn Backtest Report</p>
-      <h1>{{ metadata.strategy_name }}</h1>
-      <div class="meta-grid">
-        <div class="meta-item">
-          <div class="meta-label">Run ID</div>
-          <div class="meta-value">{{ metadata.run_id }}</div>
+      <div class="report-header">
+        <div>
+          <p class="eyebrow">Tradelearn Backtest Report</p>
+          <h1>{{ metadata.strategy_name }}</h1>
         </div>
-        <div class="meta-item">
-          <div class="meta-label">Period</div>
-          <div class="meta-value">{{ metadata.start }} to {{ metadata.end }}</div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-label">Generated</div>
-          <div class="meta-value">{{ metadata.generated_at }}</div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-label">Rows</div>
-          <div class="meta-value">returns={{ returns_count }}, trades={{ trades_count }}</div>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <div class="meta-label">Run ID</div>
+            <div class="meta-value">{{ metadata.run_id }}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">Period</div>
+            <div class="meta-value">{{ metadata.start }} to {{ metadata.end }}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">Generated</div>
+            <div class="meta-value">{{ metadata.generated_at }}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">Rows</div>
+            <div class="meta-value">returns={{ returns_count }}, trades={{ trades_count }}</div>
+          </div>
         </div>
       </div>
     </header>
-    <div class="tear-sheet">
-      <div class="tear-sheet-main">
-        {% for title, chart in charts.items() %}
-        <section class="chart">
-          <h2>{{ title }}</h2>
-          {{ chart | safe }}
-        </section>
-        {% endfor %}
-      </div>
-      <aside class="tear-sheet-side">
-        <section class="compact-section">
-          <h2>Summary Stats</h2>
-          <p class="section-note">Pyfolio-style key performance and accounting metrics.</p>
-          {{ summary_table | safe }}
-        </section>
+    <div class="report-layout">
+      <section class="compact-section">
+        <h2>Summary Stats</h2>
+        <p class="section-note">Key performance, risk, and accounting metrics.</p>
+        {{ summary_table | safe }}
+      </section>
+      <div class="detail-grid">
         <section class="compact-section">
           <h2>Top 10 Drawdowns</h2>
           {{ drawdowns_table | safe }}
@@ -176,6 +262,8 @@
           {{ config_table | safe }}
           {{ research_section | safe }}
         </section>
+      </div>
+      <div class="detail-grid">
         {{ benchmark_section | safe }}
         {{ correlation_section | safe }}
         {{ exposure_section | safe }}
@@ -184,7 +272,21 @@
         {{ factor_turnover_section | safe }}
         {{ factor_long_short_section | safe }}
         {{ factor_section | safe }}
-      </aside>
+      </div>
+      {% if charts.get("Price / Trades") %}
+      <section class="chart">
+        <h2>Price / Trades</h2>
+        {{ charts.get("Price / Trades") | safe }}
+      </section>
+      {% endif %}
+      <div class="chart-grid">
+        {% for title, chart in charts.items() if title != "Price / Trades" %}
+        <section class="chart">
+          <h2>{{ title }}</h2>
+          {{ chart | safe }}
+        </section>
+        {% endfor %}
+      </div>
     </div>
     {{ custom_sections | safe }}
     {{ script | safe }}

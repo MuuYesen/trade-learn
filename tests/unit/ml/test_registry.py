@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from tradelearn.engine import Cerebro
-from tradelearn.ml import MLStrategy, ModelLoader, ModelRegistry, model_uri
+from tradelearn.ml import ModelLoader, ModelRegistry, model_uri
 
 
 class FakePyfunc:
@@ -73,24 +72,11 @@ def test_model_loader_protocol_accepts_plain_registry() -> None:
     assert isinstance(PlainRegistry(), ModelLoader)
 
 
-def test_mlstrategy_loads_string_model_reference_from_registry() -> None:
+def test_model_registry_loads_string_model_reference_for_user_strategy() -> None:
     mlflow = FakeMlflow()
 
-    class DemoMLStrategy(MLStrategy):
-        model = "alpha_model:production"
-        features = ("feature",)
+    registry = ModelRegistry(mlflow_module=mlflow)
+    model = registry.load("alpha_model:production")
 
-    cerebro = Cerebro(trade_on_close=True)
-    cerebro.adddata(_bars(), name="demo")
-    cerebro.addstrategy(
-        DemoMLStrategy,
-        threshold=0.5,
-        size=1,
-        model_registry=ModelRegistry(mlflow_module=mlflow),
-    )
-    [strategy] = cerebro.run()
-
-    assert strategy.model_ is mlflow.pyfunc.model
+    assert model is mlflow.pyfunc.model
     assert mlflow.pyfunc.loaded == ["models:/alpha_model/production"]
-    assert strategy.stats is not None
-    assert strategy.stats.summary["total_fills"] == 1

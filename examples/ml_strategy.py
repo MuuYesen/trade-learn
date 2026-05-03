@@ -1,4 +1,4 @@
-"""Minimal MLStrategy example using Alpha101-style feature preparation."""
+"""Minimal model-driven Strategy example using Alpha101-style feature preparation."""
 
 from __future__ import annotations
 
@@ -49,21 +49,46 @@ def build_alpha101_features(bars: pd.DataFrame, max_features: int = 3) -> pd.Dat
 
 
 def run_example() -> MLExampleResult:
-    """Run a deterministic MLStrategy demo and return reportable results."""
+    """Run a deterministic model-driven strategy demo and return reportable results."""
     bars = _demo_bars()
     factors = build_alpha101_features(bars, max_features=2)
     selected_features = list(factors.columns)
     data = pd.concat([bars, factors], axis=1)
     data["target"] = data["close"].pct_change().shift(-1).fillna(0.0)
 
-    class AlphaStrategy(bt.MLStrategy):
-        model = ThresholdModel()
-        features = tuple(selected_features)
-        target = "target"
+    model = ThresholdModel().fit(
+        data.loc[:, selected_features].fillna(0.0).values.tolist(),
+        data["target"].astype(float).tolist(),
+    )
+
+    class AlphaStrategy(bt.Strategy):
+        params = (
+            ("model", None),
+            ("features", ()),
+            ("threshold", 0.0),
+            ("size", 1),
+        )
+
+        def next(self) -> None:
+            vector = [
+                float(self.data.get_value(feature))
+                for feature in self.p.features
+            ]
+            prediction = float(self.p.model.predict([vector])[0])
+            if prediction > self.p.threshold and self.position.size <= 0:
+                self.buy(size=self.p.size)
+            elif prediction < -self.p.threshold and self.position.size > 0:
+                self.close()
 
     cerebro = bt.Cerebro(trade_on_close=True)
     cerebro.adddata(data, name="alpha")
-    cerebro.addstrategy(AlphaStrategy, threshold=0.0, size=1)
+    cerebro.addstrategy(
+        AlphaStrategy,
+        model=model,
+        features=tuple(selected_features),
+        threshold=0.0,
+        size=1,
+    )
     [strategy] = cerebro.run()
 
     return MLExampleResult(

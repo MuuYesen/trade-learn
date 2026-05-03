@@ -4,10 +4,12 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from tradelearn.core import get_logger
 from tradelearn.report.artifacts import market_data_from_strategy, write_artifact_bundle
 from tradelearn.report.mlflow import build_run_metrics, build_run_params
 
 DEFAULT_MLFLOW_URI = "http://127.0.0.1:5050"
+LOGGER = get_logger("lite.mlflow")
 
 
 def log_lite_run(
@@ -39,6 +41,13 @@ def log_lite_run(
 
     mlflow = mlflow_module or _import_mlflow()
     tracking_uri = uri or DEFAULT_MLFLOW_URI
+    LOGGER.info(
+        "MLflow logging started experiment=%s run=%s uri=%s artifacts=%s",
+        experiment_name,
+        run_name or "auto",
+        tracking_uri,
+        upload_artifacts if log_artifacts is None else bool(log_artifacts),
+    )
     mlflow.set_tracking_uri(tracking_uri)
     if experiment_name:
         mlflow.set_experiment(experiment_name)
@@ -68,6 +77,12 @@ def log_lite_run(
                 log_report=log_report,
                 log_plot=log_plot,
             )
+    LOGGER.info(
+        "MLflow logging finished experiment=%s run=%s artifacts=%s",
+        experiment_name,
+        run_name or "auto",
+        upload_artifacts,
+    )
     return "logged"
 
 
@@ -117,4 +132,3 @@ def _log_path(mlflow: Any, path: Path, artifact_path: str | None) -> None:
 
 def _join_artifact_path(base: str | None, name: str) -> str:
     return f"{base}/{name}" if base else name
-

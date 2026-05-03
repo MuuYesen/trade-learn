@@ -9,7 +9,7 @@ import pandas as pd
 import tradelearn.engine as bt
 from tradelearn import metrics
 from tradelearn.lite import Backtest, Strategy
-from tradelearn.ml import MLStrategy
+from tradelearn.research import ModelScorer
 
 
 def _bars(mult: float = 1.0) -> pd.DataFrame:
@@ -117,7 +117,7 @@ def test_lite_report_dispatches_to_excel(tmp_path: Path) -> None:
         assert "xl/workbook.xml" in workbook.namelist()
 
 
-def test_oco_multitimeframe_multiasset_ml_and_metrics_surfaces() -> None:
+def test_oco_multitimeframe_multiasset_model_scorer_and_metrics_surfaces() -> None:
     class BracketAndResample(bt.Strategy):
         def __init__(self) -> None:
             self.orders: list[Any] = []
@@ -147,25 +147,12 @@ def test_oco_multitimeframe_multiasset_ml_and_metrics_surfaces() -> None:
     assert strategy.getdatabyname("daily") is strategy.datas[0]
 
     class DemoModel:
-        def fit(self, X, y):
-            self.fit_shape = (len(X), len(X[0]))
-            return self
-
         def predict(self, X):
-            return [1.0]
+            return [1.0] * len(X)
 
-    class DemoML(MLStrategy):
-        model = DemoModel()
-        features = ("feature",)
-        target = "target"
+    scores = ModelScorer(DemoModel(), features=("feature",)).predict(_bars())
 
-    cerebro = bt.Cerebro(trade_on_close=True)
-    cerebro.adddata(_bars(), name="ml")
-    cerebro.addstrategy(DemoML, threshold=0.5, size=1)
-    [ml_strategy] = cerebro.run()
-
-    assert ml_strategy.stats is not None
-    assert ml_strategy.model_.fit_shape == (8, 1)
+    assert scores.tolist() == [1.0] * len(_bars())
     assert metrics.sharpe(pd.Series([0.01, -0.01, 0.02]), periods=252) == metrics.sharpe(
         pd.Series([0.01, -0.01, 0.02]), periods=252
     )

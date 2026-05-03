@@ -41,10 +41,7 @@ class EngineResearchIndexEnhance(bt.Strategy):
             return
         weights = self.research_result.weights[0]
         for data in self.datas:
-            self.order_target_percent(
-                data=data,
-                target=weights.get(data._name),
-            )
+            self.order_target_percent(data=data, target=weights.get(data._name))
 
 
 if __name__ == "__main__":
@@ -74,8 +71,7 @@ if __name__ == "__main__":
 
     feature_set = research.FeatureSet(
         {
-            "alpha": lambda p: p.close.pct_change(lookback)
-            / p.close.pct_change().rolling(lookback).std(),
+            "alpha": lambda p: p.close.pct_change(lookback) / p.close.pct_change().rolling(lookback).std(),
             "size": lambda p: p.close,
         },
         target={

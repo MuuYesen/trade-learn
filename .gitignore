@@ -175,14 +175,6 @@ resources/
 tests/data/
 tests/res/
 
-
-tradelearn/mlops/
-tradelearn/causal/inference/
-
-tradelearn/strategy/signal/
-tradelearn/strategy/select/
-tradelearn/strategy/weight/
-
 tradelearn/trader/extension/
 
 # trade-learn 2.0 local artifacts
@@ -203,3 +195,4 @@ scratch/*.py
 scratch_doc.txt
 /demo/
 examples/output/
+design/

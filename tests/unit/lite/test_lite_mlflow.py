@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -120,6 +121,39 @@ def test_lite_log_mlflow_logs_stats_config_params_and_artifacts() -> None:
     ]
     assert {artifact_path for _, artifact_path in fake.artifacts} == {None}
     assert fake.artifact_dirs == []
+
+
+def test_lite_log_mlflow_logs_upload_summary(caplog) -> None:
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(2)
+
+        def next(self) -> None:
+            pass
+
+    fake = FakeMLflow()
+    backtest = Backtest(_data(), LiteStrategy, cash=1000.0)
+    backtest.run()
+    caplog.set_level(logging.INFO, logger="tradelearn.lite.mlflow")
+
+    backtest.log_mlflow(
+        experiment_name="lite-exp",
+        run_name="lite-run",
+        upload_artifacts=False,
+        mlflow_module=fake,
+    )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "MLflow logging started" in message
+        and "experiment=lite-exp" in message
+        and "run=lite-run" in message
+        for message in messages
+    )
+    assert any(
+        "MLflow logging finished" in message and "artifacts=False" in message
+        for message in messages
+    )
 
 
 def test_lite_log_mlflow_can_skip_artifact_uploads() -> None:

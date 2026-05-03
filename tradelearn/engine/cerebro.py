@@ -6,6 +6,7 @@ from typing import Any
 from tradelearn.backtest.feed import is_panel_ohlcv_frame, panel_symbol_level
 from tradelearn.backtest.models import FixedCommission, FixedSlippage
 from tradelearn.backtest.reporting import reporter_from_results
+from tradelearn.core import get_logger
 from tradelearn.engine.analyzer import AnalyzerCollection
 from tradelearn.engine.base import TimeFrame
 from tradelearn.engine.datafeed import DataFeed
@@ -15,6 +16,8 @@ from tradelearn.engine.strategy import Strategy
 
 from .analyzer import Analyzer
 
+LOGGER = get_logger("engine.cerebro")
+
 
 class OptReturn:
     """Lightweight optimization result returned by ``Cerebro.run(optreturn=True)``."""
@@ -23,6 +26,14 @@ class OptReturn:
         self.p = self.params = params
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+
+def _strategy_name(strategy_cls: type[Any]) -> str:
+    return getattr(strategy_cls, "__name__", str(strategy_cls))
+
+
+def _feed_rows(datas: list[Any]) -> int:
+    return int(sum(len(getattr(data, "_frame", ())) for data in datas))
 
 
 class Cerebro:
@@ -298,6 +309,15 @@ class Cerebro:
         from tradelearn.backtest.engine import run_backtest
         results: list[Strategy] = []
         specs = specs or [(Strategy, (), {})]
+        LOGGER.info(
+            "Cerebro run started mode=%s strategies=%s feeds=%s rows=%s cash=%s commission=%s",
+            self.mode,
+            ",".join(_strategy_name(spec[0]) for spec in specs),
+            len(self.datas),
+            _feed_rows(self.datas),
+            self.broker.getcash(),
+            getattr(self.broker, "_commission", "n/a"),
+        )
         original_strats = self.strats
         for spec in specs:
             self._runstop = False
@@ -309,7 +329,18 @@ class Cerebro:
                 self._reset_strategy_context()
         self.strats = original_strats
         self._last_results = results
-        return self._format_run_results(results)
+        formatted = self._format_run_results(results)
+        if results:
+            summary = getattr(getattr(results[-1], "stats", None), "summary", {}) or {}
+            LOGGER.info(
+                "Cerebro run finished strategies=%s final_value=%s return_pct=%s total_trades=%s total_fills=%s",
+                len(results),
+                summary.get("final_value", "n/a"),
+                summary.get("return_pct", "n/a"),
+                summary.get("total_trades", "n/a"),
+                summary.get("total_fills", "n/a"),
+            )
+        return formatted
 
     def _apply_run_kwargs(self, kwargs: dict[str, Any]) -> None:
         if not kwargs:

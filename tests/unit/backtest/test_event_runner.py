@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from tradelearn.backtest import BatchIndicatorCache, RollingBarBuffer, RollingIndicatorCache
+import tradelearn.backtest as backtest
 from tradelearn.backtest import HistoricalDriver as PublicHistoricalDriver
 from tradelearn.backtest import LiveDriver as PublicLiveDriver
 from tradelearn.backtest import PaperDriver as PublicPaperDriver
@@ -54,10 +54,10 @@ def test_event_runner_drives_single_live_bar_and_broker_events() -> None:
     assert strategy.rows == [(pd.Timestamp("2026-01-01", tz="UTC"), 10.5)]
 
 
-def test_backtest_namespace_exposes_event_runner_building_blocks() -> None:
-    assert BatchIndicatorCache is not None
-    assert RollingIndicatorCache is not None
-    assert RollingBarBuffer is not None
+def test_backtest_namespace_exposes_event_runner_drivers() -> None:
+    assert not hasattr(backtest, "BatchIndicatorCache")
+    assert not hasattr(backtest, "RollingIndicatorCache")
+    assert not hasattr(backtest, "RollingBarBuffer")
     assert PublicHistoricalDriver is HistoricalDriver
     assert PublicPaperDriver is PaperDriver
     assert PublicLiveDriver is LiveDriver

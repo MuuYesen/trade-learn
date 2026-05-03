@@ -74,6 +74,7 @@ def test_backtest_runtime_modules_are_flattened() -> None:
         "engine.py",
         "event_runner.py",
         "feed.py",
+        "history.py",
         "indicator_cache.py",
         "lines.py",
         "models.py",
@@ -99,7 +100,7 @@ def test_backtest_runtime_modules_are_flattened() -> None:
 
 def test_project_structure_documents_core_boundaries() -> None:
     root = Path(__file__).parents[3]
-    text = (root / "docs" / "PROJECT_STRUCTURE.md").read_text()
+    text = (root / "design" / "PROJECT_STRUCTURE.md").read_text()
 
     assert "不允许 import `tradelearn.backtest.*`" in text
     assert "回测专属 runtime 不上移到 `tradelearn/core/`" in text

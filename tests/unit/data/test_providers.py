@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from tradelearn.data.providers import (
@@ -329,6 +331,25 @@ def test_tradingview_provider_fetches_and_normalizes_bars() -> None:
     assert bars.attrs["market"] == "GLOBAL"
     assert bars.attrs["freq"] == "1d"
     assert bars.attrs["engine"] == "tradingview"
+
+
+def test_tradingview_provider_logs_request_and_result(caplog) -> None:
+    """TradingViewProvider emits concise request/result diagnostics."""
+    client = FakeTvDatafeedClient()
+    provider = TradingViewProvider(client_factory=lambda: client, n_bars=100)
+    caplog.set_level(logging.INFO, logger="tradelearn.data.providers")
+
+    provider.history_ohlc("NASDAQ:AAPL", start="2024-01-02", end="2024-01-02", freq="1d")
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "TradingView history_ohlc started" in message and "NASDAQ:AAPL" in message
+        for message in messages
+    )
+    assert any(
+        "TradingView history_ohlc finished" in message and "rows=1" in message
+        for message in messages
+    )
 
 
 def test_tradingview_provider_fetches_symbol_list_as_combined_bars() -> None:

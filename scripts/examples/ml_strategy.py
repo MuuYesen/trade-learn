@@ -1,4 +1,4 @@
-"""Runnable example for ML Strategy using Alpha101 and Causal Selection."""
+"""Runnable example for model-driven Strategy using Alpha101 and Causal Selection."""
 
 import pandas as pd
 
@@ -47,13 +47,16 @@ def run_example():
     # 2. Prepare ML Data (Factors + Selection)
     data, features = prepare_ml_data(bars)
 
-    # 3. Setup Strategy
-    Alpha101GBMStrategy.features = tuple(features)
-
-    # 4. Run Backtest
+    # 3. Run Backtest
     cerebro = Cerebro()
     cerebro.adddata(data, name="GOOG")
-    cerebro.addstrategy(Alpha101GBMStrategy, threshold=0.001, size=10, training_data=data)
+    cerebro.addstrategy(
+        Alpha101GBMStrategy,
+        features=tuple(features),
+        threshold=0.001,
+        size=10,
+        training_data=data,
+    )
 
     strategies = cerebro.run()
     return strategies[0]

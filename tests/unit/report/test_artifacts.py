@@ -89,6 +89,33 @@ def test_write_artifact_bundle_writes_research_result_weights(tmp_path) -> None:
     assert int(research["artifacts.profile.rows"]) == 3
 
 
+def test_write_artifact_bundle_writes_benchmark_aware_tables(tmp_path) -> None:
+    stats = _stats()
+    stats.positions = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
+                utc=True,
+            ),
+            "symbol": ["AAA", "BBB", "AAA", "BBB"],
+            "value": [60.0, 40.0, 25.0, 75.0],
+        }
+    )
+    benchmark = pd.Series(
+        [0.01, -0.005, 0.01],
+        index=pd.date_range("2024-01-01", periods=3, tz="UTC"),
+        name="benchmark",
+    )
+
+    files = write_artifact_bundle(stats, tmp_path, benchmark=benchmark)
+
+    names = {path.name for path in files}
+    assert "active_returns.csv" in names
+    assert "active_weights.csv" in names
+    assert "performance_attr.csv" in names
+    assert "artifacts.xlsx" in names
+
+
 def _stats() -> SimpleNamespace:
     returns = pd.Series(
         [0.02, -0.01, 0.015],

@@ -39,7 +39,7 @@ warnings.filterwarnings(
 )
 
 
-class EngineMomentumPortfolio(bt.IndexEnhanceStrategy):
+class EngineMomentumPortfolio(bt.Strategy):
     """Monthly top-2 momentum portfolio using Engine target weights."""
 
     params = (

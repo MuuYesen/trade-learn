@@ -1087,6 +1087,73 @@ def test_backtest_engine_uses_rust_plan_for_secondary_data_clock() -> None:
     assert strategy.rows == [(10.0, 100.0), (11.0, 100.0), (12.0, 130.0)]
 
 
+def test_backtest_engine_fills_secondary_data_orders_with_open_matching() -> None:
+    primary = pd.DataFrame(
+        {
+            "open": [10.0, 11.0, 12.0],
+            "high": [10.0, 11.0, 12.0],
+            "low": [10.0, 11.0, 12.0],
+            "close": [10.0, 11.0, 12.0],
+            "volume": [1.0, 1.0, 1.0],
+        },
+        index=pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"], utc=True),
+    )
+    secondary = pd.DataFrame(
+        {
+            "open": [100.0, 110.0, 120.0],
+            "high": [100.0, 110.0, 120.0],
+            "low": [100.0, 110.0, 120.0],
+            "close": [100.0, 110.0, 120.0],
+            "volume": [1.0, 1.0, 1.0],
+        },
+        index=primary.index,
+    )
+
+    class SecondaryOrderStrategy(Strategy):
+        def next(self) -> None:
+            if len(self) == 1:
+                self.buy(data=self.datas[1], size=1)
+
+    cerebro = Cerebro(match_mode="exact", trade_on_close=False)
+    cerebro.adddata(primary, name="AAA")
+    cerebro.adddata(secondary, name="BBB")
+    cerebro.addstrategy(SecondaryOrderStrategy)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.getpositionbyname("BBB").size == 1.0
+
+
+def test_data_advance_plan_skips_cursor_matrix_for_aligned_feeds() -> None:
+    index = pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"], utc=True)
+    primary = DataContainer(
+        pd.DataFrame(
+            {
+                "open": [1.0, 2.0, 3.0],
+                "high": [1.0, 2.0, 3.0],
+                "low": [1.0, 2.0, 3.0],
+                "close": [1.0, 2.0, 3.0],
+                "volume": [1.0, 1.0, 1.0],
+            },
+            index=index,
+        )
+    )
+    secondary = DataContainer(
+        pd.DataFrame(
+            {
+                "open": [10.0, 20.0, 30.0],
+                "high": [10.0, 20.0, 30.0],
+                "low": [10.0, 20.0, 30.0],
+                "close": [10.0, 20.0, 30.0],
+                "volume": [1.0, 1.0, 1.0],
+            },
+            index=index,
+        )
+    )
+
+    assert _build_data_advance_plan([primary, secondary]) is None
+
+
 def test_shared_bar_buffer_reuses_data_container_arrays() -> None:
     data = DataContainer(
         pd.DataFrame(
@@ -1169,6 +1236,39 @@ def test_backtrader_datafeed_lines_read_shared_bar_buffer_without_copy() -> None
     assert feed.close[0] == 4.0
     assert feed.close[-1] == 3.0
     assert feed.datetime[0] == pd.Timestamp("2026-01-02", tz="UTC")
+
+
+def test_runtime_data_feed_lines_share_feed_cursor_source() -> None:
+    frame = pd.DataFrame(
+        {
+            "open": [1.0, 2.0, 3.0],
+            "high": [1.0, 2.0, 3.0],
+            "low": [1.0, 2.0, 3.0],
+            "close": [1.0, 2.0, 3.0],
+            "volume": [1.0, 1.0, 1.0],
+        },
+        index=pd.date_range("2026-01-01", periods=3, tz="UTC"),
+    )
+    feed = DataFeed(frame)
+
+    assert feed.close._cursor_source is feed
+    feed._advance(2)
+    assert feed.close[0] == 3.0
+    assert feed.close.get(size=2).tolist() == [2.0, 3.0]
+
+
+def test_rust_broker_skips_oco_scan_when_no_oco_orders(monkeypatch) -> None:
+    broker = RustBroker()
+    completed = Order(ref=1, data=None, ordtype=Order.Buy, size=1.0, status=Order.Completed)
+    live = Order(ref=2, data=None, ordtype=Order.Sell, size=1.0, status=Order.Accepted)
+    broker._orders = [completed, live]
+
+    def fail_alive(self) -> bool:
+        raise AssertionError("non-OCO fills should not scan live orders")
+
+    monkeypatch.setattr(Order, "alive", fail_alive)
+
+    broker._cancel_oco_siblings(owner=None, completed=completed)
 
 
 def test_line_series_previous_value_before_start_is_nan() -> None:

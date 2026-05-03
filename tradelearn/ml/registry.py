@@ -1,4 +1,4 @@
-"""MLflow Model Registry helpers for MLStrategy."""
+"""MLflow Model Registry helpers."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 
 @runtime_checkable
 class ModelLoader(Protocol):
-    """Protocol for user-defined model registries used by MLStrategy."""
+    """Protocol for user-defined model registries."""
 
     def load(self, reference: str) -> Any:
         """Load a model object from a user-facing reference."""
@@ -34,7 +34,7 @@ def model_uri(reference: str) -> str:
 
 @dataclass
 class ModelRegistry:
-    """Small MLflow Model Registry facade used by MLStrategy."""
+    """Small MLflow Model Registry facade."""
 
     tracking_uri: str | None = None
     mlflow_module: Any | None = None

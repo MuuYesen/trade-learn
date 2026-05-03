@@ -1,6 +1,7 @@
 """Tests for report facade summary statistics."""
 
 from types import SimpleNamespace
+import logging
 
 import pandas as pd
 import pytest
@@ -29,6 +30,8 @@ def test_reporter_summary_uses_metrics_functions() -> None:
         "alpha",
         "beta",
         "information_ratio",
+        "active_return",
+        "tracking_error",
         "win_rate",
         "profit_factor",
         "avg_win",
@@ -46,11 +49,31 @@ def test_reporter_summary_uses_metrics_functions() -> None:
     assert summary["alpha"] == metrics.alpha(stats.returns, benchmark, periods=252)
     assert summary["beta"] == metrics.beta(stats.returns, benchmark)
     assert summary["information_ratio"] == metrics.information_ratio(stats.returns, benchmark, 252)
+    assert summary["active_return"] == pytest.approx(
+        ((1.0 + stats.returns).prod() - 1.0) - ((1.0 + benchmark).prod() - 1.0)
+    )
+    assert summary["tracking_error"] > 0
     assert summary["win_rate"] == metrics.win_rate(stats.trades)
     assert summary["profit_factor"] == metrics.profit_factor(stats.trades)
     assert summary["avg_win"] == metrics.avg_win(stats.trades)
     assert summary["avg_loss"] == metrics.avg_loss(stats.trades)
     assert summary["total_trades"] == 4
+
+
+def test_reporter_report_logs_output_path_and_format(tmp_path, caplog) -> None:
+    path = tmp_path / "report.html"
+    caplog.set_level(logging.INFO, logger="tradelearn.report")
+
+    Reporter(_stats(), periods=252).report(path, benchmark=_benchmark())
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "Report written" in message
+        and "format=html" in message
+        and "benchmark=True" in message
+        and str(path) in message
+        for message in messages
+    )
 
 
 def test_reporter_summary_accepts_mapping_stats_and_existing_summary() -> None:
@@ -201,6 +224,47 @@ def test_reporter_exposure_pivots_multi_asset_positions() -> None:
     assert exposure.loc[pd.Timestamp("2024-01-01", tz="UTC"), "BBB"] == pytest.approx(0.4)
     assert exposure.loc[pd.Timestamp("2024-01-02", tz="UTC"), "AAA"] == pytest.approx(0.25)
     assert exposure.loc[pd.Timestamp("2024-01-02", tz="UTC"), "BBB"] == pytest.approx(0.75)
+
+
+def test_reporter_index_enhance_tables_align_benchmark_and_positions() -> None:
+    """Reporter exposes benchmark-aware index enhancement tables."""
+    positions = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
+                utc=True,
+            ),
+            "symbol": ["AAA", "BBB", "AAA", "BBB"],
+            "value": [60.0, 40.0, 25.0, 75.0],
+        }
+    )
+    benchmark_weights = pd.DataFrame(
+        {"AAA": [0.5, 0.5], "BBB": [0.5, 0.5]},
+        index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+    )
+    reporter = Reporter(
+        {
+            "returns": _returns(),
+            "trades": pd.DataFrame(),
+            "positions": positions,
+        },
+        periods=252,
+    )
+
+    active_returns = reporter.active_returns(_benchmark())
+    active_weights = reporter.active_weights(benchmark_weights=benchmark_weights)
+    attribution = reporter.performance_attribution(_benchmark())
+
+    assert active_returns.name == "active_return"
+    assert active_returns.iloc[0] == pytest.approx(_returns().iloc[0] - _benchmark().iloc[0])
+    assert active_weights.loc[pd.Timestamp("2024-01-01", tz="UTC"), "AAA"] == pytest.approx(0.1)
+    assert active_weights.loc[pd.Timestamp("2024-01-02", tz="UTC"), "BBB"] == pytest.approx(0.25)
+    assert list(attribution.columns) == ["component", "value"]
+    assert set(attribution["component"]) == {
+        "strategy_return",
+        "benchmark_return",
+        "active_return",
+    }
 
 
 def test_reporter_correlation_matrix_uses_multi_asset_exposure() -> None:
