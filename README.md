@@ -138,6 +138,80 @@ cerebro.addstrategy(SmaCross)
 print(strategy.stats.summary)
 ```
 
+## 投研流水线示例
+
+README 只放最短可读版本，完整脚本见 [`examples/research/`](./examples/research/) 和 [`examples/full_workflow_lite.py`](./examples/full_workflow_lite.py) / [`examples/full_workflow_engine.py`](./examples/full_workflow_engine.py)。
+
+**1. Research：从原始行情生成特征、切分训练集 / 测试集**
+
+```python
+import tradelearn.research as research
+import tradelearn.research.preprocess as pp
+
+feature_set = research.FeatureSet(
+    {
+        "alpha": lambda p: p.close.pct_change(20)
+        / p.close.pct_change().rolling(20).std(),
+        "size": lambda p: p.close,
+    },
+    target={"label": lambda p: p.close.shift(-20) / p.close - 1.0},
+)
+
+features = feature_set.fit_transform(bars, include_target=True).dropna()
+train, test = research.time_split(features, split="2023-09-01", level="timestamp")
+```
+
+**2. Pipeline：预处理、模型打分、生成权重**
+
+```python
+from sklearn.ensemble import GradientBoostingRegressor
+import tradelearn.research.portfolio as pf
+
+pipe = research.Pipeline(
+    [
+        pp.Winsorizer(columns=["alpha"], limits=(0.05, 0.95)),
+        pp.Neutralizer(columns=["alpha"], exposures=["size"]),
+        pp.StandardScaler(columns=["alpha"]),
+    ]
+)
+train = pipe.fit_transform(train)
+test = pipe.transform(test)
+
+model = GradientBoostingRegressor(random_state=7)
+model.fit(train[["alpha"]], train["label"])
+scores = research.ModelScorer(model, features=("alpha",), current=False).predict(test)
+
+weights = pf.Allocator(
+    select=pf.TopK(k=2),
+    weight=pf.EqualWeight(gross=0.95),
+    constrain=pf.Constraints(max_weight=0.5, normalize=True),
+).build(scores)
+```
+
+**3. Portfolio：把目标权重交给 Lite / Engine 执行**
+
+```python
+class LitePortfolio(tl.Strategy):
+    def next(self):
+        if len(self.data) % 20 == 0:
+            self.target_weights(self.research_result.weights[0], close_missing=True)
+
+
+test_bars = research.split_bars(bars, split="2023-09-01")
+stats = tl.Backtest(test_bars, LitePortfolio, cash=100_000).run(
+    research_result=research_result
+)
+```
+
+完整版本：
+
+| 目标 | 完整脚本 |
+|---|---|
+| Lite 投研 + 回测 + report + MLflow | [`examples/research/index_enhance_lite_pipeline.py`](./examples/research/index_enhance_lite_pipeline.py) |
+| Engine 投研 + 回测 + report + MLflow | [`examples/research/index_enhance_engine_pipeline.py`](./examples/research/index_enhance_engine_pipeline.py) |
+| Engine Backtrader 风格组合调仓 | [`examples/engine/11_target_percent_portfolio.py`](./examples/engine/11_target_percent_portfolio.py) |
+| 资产类别组合策略 | [`examples/engine/12_asset_class_portfolios.py`](./examples/engine/12_asset_class_portfolios.py) |
+
 ## 完整文档
 
 完整技术手册（mkdocs 站点）：[`docs/`](./docs/README.md)

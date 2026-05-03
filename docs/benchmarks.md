@@ -10,6 +10,8 @@ Lite 不是 Backtrader facade，它是更薄的策略语法层。Lite 与 Engine
 
 ### 55 万 bar 单标的 SMA
 
+验证入口：[`benchmarks/runners/benchmark_bt.py`](https://github.com/MuuYesen/trade-learn/blob/v2/benchmarks/runners/benchmark_bt.py) 和 [`benchmarks/runners/benchmark_throughput.py`](https://github.com/MuuYesen/trade-learn/blob/v2/benchmarks/runners/benchmark_throughput.py)。示例策略可参考 [`examples/lite/03_sma_cross.py`](https://github.com/MuuYesen/trade-learn/blob/v2/examples/lite/03_sma_cross.py) 与 [`examples/engine/02_sma_cross.py`](https://github.com/MuuYesen/trade-learn/blob/v2/examples/engine/02_sma_cross.py)。
+
 | 引擎 | 耗时 | bars/s | 加速比 | Final Value | Fills | Closed Trades |
 |---|---:|---:|---:|---:|---:|---:|
 | Tradelearn Lite | 1.3253s | 414,990 | 27.9x | 118,399.33 | 10,299 | 5,149 |
@@ -19,6 +21,8 @@ Lite 不是 Backtrader facade，它是更薄的策略语法层。Lite 与 Engine
 ### 1000 标的、约 20 年、月频 top-50 目标权重
 
 总计 5,040,000 根 data bars。
+
+验证入口：[`benchmarks/runners/benchmark_target_weight_parity.py`](https://github.com/MuuYesen/trade-learn/blob/v2/benchmarks/runners/benchmark_target_weight_parity.py)。用户侧完整组合写法见 [`examples/research/index_enhance_lite_pipeline.py`](https://github.com/MuuYesen/trade-learn/blob/v2/examples/research/index_enhance_lite_pipeline.py)、[`examples/research/index_enhance_engine_pipeline.py`](https://github.com/MuuYesen/trade-learn/blob/v2/examples/research/index_enhance_engine_pipeline.py) 和 [`examples/engine/11_target_percent_portfolio.py`](https://github.com/MuuYesen/trade-learn/blob/v2/examples/engine/11_target_percent_portfolio.py)。
 
 | 引擎 | 耗时 | bars/s | 加速比 | Final Value | Completed Orders | Target Intents | Targets |
 |---|---:|---:|---:|---:|---:|---:|---:|
