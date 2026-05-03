@@ -94,6 +94,7 @@ class Backtest:
         trade_start_date: str | pd.Timestamp | None = None,
         lot_size: int = 1,
         fail_fast: bool = True,
+        stats_mode: str = "full",
         storage: dict | None = None,
         match_mode: str = 'exact' # Default to exact for alignment
     ):
@@ -118,7 +119,9 @@ class Backtest:
         )
         self.strats = [(strategy, (), {})]
         self.match_mode = match_mode
-        self.stats_mode = "full"
+        if stats_mode not in {"full", "lazy"}:
+            raise ValueError("stats_mode must be one of 'full' or 'lazy'")
+        self.stats_mode = stats_mode
         from tradelearn.backtest.sizer import FixedSize
         self._sizer_spec = (FixedSize, {})
         self.broker = RustBroker(cash=cash, commission=commission, match_mode=match_mode)

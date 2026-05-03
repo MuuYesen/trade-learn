@@ -213,6 +213,31 @@ def test_lite_run_exposes_shared_stats_summary_keys() -> None:
     assert "_records" not in stats
 
 
+def test_lite_can_run_with_lazy_stats_artifacts() -> None:
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(2)
+
+        def next(self) -> None:
+            if len(self.data) == 3:
+                self.buy(size=1)
+
+    backtest = Backtest(_data(), LiteStrategy, cash=1000.0, stats_mode="lazy")
+    stats = backtest.run()
+
+    assert backtest.stats_mode == "lazy"
+    assert stats.summary["final_value"] == stats.stats.summary["final_value"]
+    assert not stats.stats.is_materialized("equity")
+    assert not stats.stats.is_materialized("fills")
+
+    assert not stats.equity.empty
+    assert stats.stats.is_materialized("equity")
+    assert not stats.stats.is_materialized("fills")
+
+    assert not stats.fills.empty
+    assert stats.stats.is_materialized("fills")
+
+
 def test_lite_fractional_size_is_order_quantity_not_equity_fraction() -> None:
     class LiteStrategy(Strategy):
         def init(self) -> None:

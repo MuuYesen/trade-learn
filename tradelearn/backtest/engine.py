@@ -678,6 +678,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
     data_advance_plan = (
         None if clocked_multi_data_runner is not None else _build_data_advance_plan(cerebro.datas)
     )
+    data_advance_methods = tuple(data._advance for data in cerebro.datas)
     bar_advancers = _build_bar_advancers(
         strategy,
         cerebro.datas,
@@ -692,11 +693,15 @@ def run_backtest(cerebro: Any) -> list[Any]:
     else:
 
         def advance_datas(i: int) -> None:
-            for data, cursor in zip(cerebro.datas, data_advance_plan.cursors_at(i), strict=False):
+            for advance_data, cursor in zip(
+                data_advance_methods,
+                data_advance_plan.cursors_at(i),
+                strict=False,
+            ):
                 if cursor >= 0:
-                    data._advance(cursor)
+                    advance_data(cursor)
                 else:
-                    data._advance(-1)
+                    advance_data(-1)
 
     if hasattr(strategy, "_set_bar_advancers"):
         if data_advance_plan is None:
@@ -820,8 +825,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 size: float,
                 price: float,
             ) -> list[Any] | None:
-                for data, cursor in zip(cerebro.datas, data_cursors, strict=False):
-                    data._advance(cursor if cursor >= 0 else -1)
+                for advance_data, cursor in zip(data_advance_methods, data_cursors, strict=False):
+                    advance_data(cursor if cursor >= 0 else -1)
                 for advance in bar_advancers:
                     advance(i)
                 broker._curr_idx = i
@@ -849,8 +854,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 size: float,
                 price: float,
             ) -> list[Any] | None:
-                for data, cursor in zip(cerebro.datas, data_cursors, strict=False):
-                    data._advance(cursor if cursor >= 0 else -1)
+                for advance_data, cursor in zip(data_advance_methods, data_cursors, strict=False):
+                    advance_data(cursor if cursor >= 0 else -1)
                 for advance in bar_advancers:
                     advance(i)
                 broker._curr_idx = i
@@ -877,8 +882,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 size: float,
                 price: float,
             ) -> list[Any] | None:
-                for data, cursor in zip(cerebro.datas, data_cursors, strict=False):
-                    data._advance(cursor if cursor >= 0 else -1)
+                for advance_data, cursor in zip(data_advance_methods, data_cursors, strict=False):
+                    advance_data(cursor if cursor >= 0 else -1)
                 for advance in bar_advancers:
                     advance(i)
                 broker._curr_idx = i

@@ -67,6 +67,8 @@ def test_chinese_readme_documents_optional_integration_boundaries() -> None:
     assert "`tradelearn.optimize` 是用户级 Optuna 入口" in text
     assert "`tradelearn.backtest._optimize` grid helper" in text
     assert "用户不直接依赖 backtest 内部模块" in text
+    assert "Engine/Lite 都支持 `stats_mode=\"lazy\"`" in text
+    assert "pandas artifacts 会在访问、report 或 MLflow 上传时再 materialize" in text
     assert "`tradelearn.brokers`：paper/live broker adapter 层" in text
     assert "`tradelearn.lab`：本地研究环境启动入口" in text
     assert "`tradelearn.mcp`：外部工具和智能助手集成入口" in text

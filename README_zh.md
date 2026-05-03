@@ -453,6 +453,7 @@ trade-learn 2.x 当前定位为：
 - **报告与可视化**：`tradelearn.report` 提供 pyfolio / alphalens 风格分析图和 HTML 报告。
 - **实验追踪**：支持 MLflow 记录参数、指标、报告、图表、CSV/XLSX artifacts。
 - **参数搜索**：`tradelearn.optimize` 是用户级 Optuna 入口；Engine 的 `grid_search()` 与 Lite 的 `Backtest.optimize()` 只复用内部 `tradelearn.backtest._optimize` grid helper，用户不直接依赖 backtest 内部模块。
+- **大样本统计**：Engine/Lite 都支持 `stats_mode="lazy"`。该模式先返回 summary，`equity`、`fills`、`trades`、`positions`、`orders` 等 pandas artifacts 会在访问、report 或 MLflow 上传时再 materialize。
 
 可选集成模块不属于策略主路径：
 

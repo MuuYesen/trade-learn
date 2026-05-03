@@ -49,6 +49,7 @@ class Cerebro:
         slippage: Any | None = None,
         commission: Any | None = None,
         mode: str = "backtest",
+        stats_mode: str = "full",
         **kwargs: Any,
     ) -> None:
         self.datas: list[DataFeed] = []
@@ -62,6 +63,9 @@ class Cerebro:
         if mode not in {"backtest", "paper", "live"}:
             raise ValueError("mode must be one of 'backtest', 'paper', or 'live'")
         self.mode = mode
+        if stats_mode not in {"full", "lazy"}:
+            raise ValueError("stats_mode must be one of 'full' or 'lazy'")
+        self.stats_mode = stats_mode
         self.optreturn = bool(kwargs.pop("optreturn", False))
         self.kwargs = kwargs
         from tradelearn.backtest.broker import RustBroker

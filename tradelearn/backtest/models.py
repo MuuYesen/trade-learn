@@ -79,6 +79,12 @@ class Stats:
     def _materialize(value: Any) -> Any:
         return value() if callable(value) else value
 
+    def is_materialized(self, name: str) -> bool:
+        """Return whether a lazy pandas artifact has already been built."""
+        if name not in {"returns", "equity", "trades", "positions", "orders", "fills"}:
+            raise KeyError(f"unknown stats artifact {name!r}")
+        return not callable(getattr(self, f"_{name}"))
+
     @property
     def returns(self) -> pd.Series:
         self._returns = self._materialize(self._returns)
