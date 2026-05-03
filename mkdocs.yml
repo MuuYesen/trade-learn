@@ -86,15 +86,19 @@ markdown_extensions:
   - pymdownx.mark
 
 nav:
-  - Home: README.md
   - Quickstart: quickstart.md
   - Concepts:
       - 架构与边界: concepts/architecture.md
       - Runtime 与 Runner: concepts/runtime.md
       - Stats 结果对象: concepts/stats.md
   - User Guide:
-      - Lite Guide: guides/lite.md
-      - Engine Guide: guides/engine.md
+      - 策略撰写: guides/strategy.md
+      - Lite:
+          - Lite 入门: guides/lite.md
+          - Lite API 签名: guides/lite-api.md
+      - Engine:
+          - Engine 入门: guides/engine.md
+          - Engine API 签名: guides/engine-api.md
       - Data Guide: guides/data.md
       - Indicators Guide: guides/indicators.md
       - Research Guide: guides/research.md
@@ -102,20 +106,24 @@ nav:
       - Optimization Guide: guides/optimization.md
       - Report / Plot Guide: guides/report.md
       - MLflow / Lab / MCP: guides/mlflow-lab-mcp.md
-  - Benchmarks: benchmarks.md
+  - Design Notes:
+      - 契约与边界: internals/contracts.md
+      - 事件循环: internals/event-loop.md
+      - 撮合与成交: internals/matching.md
+      - Portfolio 模型: internals/portfolio.md
+      - 与外部库的语义一致性: internals/consistency.md
+      - v1 → v2 迁移: internals/migration.md
+  - Benchmarks:
+      - 性能基线: benchmarks.md
+      - 评估与竞品对比: release/evaluation.md
   - API Reference:
-      - Overview: api/reference.md
-      - Strategy Writing Guide: api/strategy.md
-      - Engine API Guide: api/engine.md
-      - Lite API Guide: api/lite.md
-      - Reference:
-          - Engine: api/reference/engine.md
-          - Lite: api/reference/lite.md
-          - Data: api/reference/data.md
-          - Indicators: api/reference/indicators.md
-          - Metrics: api/reference/metrics.md
-          - Factor: api/reference/factor.md
-          - Report: api/reference/report.md
-          - ML: api/reference/ml.md
-          - Research: api/reference/research.md
-  - Evaluation: release/evaluation.md
+      - 概览: api/reference.md
+      - Lite: api/reference/lite.md
+      - Engine: api/reference/engine.md
+      - Data: api/reference/data.md
+      - Indicators: api/reference/indicators.md
+      - Metrics: api/reference/metrics.md
+      - Factor: api/reference/factor.md
+      - Report: api/reference/report.md
+      - ML: api/reference/ml.md
+      - Research: api/reference/research.md

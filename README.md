@@ -1,401 +1,164 @@
-## trade-learn：Building Trading Strategies with Machine Learning in Closed-Loop 
+<p align="center">
+  <img src="docs/tradelearn-logo.png" alt="trade-learn logo" width="600" />
+</p>
 
-<b>trade-learn</b> is a machine learning strategy development toolkit based on alphalens, backtrader, pyfolio, and quantstats. It provides a <b>complete strategy development process</b>. &nbsp;&nbsp;&nbsp; [[ 中文版介绍 ]](./README_zh.md)
+<p align="center">
+  <strong>Python for strategy and research, Rust for the event-driven backtest core.</strong>
+</p>
 
-The functions it gives including factor collection, factor processing, factor evaluation, <b>causal analysis</b>, model definition, and strategy backtesting, and supports visualization results saved as <b>HTML files</b> for sharing.
+<p align="center">
+  <a href="./README_zh.md">中文版介绍</a>
+</p>
 
-<img src="design/assets/flow.png" alt="img" width="100%">
+**trade-learn** is a Python / Rust framework for quantitative research, machine-learning strategies, and event-driven backtesting. Python keeps its flexibility for strategy expression, factor research, and model experimentation; Rust handles matching, order processing, and portfolio accounting — so research, backtesting, reporting, and experiment tracking form one reproducible pipeline.
 
-Summary of visualizations:
+Its goal is not "another backtester," but to connect a complete strategy research loop:
 
-<img src="design/assets/plot_list.png" alt="img" width="100%">
+<p align="center">
+  <img src="docs/research-flow.png" alt="trade-learn research flow" width="100%" />
+</p>
 
+You can write a Backtrader-style professional strategy or use the Lite API to validate an idea quickly. You can plug into TDX, TA-Lib, TradingView, and pandas-ta-classic indicator ecosystems, and combine factor analysis, causal feature selection, Optuna parameter search, portfolio weights, backtest reports, and experiment tracking in the same workflow.
 
-## Key Features
+## Highlights
 
-1. Provides stock market data from "Tongdaxin Trading Software" along with 30 proven technical indicators (tdx30) that can be used directly with the Tongdaxin platform.
-2. Offers stock market data from "TradingView," leveraging its advanced data visualization to quickly generate and validate trading insights.
-3. Includes stock market data from "Yahoo Finance" and factor calculation formulas, such as the alpha101 and alpha191 factor sets from WorldQuant LLC.
-4. Provides tools for "Exploratory Analysis" and "Optimal Model Selection" to rapidly identify patterns in the dataset and assess the performance of various models.
-5. Features algorithms for "Causal Graph Construction" and "Causal Feature Selection," extending the gplearn library to support "Feature Derivation" for time series data.
-6. Integrates open-source strategy development components from the Quantopian platform, including tools like empyrical, alphalens, and pyfolio.
-7. Provides two strategy APIs: `tradelearn.engine` for Backtrader-style production workflows and `tradelearn.lite` for Tradelearn 1.x-style quick validation.
-8. Ensures a closed-loop process for machine learning strategy development by eliminating the need for additional third-party packages beyond the user-customized model.
+- **Lite as the recommended entry point** — short syntax for quick validation, teaching, 1.x-style migration, and multi-asset target weights. Not a separate matching engine — same runtime, lighter syntax.
+- **Backtrader-style Engine** — mature event-driven model for complex / portfolio strategies, Analyzer / Sizer / Signal, and future paper / live adapters.
+- **Rust single / multi-data runner** — single-data goes through the single-data runner; panel data switches automatically to the multi-data clock runner. Users still only write `next()`.
+- **Transparent performance baseline** — locally measured, with Backtrader as the 1.0x baseline:
+  - 550k-bar single-asset: Lite ≈ **27.9x**, Engine ≈ **11.0x**
+  - 1000-symbol 20-year target-weight portfolio: Lite ≈ **119.1x**, Engine ≈ **69.7x**
+- **Dual-market indicator ecosystem** — A-share leans on TDX / MyTT (`tl.tdx` / `bt.tdx`), overseas / general research leans on TradingView (`tl.tv` / `bt.tv`) and pandas-ta-classic / TA-Lib (`tl.pta` / `tl.talib`). Users explicitly choose conventions.
+- **ML and causal feature selection** — `FeatureSet`, `Pipeline`, `CausalSelector`, `ResearchRun`, `Allocator` chain train / test, preprocessing, scoring, weights, and backtesting.
+- **Factor and reporting** — alphalens / pyfolio style analysis with HTML reports, interactive plots, CSV / XLSX artifacts.
+- **MLflow / JupyterLab / MCP** — integrated experiment tracking, interactive research, and LLM tool integration.
 
-## Choosing a User-Facing API
+## Consistency commitment
 
-trade-learn ships two user-facing APIs. Both are backed by the same Rust backtesting engine and produce numerically identical results — pick the one that matches your experience level:
+trade-learn treats "matching reference baselines" as engineering discipline:
 
-- **Beginner / quick validation**: `tradelearn.lite`
-  Aligned with Tradelearn 1.x-style Lite semantics. Minimal surface: `Strategy.init/next` + `self.buy/sell` + `self.I(...)`.
-  Good for strategy prototyping, teaching, single-data setups, and `pd.Series` style stat output.
+- `metrics` vs empyrical: `rtol=1e-10`
+- `tl.pta` / `bt.pta` vs pandas-ta-classic: `rtol=1e-10`
+- `tl.tdx` / `bt.tdx` vs MyTT: `rtol=1e-10`
+- `tl.tv` / `bt.tv` vs pyneCore / TradingView: `rtol=1e-6`
+- Backtest **trades** (decision layer) vs Backtrader oracle: **0 difference** in time / side / size
+- Backtest equity vs oracle: `rtol=1e-6` · summary: `rtol=1e-4` (every diff documented)
 
-- **Advanced / production**: `tradelearn.engine`
-  Aligned with Backtrader. Full surface: Analyzer / Observer / Sizer / Indicator / CommInfo / bracket orders / multi-data / multi-strategy optimization / event-driven paper & live modes.
-  Good for complex strategies, portfolios, productionization, and future broker adapter integration.
+See [Design Notes → Consistency](docs/internals/consistency.md).
 
-> `tradelearn.backtest.*` and `tradelearn.core.*` are the shared implementation layer and neutral contracts for the two facades — **not** a public user API. Please do not import them directly.
-> Future paper/live adapters plug into the `tradelearn.engine` side, consistent with the existing `Cerebro.run(mode="paper"|"live")` path.
+## Install
 
-## Download
-Requires VPN:
 ```bash
 pip install trade-learn
 ```
-Recommended (for the latest version):
+
+For the latest:
+
 ```bash
 pip install git+https://github.com/MuuYesen/trade-learn.git@master
 ```
 
-## Usage Template
-```python
-import pandas as pd
-from tradelearn.engine import Cerebro, Strategy
-from tradelearn import ta
+Optional extras: `[lab]` (JupyterLab), `[live-qmt]` (Windows-only live broker, available from 1.1).
 
-if __name__ == '__main__':
-    # Obtain asset market data (example with pre-loaded bars)
-    # In 2.0, use tradelearn.data providers to fetch bars
-    bars = pd.read_parquet("data/tv/GOOG_daily.parquet")
+## Quickstart
 
-    # Define the strategy class (strictly backtrader style)
-    class SmaCross(Strategy):
-        params = (
-            ('fast', 10),
-            ('slow', 20),
-        )
-
-        def __init__(self):
-            # Compute indicators using the ta namespace
-            self.ma1 = ta.sma(self.data.close, period=self.p.fast)
-            self.ma2 = ta.sma(self.data.close, period=self.p.slow)
-
-        def next(self):
-            if not self.position:
-                if self.ma1[0] > self.ma2[0]:
-                    self.buy()
-            elif self.ma1[0] < self.ma2[0]:
-                self.close()
-
-    # Run the backtest via Cerebro
-    cerebro = Cerebro()
-    cerebro.adddata(bars, name="GOOG")
-    cerebro.addstrategy(SmaCross)
-    cerebro.broker.setcash(1000000)
-    
-    stats = cerebro.run()[0].stats
-    print(stats.summary)
-```
-```
-Start                     2014-03-27 00:00:00
-End                       2024-08-16 00:00:00
-Duration                   3795 days 00:00:00
-Exposure Time [%]                   98.509174
-Equity Final [$]                233497.861225
-Equity Peak [$]                1043778.801501
-Return [%]                         -76.650214
-Buy & Hold Return [%]              529.083876
-Return (Ann.) [%]                  -13.163701
-Volatility (Ann.) [%]               24.393102
-Sharpe Ratio                        -0.539648
-Sortino Ratio                       -0.680248
-Calmar Ratio                        -0.154556
-Max. Drawdown [%]                    -85.1713
-Avg. Drawdown [%]                    -85.1713
-Max. Drawdown Duration     3734 days 00:00:00
-Avg. Drawdown Duration     3734 days 00:00:00
-# Trades                                  146
-Win Rate [%]                        33.561644
-Best Trade [%]                      20.325583
-Worst Trade [%]                    -15.835971
-Avg. Trade [%]                      -0.991343
-Max. Trade Duration         116 days 00:00:00
-Avg. Trade Duration          26 days 00:00:00
-Profit Factor                        0.702201
-Expectancy [%]                      -0.808854
-SQN                                 -2.538763
-Kelly Criterion                     -0.272909
-_strategy                            SmaCross
-_equity_curve                             ...
-_trades                        EntryBar  E...
-_orders                              Ticke...
-_positions                {'Asset': -1154,...
-_trade_start_bar                           19
-```
-![design/assets/single_res1.png](design/assets/single_res1.png)
-![design/assets/single_res2.png](design/assets/single_res2.png)
-
-## Further Example
-
-**Using machine learning models to build a portfolio**：  
-```python
-from tradelearn.query import Query
-from tradelearn.strategy.backtest import Backtest, Strategy
-
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-
-
-if __name__ == '__main__':
-    
-    # Define a RandomForest indicator class, using predictions to generate trading signals and conduct portfolio backtesting
-    class RandomForest(Strategy):
-        def init(self):
-            # Obtain the raw data and feature set
-            data = self.data.df.swaplevel(0, 1, axis=1).stack().reset_index(level=1)
-            fea_list = data.columns.drop(['label', 'code']).tolist()
-
-            # Split the training set and train the model
-            train_data = data.query(f"date >= '{tn_begin_date}' and date < '{bt_begin_date}'")
-            bt_x_train, bt_y_train = train_data[fea_list], train_data['label']
-            model = RandomForestClassifier(random_state=42, n_jobs=-1)
-            model.fit(bt_x_train, bt_y_train)
-
-            # Predict the probability of price increases for each asset in the portfolio during the backtesting period
-            test_data = data.query(f"date >= '{bt_begin_date}' and date < '{bt_end_date}'")
-            ind_df = pd.DataFrame({'date': data.index.unique()}).set_index('date')
-            for symbol in test_data['code'].unique():
-                bt_x_test = test_data.query(f"code == '{symbol}'")[fea_list]
-                pre_proba = model.predict_proba(bt_x_test)[:, 1]
-                ind_df = pd.merge(pd.DataFrame(pre_proba, index=bt_x_test.index, columns=[symbol]),
-                                  ind_df, on=['date'], how='right')
-
-            # Package the probability predictions as indicators for use in the next method
-            self.proba = self.I(ind_df, overlay=False)
-
-        def next(self):
-            # Reset the portfolio's position weights
-            self.alloc.assume_zero()
-
-            # Get the predicted probabilities for each asset on the current day
-            proba = self.proba.df.iloc[-1]
-
-            # Select a subset of assets based on the probability indicator and set position weights
-            bucket = self.alloc.bucket['equity']
-            bucket.append(proba.sort_values(ascending=False))
-            bucket.trim(limit=3)
-            bucket.weight_explicitly(weight=1/3)
-            bucket.apply(method='update')
-
-            # Update the portfolio's position weights
-            self.rebalance(cash_reserve=0.1)
-
-
-    # Define the start and end dates for the data
-    tn_begin_date = '2017-01-01'
-    tn_end_date = '2022-06-22'
-
-    # Loop through multiple stocks to query historical data and process it
-    rawdata = None
-    for i in range(7):
-        temp = Query.history_ohlc(symbol='60052' + str(i), start=tn_begin_date, end=tn_end_date, adjust='hfq', engine='tdx')
-        if temp is None:
-            continue
-
-        # Label the data with price change tags
-        temp['label'] = temp['close'].pct_change(periods=1).shift(-1).map(lambda x: 1 if x > 0 else -1)
-        rawdata = pd.concat([rawdata, temp], axis=0)
-
-    # Convert the dataset format and handle missing values
-    btdata = rawdata.pivot_table(index='date', columns='code').swaplevel(0, 1, axis=1)
-    btdata = btdata.sort_values(by='code', axis=1).fillna(method='ffill')
-
-    # Define the start and end dates for the backtest
-    bt_begin_date = '2020-01-01'
-    bt_end_date = '2022-06-22'
-
-    # Run the backtest and plot the results, with the default benchmark being an equal-weighted portfolio
-    bt = Backtest(btdata, RandomForest, cash=1000000, commission=.002, trade_on_close=False)
-    bt.run()
-    bt.plot(plot_volume=True, superimpose=False, plot_allocation=True)
-```
-```
-Start                     2017-01-03 00:00:00
-End                       2022-06-21 00:00:00
-Duration                   1995 days 00:00:00
-Exposure Time [%]                    44.83798
-Equity Final [$]                 515002.86814
-Equity Peak [$]                 1014662.65544
-Return [%]                         -48.499713
-Buy & Hold Return [%]               44.762561
-Return (Ann.) [%]                  -24.465092
-Volatility (Ann.) [%]               23.349782
-Sharpe Ratio                        -1.047765
-Sortino Ratio                       -1.083421
-Calmar Ratio                        -0.397371
-Max. Drawdown [%]                  -61.567329
-Avg. Drawdown [%]                  -15.734656
-Max. Drawdown Duration      890 days 00:00:00
-Avg. Drawdown Duration      225 days 00:00:00
-# Trades                                 1490
-Win Rate [%]                        47.919463
-Best Trade [%]                      63.422669
-Worst Trade [%]                    -34.094076
-Avg. Trade [%]                      -0.150202
-Max. Trade Duration          98 days 00:00:00
-Avg. Trade Duration           8 days 00:00:00
-Profit Factor                        1.040877
-Expectancy [%]                       0.082296
-SQN                                 -1.906885
-Kelly Criterion                     -0.116659
-_strategy                        RandomForest
-_equity_curve                             ...
-_trades                         EntryBar  ...
-_orders                               Tick...
-_positions                {'600520': 0, '6...
-_trade_start_bar                          731
-dtype: object
-```
-![design/assets/port_res1.png](design/assets/port_res1.png)
-
-## Method Guide
-### Retrieving Raw Data
-```python
-from tradelearn.query import Query
-
-rawdata = Query.history_ohlc(symbol='600520', start='2017-01-01', end='2022-06-22', adjust='hfq',engine='tdx')
-```
-| Parameter Name   | Data Type	   | Notes                                                                                                                |
-|--------|--------|----------------------------------------------------------------------------------------------------------------------|
-| symbol | string | Stock ticker                                                                                                         |
-| start  | string | Start date                                                                                                           |
-| end    | string | End date                                                                                                             |
-| adjust | string | Adjustment method, can choose forward or backward adjustment, corresponding to 'qfq' and 'hfq' respectively          |
-| engine | string | Third-party data source, can choose Yahoo Finance or Tongdaxin, corresponding to 'yahoo'、'tv' and 'tdx' respectively |
-
-### Factor Generation
-```python
-from tradelearn.query import Query
-
-res = Query.alphas101(stock_data=rawdata, alpha_name=['alpha001'])
-res = Query.alphas191(stock_data=rawdata, alpha_name=['alpha001'])
-res = Query.tec_indicator(stock_data=rawdata, alpha_name=['ATR', 'RSI'])
-```
-| Parameter Name       | Data Type	      | Notes                                            |
-|------------|-----------|-----------------------------------------------|
-| stock_data | DataFrame | Target market data, required to have columns: open, low, high, close, volume, vwap |
-| alpha_name | list      | List of factor or indicator names                                   |
-
-### Exploratory Analysis
-```python
-from tradelearn.strategy.preprocess.explore import Explore
-
-Explore.analysis_report(data=rawdata, filename='res/explore.html')
-```
-
-| Parameter Name     | Data Type	      | Notes                 |
-|----------|-----------|--------------------|
-| data     | DataFrame | Target market data             |
-| filename | string    | Path and name of the saved HTML file, optional |
-### Factor Derivation
-```python
-from tradelearn.strategy.preprocess.derive import Derive
-
-res = Derive.generic_generate(data=rawdata, f_col=None, n_alpha=20, random_status=None)
-```
-| Parameter Name     | Data Type	      | Notes                                                                                                                                          |
-|----------|-----------|------------------------------------------------------------------------------------------------------------------------------------------------|
-| data     | DataFrame | Target market data                                                                                                                             |
-| f_col   | list      | List of variable names derived from participating factors, and evaluated by Sharpe metrics. default to all variables except code, date, and label |
-| n_alpha | int       | Count derived from the final factor                                                                                                            |
-| random_status | int       | Random number seed, if not set, each execution will appear different results                          |
-### Single Factor Test
-```python
-from tradelearn.strategy.examine import Examine
-
-Examine.single_factor(data=data, col='alpha001_101', filename='res/examine.html')
-```
-| Parameter Name     | Data Type	      | Notes                        |
-|----------|-----------|---------------------------|
-| data     | DataFrame | Target market data, required to have two or more stocks       |
-| col      | string    | Target factor name                    |
-| filename | string    | Path and name of the saved HTML file, optional        |
-### Multi-Factor Comparison
-```python
-from tradelearn.strategy.examine import Examine
-
-res = Examine.factor_compare(data=data, f_col=None, ind=None, cir=None)
-```
-| Parameter Name  | Data Type	      | Notes                                 |
-|-------|-----------|------------------------------------|
-| data  | DataFrame | Target market data, required to have two or more stocks                |
-| f_col | string    | List of factor names to compare, if None, all variables will be compared |
-| ind   | string    | Industry field name for t-test calculation, optional             |
-| cir   | string    | Market capitalization field name for t-test calculation, optional             |
-### Causal Feature Selection
-```python
-from tradelearn.causal.blanket import Blanket
-
-Blanket.fit_causal(data=rawdata, method='iamb', target_name='volume', is_discrete=False)
-```
-| Parameter Name        | Data Type	      | Notes                                |
-|-------------|-----------|-----------------------------------|
-| data        | DataFrame | Target market data                            |
-| method      | string    | Selected causal feature selection algorithm, options are 'iamb' and 'pcmb' |
-| target      | string    | Dependent variable name                             |
-| alpha       | float     | Confidence level, generally set to 0.05 or 0.01           |
-| is_discrete | bool      | If data is discrete, set to True           |
-### Causal Graph Construction
+**Lite — shortest path** (good for prototyping, teaching, multi-asset target weights):
 
 ```python
-from tradelearn.causal.graph import Graph
+import tradelearn.lite as tl
+from tradelearn.data import TradingViewProvider
 
-Graph.fit_causal(data=rawdata, method='pc', is_discrete=False, filename='res/pc.png')
+
+class LiteSmaCross(tl.Strategy):
+    fast = 10
+    slow = 20
+
+    def init(self):
+        self.fast_ma = tl.tdx.MA(self.data.close, N=self.fast)
+        self.slow_ma = tl.tdx.MA(self.data.close, N=self.slow)
+        self.start_on_bar(self.slow + 1)
+
+    def next(self):
+        if self.fast_ma[0] > self.slow_ma[0] and not self.position():
+            self.buy(size=100)
+        elif self.fast_ma[0] < self.slow_ma[0] and self.position():
+            self.position().close()
+
+
+provider = TradingViewProvider(n_bars=500)
+bars = provider.history_ohlc("NASDAQ:AAPL", start="2023-01-01", end="2024-01-01")
+
+bt = tl.Backtest(bars, LiteSmaCross, cash=100_000, commission=0.0003, trade_on_close=True)
+stats = bt.run()
+
+print(stats.summary)
+bt.plot("plot.html")
+bt.report("report.html")
 ```
-| Parameter Name        | Data Type      | Notes                        |
-|-------------|-----------|---------------------------|
-| data        | DataFrame | Target market data                    |
-| method      | string    | Selected causal graph construction algorithm, options are 'pc' and 'ges' |
-| is_discrete | bool      | If data is discrete, set to True   |
-| filename    | string    | Path and name of the saved causal graph, optional            |
-### Optimal Model Selection
+
+**Engine — Backtrader-style** (good for complex / portfolio strategies and future paper / live mode):
 
 ```python
-from tradelearn.automl import AutoML
+import tradelearn.engine as bt
+from tradelearn.data import TradingViewProvider
 
-model = AutoML.lazy_predict(data=data)
+
+class SmaCross(bt.Strategy):
+    params = (("fast", 10), ("slow", 20))
+
+    def __init__(self):
+        self.fast = bt.tdx.MA(self.data.close, N=self.p.fast)
+        self.slow = bt.tdx.MA(self.data.close, N=self.p.slow)
+
+    def next(self):
+        if not self.position and self.fast[0] > self.slow[0]:
+            self.buy(size=100)
+        elif self.position and self.fast[0] < self.slow[0]:
+            self.close()
+
+
+provider = TradingViewProvider(n_bars=500)
+bars = provider.history_ohlc("NASDAQ:AAPL", start="2023-01-01", end="2024-01-01")
+
+cerebro = bt.Cerebro(trade_on_close=True)
+cerebro.setcash(100_000)
+cerebro.setcommission(0.0003)
+cerebro.adddata(bars, name="AAPL")
+cerebro.addstrategy(SmaCross)
+
+[strategy] = cerebro.run()
+print(strategy.stats.summary)
 ```
-| Parameter Name     | Data Type	      | Notes                |
-|----------|-----------|-------------------|
-| data     | DataFrame | Target market data            |
-### Backtest Validation
 
-```python
-from tradelearn.strategy.backtest import Backtest
+## Documentation
 
-bt = Backtest(data=data, strategy=Example, cash=1000000, commission=.002, trade_on_close=False)
+Full technical handbook (mkdocs site): [`docs/`](./docs/README.md)
+
+| Topic | Read |
+|---|---|
+| 30-line walkthrough | [Quickstart](./docs/quickstart.md) |
+| Lite / Engine usage | [Lite Guide](./docs/guides/lite.md) · [Engine Guide](./docs/guides/engine.md) |
+| Architecture & boundaries | [Architecture](./docs/concepts/architecture.md) |
+| Research pipeline (factor / ML / weights) | [Research Guide](./docs/guides/research.md) |
+| Indicators (`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`) | [Indicators Guide](./docs/guides/indicators.md) |
+| Performance baselines | [Benchmarks](./docs/benchmarks.md) |
+| Design Notes (contracts / matching / portfolio / event loop) | [Design Notes](./docs/internals/contracts.md) |
+| Full API | [API Reference](./docs/api/reference.md) |
+
+To preview the site locally:
+
+```bash
+uv run mkdocs serve
 ```
-| Parameter Name        | Data Type	      | Notes                        |
-|-------------|-----------|---------------------------|
-| data | DataFrame | Asset market data |
-| strategy | Strategy | Strategy class implementation, needs to be customized by the user |
-| cash | DataFrame | Initial amount for backtesting |
-| commission | DataFrame | Transaction fee per trade | 
-| trade_on_close | string | Whether to use the previous day's closing price for buying; if not, the next day's opening price is used |
-### Strategy Evaluation
 
-```python
-from tradelearn.strategy.evaluate import Evaluate
+## License
 
-Evaluate.analysis_report(strat=res, baseline=baseline, filename='./evaluate.html', engine='quantstats')
-```
-| Parameter Name        | Data Type	      | Notes                                                      |
-|-------------|-----------|---------------------------------------------------------|
-| strat | dict      | Data dictionary returned by LongBacktest.run()                              |
-| baseline  | DataFrame | Baseline market data                                                  |
-| filename    | string    | Path and name of the generated HTML file, optional                                    |
-| engine   | string    | Evaluation engine, options are pyfolio or quantstats, corresponding to 'pyfolio' and 'quantstats' respectively |
+Apache-2.0. See [`NOTICE`](./NOTICE) for fused upstream attribution: empyrical / alphalens / pyfolio / quantstats / MyTT / pandas-ta-classic / pyneCore / causallearn / DolphinDB. backtesting.py and backtrader are noted as "inspired by" — not copied.
+
 ## Acknowledgements
 
-- [Quantopian](https://github.com/quantopian)
-- [Trevor Stephens](https://github.com/trevorstephens)
-- [PyWhy](https://github.com/py-why)
-- [dodid](https://github.com/dodid)
-- [DolphinDB](https://github.com/dolphindb)
-- [happydasch](https://github.com/happydasch)
-- [mpquant](https://github.com/mpquant)
-- [baobao1997](https://github.com/baobao1997)
+[Quantopian](https://github.com/quantopian) · [Trevor Stephens](https://github.com/trevorstephens) · [PyWhy](https://github.com/py-why) · [dodid](https://github.com/dodid) · [DolphinDB](https://github.com/dolphindb) · [happydasch](https://github.com/happydasch) · [mpquant](https://github.com/mpquant) · [baobao1997](https://github.com/baobao1997)
 
-## Contact Information
+## Contact
 
-WeChat Official Account：知守溪的收纳屋  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Email：muyes88@gmail.com
+WeChat Official Account: 知守溪的收纳屋 · Email: muyes88@gmail.com

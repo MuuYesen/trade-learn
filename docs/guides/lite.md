@@ -36,7 +36,7 @@ class MyStrategy(tl.Strategy):
 self.buy(size=100)
 self.sell(size=100)
 self.position().close()
-self.order_target_percent("AAPL", 0.5)
+self.order_target_percent(ticker="AAPL", target=0.5)
 self.target_weights({"AAPL": 0.5, "MSFT": 0.3, "cash": 0.2})
 self.close_all()
 ```
@@ -50,6 +50,7 @@ self.record(alpha=score, signal=self.data.close[0])
 运行后：
 
 ```python
-stats = bt.run()
+backtest = tl.Backtest(data, MyStrategy)
+stats = backtest.run()
 stats.records
 ```

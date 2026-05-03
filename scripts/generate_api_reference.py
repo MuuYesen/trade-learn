@@ -23,16 +23,16 @@ class ApiReferenceModule:
 
 API_REFERENCE_MODULES: tuple[ApiReferenceModule, ...] = (
     ApiReferenceModule(
-        "Engine",
-        "tradelearn.engine",
-        "Backtrader 风格高级事件驱动 API。",
-        ("Cerebro", "Strategy", "Order", "ind", "Analyzer", "Sizer"),
-    ),
-    ApiReferenceModule(
         "Lite",
         "tradelearn.lite",
         "Tradelearn 1.x 风格轻量 API。",
         ("Backtest", "Strategy", "talib", "pta", "tdx", "tv"),
+    ),
+    ApiReferenceModule(
+        "Engine",
+        "tradelearn.engine",
+        "Backtrader 风格高级事件驱动 API。",
+        ("Cerebro", "Strategy", "Order", "Analyzer", "Sizer"),
     ),
     ApiReferenceModule(
         "Data",
@@ -172,6 +172,9 @@ def _render_guide(
         f"# {title}",
         "",
         intro,
+        "",
+        "本页偏查询:用于核对函数签名、参数名和返回值。第一次写策略请先看 "
+        "[Lite Guide](lite.md)、[Engine Guide](engine.md) 或 [Strategy Writing Guide](strategy.md)。",
         "",
         f"Generated from `{source_module}` code signatures by `scripts/generate_api_reference.py`.",
         "",
@@ -521,7 +524,12 @@ def render_lite_api_guide() -> str:
                 "kwargs": "传给指标函数,或保存到指标 attrs。",
             },
             returns="`IndicatorProxy` 或 `IndicatorBundle`。",
-            examples=("self.sma = self.I(tl.tdx.MA, self.data.close, N=20)",),
+            examples=(
+                "def zscore(close, window=20):\n"
+                "    series = close.to_series() if hasattr(close, 'to_series') else close\n"
+                "    return (series - series.rolling(window).mean()) / series.rolling(window).std()\n\n"
+                "self.z = self.I(zscore, self.data.close, window=20)",
+            ),
         ),
         ApiDocTarget(
             "Strategy.position",
@@ -704,10 +712,10 @@ def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE
         "",
         "| 目标 | 阅读 |",
         "|---|---|",
+        "| 编写 Tradelearn 1.x 风格轻量策略 | [Lite API Guide](../guides/lite-api.md) |",
         "| 编写 Backtrader 风格事件策略、Analyzer、Observer、Sizer | "
-        "[Engine API Guide](engine.md) |",
-        "| 编写 Tradelearn 1.x 风格轻量策略 | [Lite API Guide](lite.md) |",
-        "| 从零编写策略并理解两种入口差异 | [Strategy Writing Guide](strategy.md) |",
+        "[Engine API Guide](../guides/engine-api.md) |",
+        "| 从零编写策略并理解两种入口差异 | [Strategy Writing Guide](../guides/strategy.md) |",
         "| 查询精确类/函数签名和完整 docstring | 下方模块 Reference 链接 |",
         "",
         "## 公开模块",
@@ -747,9 +755,9 @@ def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE
             "",
             "## Generated Pages",
             "",
-            "- [Engine API Guide](engine.md)",
-            "- [Lite API Guide](lite.md)",
-            "- [Strategy Writing Guide](strategy.md)",
+            "- [Lite API Guide](../guides/lite-api.md)",
+            "- [Engine API Guide](../guides/engine-api.md)",
+            "- [Strategy Writing Guide](../guides/strategy.md)",
         ]
     )
     for module in modules:
@@ -763,17 +771,18 @@ def render_strategy_writing_guide() -> str:
     parts = [
         "# Strategy Writing Guide",
         "",
-        "本页由 `scripts/generate_api_reference.py` 自动生成,用于回答“策略到底怎么写”。",
+        "本页由 `scripts/generate_api_reference.py` 自动生成,只说明两种策略入口的共同心智模型。",
+        "完整函数签名请看 Lite / Engine API 签名页,完整工作流请看对应 Guide。",
         "",
         "Tradelearn 当前有两个用户入口:",
         "",
         (
-            "- `tradelearn.engine`: Backtrader 风格高级 API,适合复杂事件策略、"
-            "Analyzer、Observer、Sizer、多数据和参数优化。"
-        ),
-        (
             "- `tradelearn.lite`: Tradelearn 1.x 风格轻量 API,"
             "适合快速写单文件策略和研究原型。"
+        ),
+        (
+            "- `tradelearn.engine`: Backtrader 风格高级 API,适合复杂事件策略、"
+            "Analyzer、Observer、Sizer、多数据和参数优化。"
         ),
         "",
         (
@@ -796,6 +805,68 @@ def render_strategy_writing_guide() -> str:
             "- Lite 只验证语法层是否正确接入同一 runtime;"
             "底层正确性仍以 Engine/Backtrader 对齐为主。"
         ),
+        "",
+        "## Lite Strategy",
+        "",
+        (
+            "Lite 策略继承 `tradelearn.lite.Strategy`,"
+            "通常在 `init()` 声明指标,在 `next()` 写交易逻辑。"
+        ),
+        "",
+        "```python",
+        "import pandas as pd",
+        "import tradelearn.lite as tl",
+        "",
+        "",
+        "class SmaCross(tl.Strategy):",
+        "    fast = 10",
+        "    slow = 30",
+        "",
+        "    def init(self):",
+        "        self.fast_sma = tl.tdx.MA(self.data.close, N=self.fast)",
+        "        self.slow_sma = tl.tdx.MA(self.data.close, N=self.slow)",
+        "",
+        "    def next(self):",
+        "        if not self.position() and self.fast_sma[0] > self.slow_sma[0]:",
+        "            self.buy(size=1)",
+        "        elif self.position() and self.fast_sma[0] < self.slow_sma[0]:",
+        "            self.position().close()",
+        "",
+        "",
+        "data = pd.read_csv('bars.csv', parse_dates=True, index_col=0)",
+        "stats = tl.Backtest(data, SmaCross, cash=100_000, match_mode='exact').run()",
+        "print(stats['final_value'])",
+        "```",
+        "",
+        "Lite 常用写法:",
+        "",
+        "| 需求 | 写法 |",
+        "|---|---|",
+        "| 当前价格 | `self.data.close[0]` |",
+        "| 前一根价格 | `self.data.close[-1]` |",
+        "| 内置指标 | `tl.tdx.MA(self.data.close, N=20)` |",
+        "| 自定义函数指标 | `self.I(my_func, self.data.close, window=20)` |",
+        "| 当前持仓 | `self.position()` |",
+        "| 指定 ticker 持仓 | `self.position('BTCUSDT')` |",
+        "| 买入/卖出 | `self.buy(size=...)` / `self.sell(size=...)` |",
+        "| 权益比例调仓 | `self.order_target_percent(ticker='BTCUSDT', target=0.5)` |",
+        "| 止损止盈 | `self.buy(sl=..., tp=...)` |",
+        "| 记录序列 | `self.record(signal=value)` |",
+        "| 当前权益 | `self.equity` |",
+        "| 运行存储 | `self.storage` |",
+        "",
+        "Lite `run()` 返回 `LiteStats`:",
+        "",
+        "```python",
+        "stats = tl.Backtest(data, SmaCross).run()",
+        "stats['final_value']",
+        "stats.summary",
+        "stats.equity",
+        "stats.trades",
+        "stats.records",
+        "stats.strategy",
+        "stats.config",
+        "```",
         "",
         "## Engine Strategy",
         "",
@@ -842,6 +913,8 @@ def render_strategy_writing_guide() -> str:
         "| 当前价格 | `self.data.close[0]` |",
         "| 前一根价格 | `self.data.close[-1]` |",
         "| 当前持仓 | `self.position` 或 `self.getposition(data)` |",
+        "| 内置指标 | `bt.tdx.MA(self.data.close, N=20)` |",
+        "| 复杂自定义指标 | `class MyInd(bt.Indicator)` |",
         "| 买入/卖出 | `self.buy(size=...)` / `self.sell(size=...)` |",
         "| 平仓 | `self.close()` |",
         "| 目标仓位 | `self.order_target_size(...)` / `self.order_target_percent(...)` |",
@@ -849,66 +922,6 @@ def render_strategy_writing_guide() -> str:
         "| 多数据查询 | `self.getdatabyname('BTCUSDT')` |",
         "| 订单通知 | `notify_order(self, order)` |",
         "| 交易通知 | `notify_trade(self, trade)` |",
-        "",
-        "## Lite Strategy",
-        "",
-        (
-            "Lite 策略继承 `tradelearn.lite.Strategy`,"
-            "通常在 `init()` 声明指标,在 `next()` 写交易逻辑。"
-        ),
-        "",
-        "```python",
-        "import pandas as pd",
-        "import tradelearn.lite as tl",
-        "",
-        "",
-        "class SmaCross(tl.Strategy):",
-        "    fast = 10",
-        "    slow = 30",
-        "",
-        "    def init(self):",
-        "        self.fast_sma = self.I(tl.tdx.MA, self.data.close, N=self.fast)",
-        "        self.slow_sma = self.I(tl.tdx.MA, self.data.close, N=self.slow)",
-        "",
-        "    def next(self):",
-        "        if not self.position() and self.fast_sma[0] > self.slow_sma[0]:",
-        "            self.buy(size=1)",
-        "        elif self.position() and self.fast_sma[0] < self.slow_sma[0]:",
-        "            self.position().close()",
-        "",
-        "",
-        "data = pd.read_csv('bars.csv', parse_dates=True, index_col=0)",
-        "stats = tl.Backtest(data, SmaCross, cash=100_000, match_mode='exact').run()",
-        "print(stats['final_value'])",
-        "```",
-        "",
-        "Lite 常用写法:",
-        "",
-        "| 需求 | 写法 |",
-        "|---|---|",
-        "| 当前价格 | `self.data.close[0]` |",
-        "| 指标声明 | `self.I(tl.tdx.MA, self.data.close, N=20)` |",
-        "| 当前持仓 | `self.position()` |",
-        "| 指定 ticker 持仓 | `self.position('BTCUSDT')` |",
-        "| 买入/卖出 | `self.buy(size=...)` / `self.sell(size=...)` |",
-        "| 权益比例调仓 | `self.order_target_percent(target=0.5)` |",
-        "| 止损止盈 | `self.buy(sl=..., tp=...)` |",
-        "| 记录序列 | `self.record(signal=value)` |",
-        "| 当前权益 | `self.equity` |",
-        "| 运行存储 | `self.storage` |",
-        "",
-        "Lite `run()` 返回 `LiteStats`:",
-        "",
-        "```python",
-        "stats = tl.Backtest(data, SmaCross).run()",
-        "stats['final_value']",
-        "stats.summary",
-        "stats.equity",
-        "stats.trades",
-        "stats.records",
-        "stats.strategy",
-        "stats.config",
-        "```",
         "",
         "## 指标写法",
         "",
@@ -919,20 +932,21 @@ def render_strategy_writing_guide() -> str:
         "self.rsi14 = bt.talib.RSI(self.data.close, timeperiod=14)",
         "```",
         "",
-        "Lite 使用 `self.I(...)` 做批量指标缓存和渐进揭示:",
+        "Lite 内置指标也直接使用 vendor 命名空间;只有自定义函数才需要 `self.I(...)`:",
         "",
         "```python",
-        "self.ma20 = self.I(tl.tdx.MA, self.data.close, N=20)",
-        "self.macd = self.I(tl.talib.MACD, self.data.close)",
+        "self.ma20 = tl.tdx.MA(self.data.close, N=20)",
+        "self.macd = tl.talib.MACD(self.data.close)",
+        "self.custom = self.I(my_func, self.data.close, window=20)",
         "```",
         "",
         "TA-Lib / pandas-ta-classic / TDX / TradingView 指标都保留在 Python 生态中,不要写成 Rust 指标:",
         "",
         "```python",
-        "self.talib_sma = self.I(tl.talib.SMA, self.data.close, timeperiod=20)",
-        "self.pta_sma = self.I(tl.pta.SMA, self.data.close, length=20)",
-        "self.tdx_ma = self.I(tl.tdx.MA, self.data.close, N=20)",
-        "self.tv_rsi = self.I(tl.tv.RSI, self.data.close, length=14)",
+        "self.talib_sma = tl.talib.SMA(self.data.close, timeperiod=20)",
+        "self.pta_sma = tl.pta.SMA(self.data.close, length=20)",
+        "self.tdx_ma = tl.tdx.MA(self.data.close, N=20)",
+        "self.tv_rsi = tl.tv.RSI(self.data.close, length=14)",
         "```",
         "",
         "## 测试验收",
@@ -1007,12 +1021,12 @@ def write_api_reference(docs_dir: Path | str = Path("docs")) -> Path:
 
 
 def write_api_guides(docs_dir: Path | str = Path("docs")) -> tuple[Path, Path, Path]:
-    """Write generated API guide pages under ``docs_dir/api``."""
-    api_dir = Path(docs_dir) / "api"
-    api_dir.mkdir(parents=True, exist_ok=True)
-    engine_output = api_dir / "engine.md"
-    lite_output = api_dir / "lite.md"
-    strategy_output = api_dir / "strategy.md"
+    """Write generated API guide pages under ``docs_dir/guides``."""
+    guides_dir = Path(docs_dir) / "guides"
+    guides_dir.mkdir(parents=True, exist_ok=True)
+    engine_output = guides_dir / "engine-api.md"
+    lite_output = guides_dir / "lite-api.md"
+    strategy_output = guides_dir / "strategy.md"
     engine_output.write_text(render_engine_api_guide(), encoding="utf-8")
     lite_output.write_text(render_lite_api_guide(), encoding="utf-8")
     strategy_output.write_text(render_strategy_writing_guide(), encoding="utf-8")

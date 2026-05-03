@@ -7,6 +7,14 @@
 ```python
 from tradelearn import research
 
+feature_set = research.FeatureSet(
+    {
+        "alpha": lambda p: p.close.pct_change(20)
+        / p.close.pct_change().rolling(20).std(),
+        "size": lambda p: p.close,
+    },
+    target={"future_return": lambda p: p.close.pct_change().shift(-1)},
+)
 features = feature_set.fit_transform(bars, include_target=True).dropna()
 train, test = research.time_split(features, split="2023-09-01", level="timestamp")
 

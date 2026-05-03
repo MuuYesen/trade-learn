@@ -2,6 +2,8 @@
 
 `tradelearn.engine` 是 Backtrader 风格高级入口。本文档的签名来自运行时代码,参数说明由生成器元数据补充。
 
+本页偏查询:用于核对函数签名、参数名和返回值。第一次写策略请先看 [Lite Guide](lite.md)、[Engine Guide](engine.md) 或 [Strategy Writing Guide](strategy.md)。
+
 Generated from `tradelearn.engine` code signatures by `scripts/generate_api_reference.py`.
 
 ## `Cerebro.__init__`
@@ -9,7 +11,7 @@ Generated from `tradelearn.engine` code signatures by `scripts/generate_api_refe
 创建 Backtrader 风格的高级事件驱动回测运行器。
 
 ```python
-Cerebro.__init__(self, match_mode: 'str' = 'exact', callback_batch: 'int' = 1, trade_on_close: 'bool' = False, exactbars: 'bool' = False, stdstats: 'bool' = True, slippage: 'Any | None' = None, commission: 'Any | None' = None, mode: 'str' = 'backtest', **kwargs: 'Any') -> 'None'
+Cerebro.__init__(self, match_mode: 'str' = 'exact', callback_batch: 'int' = 1, trade_on_close: 'bool' = False, exactbars: 'bool' = False, stdstats: 'bool' = True, slippage: 'Any | None' = None, commission: 'Any | None' = None, mode: 'str' = 'backtest', stats_mode: 'str' = 'full', **kwargs: 'Any') -> 'None'
 ```
 
 | 参数 | 类型 | 默认值 | 说明 |
@@ -22,6 +24,7 @@ Cerebro.__init__(self, match_mode: 'str' = 'exact', callback_batch: 'int' = 1, t
 | `slippage` | `Any \| None` | `None` | slippage 配置对象。 |
 | `commission` | `Any \| None` | `None` | commission 配置对象。 |
 | `mode` | `str` | `'backtest'` | `backtest` / `paper` / `live`; 当前主路径是 backtest。 |
+| `stats_mode` | `str` | `'full'` |  |
 | `**kwargs` | `Any` | `required` | 保留给 Backtrader facade 的额外配置。 |
 
 返回: `Cerebro` 实例。

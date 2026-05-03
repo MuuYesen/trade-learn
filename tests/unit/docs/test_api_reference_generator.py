@@ -19,9 +19,9 @@ def test_render_api_reference_is_readable_overview_not_module_dump() -> None:
     assert "## 先看这里" in rendered
     assert "## 公开模块" in rendered
     assert "| 模块 | 用途 | 常用入口 | 完整 Reference |" in rendered
-    assert "[Engine API Guide](engine.md)" in rendered
-    assert "[Lite API Guide](lite.md)" in rendered
-    assert "[Strategy Writing Guide](strategy.md)" in rendered
+    assert "[Engine API Guide](../guides/engine-api.md)" in rendered
+    assert "[Lite API Guide](../guides/lite-api.md)" in rendered
+    assert "[Strategy Writing Guide](../guides/strategy.md)" in rendered
     assert "[`tradelearn.engine`](reference/engine.md)" in rendered
     assert "## Public Symbols by Module" in rendered
     assert "`Cerebro`" in rendered
@@ -37,9 +37,9 @@ def test_render_api_reference_is_readable_overview_not_module_dump() -> None:
 def test_render_module_reference_contains_single_mkdocstrings_directive() -> None:
     rendered = render_module_reference(API_REFERENCE_MODULES[0])
 
-    assert rendered.startswith("# Engine Reference")
-    assert "::: tradelearn.engine" in rendered
-    assert "::: tradelearn.lite" not in rendered
+    assert rendered.startswith("# Lite Reference")
+    assert "::: tradelearn.lite" in rendered
+    assert "::: tradelearn.engine" not in rendered
     assert "show_source: false" in rendered
 
 
@@ -63,8 +63,10 @@ def test_write_api_reference_pages_creates_module_pages(tmp_path) -> None:
 def test_write_api_guides_creates_strategy_writing_guide(tmp_path) -> None:
     outputs = write_api_guides(tmp_path)
 
-    assert tmp_path / "api" / "strategy.md" in outputs
-    text = (tmp_path / "api" / "strategy.md").read_text(encoding="utf-8")
+    assert tmp_path / "guides" / "strategy.md" in outputs
+    assert tmp_path / "guides" / "engine-api.md" in outputs
+    assert tmp_path / "guides" / "lite-api.md" in outputs
+    text = (tmp_path / "guides" / "strategy.md").read_text(encoding="utf-8")
     assert "# Strategy Writing Guide" in text
     assert "Engine Strategy" in text
     assert "Lite Strategy" in text

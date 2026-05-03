@@ -2,6 +2,8 @@
 
 `tradelearn.lite` 是 Tradelearn 1.x 风格轻量入口。本文档的签名来自运行时代码,参数说明由生成器元数据补充。
 
+本页偏查询:用于核对函数签名、参数名和返回值。第一次写策略请先看 [Lite Guide](lite.md)、[Engine Guide](engine.md) 或 [Strategy Writing Guide](strategy.md)。
+
 Generated from `tradelearn.lite` code signatures by `scripts/generate_api_reference.py`.
 
 ## `Backtest.__init__`
@@ -9,7 +11,7 @@ Generated from `tradelearn.lite` code signatures by `scripts/generate_api_refere
 创建 Lite 回测运行器。Lite 是 Tradelearn 1.x 风格入口,不是 backtesting.py 兼容层。
 
 ```python
-Backtest.__init__(self, data: 'pd.DataFrame | dict[str, pd.DataFrame]', strategy: 'type[Strategy]', cash: 'float' = 10000, commission: 'float' = 0.0, margin: 'float' = 1.0, trade_on_close: 'bool' = False, hedging: 'bool' = False, exclusive_orders: 'bool' = False, holding: 'dict[str, float] | None' = None, trade_start_date: 'str | pd.Timestamp | None' = None, lot_size: 'int' = 1, fail_fast: 'bool' = True, storage: 'dict | None' = None, match_mode: 'str' = 'exact')
+Backtest.__init__(self, data: 'pd.DataFrame | dict[str, pd.DataFrame]', strategy: 'type[Strategy]', cash: 'float' = 10000, commission: 'float' = 0.0, margin: 'float' = 1.0, trade_on_close: 'bool' = False, hedging: 'bool' = False, exclusive_orders: 'bool' = False, holding: 'dict[str, float] | None' = None, trade_start_date: 'str | pd.Timestamp | None' = None, lot_size: 'int' = 1, fail_fast: 'bool' = True, stats_mode: 'str' = 'full', storage: 'dict | None' = None, match_mode: 'str' = 'exact')
 ```
 
 | 参数 | 类型 | 默认值 | 说明 |
@@ -26,6 +28,7 @@ Backtest.__init__(self, data: 'pd.DataFrame | dict[str, pd.DataFrame]', strategy
 | `trade_start_date` | `str \| pd.Timestamp \| None` | `None` | 开始交易日期保留参数。 |
 | `lot_size` | `int` | `1` | 最小交易单位保留参数。 |
 | `fail_fast` | `bool` | `True` | 保留参数。 |
+| `stats_mode` | `str` | `'full'` |  |
 | `storage` | `dict \| None` | `None` | 策略可读写的共享存储。 |
 | `match_mode` | `str` | `'exact'` | 撮合模式; 默认 `exact` 以复用 Engine/Backtrader 对齐路径。 |
 
@@ -85,7 +88,11 @@ Strategy.I(self, funcval: 'Callable | pd.DataFrame | pd.Series | Any', *args, na
 返回: `IndicatorProxy` 或 `IndicatorBundle`。
 
 ```python
-self.sma = self.I(tl.tdx.MA, self.data.close, N=20)
+def zscore(close, window=20):
+    series = close.to_series() if hasattr(close, 'to_series') else close
+    return (series - series.rolling(window).mean()) / series.rolling(window).std()
+
+self.z = self.I(zscore, self.data.close, window=20)
 ```
 
 ## `Strategy.position`
