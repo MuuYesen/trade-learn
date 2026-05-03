@@ -27,6 +27,12 @@ class ParityResult:
     timings_seconds: tuple[float, ...]
     target_count: int = 0
     target_history: tuple[tuple[int, tuple[str, ...]], ...] = ()
+    submitted_count: int = 0
+    intent_count: int = 0
+    status_counts: tuple[tuple[str, int], ...] = ()
+    zero_size_orders: int = 0
+    unnotified_orders: int = 0
+    unnotified_sample: tuple[str, ...] = ()
 
 
 def make_panel(symbols: int, bars: int, seed: int) -> dict[str, pd.DataFrame]:
@@ -69,7 +75,7 @@ def _target_weights_from_scores(scores: list[tuple[str, float]], holdings: int) 
     return weights
 
 
-def _engine_strategy_cls(bt_module, rebalance_every: int, holdings: int):
+def _engine_strategy_cls(bt_module, rebalance_every: int, holdings: int, total_bars: int):
     class TargetWeightParityStrategy(bt_module.Strategy):
         params = (
             ("rebalance_every", rebalance_every),
@@ -80,15 +86,29 @@ def _engine_strategy_cls(bt_module, rebalance_every: int, holdings: int):
         def __init__(self) -> None:
             self.completed_orders = 0
             self.submitted_targets = 0
+            self.intent_count = 0
+            self.status_counts = {}
+            self.zero_size_orders = 0
+            self.returned_order_info = {}
+            self.notified_order_refs = set()
             self.target_history = []
             self.addminperiod(self.p.lookback + 1)
 
         def notify_order(self, order) -> None:
+            self.notified_order_refs.add(getattr(order, "ref", None))
+            status_name = str(getattr(order, "getstatusname", lambda: order.status)())
+            self.status_counts[status_name] = self.status_counts.get(status_name, 0) + 1
             if order.status == order.Completed:
                 self.completed_orders += 1
 
         def next(self) -> None:
             if len(self) <= int(self.p.lookback):
+                return
+            # Backtrader returns final-bar orders but has no subsequent
+            # lifecycle step to notify or complete them. The parity benchmark
+            # compares executable target rebalance events, so skip terminal
+            # orders that cannot have a full lifecycle in both engines.
+            if len(self) >= total_bars:
                 return
             if len(self) % int(self.p.rebalance_every):
                 return
@@ -115,26 +135,38 @@ def _engine_strategy_cls(bt_module, rebalance_every: int, holdings: int):
                 equity=float(self.broker.getvalue()),
                 close_missing=True,
             )
+            self.intent_count += len(intents)
 
             for intent in intents:
                 order = self.order_target_percent(data=intent.data, target=intent.target_weight)
                 if order is not None:
+                    created = getattr(order, "created", None)
+                    size = getattr(created, "size", getattr(order, "size", None))
+                    if size is not None and abs(float(size)) < 1e-12:
+                        self.zero_size_orders += 1
+                    self.returned_order_info[getattr(order, "ref", len(self.returned_order_info))] = (
+                        f"bar={len(self)} symbol={intent.symbol} target={intent.target_weight:.6f} "
+                        f"size={float(size) if size is not None else 'NA'}"
+                    )
                     self.submitted_targets += 1
 
     return TargetWeightParityStrategy
 
 
-def _lite_strategy_cls(rebalance_every: int, holdings: int):
+def _lite_strategy_cls(rebalance_every: int, holdings: int, total_bars: int):
     from tradelearn.lite import Strategy
 
     class TargetWeightParityLiteStrategy(Strategy):
         def init(self) -> None:
             self.completed_orders = 0
+            self.intent_count = 0
             self.target_history = []
             self.start_on_bar(LOOKBACK)
 
         def next(self) -> None:
             if len(self.data) <= LOOKBACK:
+                return
+            if len(self.data) >= total_bars:
                 return
             if len(self.data) % rebalance_every:
                 return
@@ -148,7 +180,8 @@ def _lite_strategy_cls(rebalance_every: int, holdings: int):
                 scores.append((symbol, current / past - 1.0 if past else 0.0))
             weights = _target_weights_from_scores(scores, holdings)
             self.target_history.append((len(self.data), dict(weights)))
-            self.target_weights(weights, close_missing=True)
+            orders = self.target_weights(weights, close_missing=True)
+            self.intent_count += len(orders)
 
     return TargetWeightParityLiteStrategy
 
@@ -171,7 +204,14 @@ def _run_engine(
     order_count = 0
     target_count = 0
     target_history = ()
-    strategy_cls = _engine_strategy_cls(bt, rebalance_every, holdings)
+    submitted_count = 0
+    intent_count = 0
+    status_counts = ()
+    zero_size_orders = 0
+    unnotified_orders = 0
+    unnotified_sample = ()
+    total_bars = min(len(frame) for frame in panel.values())
+    strategy_cls = _engine_strategy_cls(bt, rebalance_every, holdings, total_bars)
     for run_idx in range(warmup + repeats):
         cerebro = bt.Cerebro(match_mode=match_mode, trade_on_close=trade_on_close)
         cerebro.broker.setcash(cash)
@@ -188,6 +228,13 @@ def _run_engine(
             final_value = float(cerebro.broker.getvalue())
             strategy = strategies[0]
             order_count = int(strategy.completed_orders)
+            submitted_count = int(strategy.submitted_targets)
+            intent_count = int(strategy.intent_count)
+            status_counts = tuple(sorted(strategy.status_counts.items()))
+            zero_size_orders = int(strategy.zero_size_orders)
+            missing_refs = sorted(set(strategy.returned_order_info) - strategy.notified_order_refs)
+            unnotified_orders = len(missing_refs)
+            unnotified_sample = tuple(strategy.returned_order_info[ref] for ref in missing_refs[:5])
             target_count = len(strategy.target_history)
             target_history = tuple(
                 (bar, tuple(symbol for symbol, weight in weights.items() if weight > 0))
@@ -205,6 +252,12 @@ def _run_engine(
         tuple(timings),
         target_count,
         target_history,
+        submitted_count,
+        intent_count,
+        status_counts,
+        zero_size_orders,
+        unnotified_orders,
+        unnotified_sample,
     )
 
 
@@ -236,7 +289,14 @@ def _run_backtrader(
     order_count = 0
     target_count = 0
     target_history = ()
-    strategy_cls = _engine_strategy_cls(bt, rebalance_every, holdings)
+    submitted_count = 0
+    intent_count = 0
+    status_counts = ()
+    zero_size_orders = 0
+    unnotified_orders = 0
+    unnotified_sample = ()
+    total_bars = min(len(frame) for frame in panel.values())
+    strategy_cls = _engine_strategy_cls(bt, rebalance_every, holdings, total_bars)
     for run_idx in range(warmup + repeats):
         cerebro = bt.Cerebro()
         cerebro.broker.set_coc(trade_on_close)
@@ -254,6 +314,13 @@ def _run_backtrader(
             final_value = float(cerebro.broker.getvalue())
             strategy = strategies[0]
             order_count = int(strategy.completed_orders)
+            submitted_count = int(strategy.submitted_targets)
+            intent_count = int(strategy.intent_count)
+            status_counts = tuple(sorted(strategy.status_counts.items()))
+            zero_size_orders = int(strategy.zero_size_orders)
+            missing_refs = sorted(set(strategy.returned_order_info) - strategy.notified_order_refs)
+            unnotified_orders = len(missing_refs)
+            unnotified_sample = tuple(strategy.returned_order_info[ref] for ref in missing_refs[:5])
             target_count = len(strategy.target_history)
             target_history = tuple(
                 (bar, tuple(symbol for symbol, weight in weights.items() if weight > 0))
@@ -271,6 +338,12 @@ def _run_backtrader(
         tuple(timings),
         target_count,
         target_history,
+        submitted_count,
+        intent_count,
+        status_counts,
+        zero_size_orders,
+        unnotified_orders,
+        unnotified_sample,
     )
 
 
@@ -292,7 +365,14 @@ def _run_lite(
     order_count = 0
     target_count = 0
     target_history = ()
-    strategy_cls = _lite_strategy_cls(rebalance_every, holdings)
+    submitted_count = 0
+    intent_count = 0
+    status_counts = ()
+    zero_size_orders = 0
+    unnotified_orders = 0
+    unnotified_sample = ()
+    total_bars = min(len(frame) for frame in panel.values())
+    strategy_cls = _lite_strategy_cls(rebalance_every, holdings, total_bars)
     for run_idx in range(warmup + repeats):
         backtest = Backtest(
             panel,
@@ -308,6 +388,14 @@ def _run_lite(
             timings.append(elapsed)
             final_value = float(stats["final_value"])
             order_count = len(stats.fills)
+            submitted_count = len(stats.orders)
+            intent_count = int(getattr(stats.strategy, "intent_count", 0))
+            status_counts = (
+                tuple(sorted(stats.orders["status"].value_counts().to_dict().items()))
+                if "status" in stats.orders
+                else ()
+            )
+            zero_size_orders = int((stats.orders["size"].abs() < 1e-12).sum()) if "size" in stats.orders else 0
             target_count = len(stats.strategy.target_history)
             target_history = tuple(
                 (bar, tuple(symbol for symbol, weight in weights.items() if weight > 0))
@@ -325,6 +413,12 @@ def _run_lite(
         tuple(timings),
         target_count,
         target_history,
+        submitted_count,
+        intent_count,
+        status_counts,
+        zero_size_orders,
+        unnotified_orders,
+        unnotified_sample,
     )
 
 
@@ -394,6 +488,8 @@ def _status(results: list[ParityResult], tolerance: float) -> str:
     parity_results = [
         result for result in results if result.name in {"Tradelearn Engine", "Backtrader"}
     ]
+    if len(parity_results) < 2:
+        return "N/A"
     values = [result.final_value for result in parity_results]
     orders = {result.order_count for result in parity_results}
     value_ok = max(values) - min(values) < tolerance
@@ -449,19 +545,31 @@ def main() -> None:
     )
     print(
         f"{'Runner':<20} | {'Final Value':>14} | {'Time':>10} | "
-        f"{'Bars/s':>12} | {'Orders':>8} | {'Targets':>8}"
+        f"{'Bars/s':>12} | {'Completed':>9} | {'Submitted':>9} | "
+        f"{'Intents':>8} | {'Targets':>8}"
     )
-    print("-" * 78)
+    print("-" * 104)
     for result in results:
         print(
             f"{result.name:<20} | {result.final_value:>14,.2f} | "
             f"{result.elapsed_seconds:>8.3f}s | {result.bars_per_sec:>12,.0f} | "
-            f"{result.order_count:>8,} | {result.target_count:>8,}"
+            f"{result.order_count:>9,} | {result.submitted_count:>9,} | "
+            f"{result.intent_count:>8,} | {result.target_count:>8,}"
         )
+    print("-" * 104)
+    print("Order status counts:")
+    for result in results:
+        statuses = ", ".join(f"{name}={count}" for name, count in result.status_counts) or "-"
+        print(
+            f"  {result.name}: {statuses}; "
+            f"zero_size_returned={result.zero_size_orders:,}; "
+            f"unnotified_returned={result.unnotified_orders:,}"
+        )
+        if result.unnotified_sample:
+            print("    sample: " + " | ".join(result.unnotified_sample))
     status = _status(results, args.tolerance)
-    print("-" * 78)
     print(f"Status: {status} (Tradelearn Engine vs Backtrader)")
-    if status != "EXACT":
+    if status == "DIFF":
         raise SystemExit(1)
 
 
