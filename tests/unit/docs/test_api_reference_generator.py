@@ -16,14 +16,14 @@ from scripts.generate_api_reference import (
 def test_render_api_reference_is_readable_overview_not_module_dump() -> None:
     rendered = render_api_reference()
 
-    assert "## Start Here" in rendered
-    assert "## Public Modules" in rendered
-    assert "| Module | Purpose | Common Entries | Full Reference |" in rendered
+    assert "## 先看这里" in rendered
+    assert "## 公开模块" in rendered
+    assert "| 模块 | 用途 | 常用入口 | 完整 Reference |" in rendered
     assert "[Engine API Guide](../guides/engine-api.md)" in rendered
     assert "[Lite API Guide](../guides/lite-api.md)" in rendered
     assert "[Strategy Writing Guide](../guides/strategy.md)" in rendered
     assert "[`tradelearn.engine`](reference/engine.md)" in rendered
-    assert "## Public Symbols by Module" in rendered
+    assert "## 按模块列出公开符号" in rendered
     assert "`Cerebro`" in rendered
     assert "`DataProvider`" in rendered
     assert "`win_rate`" in rendered
@@ -48,7 +48,7 @@ def test_write_api_reference_creates_expected_page(tmp_path) -> None:
 
     assert output == tmp_path / "api" / "reference.md"
     assert output.exists()
-    assert output.read_text(encoding="utf-8").startswith("# API Reference")
+    assert output.read_text(encoding="utf-8").startswith("# API 参考")
 
 
 def test_write_api_reference_pages_creates_module_pages(tmp_path) -> None:
