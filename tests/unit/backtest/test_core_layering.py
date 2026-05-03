@@ -88,6 +88,7 @@ def test_backtest_runtime_modules_are_flattened() -> None:
         "models.py",
         "optimize.py",
         "reporting.py",
+        "runtime_config.py",
         "sizer.py",
         "strategy.py",
         "targets.py",
@@ -122,6 +123,7 @@ def test_rust_core_is_split_by_runtime_responsibility() -> None:
         "engine.rs",
         "lib.rs",
         "matching.rs",
+        "resampler.rs",
         "runner.rs",
         "types.rs",
     }

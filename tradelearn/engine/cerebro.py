@@ -6,6 +6,7 @@ from typing import Any
 from tradelearn.backtest.feed import is_panel_ohlcv_frame, panel_symbol_level
 from tradelearn.backtest.models import FixedCommission, FixedSlippage
 from tradelearn.backtest.reporting import reporter_from_results
+from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
 from tradelearn.core import get_logger
 from tradelearn.engine.analyzer import AnalyzerCollection
 from tradelearn.engine.base import TimeFrame
@@ -70,6 +71,7 @@ class Cerebro:
             slippage=slippage or FixedSlippage(),
             commission=commission or FixedCommission(),
         )
+        self.runtime_config = BacktestRuntimeConfig.from_owner(self)
         self._sizer_spec = (FixedSize, {})
         self.analyzers: dict[str, tuple[type[Analyzer], tuple[Any, ...], dict[str, Any]]] = {}
         self.observers: dict[str, tuple[type[Any], dict]] = {}

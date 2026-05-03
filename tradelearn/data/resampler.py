@@ -17,6 +17,9 @@ def resample_frame(
     df: pd.DataFrame, timeframe: int, compression: int = 1
 ) -> pd.DataFrame:
     """Resample a OHLCV DataFrame into a higher timeframe."""
+    rust_result = _try_rust_resample_frame(df, timeframe, compression)
+    if rust_result is not None:
+        return rust_result
     rule = _get_pandas_rule(timeframe, compression)
     
     # Define aggregation mapping
@@ -38,6 +41,90 @@ def resample_frame(
     resampled = resampled.dropna(subset=["open", "high", "low", "close"])
     
     return resampled
+
+
+def _try_rust_resample_frame(
+    df: pd.DataFrame,
+    timeframe: int,
+    compression: int,
+) -> pd.DataFrame | None:
+    """Use the Rust fast path for plain fixed-width OHLCV frames."""
+    if not isinstance(df.index, pd.DatetimeIndex):
+        raise TypeError("resample_frame requires a DatetimeIndex")
+    required_columns = ["open", "high", "low", "close", "volume"]
+    if list(df.columns) != required_columns:
+        return None
+    period_seconds = _fixed_period_seconds(timeframe, compression)
+    if period_seconds is None:
+        return None
+    if df.empty:
+        return df.copy()
+
+    timestamps = df.index
+    if timestamps.tz is None:
+        timestamp_seconds = timestamps.tz_localize("UTC").asi8 // 1_000_000_000
+        tz = "UTC"
+    else:
+        timestamp_seconds = timestamps.tz_convert("UTC").asi8 // 1_000_000_000
+        tz = timestamps.tz
+    try:
+        labels, opens, highs, lows, closes, volumes = _rust_resample_ohlcv(
+            timestamp_seconds.astype("int64", copy=False).tolist(),
+            df["open"].to_numpy(dtype="float64", copy=False).tolist(),
+            df["high"].to_numpy(dtype="float64", copy=False).tolist(),
+            df["low"].to_numpy(dtype="float64", copy=False).tolist(),
+            df["close"].to_numpy(dtype="float64", copy=False).tolist(),
+            df["volume"].to_numpy(dtype="float64", copy=False).tolist(),
+            period_seconds,
+        )
+    except (ImportError, AttributeError):
+        return None
+    index = pd.to_datetime(labels, unit="s", utc=True)
+    if tz != "UTC":
+        index = index.tz_convert(tz)
+    result = pd.DataFrame(
+        {
+            "open": opens,
+            "high": highs,
+            "low": lows,
+            "close": closes,
+            "volume": volumes,
+        },
+        index=index,
+    )
+    try:
+        result["volume"] = result["volume"].astype(df["volume"].dtype, copy=False)
+    except (TypeError, ValueError):
+        pass
+    return result
+
+
+def _rust_resample_ohlcv(
+    timestamps: list[int],
+    opens: list[float],
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    volumes: list[float],
+    period_seconds: int,
+):
+    from tradelearn._rust import resample_ohlcv
+
+    return resample_ohlcv(timestamps, opens, highs, lows, closes, volumes, period_seconds)
+
+
+def _fixed_period_seconds(timeframe: int, compression: int) -> int | None:
+    if compression <= 0:
+        raise ValueError("compression must be a positive integer")
+    if timeframe == _MICROSECONDS:
+        return None
+    if timeframe == _SECONDS:
+        return compression
+    if timeframe == _MINUTES:
+        return compression * 60
+    if timeframe == _DAYS:
+        return compression * 86_400
+    return None
 
 
 def _get_pandas_rule(timeframe: int, compression: int) -> str:

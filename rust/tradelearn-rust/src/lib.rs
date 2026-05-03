@@ -3,6 +3,7 @@ use pyo3::prelude::*;
 
 pub mod engine;
 pub mod matching;
+pub mod resampler;
 pub mod runner;
 pub mod types;
 
@@ -541,6 +542,7 @@ impl RustBacktestEngine {
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tradelearn_rust_version, m)?)?;
     m.add_function(wrap_pyfunction!(match_order_fill, m)?)?;
+    resampler::register_pyfunctions(m)?;
     m.add_class::<RustBacktestEngine>()?;
     runner::register_pyclasses(m)?;
     Ok(())

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from tradelearn.backtest.models import BarSnapshot, Stats
+from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
 
 
@@ -316,14 +317,15 @@ def _build_equity_returns(
 
 
 def _stats_config(cerebro: Any) -> dict[str, Any]:
+    config = BacktestRuntimeConfig.from_owner(cerebro)
     return {
         "callback_batch": getattr(cerebro, "callback_batch", 1),
-        "trade_on_close": bool(getattr(cerebro, "trade_on_close", False)),
-        "exactbars": bool(getattr(cerebro, "exactbars", False)),
-        "stdstats": bool(getattr(cerebro, "stdstats", True)),
+        "trade_on_close": config.trade_on_close,
+        "exactbars": config.exactbars,
+        "stdstats": config.stdstats,
         "broker": {
-            "cash": getattr(cerebro.broker, "_cash", 0.0),
-            "commission": getattr(cerebro.broker, "commission_ratio", 0.0),
+            "cash": config.cash,
+            "commission": config.commission,
         },
     }
 
@@ -532,6 +534,8 @@ def _build_clocked_multi_data_runner(datas: list[Any]) -> Any | None:
 
 def run_backtest(cerebro: Any) -> list[Any]:
     """Unified backtest engine that runs any strategy inheriting from core.Strategy."""
+    runtime_config = BacktestRuntimeConfig.from_owner(cerebro)
+    cerebro.runtime_config = runtime_config
     strategy_cls, args, kwargs = cerebro.strats[0]
     bind_strategy_context = getattr(cerebro, "_bind_strategy_context", None)
 
@@ -579,9 +583,9 @@ def run_backtest(cerebro: Any) -> list[Any]:
             lows,
             closes,
             volumes,
-            float(cerebro.broker._cash),
-            float(cerebro.broker.commission_ratio),
-            bool(getattr(cerebro, "trade_on_close", False)),
+            runtime_config.cash,
+            runtime_config.commission,
+            runtime_config.trade_on_close,
             False,
             False,
             0.0,
@@ -591,7 +595,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
             False,
             float(cerebro.broker._mult),
             1.0,
-            cerebro.broker.match_mode == "smart",
+            runtime_config.match_mode == "smart",
         )
         cerebro.broker.bind_engine(rust_engine)
         if hasattr(cerebro.broker, "bind_datas"):

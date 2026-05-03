@@ -15,6 +15,7 @@ from tradelearn.backtest.feed import (
 from tradelearn.backtest.models import Stats
 from tradelearn.backtest.optimize import expand_grid
 from tradelearn.backtest.reporting import reporter_from_stats
+from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
 from tradelearn.core import get_logger
 
 from .strategy import Strategy
@@ -124,6 +125,7 @@ class Backtest:
         self.broker.configure_matching(trade_on_close=self.trade_on_close)
         self.broker.set_storage(self._storage)
         self.analyzers = {}
+        self.runtime_config = BacktestRuntimeConfig.from_owner(self)
 
     @staticmethod
     def _normalize_data(data: pd.DataFrame) -> pd.DataFrame:
@@ -147,6 +149,7 @@ class Backtest:
         )
         self.broker.configure_matching(trade_on_close=self.trade_on_close)
         self.broker.set_storage(self._storage)
+        self.runtime_config = BacktestRuntimeConfig.from_owner(self)
 
         # Lite passes strategy params through run(**kwargs).
         if kwargs:
