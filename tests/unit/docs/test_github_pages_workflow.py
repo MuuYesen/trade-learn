@@ -15,6 +15,7 @@ def test_docs_workflow_deploys_mkdocs_site_with_github_pages_actions() -> None:
     assert workflow["permissions"]["contents"] == "read"
     assert workflow["permissions"]["pages"] == "write"
     assert workflow["permissions"]["id-token"] == "write"
+    assert "master" in workflow[True]["push"]["branches"]
     assert "main" in workflow[True]["push"]["branches"]
     assert "v2" in workflow[True]["push"]["branches"]
     build_steps = workflow["jobs"]["build"]["steps"]
