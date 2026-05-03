@@ -3,17 +3,11 @@ site_author: MuuYesen
 site_description: Python quantitative research framework for traditional and ML strategies.
 repo_url: https://github.com/MuuYesen/trade-learn
 repo_name: MuuYesen/trade-learn
-docs_dir: design
-exclude_docs: |
-  PROGRESS.md
-  BACKTESTING_COMPAT.md
-  backtrader_compat_refactor.md
-  archive/
-  superpowers/
+docs_dir: docs
 
 theme:
   name: material
-  custom_dir: design/mkdocs/overrides
+  custom_dir: docs/mkdocs/overrides
   language: zh
   palette:
     - scheme: default
@@ -41,7 +35,7 @@ theme:
     - search.share
   icon:
     repo: fontawesome/brands/github-alt
-edit_uri: edit/main/design
+edit_uri: edit/main/docs
 copyright: Copyright &copy; 2026 trade-learn
 extra:
   social:
@@ -92,40 +86,36 @@ markdown_extensions:
   - pymdownx.mark
 
 nav:
-  - Quickstart: README.md
-  - Project:
-      - Overview: PROJECT.md
-      - Structure: PROJECT_STRUCTURE.md
-      - Component Usage: COMPONENT_USAGE.md
-  - Runbook: RUNBOOK.md
-  - Specs:
-      - Architecture: specs/ARCHITECTURE.md
-      - Contracts: specs/CONTRACTS.md
-      - Backtest: specs/BACKTEST_SPEC.md
-      - Strategy: specs/STRATEGY_SPEC.md
-      - Migration: specs/MIGRATION.md
-      - Consistency: specs/CONSISTENCY.md
-      - Indicators: specs/INDICATORS_SPEC.md
-      - Metrics: specs/METRICS_SPEC.md
-      - Report: specs/REPORT_SPEC.md
-  - Internal:
-      - Event Loop: internal/event-loop.md
-      - Matching: internal/matching-design.md
-      - Portfolio: internal/portfolio.md
-      - Agent Loop: internal/agent-loop.md
-  - Release:
-      - Evaluation: release/evaluation.md
-      - API Reference:
-          - Overview: api/reference.md
-          - Strategy Writing Guide: api/strategy.md
-          - Engine API Guide: api/engine.md
-          - Lite API Guide: api/lite.md
-          - Reference:
-              - Engine: api/reference/engine.md
-              - Lite: api/reference/lite.md
-              - Data: api/reference/data.md
-              - Indicators: api/reference/indicators.md
-              - Metrics: api/reference/metrics.md
-              - Factor: api/reference/factor.md
-              - Report: api/reference/report.md
-              - ML: api/reference/ml.md
+  - Home: README.md
+  - Quickstart: quickstart.md
+  - Concepts:
+      - 架构与边界: concepts/architecture.md
+      - Runtime 与 Runner: concepts/runtime.md
+      - Stats 结果对象: concepts/stats.md
+  - User Guide:
+      - Lite Guide: guides/lite.md
+      - Engine Guide: guides/engine.md
+      - Data Guide: guides/data.md
+      - Indicators Guide: guides/indicators.md
+      - Research Guide: guides/research.md
+      - Factor Guide: guides/factor.md
+      - Optimization Guide: guides/optimization.md
+      - Report / Plot Guide: guides/report.md
+      - MLflow / Lab / MCP: guides/mlflow-lab-mcp.md
+  - Benchmarks: benchmarks.md
+  - API Reference:
+      - Overview: api/reference.md
+      - Strategy Writing Guide: api/strategy.md
+      - Engine API Guide: api/engine.md
+      - Lite API Guide: api/lite.md
+      - Reference:
+          - Engine: api/reference/engine.md
+          - Lite: api/reference/lite.md
+          - Data: api/reference/data.md
+          - Indicators: api/reference/indicators.md
+          - Metrics: api/reference/metrics.md
+          - Factor: api/reference/factor.md
+          - Report: api/reference/report.md
+          - ML: api/reference/ml.md
+          - Research: api/reference/research.md
+  - Evaluation: release/evaluation.md

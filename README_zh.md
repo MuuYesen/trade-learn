@@ -6,13 +6,13 @@
   <strong>Python 写策略与投研流程，Rust 扛事件驱动回测内核。</strong>
 </p>
 
-trade-learn 是一个面向量化研究和事件驱动回测的 Python/Rust 框架：**Python 负责表达策略和投研流程，Rust 负责高频回测内核**。
+trade-learn 是一个面向量化交易研究、机器学习策略和事件驱动回测的 Python/Rust 框架：它保留 Python 在策略表达、因子研究和模型实验上的灵活性，同时用 Rust 承担撮合、订单推进和 portfolio 计算，把研究、回测、报告和实验追踪接成一条可复现的工作流。
 
 它想解决的不是“怎么跑一段回测”，而是把一条完整的策略研发链路接起来：
 
-```text
-数据 -> 指标 / 因子 -> 预处理 -> 选股 / 权重 -> 事件驱动回测 -> 报告 -> MLflow 追踪
-```
+<p align="center">
+  <img src="docs/research-flow.png" alt="trade-learn logo" width="100%" />
+</p>
 
 你可以像写 Backtrader 一样写专业策略，也可以用 Lite API 快速验证一个想法；可以接入 TDX、TA-Lib、TradingView、pandas-ta-classic 等指标生态，也可以把因子分析、因果特征筛选、Optuna 参数优化、组合权重、回测报告和实验记录放进同一条工作流。
 
