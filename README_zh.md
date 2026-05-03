@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/tradelearn-logo.png" alt="trade-learn logo" width="120" />
+</p>
+
 # trade-learn
 
 trade-learn 是一个面向量化研究和事件驱动回测的 Python/Rust 框架：**Python 负责表达策略和投研流程，Rust 负责高频回测内核**。
@@ -381,30 +385,30 @@ Lite 不是 Backtrader facade，它是更薄的策略语法层。Lite 与 Engine
 
 Lite 示例先验收“能否正确接入同一 runtime”。当前 smoke 覆盖 Lite 示例和组合示例，最近一次结果为 `5 passed`。
 
-Engine 示例进入 `benchmark_bt.py`，以 Backtrader 为 oracle 做严格数值审计。下表数值为 Tradelearn 与 Backtrader 对齐后的共同值：
+Engine 示例进入 `benchmark_bt.py`，以 Backtrader 为 oracle 做严格数值审计。表格中 `TL / BT` 分别表示 Tradelearn Engine 与 Backtrader：
 
-| 示例策略 | Final Value | Closed Trades | Closed PnL | 状态 |
-| --- | ---: | ---: | ---: | --- |
-| QuickstartSmaCross | 100026.14 | 16 | 26.14 | EXACT |
-| SmaCross | 99630.56 | 3 | -247.72 | EXACT |
-| MigratedSmaCross | 99997.70 | 21 | -2.30 | EXACT |
-| Turtle | 99995.64 | 8 | -4.36 | EXACT |
-| EnhancedRSI | 97875.79 | 6 | -2124.21 | EXACT |
-| BetterMA | 100000.00 | 0 | 0.00 | EXACT |
-| MacdTharp | 99998.98 | 2 | -1.02 | EXACT |
-| OrderExecutionStrategy | 99994.05 | 13 | -5.95 | EXACT |
+| 策略 | Final Value TL / BT | Closed Trades TL / BT | Closed PnL TL / BT | PnLComm TL / BT | 状态 |
+| --- | ---: | ---: | ---: | ---: | --- |
+| QuickstartSmaCross | 100026.14 / 100026.14 | 16 / 16 | 26.14 / 26.14 | 26.14 / 26.14 | EXACT |
+| SmaCross | 99630.56 / 99630.56 | 3 / 3 | -247.72 / -247.72 | -247.72 / -247.72 | EXACT |
+| MigratedSmaCross | 99997.70 / 99997.70 | 21 / 21 | -2.30 / -2.30 | -2.30 / -2.30 | EXACT |
+| Turtle | 99995.64 / 99995.64 | 8 / 8 | -4.36 / -4.36 | -4.36 / -4.36 | EXACT |
+| EnhancedRSI | 97875.79 / 97875.79 | 6 / 6 | -2124.21 / -2124.21 | -2124.21 / -2124.21 | EXACT |
+| BetterMA | 100000.00 / 100000.00 | 0 / 0 | 0.00 / 0.00 | 0.00 / 0.00 | EXACT |
+| MacdTharp | 99998.98 / 99998.98 | 2 / 2 | -1.02 / -1.02 | -1.02 / -1.02 | EXACT |
+| OrderExecutionStrategy | 99994.05 / 99994.05 | 13 / 13 | -5.95 / -5.95 | -5.95 / -5.95 | EXACT |
 
 #### 多标的组合示例
 
-多标的组合 / 指数增强策略也走同一条 Backtrader 对齐链路。`benchmark_bt.py --include-portfolio` 会同时审计目标权重、资产类别目标权重、等权、趋势过滤、反波动率等多数据策略。下表数值同样为 Tradelearn 与 Backtrader 对齐后的共同值：
+多标的组合 / 指数增强策略也走同一条 Backtrader 对齐链路。`benchmark_bt.py --include-portfolio` 会同时审计目标权重、资产类别目标权重、等权、趋势过滤、反波动率等多数据策略：
 
-| 多标的策略 | Final Value | Orders | 状态 |
-| --- | ---: | ---: | --- |
-| TargetPercentPortfolioStrategy | 104447.50 | 14 | EXACT |
-| AssetClassTargetPortfolioStrategy | 104003.95 | 21 | EXACT |
-| UniformAssetClassPortfolioStrategy | 104155.45 | 22 | EXACT |
-| TrendFilteredPortfolioStrategy | 103430.20 | 21 | EXACT |
-| InverseVolatilityPortfolioStrategy | 104410.00 | 9 | EXACT |
+| 多标的策略 | Final Value TL / BT | Orders TL / BT | Targets TL / BT | 状态 |
+| --- | ---: | ---: | ---: | --- |
+| TargetPercentPortfolioStrategy | 104447.50 / 104447.50 | 14 / 14 | 6 / 6 | EXACT |
+| AssetClassTargetPortfolioStrategy | 104003.95 / 104003.95 | 21 / 21 | 6 / 6 | EXACT |
+| UniformAssetClassPortfolioStrategy | 104155.45 / 104155.45 | 22 / 22 | 6 / 6 | EXACT |
+| TrendFilteredPortfolioStrategy | 103430.20 / 103430.20 | 21 / 21 | 6 / 6 | EXACT |
+| InverseVolatilityPortfolioStrategy | 104410.00 / 104410.00 | 9 / 9 | 6 / 6 | EXACT |
 
 严格门禁只比较 **Tradelearn Engine vs Backtrader**：两者使用相同的目标权重意图、相同的 sell-first 调仓顺序，并跳过最后一根 K 线上的 terminal rebalance。原因是 Backtrader 在最后一根 bar 上会返回订单对象，但没有后续生命周期去发出 Submitted / Accepted / Completed 通知；这类订单没有可比的完整撮合生命周期，不应计入正式订单数对齐。
 
