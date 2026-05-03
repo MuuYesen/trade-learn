@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="docs/tradelearn-logo.png" alt="trade-learn logo" width="260" />
+  <img src="docs/tradelearn-logo.png" alt="trade-learn logo" width="600" />
 </p>
-
-<h1 align="center">trade-learn</h1>
 
 <p align="center">
   <strong>Python 写策略与投研流程，Rust 扛事件驱动回测内核。</strong>
