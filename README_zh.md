@@ -271,15 +271,27 @@ Lite 不是 Backtrader facade，它是更薄的策略语法层。Lite 与 Engine
 | TrendFilteredPortfolioStrategy | 103430.20 | 103430.20 | 3.4x | 21 / 21 |
 | InverseVolatilityPortfolioStrategy | 104410.00 | 104410.00 | 2.9x | 9 / 9 |
 
-1000 标的、约 20 年日线、月频 top-50 目标权重策略的临时压力测试结果如下。这组用于观察大规模性能，不作为正式对齐门禁；当前三者最终权益和订单数尚未对齐，后续需要把它整理成正式 parity benchmark 后再纳入质量门禁。
+1000 标的、约 20 年日线、月频 top-50 目标权重策略已经固化为正式 parity benchmark。该场景总计 5,040,000 根 data bars，用于验证大规模多资产 `order_target_percent` / `target_weights` 的执行语义与吞吐。
 
-| 引擎 | 总 data bars | 总耗时 | bars/s | Final Value | Orders / Fills |
+严格门禁只比较 **Tradelearn Engine vs Backtrader**：两者使用相同的目标权重意图、相同的 sell-first 调仓顺序，并跳过最后一根 K 线上的 terminal rebalance。原因是 Backtrader 在最后一根 bar 上会返回订单对象，但没有后续生命周期去发出 Submitted / Accepted / Completed 通知；这类订单没有可比的完整撮合生命周期，不应计入正式订单数对齐。
+
+最近一次本机 1000 标的、20 年 benchmark 结果如下：
+
+| 引擎 | 总 data bars | 总耗时 | bars/s | Final Value | Completed / Submitted / Intents / Targets |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Tradelearn Lite | 5,040,000 | 30.14s | 167,209 | 3,065,979.65 | 23,799 |
-| Tradelearn Engine | 5,040,000 | 49.94s | 100,918 | 2,097,085.40 | 27,966 |
-| Backtrader | 5,040,000 | 257.03s | 19,609 | 2,847,745.54 | 18,353 |
+| Tradelearn Engine | 5,040,000 | 29.189s | 172,670 | 4,199,638.26 | 23,249 / 23,249 / 23,249 / 239 |
+| Backtrader | 5,040,000 | 282.660s | 17,831 | 4,199,638.26 | 23,249 / 23,249 / 23,249 / 239 |
 
-这组压力测试显示 Lite 约为 Backtrader 的 8.5x，Engine 约为 Backtrader 的 5.2x。差异主要来自大规模截面选股、排序、目标权重生成和订单提交仍在 Python 策略层；Rust 当前主要负责撮合、bar loop、订单推进和 portfolio。
+结论：Engine 与 Backtrader 在最终权益、完成订单数、提交订单数、目标意图数和 rebalance 次数上全部 `EXACT`；Engine 约为 Backtrader 的 **9.68x**。
+
+Lite 同规模结果作为 facade 吞吐参考，不参与 Backtrader 严格门禁：
+
+| 引擎 | 总 data bars | 总耗时 | bars/s | Final Value | Completed / Submitted / Intents / Targets |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Tradelearn Engine | 5,040,000 | 28.769s | 175,187 | 4,199,638.26 | 23,249 / 23,249 / 23,249 / 239 |
+| Tradelearn Lite | 5,040,000 | 29.646s | 170,005 | 4,200,582.18 | 23,715 / 23,715 / 23,715 / 239 |
+
+Lite 与 Engine 共用 backtest runtime 和 Rust 撮合内核，但 Lite 是更轻的 facade；大规模组合策略中，Lite 的目标权重语法层仍可能产生极小的订单口径差异。因此质量门禁以 Engine vs Backtrader 为准，Lite 侧重点是 API smoke、stats 字段一致性和吞吐表现。
 
 复现入口：
 
@@ -292,6 +304,10 @@ uv run python benchmarks/runners/benchmark_bt.py smart --repeat 1 --warmup 0 --i
 
 # Engine / Lite / Backtrader 吞吐与统计口径对比
 uv run python benchmarks/runners/benchmark_throughput.py --bars 550000 --repeat 1 --warmup 0
+
+# 1000 标的、20 年目标权重 parity benchmark
+uv run python benchmarks/runners/benchmark_target_weight_parity.py \
+  --symbols 1000 --bars 5040 --holdings 50 --rebalance-every 21 --no-lite
 ```
 
 ## 当前定位
