@@ -3,6 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.check_docs_completeness import check_docs_completeness
+from tradelearn.indicators import tdx, tv
+
+
+def _canonical_indicator_names(module: object) -> list[str]:
+    return sorted(
+        name
+        for name in getattr(module, "__all__", [])
+        if name.islower() and not name.startswith("_")
+    )
 
 
 def test_docs_completeness_requires_all_spec_pages_in_mkdocs_nav() -> None:
@@ -38,3 +47,15 @@ def test_chinese_readme_documents_runtime_boundaries_and_artifact_schema() -> No
     assert "artifact_kind=backtest" in text
     assert "破坏性变更必须提升 schema version" in text
     assert "不引入 action-dict / `next_multi()` 这类并列策略模型" in text
+
+
+def test_chinese_readme_lists_tdx_and_tv_indicator_names() -> None:
+    text = Path("README_zh.md").read_text(encoding="utf-8")
+
+    assert "均提供大小写兼容别名" in text
+    assert "tdx.MA` / `tdx.ma" in text
+    assert "tv.rsi` / `tv.RSI" in text
+    for name in _canonical_indicator_names(tdx):
+        assert f"`{name}`" in text
+    for name in _canonical_indicator_names(tv):
+        assert f"`{name}`" in text

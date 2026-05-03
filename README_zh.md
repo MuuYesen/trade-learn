@@ -495,8 +495,9 @@ panel = self.history_panel(lookback=20)
 
 当前覆盖边界：
 
-- `tdx`：TDX / MyTT 经典指标已覆盖 30+ 常用函数，并提供大小写兼容别名；TDX 仍可用，但不是海外数据工作流默认主路径。
-- `tv`：以 PyneCore common subset 为主，覆盖 30+ 常用 TradingView / Pine 风格指标；不是完整 TradingView/Pine 语言实现。少量 PyneCore 未直接覆盖的常用指标会保留本地 fallback，并通过 `COVERED_PYNECORE` 标记覆盖状态。
+- 命名规则：`tdx`、`talib`、`tv` 均提供大小写兼容别名。文档里的指标列表只写 canonical 名称，用户可以按自己习惯调用 `tdx.MA` / `tdx.ma`、`tv.rsi` / `tv.RSI`。
+- `tdx`：TDX / MyTT 经典指标已覆盖 30+ 常用函数，并提供大小写兼容别名；TDX 仍可用，但不是海外数据工作流默认主路径。当前 canonical 指标：`asi`, `atr`, `bbi`, `bias`, `boll`, `brar`, `cci`, `cr`, `dfma`, `dmi`, `dpo`, `ema`, `emv`, `expma`, `kdj`, `ktn`, `ma`, `macd`, `mass`, `mfi`, `mtm`, `obv`, `psy`, `roc`, `rsi`, `sma`, `taq`, `trix`, `vr`, `wma`, `wr`, `xsii`。
+- `tv`：以 PyneCore common subset 为主，覆盖 30+ 常用 TradingView / Pine 风格指标；不是完整 TradingView/Pine 语言实现。少量 PyneCore 未直接覆盖的常用指标会保留本地 fallback，并通过 `COVERED_PYNECORE` 标记覆盖状态。当前 canonical 指标：`adx`, `alma`, `atr`, `bb`, `bbands`, `bbw`, `cci`, `change`, `cmo`, `cum`, `dmi`, `ema`, `hma`, `ichimoku`, `kc`, `kcw`, `linreg`, `macd`, `mfi`, `mom`, `obv`, `rma`, `roc`, `rsi`, `sar`, `sma`, `stdev`, `stoch`, `supertrend`, `swma`, `tr`, `tsi`, `variance`, `vwap`, `wma`。
 
 ### 4. 因子分析
 
