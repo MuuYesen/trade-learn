@@ -118,7 +118,7 @@ nav:
       - 性能基线: benchmarks.md
       - 评估与竞品对比: release/evaluation.md
   - API 参考:
-      - 概览: api/reference.md
+      - Overview: api/reference.md
       - Lite: api/reference/lite.md
       - Engine: api/reference/engine.md
       - Data: api/reference/data.md

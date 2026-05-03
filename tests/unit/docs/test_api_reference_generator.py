@@ -19,9 +19,9 @@ def test_render_api_reference_is_readable_overview_not_module_dump() -> None:
     assert "## 先看这里" in rendered
     assert "## 公开模块" in rendered
     assert "| 模块 | 用途 | 常用入口 | 完整 Reference |" in rendered
-    assert "[Engine API Guide](../guides/engine-api.md)" in rendered
-    assert "[Lite API Guide](../guides/lite-api.md)" in rendered
-    assert "[Strategy Writing Guide](../guides/strategy.md)" in rendered
+    assert "[Engine API 签名](../guides/engine-api.md)" in rendered
+    assert "[Lite API 签名](../guides/lite-api.md)" in rendered
+    assert "[策略编写指南](../guides/strategy.md)" in rendered
     assert "[`tradelearn.engine`](reference/engine.md)" in rendered
     assert "## 按模块列出公开符号" in rendered
     assert "`Cerebro`" in rendered

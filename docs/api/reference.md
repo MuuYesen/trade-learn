@@ -8,9 +8,9 @@
 
 | 目标 | 阅读 |
 |---|---|
-| 编写 Tradelearn 1.x 风格轻量策略 | [Lite API Guide](../guides/lite-api.md) |
-| 编写 Backtrader 风格事件策略、Analyzer、Observer、Sizer | [Engine API Guide](../guides/engine-api.md) |
-| 从零编写策略并理解两种入口差异 | [Strategy Writing Guide](../guides/strategy.md) |
+| 编写 Tradelearn 1.x 风格轻量策略 | [Lite API 签名](../guides/lite-api.md) |
+| 编写 Backtrader 风格事件策略、Analyzer、Observer、Sizer | [Engine API 签名](../guides/engine-api.md) |
+| 从零编写策略并理解两种入口差异 | [策略编写指南](../guides/strategy.md) |
 | 查询精确类/函数签名和完整 docstring | 下方模块 Reference 链接 |
 
 ## 公开模块
@@ -68,9 +68,9 @@
 
 ## Generated Pages
 
-- [Lite API Guide](../guides/lite-api.md)
-- [Engine API Guide](../guides/engine-api.md)
-- [Strategy Writing Guide](../guides/strategy.md)
+- [Lite API 签名](../guides/lite-api.md)
+- [Engine API 签名](../guides/engine-api.md)
+- [策略编写指南](../guides/strategy.md)
 - [`tradelearn.lite`](reference/lite.md)
 - [`tradelearn.engine`](reference/engine.md)
 - [`tradelearn.data`](reference/data.md)
