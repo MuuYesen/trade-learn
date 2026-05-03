@@ -1,7 +1,11 @@
 :root {
   --tl-header: #536f78;
   --tl-header-sub: #5f7a83;
+  --tl-header-dark: #3f5962;
   --tl-border: #dfe7eb;
+  --md-primary-fg-color: var(--tl-header);
+  --md-primary-fg-color--light: var(--tl-header-sub);
+  --md-primary-fg-color--dark: var(--tl-header-dark);
 }
 
 .md-header,
@@ -28,6 +32,18 @@
 
 .md-main__inner {
   column-gap: 1.4rem;
+}
+
+@media screen and (max-width: 76.234375em) {
+  html .md-nav--primary .md-nav__title[for="__drawer"],
+  html .md-nav--primary .md-nav__title {
+    background-color: var(--tl-header);
+    color: #ffffff;
+  }
+
+  .md-nav__source {
+    background-color: var(--tl-header-dark);
+  }
 }
 
 @media screen and (min-width: 76.25em) {
