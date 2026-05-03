@@ -282,15 +282,30 @@ Lite 不是 Backtrader facade，它是更薄的策略语法层。Lite 与 Engine
 | 55 万 bar 单标的 SMA | Tradelearn Lite | 1.3253s | 414,990 | 27.9x | 118,399.33 | 10,299 / 5,149 |
 | 55 万 bar 单标的 SMA | Backtrader | 37.0270s | 14,854 | 1.0x | 118,399.33 | 10,299 / 5,149 |
 
+`examples/engine` 下的 Backtrader 风格示例会进入 `benchmark_bt.py` 做 oracle 审计。最近一次本机单次运行结果如下，全部最终权益对齐：
+
+| Engine 示例策略 | Tradelearn Value | Backtrader Value | Tradelearn Time | Backtrader Time | 加速比 | 状态 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| QuickstartSmaCross | 100026.14 | 100026.14 | 10.2ms | 17.4ms | 1.7x | EXACT |
+| SmaCross | 99630.56 | 99630.56 | 10.1ms | 15.9ms | 1.6x | EXACT |
+| MigratedSmaCross | 99997.70 | 99997.70 | 10.6ms | 18.6ms | 1.8x | EXACT |
+| Turtle | 99995.64 | 99995.64 | 14.5ms | 28.4ms | 2.0x | EXACT |
+| EnhancedRSI | 97875.79 | 97875.79 | 11.9ms | 23.4ms | 2.0x | EXACT |
+| BetterMA | 100000.00 | 100000.00 | 7.0ms | 15.4ms | 2.2x | EXACT |
+| MacdTharp | 99998.98 | 99998.98 | 18.0ms | 17.5ms | 1.0x | EXACT |
+| OrderExecutionStrategy | 99994.05 | 99994.05 | 18.9ms | 16.9ms | 0.9x | EXACT |
+
+`examples/lite` 不作为 Backtrader facade 逐策略对齐，但必须证明能正确接入同一 runtime。当前 smoke 覆盖 Lite 示例和组合示例，最近一次结果为 `5 passed`；Lite 的时间对比和统计口径主要看上方 55 万 bar 表与下方 1000 标的表。
+
 多标的组合 / 指数增强策略也走同一条 Backtrader 对齐链路。`benchmark_bt.py --include-portfolio` 会同时审计目标权重、资产类别目标权重、等权、趋势过滤、反波动率等多数据策略。最近一次本机审计结果如下，全部最终权益与订单数对齐：
 
-| 多标的策略 | Tradelearn Value | Backtrader Value | 相对 Backtrader | Orders |
-| --- | ---: | ---: | ---: | ---: |
-| TargetPercentPortfolioStrategy | 104447.50 | 104447.50 | 3.0x | 14 / 14 |
-| AssetClassTargetPortfolioStrategy | 104003.95 | 104003.95 | 3.2x | 21 / 21 |
-| UniformAssetClassPortfolioStrategy | 104155.45 | 104155.45 | 3.1x | 22 / 22 |
-| TrendFilteredPortfolioStrategy | 103430.20 | 103430.20 | 3.4x | 21 / 21 |
-| InverseVolatilityPortfolioStrategy | 104410.00 | 104410.00 | 2.9x | 9 / 9 |
+| 多标的策略 | Tradelearn Value | Backtrader Value | Tradelearn Time | Backtrader Time | 加速比 | Orders | 状态 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| TargetPercentPortfolioStrategy | 104447.50 | 104447.50 | 8.6ms | 26.8ms | 3.1x | 14 / 14 | EXACT |
+| AssetClassTargetPortfolioStrategy | 104003.95 | 104003.95 | 8.6ms | 27.8ms | 3.2x | 21 / 21 | EXACT |
+| UniformAssetClassPortfolioStrategy | 104155.45 | 104155.45 | 8.7ms | 27.0ms | 3.1x | 22 / 22 | EXACT |
+| TrendFilteredPortfolioStrategy | 103430.20 | 103430.20 | 8.4ms | 27.5ms | 3.3x | 21 / 21 | EXACT |
+| InverseVolatilityPortfolioStrategy | 104410.00 | 104410.00 | 8.4ms | 27.0ms | 3.2x | 9 / 9 | EXACT |
 
 1000 标的、约 20 年日线、月频 top-50 目标权重策略已经固化为正式 parity benchmark。该场景总计 5,040,000 根 data bars，用于验证大规模多资产 `order_target_percent` / `target_weights` 的执行语义与吞吐。
 
@@ -305,6 +320,14 @@ Lite 不是 Backtrader facade，它是更薄的策略语法层。Lite 与 Engine
 | 1000 标的 20 年 top-50 目标权重 | Backtrader | 5,040,000 | 286.538s | 17,589 | 1.0x | 4,199,638.26 | 23,249 / 23,249 / 23,249 / 239 |
 
 结论：Engine 与 Backtrader 在最终权益、完成订单数、提交订单数、目标意图数和 rebalance 次数上全部 `EXACT`；Engine 约为 Backtrader 的 **69.7x**，Lite 约为 **119.1x**。这组数据用于观察当前 multi-data Rust runner 主路径的上限，后续撮合优化继续用同一 benchmark 做对照。
+
+Rust runner 由 runtime 自动选择，用户不需要显式配置：
+
+| 场景 | 自动路径 | 触发条件 |
+| --- | --- | --- |
+| 单标的 | Rust single-data runner | `RustBroker` 已绑定 Rust engine，且只有 1 个 data feed |
+| 多标的 | `RustClockedMultiDataRunner` | `RustBroker` 已绑定 Rust engine，`len(cerebro.datas) > 1`，并且每个 feed 暴露 `_datetime/_open/_high/_low/_close/_volume` 数组 |
+| 自定义 feed / 非 Rust broker | Python fallback | 不满足上述数组协议或 broker 条件 |
 
 Lite 与 Engine 共用 backtest runtime 和 Rust 撮合内核。该 benchmark 中 Lite 与 Engine / Backtrader 的最终权益和订单生命周期计数也保持一致；质量门禁仍以 Engine vs Backtrader 为准，Lite 侧重点是 API smoke、stats 字段一致性和吞吐表现。
 
