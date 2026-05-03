@@ -86,7 +86,9 @@ markdown_extensions:
   - pymdownx.mark
 
 nav:
-  - Quickstart: quickstart.md
+  - Quickstart:
+      - Home: README.md
+      - Quickstart: quickstart.md
   - Concepts:
       - 架构与边界: concepts/architecture.md
       - Runtime 与 Runner: concepts/runtime.md

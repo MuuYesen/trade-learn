@@ -18,6 +18,7 @@ def test_docs_completeness_requires_current_public_navigation() -> None:
 def test_docs_navigation_keeps_lite_before_engine() -> None:
     report = check_docs_completeness(Path("."))
 
+    assert report.nav_paths.index("README.md") < report.nav_paths.index("quickstart.md")
     assert report.nav_paths.index("guides/lite.md") < report.nav_paths.index("guides/engine.md")
     assert report.nav_paths.index("guides/lite-api.md") < report.nav_paths.index(
         "guides/engine-api.md"

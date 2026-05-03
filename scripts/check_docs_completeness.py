@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 REQUIRED_GUIDE_PAGES = (
+    "README.md",
     "quickstart.md",
     "concepts/architecture.md",
     "concepts/runtime.md",

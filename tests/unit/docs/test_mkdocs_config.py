@@ -14,7 +14,10 @@ def test_mkdocs_material_config_targets_docs_dir() -> None:
     assert config["docs_dir"] == "docs"
     assert config["theme"]["name"] == "material"
     assert any(plugin == "mkdocstrings" or "mkdocstrings" in plugin for plugin in config["plugins"])
-    assert any(item == {"Quickstart": "quickstart.md"} for item in config["nav"])
+    assert any(
+        item == {"Quickstart": [{"Home": "README.md"}, {"Quickstart": "quickstart.md"}]}
+        for item in config["nav"]
+    )
     assert any("API Reference" in item for item in config["nav"])
 
 
