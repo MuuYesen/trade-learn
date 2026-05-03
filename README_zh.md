@@ -275,23 +275,17 @@ Lite 不是 Backtrader facade，它是更薄的策略语法层。Lite 与 Engine
 
 严格门禁只比较 **Tradelearn Engine vs Backtrader**：两者使用相同的目标权重意图、相同的 sell-first 调仓顺序，并跳过最后一根 K 线上的 terminal rebalance。原因是 Backtrader 在最后一根 bar 上会返回订单对象，但没有后续生命周期去发出 Submitted / Accepted / Completed 通知；这类订单没有可比的完整撮合生命周期，不应计入正式订单数对齐。
 
-最近一次本机 1000 标的、20 年 benchmark 结果如下：
+最近一次本机 1000 标的、20 年 benchmark 结果如下。当前主路径仍是 single-data Rust runner 加多数据 active-bar compact step，尚未启用完整 multi-data Rust runner：
 
 | 引擎 | 总 data bars | 总耗时 | bars/s | Final Value | Completed / Submitted / Intents / Targets |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Tradelearn Engine | 5,040,000 | 29.189s | 172,670 | 4,199,638.26 | 23,249 / 23,249 / 23,249 / 239 |
-| Backtrader | 5,040,000 | 282.660s | 17,831 | 4,199,638.26 | 23,249 / 23,249 / 23,249 / 239 |
+| Tradelearn Engine | 5,040,000 | 7.492s | 672,703 | 4,199,638.26 | 23,249 / 23,249 / 23,249 / 239 |
+| Tradelearn Lite | 5,040,000 | 5.896s | 854,797 | 4,199,638.26 | 23,249 / 23,249 / 23,249 / 239 |
+| Backtrader | 5,040,000 | 282.347s | 17,850 | 4,199,638.26 | 23,249 / 23,249 / 23,249 / 239 |
 
-结论：Engine 与 Backtrader 在最终权益、完成订单数、提交订单数、目标意图数和 rebalance 次数上全部 `EXACT`；Engine 约为 Backtrader 的 **9.68x**。
+结论：Engine 与 Backtrader 在最终权益、完成订单数、提交订单数、目标意图数和 rebalance 次数上全部 `EXACT`；Engine 约为 Backtrader 的 **37.69x**，Lite 约为 **47.89x**。这组数据用于观察当前 single-data runner 主路径的上限；后续完整 multi-data Rust runner 应继续以相同 benchmark 做对照。
 
-Lite 同规模结果作为 facade 吞吐参考，不参与 Backtrader 严格门禁：
-
-| 引擎 | 总 data bars | 总耗时 | bars/s | Final Value | Completed / Submitted / Intents / Targets |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Tradelearn Engine | 5,040,000 | 28.769s | 175,187 | 4,199,638.26 | 23,249 / 23,249 / 23,249 / 239 |
-| Tradelearn Lite | 5,040,000 | 29.646s | 170,005 | 4,200,582.18 | 23,715 / 23,715 / 23,715 / 239 |
-
-Lite 与 Engine 共用 backtest runtime 和 Rust 撮合内核，但 Lite 是更轻的 facade；大规模组合策略中，Lite 的目标权重语法层仍可能产生极小的订单口径差异。因此质量门禁以 Engine vs Backtrader 为准，Lite 侧重点是 API smoke、stats 字段一致性和吞吐表现。
+Lite 与 Engine 共用 backtest runtime 和 Rust 撮合内核。该 benchmark 中 Lite 与 Engine / Backtrader 的最终权益和订单生命周期计数也保持一致；质量门禁仍以 Engine vs Backtrader 为准，Lite 侧重点是 API smoke、stats 字段一致性和吞吐表现。
 
 复现入口：
 
