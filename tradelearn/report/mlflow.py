@@ -127,12 +127,12 @@ def _normalize_research_params(values: dict[str, Any]) -> dict[str, Any]:
         key_text = str(key)
         if key_text == "Pipeline.steps":
             target = "steps"
-        elif key_text.startswith("WeightBuilder.select."):
-            target = "select." + key_text.removeprefix("WeightBuilder.select.")
-        elif key_text.startswith("WeightBuilder.weight."):
-            target = "weight." + key_text.removeprefix("WeightBuilder.weight.")
-        elif key_text.startswith("WeightBuilder.constrain."):
-            target = "constraints." + key_text.removeprefix("WeightBuilder.constrain.")
+        elif key_text.startswith("Allocator.select."):
+            target = "select." + key_text.removeprefix("Allocator.select.")
+        elif key_text.startswith("Allocator.weight."):
+            target = "weight." + key_text.removeprefix("Allocator.weight.")
+        elif key_text.startswith("Allocator.constrain."):
+            target = "constraints." + key_text.removeprefix("Allocator.constrain.")
         elif key_text.startswith("select_top."):
             target = "select." + key_text.removeprefix("select_top.")
         elif key_text.startswith("equal_weight."):

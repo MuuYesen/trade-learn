@@ -13,7 +13,7 @@ from tradelearn.research.portfolio import (
     EqualWeight,
     Selector,
     TopK,
-    WeightBuilder,
+    Allocator,
     Weighter,
     apply_constraints,
     equal_weight,
@@ -421,7 +421,7 @@ def test_research_pipeline_accepts_transformer_protocol_without_inheritance() ->
     assert transformed["alpha"].tolist() == [2.0]
 
 
-def test_weight_builder_builds_panel_weights_from_scores() -> None:
+def test_allocator_builds_panel_weights_from_scores() -> None:
     scores = pd.Series(
         [0.1, 0.3, 0.4, 0.2],
         index=pd.MultiIndex.from_tuples(
@@ -437,7 +437,7 @@ def test_weight_builder_builds_panel_weights_from_scores() -> None:
     )
 
     with ResearchRun("weights") as run:
-        builder = WeightBuilder(
+        builder = Allocator(
             select=TopK(k=1),
             weight=EqualWeight(gross=0.9),
             constrain=Constraints(max_weight=0.8),
@@ -449,13 +449,13 @@ def test_weight_builder_builds_panel_weights_from_scores() -> None:
         (pd.Timestamp("2024-01-01", tz="UTC"), "BBB"): 0.8,
         (pd.Timestamp("2024-01-02", tz="UTC"), "AAA"): 0.8,
     }
-    assert [step.name for step in result.steps] == ["WeightBuilder"]
-    assert result.params["WeightBuilder.select.type"] == "TopK"
-    assert result.params["WeightBuilder.weight.type"] == "EqualWeight"
-    assert result.params["WeightBuilder.constrain.type"] == "Constraints"
+    assert [step.name for step in result.steps] == ["Allocator"]
+    assert result.params["Allocator.select.type"] == "TopK"
+    assert result.params["Allocator.weight.type"] == "EqualWeight"
+    assert result.params["Allocator.constrain.type"] == "Constraints"
 
 
-def test_weight_builder_accepts_protocol_components_without_inheritance() -> None:
+def test_allocator_accepts_protocol_components_without_inheritance() -> None:
     class FirstSelector:
         def select(self, scores):
             return [next(iter(scores))]
@@ -481,7 +481,7 @@ def test_weight_builder_accepts_protocol_components_without_inheritance() -> Non
     assert isinstance(FullWeight(), Weighter)
     assert isinstance(Cap(), Constraint)
 
-    weights = WeightBuilder(
+    weights = Allocator(
         select=FirstSelector(),
         weight=FullWeight(),
         constrain=Cap(),

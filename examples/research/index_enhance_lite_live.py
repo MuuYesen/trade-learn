@@ -35,7 +35,7 @@ class LiteLiveIndexEnhance(tl.Strategy):
     rebalance_bars = 20
     runtime_pipeline = None
     scorer = None
-    weight_builder = None
+    allocator = None
 
     def init(self) -> None:
         self.start_on_bar(self.lookback + 1)
@@ -49,7 +49,7 @@ class LiteLiveIndexEnhance(tl.Strategy):
             return
 
         scores = self.scorer.predict(features)
-        weights = self.weight_builder.build(scores)
+        weights = self.allocator.build(scores)
         self.target_weights(weights, close_missing=True)
 
 
@@ -125,7 +125,7 @@ if __name__ == "__main__":
 
     runtime_pipeline = research.Pipeline([feature_set, preprocess])
     scorer = research.ModelScorer(model, features=("alpha",))
-    weight_builder = pf.WeightBuilder(
+    allocator = pf.Allocator(
         select=pf.TopK(k=2),
         weight=pf.EqualWeight(gross=0.95),
         constrain=pf.Constraints(max_weight=0.5, normalize=True),
@@ -145,7 +145,7 @@ if __name__ == "__main__":
         history_window=lookback + 1,
         runtime_pipeline=runtime_pipeline,
         scorer=scorer,
-        weight_builder=weight_builder,
+        allocator=allocator,
     )
     report_path = backtest.report(output_dir / "report.html")
 

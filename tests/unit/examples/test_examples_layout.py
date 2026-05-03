@@ -73,7 +73,7 @@ def test_research_examples_cover_lite_and_engine_workflows() -> None:
         assert ".transform(test_features" in source
         if name in pipeline_expected:
             assert "research.Pipeline" in source
-            assert "pf.WeightBuilder" in source
+            assert "pf.Allocator" in source
             assert "pf.TopK" in source
             assert "pf.EqualWeight" in source
             assert "pf.Constraints" in source
@@ -118,7 +118,7 @@ def test_lite_live_research_example_keeps_inference_inside_strategy() -> None:
     assert "GradientBoostingRegressor" in source
     assert "research.FeatureSet" in source
     assert "research.ModelScorer" in source
-    assert "pf.WeightBuilder" in source
+    assert "pf.Allocator" in source
     assert "research_result.weights[0]" not in source
     assert _contains_call(strategy, "transform")
     assert _contains_call(strategy, "predict")
@@ -144,7 +144,7 @@ def test_engine_live_research_example_keeps_inference_inside_strategy() -> None:
     assert "GradientBoostingRegressor" in source
     assert "research.FeatureSet" in source
     assert "research.ModelScorer" in source
-    assert "pf.WeightBuilder" in source
+    assert "pf.Allocator" in source
     assert "research_result.weights[0]" not in source
     assert "class EngineLiveIndexEnhance(bt.Strategy)" in source
     assert "target=weights.get(data._name)" in source

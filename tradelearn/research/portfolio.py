@@ -365,7 +365,7 @@ class Constraints:
         }
 
 
-class WeightBuilder:
+class Allocator:
     """Build portfolio weights from scores with object-style components."""
 
     def __init__(
@@ -381,7 +381,7 @@ class WeightBuilder:
 
     def build(self, scores: Mapping[Hashable, float] | pd.Series) -> pd.Series:
         """Build target weights from scores."""
-        _record_weight_builder_step(self)
+        _record_allocator_step(self)
         with suspend_tracking():
             selected = self.select.select(scores)
             weights = self.weight.allocate(selected)
@@ -408,10 +408,10 @@ def _component_params(prefix: str, component: Any) -> dict[str, Any]:
     return {f"{prefix}.{key}": value for key, value in raw.items()}
 
 
-def _record_weight_builder_step(builder: WeightBuilder) -> None:
+def _record_allocator_step(builder: Allocator) -> None:
     run = current_run()
     if run is not None:
-        run.record_step("WeightBuilder", "portfolio", builder.get_params())
+        run.record_step("Allocator", "portfolio", builder.get_params())
 
 
 class RiskfolioOptimizer:
@@ -522,7 +522,7 @@ __all__ = [
     "RiskfolioOptimizer",
     "Selector",
     "TopK",
-    "WeightBuilder",
+    "Allocator",
     "Weighter",
     "apply_constraints",
     "equal_weight",

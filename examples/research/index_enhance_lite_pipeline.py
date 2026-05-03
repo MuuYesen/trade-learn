@@ -104,7 +104,7 @@ if __name__ == "__main__":
             test_features
         )
 
-        weights = pf.WeightBuilder(
+        weights = pf.Allocator(
             select=pf.TopK(k=2),
             weight=pf.EqualWeight(gross=0.95),
             constrain=pf.Constraints(max_weight=0.5, normalize=True),

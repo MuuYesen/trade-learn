@@ -37,7 +37,7 @@ class EngineLiveIndexEnhance(bt.Strategy):
         ("rebalance_bars", 20),
         ("runtime_pipeline", None),
         ("scorer", None),
-        ("weight_builder", None),
+        ("allocator", None),
     )
 
     def __init__(self) -> None:
@@ -53,7 +53,7 @@ class EngineLiveIndexEnhance(bt.Strategy):
             return
 
         scores = self.p.scorer.predict(features)
-        weights = self.p.weight_builder.build(scores)
+        weights = self.p.allocator.build(scores)
         for data in self.datas:
             self.order_target_percent(
                 data=data,
@@ -133,7 +133,7 @@ if __name__ == "__main__":
 
     runtime_pipeline = research.Pipeline([feature_set, preprocess])
     scorer = research.ModelScorer(model, features=("alpha",))
-    weight_builder = pf.WeightBuilder(
+    allocator = pf.Allocator(
         select=pf.TopK(k=2),
         weight=pf.EqualWeight(gross=0.95),
         constrain=pf.Constraints(max_weight=0.5, normalize=True),
@@ -151,7 +151,7 @@ if __name__ == "__main__":
         history_window=lookback + 1,
         runtime_pipeline=runtime_pipeline,
         scorer=scorer,
-        weight_builder=weight_builder,
+        allocator=allocator,
         rebalance_bars=20,
     )
 
