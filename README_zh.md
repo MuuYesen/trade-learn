@@ -353,56 +353,58 @@ Lite 不是 Backtrader facade，它是更薄的策略语法层。Lite 与 Engine
 
 ### 大样本性能
 
-| 场景 | 引擎 | 耗时 | bars/s | 加速比 | Final Value | Fills | Closed Trades |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 55 万 bar 单标的 SMA | Tradelearn Lite | 1.3253s | 414,990 | 27.9x | 118,399.33 | 10,299 | 5,149 |
-| 55 万 bar 单标的 SMA | Tradelearn Engine | 3.3767s | 162,883 | 11.0x | 118,399.33 | 10,299 | 5,149 |
-| 55 万 bar 单标的 SMA | Backtrader | 37.0270s | 14,854 | 1.0x | 118,399.33 | 10,299 | 5,149 |
+本机基线只看两个问题：结果是否对齐、吞吐是否明显快于 Backtrader。
 
-1000 标的、约 20 年日线、月频 top-50 目标权重策略已经固化为正式 parity benchmark。该场景总计 5,040,000 根 data bars，用于验证大规模多资产 `order_target_percent` / `target_weights` 的执行语义与吞吐。
+**55 万 bar 单标的 SMA**
 
-| 场景 | 引擎 | 总 data bars | 耗时 | bars/s | 加速比 | Final Value | Completed | Submitted | Intents | Targets |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1000 标的 20 年 top-50 目标权重 | Tradelearn Lite | 5,040,000 | 2.407s | 2,094,237 | 119.1x | 4,199,638.26 | 23,249 | 23,249 | 23,249 | 239 |
-| 1000 标的 20 年 top-50 目标权重 | Tradelearn Engine | 5,040,000 | 4.112s | 1,225,594 | 69.7x | 4,199,638.26 | 23,249 | 23,249 | 23,249 | 239 |
-| 1000 标的 20 年 top-50 目标权重 | Backtrader | 5,040,000 | 286.538s | 17,589 | 1.0x | 4,199,638.26 | 23,249 | 23,249 | 23,249 | 239 |
+| 引擎 | 耗时 | bars/s | 加速比 | Final Value | Fills | Closed Trades |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Tradelearn Lite | 1.3253s | 414,990 | 27.9x | 118,399.33 | 10,299 | 5,149 |
+| Tradelearn Engine | 3.3767s | 162,883 | 11.0x | 118,399.33 | 10,299 | 5,149 |
+| Backtrader | 37.0270s | 14,854 | 1.0x | 118,399.33 | 10,299 | 5,149 |
 
-结论：Engine 与 Backtrader 在最终权益、完成订单数、提交订单数、目标意图数和 rebalance 次数上全部 `EXACT`；Engine 约为 Backtrader 的 **69.7x**，Lite 约为 **119.1x**。这组数据用于观察当前 multi-data Rust runner 主路径的上限。
+**1000 标的、约 20 年、月频 top-50 目标权重**
 
-这些数字是当前本机基线，不作为跨机器的绝对性能承诺；正式质量门禁仍然是 Engine 与 Backtrader 的最终权益、订单生命周期和交易明细保持 `EXACT`。Lite 的速度优势来自更薄的 Python facade 与同一套 Rust runtime，而不是另一套撮合语义。
+该场景总计 5,040,000 根 data bars，用于验证大规模多资产 `order_target_percent` / `target_weights` 的执行语义与吞吐。
+
+| 引擎 | 耗时 | bars/s | 加速比 | Final Value | Completed Orders | Target Intents | Targets |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Tradelearn Lite | 2.407s | 2,094,237 | 119.1x | 4,199,638.26 | 23,249 | 23,249 | 239 |
+| Tradelearn Engine | 4.112s | 1,225,594 | 69.7x | 4,199,638.26 | 23,249 | 23,249 | 239 |
+| Backtrader | 286.538s | 17,589 | 1.0x | 4,199,638.26 | 23,249 | 23,249 | 239 |
+
+结论：Engine 与 Backtrader 在最终权益、完成订单数、目标意图数和 rebalance 次数上全部 `EXACT`；Engine 约为 Backtrader 的 **69.7x**，Lite 约为 **119.1x**。这些数字不作为跨机器的绝对性能承诺；正式质量门禁仍然是 Engine 与 Backtrader 的订单生命周期和交易明细保持 `EXACT`。
 
 ### Examples 对齐审计
 
-examples 的 K 线数量较小，时间对比不稳定，因此这里不展示耗时，只展示具体对齐值和最终结论。
-
 #### 单标的示例
 
-Lite 示例先验收“能否正确接入同一 runtime”。当前 smoke 覆盖 Lite 示例和组合示例，最近一次结果为 `5 passed`；具体大样本数值看上方 55 万 bar 表。
+Lite 示例先验收“能否正确接入同一 runtime”。当前 smoke 覆盖 Lite 示例和组合示例，最近一次结果为 `5 passed`。
 
-Engine 示例进入 `benchmark_bt.py`，以 Backtrader 为 oracle 做严格数值审计：
+Engine 示例进入 `benchmark_bt.py`，以 Backtrader 为 oracle 做严格数值审计。下表数值为 Tradelearn 与 Backtrader 对齐后的共同值：
 
-| 示例策略 | Tradelearn Final Value | Backtrader Final Value | Tradelearn Closed Trades | Backtrader Closed Trades | Tradelearn Closed PnL | Backtrader Closed PnL | 状态 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| QuickstartSmaCross | 100026.14 | 100026.14 | 16 | 16 | 26.14 | 26.14 | EXACT |
-| SmaCross | 99630.56 | 99630.56 | 3 | 3 | -247.72 | -247.72 | EXACT |
-| MigratedSmaCross | 99997.70 | 99997.70 | 21 | 21 | -2.30 | -2.30 | EXACT |
-| Turtle | 99995.64 | 99995.64 | 8 | 8 | -4.36 | -4.36 | EXACT |
-| EnhancedRSI | 97875.79 | 97875.79 | 6 | 6 | -2124.21 | -2124.21 | EXACT |
-| BetterMA | 100000.00 | 100000.00 | 0 | 0 | 0.00 | 0.00 | EXACT |
-| MacdTharp | 99998.98 | 99998.98 | 2 | 2 | -1.02 | -1.02 | EXACT |
-| OrderExecutionStrategy | 99994.05 | 99994.05 | 13 | 13 | -5.95 | -5.95 | EXACT |
+| 示例策略 | Final Value | Closed Trades | Closed PnL | 状态 |
+| --- | ---: | ---: | ---: | --- |
+| QuickstartSmaCross | 100026.14 | 16 | 26.14 | EXACT |
+| SmaCross | 99630.56 | 3 | -247.72 | EXACT |
+| MigratedSmaCross | 99997.70 | 21 | -2.30 | EXACT |
+| Turtle | 99995.64 | 8 | -4.36 | EXACT |
+| EnhancedRSI | 97875.79 | 6 | -2124.21 | EXACT |
+| BetterMA | 100000.00 | 0 | 0.00 | EXACT |
+| MacdTharp | 99998.98 | 2 | -1.02 | EXACT |
+| OrderExecutionStrategy | 99994.05 | 13 | -5.95 | EXACT |
 
 #### 多标的组合示例
 
-多标的组合 / 指数增强策略也走同一条 Backtrader 对齐链路。`benchmark_bt.py --include-portfolio` 会同时审计目标权重、资产类别目标权重、等权、趋势过滤、反波动率等多数据策略。最近一次本机审计结果如下，全部最终权益与订单数对齐：
+多标的组合 / 指数增强策略也走同一条 Backtrader 对齐链路。`benchmark_bt.py --include-portfolio` 会同时审计目标权重、资产类别目标权重、等权、趋势过滤、反波动率等多数据策略。下表数值同样为 Tradelearn 与 Backtrader 对齐后的共同值：
 
-| 多标的策略 | Tradelearn Final Value | Backtrader Final Value | Tradelearn Orders | Backtrader Orders | 状态 |
-| --- | ---: | ---: | ---: | ---: | --- |
-| TargetPercentPortfolioStrategy | 104447.50 | 104447.50 | 14 | 14 | EXACT |
-| AssetClassTargetPortfolioStrategy | 104003.95 | 104003.95 | 21 | 21 | EXACT |
-| UniformAssetClassPortfolioStrategy | 104155.45 | 104155.45 | 22 | 22 | EXACT |
-| TrendFilteredPortfolioStrategy | 103430.20 | 103430.20 | 21 | 21 | EXACT |
-| InverseVolatilityPortfolioStrategy | 104410.00 | 104410.00 | 9 | 9 | EXACT |
+| 多标的策略 | Final Value | Orders | 状态 |
+| --- | ---: | ---: | --- |
+| TargetPercentPortfolioStrategy | 104447.50 | 14 | EXACT |
+| AssetClassTargetPortfolioStrategy | 104003.95 | 21 | EXACT |
+| UniformAssetClassPortfolioStrategy | 104155.45 | 22 | EXACT |
+| TrendFilteredPortfolioStrategy | 103430.20 | 21 | EXACT |
+| InverseVolatilityPortfolioStrategy | 104410.00 | 9 | EXACT |
 
 严格门禁只比较 **Tradelearn Engine vs Backtrader**：两者使用相同的目标权重意图、相同的 sell-first 调仓顺序，并跳过最后一根 K 线上的 terminal rebalance。原因是 Backtrader 在最后一根 bar 上会返回订单对象，但没有后续生命周期去发出 Submitted / Accepted / Completed 通知；这类订单没有可比的完整撮合生命周期，不应计入正式订单数对齐。
 
