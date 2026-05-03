@@ -379,28 +379,28 @@ Lite 示例先验收“能否正确接入同一 runtime”。当前 smoke 覆盖
 
 Engine 示例进入 `benchmark_bt.py`，以 Backtrader 为 oracle 做严格数值审计：
 
-| Engine 示例策略 | Tradelearn Final Value | Backtrader Final Value | 对齐指标 | 状态 |
-| --- | ---: | ---: | --- | --- |
-| QuickstartSmaCross | 100026.14 | 100026.14 | Final Value / Closed Trades / PnL | EXACT |
-| SmaCross | 99630.56 | 99630.56 | Final Value / Closed Trades / PnL | EXACT |
-| MigratedSmaCross | 99997.70 | 99997.70 | Final Value / Closed Trades / PnL | EXACT |
-| Turtle | 99995.64 | 99995.64 | Final Value / Closed Trades / PnL | EXACT |
-| EnhancedRSI | 97875.79 | 97875.79 | Final Value / Closed Trades / PnL | EXACT |
-| BetterMA | 100000.00 | 100000.00 | Final Value / Closed Trades / PnL | EXACT |
-| MacdTharp | 99998.98 | 99998.98 | Final Value / Closed Trades / PnL | EXACT |
-| OrderExecutionStrategy | 99994.05 | 99994.05 | Final Value / Closed Trades / PnL | EXACT |
+| Engine 示例策略 | Final Value TL/BT | Closed Trades TL/BT | Closed PnL TL/BT | 状态 |
+| --- | ---: | ---: | ---: | --- |
+| QuickstartSmaCross | 100026.14 / 100026.14 | 16 / 16 | 26.14 / 26.14 | EXACT |
+| SmaCross | 99630.56 / 99630.56 | 3 / 3 | -247.72 / -247.72 | EXACT |
+| MigratedSmaCross | 99997.70 / 99997.70 | 21 / 21 | -2.30 / -2.30 | EXACT |
+| Turtle | 99995.64 / 99995.64 | 8 / 8 | -4.36 / -4.36 | EXACT |
+| EnhancedRSI | 97875.79 / 97875.79 | 6 / 6 | -2124.21 / -2124.21 | EXACT |
+| BetterMA | 100000.00 / 100000.00 | 0 / 0 | 0.00 / 0.00 | EXACT |
+| MacdTharp | 99998.98 / 99998.98 | 2 / 2 | -1.02 / -1.02 | EXACT |
+| OrderExecutionStrategy | 99994.05 / 99994.05 | 13 / 13 | -5.95 / -5.95 | EXACT |
 
 #### 多标的组合示例
 
 多标的组合 / 指数增强策略也走同一条 Backtrader 对齐链路。`benchmark_bt.py --include-portfolio` 会同时审计目标权重、资产类别目标权重、等权、趋势过滤、反波动率等多数据策略。最近一次本机审计结果如下，全部最终权益与订单数对齐：
 
-| 多标的策略 | Tradelearn Final Value | Backtrader Final Value | Orders | 状态 |
-| --- | ---: | ---: | ---: | --- |
-| TargetPercentPortfolioStrategy | 104447.50 | 104447.50 | 14 / 14 | EXACT |
-| AssetClassTargetPortfolioStrategy | 104003.95 | 104003.95 | 21 / 21 | EXACT |
-| UniformAssetClassPortfolioStrategy | 104155.45 | 104155.45 | 22 / 22 | EXACT |
-| TrendFilteredPortfolioStrategy | 103430.20 | 103430.20 | 21 / 21 | EXACT |
-| InverseVolatilityPortfolioStrategy | 104410.00 | 104410.00 | 9 / 9 | EXACT |
+| 多标的策略 | Final Value TL/BT | Orders TL/BT | 状态 |
+| --- | ---: | ---: | --- |
+| TargetPercentPortfolioStrategy | 104447.50 / 104447.50 | 14 / 14 | EXACT |
+| AssetClassTargetPortfolioStrategy | 104003.95 / 104003.95 | 21 / 21 | EXACT |
+| UniformAssetClassPortfolioStrategy | 104155.45 / 104155.45 | 22 / 22 | EXACT |
+| TrendFilteredPortfolioStrategy | 103430.20 / 103430.20 | 21 / 21 | EXACT |
+| InverseVolatilityPortfolioStrategy | 104410.00 / 104410.00 | 9 / 9 | EXACT |
 
 严格门禁只比较 **Tradelearn Engine vs Backtrader**：两者使用相同的目标权重意图、相同的 sell-first 调仓顺序，并跳过最后一根 K 线上的 terminal rebalance。原因是 Backtrader 在最后一根 bar 上会返回订单对象，但没有后续生命周期去发出 Submitted / Accepted / Completed 通知；这类订单没有可比的完整撮合生命周期，不应计入正式订单数对齐。
 
