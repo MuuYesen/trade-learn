@@ -47,6 +47,9 @@ def test_write_artifact_bundle_writes_tables_report_plot_and_weights(tmp_path) -
     }.issubset(names)
     assert not (tmp_path / "csv").exists()
     assert (tmp_path / "artifacts.xlsx").is_file()
+    metadata = pd.read_csv(tmp_path / "metadata.csv").set_index("key")["value"]
+    assert metadata["artifact_schema_version"] == "1.0"
+    assert metadata["artifact_kind"] == "backtest"
     weights_csv = pd.read_csv(tmp_path / "weights.csv").set_index("symbol")["weight"]
     assert weights_csv.to_dict() == {"AAA": 0.6, "BBB": 0.4}
     trades_csv = pd.read_csv(tmp_path / "trades.csv")

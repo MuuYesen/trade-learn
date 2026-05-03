@@ -118,6 +118,7 @@ def test_mlflow_analyzer_logs_params_stats_and_artifacts() -> None:
     assert sorted(name for name, _ in fake.artifacts) == [
         "artifacts.xlsx",
         "equity.csv",
+        "metadata.csv",
         "report.html",
         "summary.csv",
         "trades.csv",

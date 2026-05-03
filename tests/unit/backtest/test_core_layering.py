@@ -3,6 +3,37 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+
+BOUNDARY_RULES = [
+    (
+        "platform core stays neutral",
+        "tradelearn/core",
+        ("tradelearn.backtest", "tradelearn.engine", "tradelearn.lite"),
+    ),
+    (
+        "backtest runtime does not import user facades",
+        "tradelearn/backtest",
+        ("tradelearn.engine", "tradelearn.lite"),
+    ),
+    (
+        "backtest runtime does not import research layer",
+        "tradelearn/backtest",
+        ("tradelearn.research",),
+    ),
+    (
+        "lite facade does not import engine facade",
+        "tradelearn/lite",
+        ("tradelearn.engine",),
+    ),
+    (
+        "engine facade does not import lite facade",
+        "tradelearn/engine",
+        ("tradelearn.lite",),
+    ),
+]
+
 
 def _find_import_offenders(root: Path, forbidden_prefixes: tuple[str, ...]) -> list[str]:
     offenders: list[str] = []
@@ -37,6 +68,19 @@ def test_import_boundary_scanner_ignores_comments(tmp_path: Path) -> None:
     )
 
     assert _find_import_offenders(tmp_path, ("tradelearn.engine", "tradelearn.backtest")) == []
+
+
+@pytest.mark.parametrize(("name", "root_path", "forbidden"), BOUNDARY_RULES)
+def test_import_boundaries_are_enforced_by_rule_table(
+    name: str,
+    root_path: str,
+    forbidden: tuple[str, ...],
+) -> None:
+    root = Path(__file__).parents[3]
+
+    offenders = _find_import_offenders(root / root_path, forbidden)
+
+    assert offenders == [], name
 
 
 def test_core_layer_does_not_import_facades() -> None:

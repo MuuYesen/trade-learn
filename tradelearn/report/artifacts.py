@@ -12,6 +12,9 @@ from bokeh.resources import INLINE
 
 from tradelearn.report.reporter import Reporter
 
+ARTIFACT_SCHEMA_VERSION = "1.0"
+ARTIFACT_KIND = "backtest"
+
 
 def write_artifact_bundle(
     stats: Any,
@@ -99,7 +102,14 @@ def _artifact_sheets(
     *,
     benchmark: pd.Series | None = None,
 ) -> dict[str, pd.DataFrame]:
-    sheets: dict[str, pd.DataFrame] = {}
+    sheets: dict[str, pd.DataFrame] = {
+        "metadata": pd.DataFrame(
+            [
+                {"key": "artifact_schema_version", "value": ARTIFACT_SCHEMA_VERSION},
+                {"key": "artifact_kind", "value": ARTIFACT_KIND},
+            ]
+        )
+    }
     reporter = Reporter(stats)
     summary = _stats_field(stats, "summary", {})
     if summary:

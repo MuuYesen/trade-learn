@@ -115,6 +115,7 @@ def test_lite_log_mlflow_logs_stats_config_params_and_artifacts() -> None:
         "artifacts.xlsx",
         "equity.csv",
         "fills.csv",
+        "metadata.csv",
         "positions.csv",
         "summary.csv",
         "trades.csv",
