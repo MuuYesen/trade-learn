@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-
-from tradelearn import metrics
+import tradelearn.metrics as metrics
 
 
 def monthly_returns_matrix(returns: pd.Series) -> pd.DataFrame:

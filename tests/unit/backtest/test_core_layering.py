@@ -56,6 +56,14 @@ def test_core_layer_does_not_import_facades() -> None:
     assert offenders == []
 
 
+def test_backtest_runtime_does_not_import_research_layer() -> None:
+    root = Path(__file__).parents[3]
+    backtest_root = root / "tradelearn" / "backtest"
+    offenders = _find_import_offenders(backtest_root, ("tradelearn.research",))
+
+    assert offenders == []
+
+
 def test_platform_core_does_not_import_backtest_or_facades() -> None:
     root = Path(__file__).parents[3]
     platform_core = root / "tradelearn" / "core"

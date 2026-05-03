@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-import tradelearn as bt
+import tradelearn as tl
+import tradelearn.engine as bt
 
 
 def _ohlcv(rows: int = 12) -> pd.DataFrame:
@@ -39,10 +40,9 @@ def test_backtrader_facade_exports_common_surface() -> None:
         assert hasattr(bt, name)
 
 
-def test_root_timeframe_alias_points_to_backtrader_facade() -> None:
-    from tradelearn.engine import TimeFrame
-
-    assert bt.TimeFrame is TimeFrame
+def test_root_namespace_does_not_proxy_engine_strategy_surface() -> None:
+    for name in ("Cerebro", "Strategy", "Order", "TimeFrame", "feeds", "analyzers"):
+        assert not hasattr(tl, name)
 
 
 def test_cerebro_exposes_runtime_compat_methods() -> None:

@@ -6,7 +6,7 @@ import logging
 import pandas as pd
 import pytest
 
-import tradelearn as tl
+import tradelearn.lite as tl
 import tradelearn.engine as bt
 from tradelearn.lite import Backtest, Strategy
 from tradelearn.lite.backtest import _can_skip_normalize_data
@@ -344,10 +344,10 @@ def test_lite_records_are_exposed_from_run_result() -> None:
 
 
 def test_lite_does_not_export_trading_signal_api() -> None:
-    assert "Signal" not in tl.lite.__all__
-    assert "SignalStrategy" not in tl.lite.__all__
-    assert not hasattr(tl.lite, "Signal")
-    assert not hasattr(tl.lite, "SignalStrategy")
+    assert "Signal" not in tl.__all__
+    assert "SignalStrategy" not in tl.__all__
+    assert not hasattr(tl, "Signal")
+    assert not hasattr(tl, "SignalStrategy")
 
 
 def test_lite_rejects_sl_tp_until_bracket_orders_are_implemented() -> None:

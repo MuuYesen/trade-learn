@@ -5,7 +5,6 @@ from typing import Any
 
 from tradelearn.backtest.models import Order, Position
 from tradelearn.backtest.targets import TargetWeightSnapshot, build_target_weight_intents
-from tradelearn.research.run import bind_research_result
 
 
 class Strategy:
@@ -42,10 +41,19 @@ class Strategy:
 
     @research_result.setter
     def research_result(self, result: Any) -> None:
-        bound = bind_research_result(result, self) if result is not None else None
+        bound = self._bind_research_result(result) if result is not None else None
         self._research_result = bound
         if bound is not None:
             self._append_research_result(bound)
+
+    def _bind_research_result(self, result: Any) -> Any:
+        """Adapt research results for strategy-time access.
+
+        The core backtest runtime deliberately does not import the research
+        layer. User facades that support ResearchResult binding override this
+        hook.
+        """
+        return result
 
     def start(self):
         pass

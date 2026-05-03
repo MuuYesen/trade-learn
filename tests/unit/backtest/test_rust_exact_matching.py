@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import tradelearn as tl
+import tradelearn.lite as tl
 from tradelearn import _rust
 from tradelearn.backtest import broker as broker_module
 from tradelearn.backtest.broker import RustBroker

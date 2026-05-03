@@ -1,5 +1,5 @@
 
-import tradelearn as bt
+import tradelearn.engine as bt
 import pandas as pd
 import numpy as np
 

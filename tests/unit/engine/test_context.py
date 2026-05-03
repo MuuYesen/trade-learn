@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import tradelearn as bt
+import tradelearn.engine as bt
 from tradelearn.engine.base import _G, engine_context
 
 

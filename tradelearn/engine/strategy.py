@@ -37,6 +37,11 @@ class Strategy(_BaseStrategy, LineRoot):
         research_result = getattr(getattr(self, "p", None), "research_result", None)
         if research_result is not None:
             self.research_result = research_result
+
+    def _bind_research_result(self, result):
+        from tradelearn.research.run import bind_research_result
+
+        return bind_research_result(result, self)
         
     @property
     def datetime(self):

@@ -52,6 +52,11 @@ class Strategy(CoreStrategy):
         self._start_on_day = 0
         self._lite_target_size_by_data: dict[Any, float] = {}
 
+    def _bind_research_result(self, result: Any) -> Any:
+        from tradelearn.research.run import bind_research_result
+
+        return bind_research_result(result, self)
+
     def _check_params(self, params: dict[str, Any]) -> dict[str, Any]:
         for key, value in params.items():
             if not hasattr(self, key):

@@ -8,8 +8,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-
-from tradelearn import metrics
+import tradelearn.metrics as metrics
 from tradelearn.core import get_logger
 from tradelearn.report import charts
 from tradelearn.report.analytics import (
