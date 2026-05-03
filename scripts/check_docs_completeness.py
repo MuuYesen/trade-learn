@@ -1,4 +1,4 @@
-"""Check release documentation coverage against the mkdocs navigation."""
+"""Check that the public documentation site exposes the expected pages."""
 
 from __future__ import annotations
 
@@ -9,30 +9,75 @@ from typing import Any
 
 import yaml
 
-REQUIRED_RELEASE_PAGES = ("README.md", "PROJECT.md", "RUNBOOK.md")
-REQUIRED_INTERNAL_NAV = (
-    "internal/event-loop.md",
-    "internal/matching-design.md",
-    "internal/portfolio.md",
+REQUIRED_GUIDE_PAGES = (
+    "quickstart.md",
+    "concepts/architecture.md",
+    "concepts/runtime.md",
+    "concepts/stats.md",
+    "guides/strategy.md",
+    "guides/lite.md",
+    "guides/lite-api.md",
+    "guides/engine.md",
+    "guides/engine-api.md",
+    "guides/data.md",
+    "guides/indicators.md",
+    "guides/research.md",
+    "guides/factor.md",
+    "guides/optimization.md",
+    "guides/report.md",
+    "guides/mlflow-lab-mcp.md",
+)
+
+REQUIRED_DESIGN_NOTE_PAGES = (
+    "internals/contracts.md",
+    "internals/event-loop.md",
+    "internals/matching.md",
+    "internals/portfolio.md",
+    "internals/consistency.md",
+    "internals/migration.md",
+)
+
+REQUIRED_BENCHMARK_PAGES = (
+    "benchmarks.md",
+    "release/evaluation.md",
+)
+
+REQUIRED_API_REFERENCE_PAGES = (
+    "api/reference.md",
+    "api/reference/lite.md",
+    "api/reference/engine.md",
+    "api/reference/data.md",
+    "api/reference/indicators.md",
+    "api/reference/metrics.md",
+    "api/reference/factor.md",
+    "api/reference/report.md",
+    "api/reference/ml.md",
+    "api/reference/research.md",
 )
 
 
 @dataclass(frozen=True)
 class DocsCompletenessReport:
-    """Structured result for release documentation completeness checks."""
+    """Structured result for documentation navigation checks."""
 
     nav_paths: tuple[str, ...]
-    spec_nav_paths: tuple[str, ...]
-    expected_spec_paths: tuple[str, ...]
-    missing_spec_nav: tuple[str, ...]
-    missing_release_pages: tuple[str, ...]
-    missing_internal_nav: tuple[str, ...]
+    required_guide_pages: tuple[str, ...]
+    required_design_note_pages: tuple[str, ...]
+    required_benchmark_pages: tuple[str, ...]
+    required_api_reference_pages: tuple[str, ...]
+    missing_guide_pages: tuple[str, ...]
+    missing_design_note_pages: tuple[str, ...]
+    missing_benchmark_pages: tuple[str, ...]
+    missing_api_reference_pages: tuple[str, ...]
 
     @property
     def ok(self) -> bool:
-        """Return whether all required release documentation is reachable."""
+        """Return whether all required public docs are reachable from mkdocs."""
         return not (
-            self.missing_spec_nav or self.missing_release_pages or self.missing_internal_nav
+            self.missing_guide_pages
+            or self.missing_design_note_pages
+            or self.missing_benchmark_pages
+            or self.missing_api_reference_pages
         )
 
 
@@ -50,39 +95,31 @@ def _flatten_nav_paths(nav: list[Any]) -> tuple[str, ...]:
     return tuple(paths)
 
 
-def _expected_spec_paths(docs_dir: Path) -> tuple[str, ...]:
-    specs_dir = docs_dir / "specs"
-    paths = []
-    for path in specs_dir.glob("*.md"):
-        if path.name == "README.md":
-            continue
-        paths.append(path.relative_to(docs_dir).as_posix())
-    return tuple(sorted(paths))
+def _missing(required: tuple[str, ...], nav_paths: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(path for path in required if path not in nav_paths)
 
 
 def check_docs_completeness(project_root: Path | str = Path(".")) -> DocsCompletenessReport:
-    """Check that release docs expose all spec pages and required guides."""
+    """Check that user-facing guides, design notes, benchmarks, and API docs are linked."""
     root = Path(project_root)
     config = yaml.safe_load((root / "mkdocs.yml").read_text(encoding="utf-8"))
-    docs_dir = root / config.get("docs_dir", "docs")
     nav_paths = _flatten_nav_paths(config["nav"])
-    spec_nav_paths = tuple(path for path in nav_paths if path.startswith("specs/"))
-    expected_spec_paths = _expected_spec_paths(docs_dir)
 
     return DocsCompletenessReport(
         nav_paths=nav_paths,
-        spec_nav_paths=spec_nav_paths,
-        expected_spec_paths=expected_spec_paths,
-        missing_spec_nav=tuple(path for path in expected_spec_paths if path not in nav_paths),
-        missing_release_pages=tuple(
-            path for path in REQUIRED_RELEASE_PAGES if path not in nav_paths
-        ),
-        missing_internal_nav=tuple(path for path in REQUIRED_INTERNAL_NAV if path not in nav_paths),
+        required_guide_pages=REQUIRED_GUIDE_PAGES,
+        required_design_note_pages=REQUIRED_DESIGN_NOTE_PAGES,
+        required_benchmark_pages=REQUIRED_BENCHMARK_PAGES,
+        required_api_reference_pages=REQUIRED_API_REFERENCE_PAGES,
+        missing_guide_pages=_missing(REQUIRED_GUIDE_PAGES, nav_paths),
+        missing_design_note_pages=_missing(REQUIRED_DESIGN_NOTE_PAGES, nav_paths),
+        missing_benchmark_pages=_missing(REQUIRED_BENCHMARK_PAGES, nav_paths),
+        missing_api_reference_pages=_missing(REQUIRED_API_REFERENCE_PAGES, nav_paths),
     )
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entrypoint for release docs completeness checks."""
+    """CLI entrypoint for docs completeness checks."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, default=Path("."))
     args = parser.parse_args(argv)
@@ -91,19 +128,22 @@ def main(argv: list[str] | None = None) -> int:
     if report.ok:
         print(
             "docs-completeness:ok "
-            f"specs={len(report.expected_spec_paths)} "
-            f"release_pages={len(REQUIRED_RELEASE_PAGES)} "
-            f"internal={len(REQUIRED_INTERNAL_NAV)}"
+            f"guides={len(report.required_guide_pages)} "
+            f"design_notes={len(report.required_design_note_pages)} "
+            f"benchmarks={len(report.required_benchmark_pages)} "
+            f"api_reference={len(report.required_api_reference_pages)}"
         )
         return 0
 
     print("docs-completeness:failed")
-    if report.missing_spec_nav:
-        print("missing_spec_nav=" + ",".join(report.missing_spec_nav))
-    if report.missing_release_pages:
-        print("missing_release_pages=" + ",".join(report.missing_release_pages))
-    if report.missing_internal_nav:
-        print("missing_internal_nav=" + ",".join(report.missing_internal_nav))
+    if report.missing_guide_pages:
+        print("missing_guide_pages=" + ",".join(report.missing_guide_pages))
+    if report.missing_design_note_pages:
+        print("missing_design_note_pages=" + ",".join(report.missing_design_note_pages))
+    if report.missing_benchmark_pages:
+        print("missing_benchmark_pages=" + ",".join(report.missing_benchmark_pages))
+    if report.missing_api_reference_pages:
+        print("missing_api_reference_pages=" + ",".join(report.missing_api_reference_pages))
     return 1
 
 
