@@ -1,10 +1,22 @@
 # 快速开始
 
-这页和站点首页保持同一套心智：**Python 写策略与投研流程，Rust 扛事件驱动回测内核**。你先选入口，再跑一个最小策略，最后按需要接上多标的、报告和实验追踪。
+## trade-learn 是什么
+
+**trade-learn** 是一个面向量化研究、机器学习策略与事件驱动回测的 Python / Rust 框架。
+
+- **Python** 表达策略、因子、模型、研究流程
+- **Rust** 承担撮合、订单推进、bar runner、portfolio 这类高频回测内核
+- **共享同一套契约和 Stats**：研究、回测、报告之间不需要再做格式转换
+
+trade-learn 的目标不是再写一个回测框架，而是把一条完整的策略研发链路接起来：
+
+数据 → 指标 → 因子 → 探索 / 因果分析 → 模型 → 组合权重 → 回测 → 报告 / 实验追踪。
+
+这页先帮你选入口，再跑一个最小策略，最后接上多标的、报告和后续阅读路径。
 
 ## 入口选择
 
-| 你想做什么 | 推荐入口 | 说明 |
+| 目标 | 推荐入口 | 说明 |
 |---|---|---|
 | 快速验证一个交易想法 | `tradelearn.lite` | 写法短，适合单标的、多标的目标权重和 1.x 风格迁移 |
 | 迁移或编写 Backtrader 风格策略 | `tradelearn.engine` | `Cerebro / Strategy / Analyzer / Sizer / Signal` 语义更完整 |
@@ -12,6 +24,15 @@
 | 生成 HTML 报告和行情回放图 | `stats.report()` / `bt.report()` / `cerebro.report()` | report 负责投研报告，plot 负责行情回放 |
 
 Lite 和 Engine **共享同一套 backtest runtime + Rust 撮合内核**。区别主要是语法层：Lite 更短，Engine 更贴近 Backtrader。
+
+## 核心能力
+
+- **Lite 快速入口**：短语法，适合快速验证、教学、1.x 风格迁移和多资产目标权重
+- **Engine 专业入口**：Backtrader 风格 `Cerebro / Strategy / Analyzer / Sizer / Signal`
+- **Rust 回测内核**：single / multi-data runner 自动选择，用户仍然只写 `next()`
+- **双市场指标生态**：`tl.tdx` / `bt.tdx`、`tl.tv` / `bt.tv`、`tl.pta` / `bt.pta`、`tl.talib` / `bt.talib`
+- **研究流水线**：`FeatureSet` / `Pipeline` / `CausalSelector` / `ResearchRun` / `Allocator`
+- **Optuna / MLflow / JupyterLab / MCP**：参数搜索、实验追踪、交互研究、外部工具集成
 
 ## 安装与环境
 

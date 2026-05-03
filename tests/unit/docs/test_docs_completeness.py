@@ -50,9 +50,12 @@ def test_english_readme_links_back_to_chinese_default() -> None:
 def test_quickstart_is_compatible_with_homepage_positioning() -> None:
     text = Path("docs/quickstart.md").read_text(encoding="utf-8")
 
-    assert "Python 写策略与投研流程，Rust 扛事件驱动回测内核" in text
+    assert "## trade-learn 是什么" in text
+    assert "**Python** 表达策略、因子、模型、研究流程" in text
+    assert "**Rust** 承担撮合、订单推进、bar runner、portfolio" in text
     assert "入口选择" in text
     assert "Lite 和 Engine **共享同一套 backtest runtime + Rust 撮合内核**" in text
+    assert "## 核心能力" in text
     assert "## Lite：最短路径" in text
     assert "## Engine：Backtrader 风格" in text
     assert "## 下一步" in text
