@@ -664,6 +664,12 @@ def run_backtest(cerebro: Any) -> list[Any]:
     begin_order_buffering = getattr(broker, "begin_order_buffering", None) if broker else None
     flush_order_buffer = getattr(broker, "flush_order_buffer", None) if broker else None
     drain_order_buffer = getattr(broker, "drain_order_buffer", None) if broker else None
+    begin_terminal_order_suppression = (
+        getattr(broker, "begin_terminal_order_suppression", None) if broker else None
+    )
+    end_terminal_order_suppression = (
+        getattr(broker, "end_terminal_order_suppression", None) if broker else None
+    )
     strategy_next = strategy.next
 
     use_rust_bar_loop = (
@@ -681,6 +687,41 @@ def run_backtest(cerebro: Any) -> list[Any]:
         if bool(getattr(cerebro, "_runstop", False)):
             raise _RunStopped
 
+    def terminal_bar(i: int) -> bool:
+        return i >= limit - 1
+
+    def run_strategy_next_python(i: int) -> None:
+        if terminal_bar(i) and begin_terminal_order_suppression is not None:
+            begin_terminal_order_suppression()
+            try:
+                strategy_next()
+            finally:
+                if end_terminal_order_suppression is not None:
+                    end_terminal_order_suppression()
+            return
+        if begin_order_buffering is not None:
+            begin_order_buffering()
+            strategy_next()
+            flush_order_buffer()
+            if getattr(broker, "_trade_on_close", False):
+                broker_process_fills(strategy, i)
+        else:
+            strategy_next()
+
+    def run_strategy_next_drained(i: int) -> list[Any] | None:
+        if terminal_bar(i) and begin_terminal_order_suppression is not None:
+            begin_terminal_order_suppression()
+            try:
+                strategy_next()
+            finally:
+                if end_terminal_order_suppression is not None:
+                    end_terminal_order_suppression()
+            return None
+        begin_order_buffering()
+        strategy_next()
+        orders = drain_order_buffer()
+        return orders if orders else None
+
     def on_bar(i: int) -> list[Any]:
         strategy_pre_next(i)
 
@@ -693,14 +734,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
 
         # Strategy Next
         if i >= min_start:
-            if begin_order_buffering is not None:
-                begin_order_buffering()
-                strategy_next()
-                flush_order_buffer()
-                if getattr(broker, "_trade_on_close", False):
-                    broker_process_fills(strategy, i)
-            else:
-                strategy_next()
+            run_strategy_next_python(i)
             if bool(getattr(cerebro, "_runstop", False)):
                 return []
             if has_analyzer_bar_callbacks:
@@ -732,15 +766,13 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 if fills:
                     broker_process_fills(strategy, i)
                 if i >= min_start:
-                    begin_order_buffering()
-                    strategy_next()
-                    orders = drain_order_buffer()
+                    orders = run_strategy_next_drained(i)
                     raise_if_runstopped()
                     if has_analyzer_bar_callbacks:
                         _analyzer_bar_step(strategy, analyzer_bar_callbacks)
                     if has_observer_nexts:
                         _observer_step(observer_nexts)
-                    return orders if orders else None
+                    return orders
                 return None
         else:
 
@@ -763,15 +795,13 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     broker_process_fills(strategy, i)
                 notify_cashvalue(broker_getcash(), broker_getvalue())
                 if i >= min_start:
-                    begin_order_buffering()
-                    strategy_next()
-                    orders = drain_order_buffer()
+                    orders = run_strategy_next_drained(i)
                     raise_if_runstopped()
                     if has_analyzer_bar_callbacks:
                         _analyzer_bar_step(strategy, analyzer_bar_callbacks)
                     if has_observer_nexts:
                         _observer_step(observer_nexts)
-                    return orders if orders else None
+                    return orders
                 return None
 
         try:
@@ -791,15 +821,13 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 if fills:
                     broker_process_fills(strategy, i)
                 if i >= min_start:
-                    begin_order_buffering()
-                    strategy_next()
-                    orders = drain_order_buffer()
+                    orders = run_strategy_next_drained(i)
                     raise_if_runstopped()
                     if has_analyzer_bar_callbacks:
                         _analyzer_bar_step(strategy, analyzer_bar_callbacks)
                     if has_observer_nexts:
                         _observer_step(observer_nexts)
-                    return orders if orders else None
+                    return orders
                 return None
         else:
 
@@ -814,15 +842,13 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     broker_process_fills(strategy, i)
                 notify_cashvalue(broker_getcash(), broker_getvalue())
                 if i >= min_start:
-                    begin_order_buffering()
-                    strategy_next()
-                    orders = drain_order_buffer()
+                    orders = run_strategy_next_drained(i)
                     raise_if_runstopped()
                     if has_analyzer_bar_callbacks:
                         _analyzer_bar_step(strategy, analyzer_bar_callbacks)
                     if has_observer_nexts:
                         _observer_step(observer_nexts)
-                    return orders if orders else None
+                    return orders
                 return None
 
         try:

@@ -52,6 +52,25 @@ def test_target_weight_intents_sell_before_buy_and_close_missing() -> None:
     assert intents[2].qty == 10.0
 
 
+def test_target_weight_intents_zero_target_closes_full_position_without_rounding_tail() -> None:
+    data = {"AAA": object()}
+    snapshots = {
+        "AAA": TargetWeightSnapshot(price=98.59351217434276, size=1004.0),
+    }
+
+    intents = build_target_weight_intents(
+        {"AAA": 0.0},
+        data_by_symbol=data,
+        snapshots=snapshots,
+        equity=1_060_000.0,
+        close_missing=True,
+    )
+
+    assert [(intent.symbol, intent.side, intent.qty) for intent in intents] == [
+        ("AAA", "sell", 1004.0)
+    ]
+
+
 def test_target_weight_intents_skip_tiny_or_zero_qty_orders() -> None:
     data = {"AAA": object(), "BBB": object()}
     snapshots = {

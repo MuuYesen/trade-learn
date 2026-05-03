@@ -101,10 +101,14 @@ def build_target_weight_intents(
         delta_value = target_value - current_value
         if abs(delta_value) < 1e-12:
             continue
-        qty = int(abs(delta_value) / (price * mult))
-        if not qty:
-            continue
-        side = "buy" if delta_value > 0 else "sell"
+        if abs(float(target_weight)) < 1e-12 and abs(float(snapshot.size)) > 0:
+            qty = abs(float(snapshot.size))
+            side = "sell" if float(snapshot.size) > 0 else "buy"
+        else:
+            qty = int(abs(delta_value) / (price * mult))
+            if not qty:
+                continue
+            side = "buy" if delta_value > 0 else "sell"
         intents.append(
             TargetOrderIntent(
                 symbol=symbol,

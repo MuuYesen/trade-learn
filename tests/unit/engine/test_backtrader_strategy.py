@@ -81,3 +81,21 @@ def test_backtrader_strategy_module_exports_order_and_line_types() -> None:
     assert line[0] == 2.0
     assert line[-1] == 1.0
     assert bt.Order.Completed == 4
+
+
+def test_engine_ignores_orders_created_on_terminal_bar() -> None:
+    class TerminalOrderStrategy(bt.Strategy):
+        def next(self) -> None:
+            if len(self.data) == 3:
+                self.buy(size=1)
+
+    cerebro = Cerebro(trade_on_close=True)
+    cerebro.setcash(1000.0)
+    cerebro.adddata(bars(), name="daily")
+    cerebro.addstrategy(TerminalOrderStrategy)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.stats.summary["final_value"] == 1000.0
+    assert strategy.stats.orders.empty
+    assert strategy.stats.fills.empty

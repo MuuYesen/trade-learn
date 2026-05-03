@@ -204,6 +204,22 @@ def test_lite_fractional_size_is_order_quantity_not_equity_fraction() -> None:
     assert stats.fills.iloc[0]["size"] == 0.5
 
 
+
+def test_lite_ignores_orders_created_on_terminal_bar() -> None:
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(2)
+
+        def next(self) -> None:
+            if len(self.data) == 5:
+                self.buy(size=1)
+
+    stats = Backtest(_data(), LiteStrategy, cash=1000.0, trade_on_close=True).run()
+
+    assert stats["final_value"] == 1000.0
+    assert stats.orders.empty
+    assert stats.fills.empty
+
 def test_lite_and_engine_stats_summary_keys_match() -> None:
     class LiteStrategy(Strategy):
         def next(self) -> None:
@@ -481,28 +497,29 @@ def test_lite_target_weights_targets_multi_asset_weights() -> None:
     assert [(order.data._name, order.size) for order in orders] == [("AAA", 22.0), ("BBB", 23.0)]
 
 
-def test_lite_target_weights_routes_through_target_percent_semantics() -> None:
+def test_lite_target_weights_submit_shared_intents_without_recomputing_targets() -> None:
     data = {
         "AAA": _data(),
         "BBB": _data().assign(close=[20.0, 21.0, 22.0, 23.0, 24.0]),
     }
-    seen: list[tuple[str | None, float]] = []
 
     class LiteStrategy(Strategy):
         def init(self) -> None:
             self.start_on_bar(1)
 
         def order_target_percent(self, *, ticker: str = None, target: float = 0.0, **kwargs):
-            seen.append((ticker, target))
-            return super().order_target_percent(ticker=ticker, target=target, **kwargs)
+            raise AssertionError("target_weights must submit shared target intents directly")
 
         def next(self) -> None:
             if len(self.data) == 2:
                 self.target_weights({"AAA": 0.25, "BBB": 0.50, "cash": 0.25})
 
-    Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run()
+    stats = Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run()
 
-    assert seen == [("AAA", 0.25), ("BBB", 0.50)]
+    assert [(order.data._name, order.size) for order in stats.strategy.orders] == [
+        ("AAA", 22.0),
+        ("BBB", 23.0),
+    ]
 
 
 def test_lite_target_weights_match_engine_when_previous_order_is_pending() -> None:

@@ -83,6 +83,7 @@ class RustBroker:
         self._step_fills_from_collect: list[Any] | CompactFillBatch | None = None
         self._active_datas: list[Any] = []
         self._buffer_order_submissions = False
+        self._terminal_order_suppression = False
         self._order_submit_buffer: list[OrderPayload] = []
         self._proxy_events: list[Any] = []
         self._trade_on_close = False
@@ -475,6 +476,14 @@ class RustBroker:
         """Delay Rust order submission until callbacks return."""
         self._buffer_order_submissions = True
 
+    def begin_terminal_order_suppression(self) -> None:
+        """Return terminal-bar order objects without routing them to the broker."""
+        self._terminal_order_suppression = True
+
+    def end_terminal_order_suppression(self) -> None:
+        """Restore normal order routing after a terminal-bar strategy callback."""
+        self._terminal_order_suppression = False
+
     def flush_order_buffer(self) -> None:
         """Submit buffered orders to Rust and update Python order refs."""
         submitted = False
@@ -643,6 +652,8 @@ class RustBroker:
             trailpercent=kwargs.get("trailpercent"),
             info=dict(kwargs.get("info", {})),
         )
+        if self._terminal_order_suppression:
+            return order
         self._register_and_route_order(owner, order, is_buy, actual_size, price)
 
         return order
@@ -670,6 +681,8 @@ class RustBroker:
             price=price,
             exectype=exectype,
         )
+        if self._terminal_order_suppression:
+            return order
         self._register_and_route_order(owner, order, is_buy, actual_size, price)
 
         return order

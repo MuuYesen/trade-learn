@@ -553,10 +553,11 @@ class Strategy(CoreStrategy):
         )
         orders: list[Any] = []
         for intent in intents:
-            order = self.order_target_percent(
-                ticker=intent.symbol,
-                target=intent.target_weight,
-            )
+            data = data_by_ticker[intent.symbol]
+            if intent.side == "buy":
+                order = self._buy_data(data=data, size=intent.qty)
+            else:
+                order = self._sell_data(data=data, size=intent.qty)
             if order is not None:
                 orders.append(order)
         return orders
