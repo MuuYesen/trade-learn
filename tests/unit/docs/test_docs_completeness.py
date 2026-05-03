@@ -59,3 +59,15 @@ def test_chinese_readme_lists_tdx_and_tv_indicator_names() -> None:
         assert f"`{name}`" in text
     for name in _canonical_indicator_names(tv):
         assert f"`{name}`" in text
+
+
+def test_chinese_readme_documents_optional_integration_boundaries() -> None:
+    text = Path("README_zh.md").read_text(encoding="utf-8")
+
+    assert "`tradelearn.optimize` 是用户级 Optuna 入口" in text
+    assert "`tradelearn.backtest._optimize` grid helper" in text
+    assert "用户不直接依赖 backtest 内部模块" in text
+    assert "`tradelearn.brokers`：paper/live broker adapter 层" in text
+    assert "`tradelearn.lab`：本地研究环境启动入口" in text
+    assert "`tradelearn.mcp`：外部工具和智能助手集成入口" in text
+    assert "这三类模块都是 optional integration" in text

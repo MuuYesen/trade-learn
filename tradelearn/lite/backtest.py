@@ -13,7 +13,7 @@ from tradelearn.backtest.feed import (
     normalize_ohlcv_frame,
 )
 from tradelearn.backtest.models import Stats
-from tradelearn.backtest.optimize import expand_grid
+from tradelearn.backtest._optimize import expand_grid
 from tradelearn.backtest.reporting import reporter_from_stats
 from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
 from tradelearn.core import get_logger

@@ -446,6 +446,15 @@ trade-learn 2.x 当前定位为：
 - **研究流水线**：`tradelearn.research` 提供数据探索、切分、预处理、特征生成、权重构建、实验记录等组件。
 - **报告与可视化**：`tradelearn.report` 提供 pyfolio / alphalens 风格分析图和 HTML 报告。
 - **实验追踪**：支持 MLflow 记录参数、指标、报告、图表、CSV/XLSX artifacts。
+- **参数搜索**：`tradelearn.optimize` 是用户级 Optuna 入口；Engine 的 `grid_search()` 与 Lite 的 `Backtest.optimize()` 只复用内部 `tradelearn.backtest._optimize` grid helper，用户不直接依赖 backtest 内部模块。
+
+可选集成模块不属于策略主路径：
+
+- `tradelearn.brokers`：paper/live broker adapter 层，用于后续接真实或模拟交易通道。
+- `tradelearn.lab`：本地研究环境启动入口，负责 JupyterLab、MCP 和本地 MLflow 的启动计划。
+- `tradelearn.mcp`：外部工具和智能助手集成入口，只暴露项目、配置、API 检索和 lab plan 等工具能力。
+
+这三类模块都是 optional integration，不承载 Engine/Lite 策略语义，也不应反向进入 `tradelearn.backtest` runtime。
 
 ## 设计原则
 

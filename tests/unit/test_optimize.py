@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import types
+import importlib.util
 
 import pytest
 
@@ -11,6 +12,12 @@ from tradelearn.optimize import OptunaBacktestSearch, OptunaSearch
 
 def test_optimize_namespace_is_lazy_public_alias() -> None:
     assert tl.optimize.OptunaSearch is OptunaSearch
+
+
+def test_only_root_optimize_is_public_namespace() -> None:
+    assert importlib.util.find_spec("tradelearn.optimize") is not None
+    assert importlib.util.find_spec("tradelearn.backtest._optimize") is not None
+    assert importlib.util.find_spec("tradelearn.backtest.optimize") is None
 
 
 def test_optuna_search_requires_optional_dependency(monkeypatch) -> None:

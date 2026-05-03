@@ -32,6 +32,36 @@ BOUNDARY_RULES = [
         "tradelearn/engine",
         ("tradelearn.lite",),
     ),
+    (
+        "factor layer does not import runtime or facades",
+        "tradelearn/factor",
+        ("tradelearn.backtest", "tradelearn.engine", "tradelearn.lite"),
+    ),
+    (
+        "ml layer does not import runtime or facades",
+        "tradelearn/ml",
+        ("tradelearn.backtest", "tradelearn.engine", "tradelearn.lite"),
+    ),
+    (
+        "report layer does not import runtime or facades",
+        "tradelearn/report",
+        ("tradelearn.backtest", "tradelearn.engine", "tradelearn.lite"),
+    ),
+    (
+        "research layer does not import runtime or facades",
+        "tradelearn/research",
+        ("tradelearn.backtest", "tradelearn.engine", "tradelearn.lite"),
+    ),
+    (
+        "data layer does not import runtime or facades",
+        "tradelearn/data",
+        ("tradelearn.backtest", "tradelearn.engine", "tradelearn.lite"),
+    ),
+    (
+        "indicator layer does not import runtime or facades",
+        "tradelearn/indicators",
+        ("tradelearn.backtest", "tradelearn.engine", "tradelearn.lite"),
+    ),
 ]
 
 
@@ -130,7 +160,7 @@ def test_backtest_runtime_modules_are_flattened() -> None:
         "indicator_cache.py",
         "lines.py",
         "models.py",
-        "optimize.py",
+        "_optimize.py",
         "reporting.py",
         "runtime_config.py",
         "sizer.py",
@@ -141,6 +171,7 @@ def test_backtest_runtime_modules_are_flattened() -> None:
     assert not (backtest_root / "core").exists()
     assert not (backtest_root / "brokers").exists()
     assert not (backtest_root / "metrics.py").exists()
+    assert not (backtest_root / "optimize.py").exists()
     assert not (backtest_root / "resampler.py").exists()
 
     actual_modules = {path.name for path in backtest_root.glob("*.py")}

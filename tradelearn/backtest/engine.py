@@ -557,8 +557,6 @@ def run_backtest(cerebro: Any) -> list[Any]:
     from .broker import RustBroker
 
     if isinstance(cerebro.broker, RustBroker):
-        from tradelearn._rust import RustBacktestEngine
-
         data = cerebro.datas[0]
         # Robustly handle both native containers and facade data feeds.
         if hasattr(data, "_datetime"):
@@ -576,28 +574,34 @@ def run_backtest(cerebro: Any) -> list[Any]:
             closes = np.array(data.close._values, dtype=np.float64)
             volumes = np.array(data.volume._values, dtype=np.float64)
 
-        rust_engine = RustBacktestEngine(
-            timestamps,
-            opens,
-            highs,
-            lows,
-            closes,
-            volumes,
-            runtime_config.cash,
-            runtime_config.commission,
-            runtime_config.trade_on_close,
-            False,
-            False,
-            0.0,
-            0.0,
-            False,
-            False,
-            False,
-            float(cerebro.broker._mult),
-            1.0,
-            runtime_config.match_mode == "smart",
-        )
-        cerebro.broker.bind_engine(rust_engine)
+        try:
+            from tradelearn._rust import RustBacktestEngine
+        except (ImportError, AttributeError):
+            RustBacktestEngine = None
+
+        if RustBacktestEngine is not None:
+            rust_engine = RustBacktestEngine(
+                timestamps,
+                opens,
+                highs,
+                lows,
+                closes,
+                volumes,
+                runtime_config.cash,
+                runtime_config.commission,
+                runtime_config.trade_on_close,
+                False,
+                False,
+                0.0,
+                0.0,
+                False,
+                False,
+                False,
+                float(cerebro.broker._mult),
+                1.0,
+                runtime_config.match_mode == "smart",
+            )
+            cerebro.broker.bind_engine(rust_engine)
         if hasattr(cerebro.broker, "bind_datas"):
             cerebro.broker.bind_datas(cerebro.datas)
         cerebro.broker._open_prices = opens

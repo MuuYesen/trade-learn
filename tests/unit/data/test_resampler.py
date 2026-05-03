@@ -88,6 +88,32 @@ def test_resample_frame_uses_rust_fast_path_for_plain_ohlcv(monkeypatch) -> None
     }
 
 
+def test_resample_frame_falls_back_when_rust_extension_is_unavailable(monkeypatch) -> None:
+    bars = _minute_bars()
+
+    def missing_rust(*args, **kwargs):
+        raise ImportError("tradelearn._rust unavailable")
+
+    monkeypatch.setattr(resampler, "_rust_resample_ohlcv", missing_rust)
+
+    result = resample_frame(bars, timeframe=_MINUTES, compression=3)
+    expected = (
+        bars.resample("3min", label="right", closed="right")
+        .agg(
+            {
+                "open": "first",
+                "high": "max",
+                "low": "min",
+                "close": "last",
+                "volume": "sum",
+            }
+        )
+        .dropna(subset=["open", "high", "low", "close"])
+    )
+
+    pd.testing.assert_frame_equal(result, expected, check_freq=False)
+
+
 def test_resample_frame_rejects_non_datetime_index() -> None:
     bars = _minute_bars().reset_index(drop=True)
 

@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-from tradelearn.backtest.optimize import expand_grid
+from tradelearn.backtest._optimize import expand_grid
 
 from .analyzers import MLflowAnalyzer
 from .cerebro import Cerebro
