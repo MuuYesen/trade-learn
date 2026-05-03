@@ -1,8 +1,8 @@
-# Lite 参考
+# Lite Reference
 
-Tradelearn 1.x 风格轻量 API。
+Lightweight Tradelearn 1.x style API.
 
-[返回 API 参考](../reference.md)
+[Back to API Reference](../reference.md)
 
 ::: tradelearn.lite
     options:
@@ -12,9 +12,6 @@ Tradelearn 1.x 风格轻量 API。
       show_root_full_path: false
       show_object_full_path: false
       show_bases: false
-      show_docstring_parameters: true
-      show_docstring_returns: true
-      show_docstring_raises: true
       show_signature_annotations: true
       separate_signature: true
       members_order: source

@@ -1,7 +1,7 @@
 # 策略编写指南
 
 本页由 `scripts/generate_api_reference.py` 自动生成,只说明两种策略入口的共同心智模型。
-完整函数签名请看 Lite / Engine API 签名页,完整工作流请看对应指南。
+完整函数签名请看 Lite / Engine API 签名页,完整工作流请看对应 Guide。
 
 Tradelearn 当前有两个用户入口:
 

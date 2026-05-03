@@ -14,9 +14,9 @@ def test_mkdocs_material_config_targets_docs_dir() -> None:
     assert config["docs_dir"] == "docs"
     assert config["theme"]["name"] == "material"
     assert any(plugin == "mkdocstrings" or "mkdocstrings" in plugin for plugin in config["plugins"])
-    assert config["nav"][0] == {"首页": "README.md"}
-    assert config["nav"][1] == {"快速开始": "quickstart.md"}
-    assert any("API 参考" in item for item in config["nav"])
+    assert config["nav"][0] == {"快速开始": [{"首页": "README.md"}, {"快速开始": "quickstart.md"}]}
+    assert "navigation.indexes" not in config["theme"]["features"]
+    assert any("API Reference" in item for item in config["nav"])
 
 
 def test_mkdocs_mobile_drawer_uses_tradelearn_header_color() -> None:

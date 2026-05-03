@@ -25,55 +25,55 @@ API_REFERENCE_MODULES: tuple[ApiReferenceModule, ...] = (
     ApiReferenceModule(
         "Lite",
         "tradelearn.lite",
-        "Tradelearn 1.x 风格轻量 API。",
+        "Lightweight Tradelearn 1.x style API.",
         ("Backtest", "Strategy", "talib", "pta", "tdx", "tv"),
     ),
     ApiReferenceModule(
         "Engine",
         "tradelearn.engine",
-        "Backtrader 风格高级事件驱动 API。",
+        "Backtrader-style advanced event-driven API.",
         ("Cerebro", "Strategy", "Order", "Analyzer", "Sizer"),
     ),
     ApiReferenceModule(
-        "数据",
+        "Data",
         "tradelearn.data",
-        "K 线数据、provider、缓存与重采样工具。",
+        "OHLCV data providers, caching, and resampling utilities.",
         ("DataProvider", "CacheProvider", "resample_frame"),
     ),
     ApiReferenceModule(
-        "指标",
+        "Indicators",
         "tradelearn.indicators",
-        "技术指标 facade,包含 pandas-ta-classic / TDX / TradingView 生态入口。",
+        "Technical indicator facade for pandas-ta-classic, TA-Lib, TDX, and TradingView styles.",
         ("sma", "ema", "rsi", "macd", "pta", "talib", "tdx", "tv"),
     ),
     ApiReferenceModule(
-        "收益风险指标",
+        "Metrics",
         "tradelearn.metrics",
-        "收益、风险、回撤与因子评价指标。",
+        "Return, risk, drawdown, trade, and factor evaluation metrics.",
         ("returns", "sharpe", "max_drawdown", "alpha_beta"),
     ),
     ApiReferenceModule(
-        "因子",
+        "Factor",
         "tradelearn.factor",
-        "Alpha 公式与因子分析工具。",
+        "Alpha formulas and factor analysis tools.",
         ("FactorAnalyzer", "alphas"),
     ),
     ApiReferenceModule(
-        "报告",
+        "Report",
         "tradelearn.report",
-        "HTML、Excel 与研究报告导出。",
+        "HTML, Excel, and research report export utilities.",
         ("Report", "TearSheet", "export_excel"),
     ),
     ApiReferenceModule(
-        "研究",
+        "Research",
         "tradelearn.research",
-        "指数增强研发流程记录、预处理与组合构建工具。",
+        "Research workflow tracking, preprocessing, and portfolio construction tools.",
         ("ResearchRun", "ResearchResult", "preprocess", "portfolio"),
     ),
     ApiReferenceModule(
-        "机器学习",
+        "ML",
         "tradelearn.ml",
-        "机器学习、模型注册与特征筛选。",
+        "Machine learning, model registry, and feature selection utilities.",
         ("AutoML", "CausalSelector", "ModelRegistry", "ModelLoader"),
     ),
 )
@@ -122,13 +122,10 @@ def _parameter_rows(
     obj: Callable[..., Any],
     descriptions: dict[str, str],
 ) -> list[str]:
-    parameters = [
-        item for item in inspect.signature(obj).parameters.items() if item[0] not in {"self", "cls"}
-    ]
-    if not parameters:
-        return ["参数说明：无。"]
     rows = ["| 参数 | 类型 | 默认值 | 说明 |", "|---|---|---|---|"]
-    for name, parameter in parameters:
+    for name, parameter in inspect.signature(obj).parameters.items():
+        if name in {"self", "cls"}:
+            continue
         if parameter.kind is inspect.Parameter.VAR_POSITIONAL:
             display = f"*{name}"
         elif parameter.kind is inspect.Parameter.VAR_KEYWORD:
@@ -155,12 +152,10 @@ def _render_target(target: ApiDocTarget) -> list[str]:
         f"{target.heading}{_signature_text(target.obj)}",
         "```",
         "",
-        "参数说明：",
-        "",
         *_parameter_rows(target.obj, target.params),
     ]
     if target.returns:
-        parts.extend(["", f"返回值：{target.returns}"])
+        parts.extend(["", f"返回: {target.returns}"])
     for example in target.examples:
         parts.extend(["", "```python", example.rstrip(), "```"])
     parts.append("")
@@ -179,9 +174,9 @@ def _render_guide(
         intro,
         "",
         "本页偏查询:用于核对函数签名、参数名和返回值。第一次写策略请先看 "
-        "[Lite 指南](lite.md)、[Engine 指南](engine.md) 或 [策略编写指南](strategy.md)。",
+        "[Lite Guide](lite.md)、[Engine Guide](engine.md) 或 [Strategy Writing Guide](strategy.md)。",
         "",
-        f"本页由 `scripts/generate_api_reference.py` 从 `{source_module}` 运行时代码签名生成。",
+        f"Generated from `{source_module}` code signatures by `scripts/generate_api_reference.py`.",
         "",
     ]
     for target in targets:
@@ -232,14 +227,14 @@ def _render_member_index(title: str, cls: type[Any], names: tuple[str, ...]) -> 
     rows = [
         f"### {title}",
         "",
-        "| 成员 | 类型 | 签名 | 说明 |",
+        "| Member | Kind | Signature | Summary |",
         "|---|---|---|---|",
     ]
     for name in names:
         member = inspect.getattr_static(cls, name, None)
         if member is None:
             continue
-        kind = "属性" if isinstance(member, property) else "方法"
+        kind = "property" if isinstance(member, property) else "method"
         signature = _member_signature(getattr(cls, name, member))
         rows.append(
             "| "
@@ -386,7 +381,7 @@ def render_engine_api_guide() -> str:
         "",
         "## Engine 完整接口",
         "",
-        "下表从运行时代码自动抽取,用于补足指南未逐段展开的常用接口。",
+        "下表从运行时代码自动抽取,用于补足 Guide 未逐段展开的常用接口。",
         "",
         *_render_member_index(
             "Cerebro",
@@ -486,7 +481,6 @@ def render_lite_api_guide() -> str:
                 "trade_start_date": "开始交易日期保留参数。",
                 "lot_size": "最小交易单位保留参数。",
                 "fail_fast": "保留参数。",
-                "stats_mode": "`full` 返回完整 orders/fills/trades/equity; `lazy` 只计算轻量 summary。",
                 "storage": "策略可读写的共享存储。",
                 "match_mode": "撮合模式; 默认 `exact` 以复用 Engine/Backtrader 对齐路径。",
             },
@@ -707,26 +701,26 @@ def render_lite_api_guide() -> str:
 def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE_MODULES) -> str:
     """Render the readable API reference index page."""
     parts = [
-        "# API 参考",
+        "# API Reference",
         "",
-        "本页由 `scripts/generate_api_reference.py` 自动生成。",
+        "This page is generated by `scripts/generate_api_reference.py`.",
         "",
-        "把这里当作 API 地图:需要示例和调用流程时看指南;需要完整类、函数、"
-        "参数签名时看模块参考。",
+        "Use this as the API map: read the guides for examples and workflows; "
+        "read module references for complete classes, functions, and signatures.",
         "",
-        "## 先看这里",
+        "## Start Here",
         "",
-        "| 目标 | 阅读 |",
+        "| Goal | Read |",
         "|---|---|",
-        "| 编写 Tradelearn 1.x 风格轻量策略 | [Lite API 签名](../guides/lite-api.md) |",
-        "| 编写 Backtrader 风格事件策略、Analyzer、Observer、Sizer | "
-        "[Engine API 签名](../guides/engine-api.md) |",
-        "| 从零编写策略并理解两种入口差异 | [策略编写指南](../guides/strategy.md) |",
-        "| 查询精确类/函数签名和完整 docstring | 下方模块参考链接 |",
+        "| Write lightweight Tradelearn 1.x style strategies | [Lite API Guide](../guides/lite-api.md) |",
+        "| Write Backtrader-style event strategies, analyzers, observers, and sizers | "
+        "[Engine API Guide](../guides/engine-api.md) |",
+        "| Learn the two strategy entry points from scratch | [Strategy Writing Guide](../guides/strategy.md) |",
+        "| Look up exact class/function signatures and docstrings | Module reference links below |",
         "",
-        "## 公开模块",
+        "## Public Modules",
         "",
-        "| 模块 | 用途 | 常用入口 | 完整参考 |",
+        "| Module | Purpose | Common Entries | Full Reference |",
         "|---|---|---|---|",
     ]
     for module in modules:
@@ -742,7 +736,7 @@ def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE
     parts.extend(
         [
             "",
-            "## 按模块列出公开符号",
+            "## Public Symbols by Module",
             "",
         ]
     )
@@ -752,18 +746,18 @@ def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE
             [
                 f"### `{module.import_path}`",
                 "",
-                symbols or "_没有显式 `__all__`; 请查看完整参考。_",
+                symbols or "_No explicit `__all__`; see full reference._",
                 "",
             ]
         )
     parts.extend(
         [
             "",
-            "## 自动生成页面",
+            "## Generated Pages",
             "",
-            "- [Lite API 签名](../guides/lite-api.md)",
-            "- [Engine API 签名](../guides/engine-api.md)",
-            "- [策略编写指南](../guides/strategy.md)",
+            "- [Lite API Guide](../guides/lite-api.md)",
+            "- [Engine API Guide](../guides/engine-api.md)",
+            "- [Strategy Writing Guide](../guides/strategy.md)",
         ]
     )
     for module in modules:
@@ -778,7 +772,7 @@ def render_strategy_writing_guide() -> str:
         "# 策略编写指南",
         "",
         "本页由 `scripts/generate_api_reference.py` 自动生成,只说明两种策略入口的共同心智模型。",
-        "完整函数签名请看 Lite / Engine API 签名页,完整工作流请看对应指南。",
+        "完整函数签名请看 Lite / Engine API 签名页,完整工作流请看对应 Guide。",
         "",
         "Tradelearn 当前有两个用户入口:",
         "",
@@ -980,11 +974,11 @@ def _module_slug(module: ApiReferenceModule) -> str:
 def render_module_reference(module: ApiReferenceModule) -> str:
     """Render one mkdocstrings-backed module reference page."""
     parts = [
-        f"# {module.title} 参考",
+        f"# {module.title} Reference",
         "",
         module.summary,
         "",
-        "[返回 API 参考](../reference.md)",
+        "[Back to API Reference](../reference.md)",
         "",
         f"::: {module.import_path}",
         "    options:",
@@ -994,9 +988,6 @@ def render_module_reference(module: ApiReferenceModule) -> str:
         "      show_root_full_path: false",
         "      show_object_full_path: false",
         "      show_bases: false",
-        "      show_docstring_parameters: true",
-        "      show_docstring_returns: true",
-        "      show_docstring_raises: true",
         "      show_signature_annotations: true",
         "      separate_signature: true",
         "      members_order: source",

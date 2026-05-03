@@ -2,9 +2,9 @@
 
 `tradelearn.engine` 是 Backtrader 风格高级入口。本文档的签名来自运行时代码,参数说明由生成器元数据补充。
 
-本页偏查询:用于核对函数签名、参数名和返回值。第一次写策略请先看 [Lite 指南](lite.md)、[Engine 指南](engine.md) 或 [策略编写指南](strategy.md)。
+本页偏查询:用于核对函数签名、参数名和返回值。第一次写策略请先看 [Lite Guide](lite.md)、[Engine Guide](engine.md) 或 [Strategy Writing Guide](strategy.md)。
 
-本页由 `scripts/generate_api_reference.py` 从 `tradelearn.engine` 运行时代码签名生成。
+Generated from `tradelearn.engine` code signatures by `scripts/generate_api_reference.py`.
 
 ## `Cerebro.__init__`
 
@@ -13,8 +13,6 @@
 ```python
 Cerebro.__init__(self, match_mode: 'str' = 'exact', callback_batch: 'int' = 1, trade_on_close: 'bool' = False, exactbars: 'bool' = False, stdstats: 'bool' = True, slippage: 'Any | None' = None, commission: 'Any | None' = None, mode: 'str' = 'backtest', stats_mode: 'str' = 'full', **kwargs: 'Any') -> 'None'
 ```
-
-参数说明：
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -29,7 +27,7 @@ Cerebro.__init__(self, match_mode: 'str' = 'exact', callback_batch: 'int' = 1, t
 | `stats_mode` | `str` | `'full'` |  |
 | `**kwargs` | `Any` | `required` | 保留给 Backtrader facade 的额外配置。 |
 
-返回值：`Cerebro` 实例。
+返回: `Cerebro` 实例。
 
 ```python
 import tradelearn.engine as bt
@@ -45,14 +43,12 @@ cerebro = bt.Cerebro(match_mode='exact')
 Cerebro.adddata(self, data: 'Any', name: 'Any | None' = None) -> 'Any'
 ```
 
-参数说明：
-
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `data` | `Any` | `required` | 包含 `open/high/low/close/volume` 的 DataFrame,或已经构造好的 DataFeed。 |
 | `name` | `Any \| None` | `None` | 数据名称; 后续可通过 `datasbyname` 或 `getdatabyname()` 查询。 |
 
-返回值：添加后的 data feed。
+返回: 添加后的 data feed。
 
 ## `Cerebro.addstrategy`
 
@@ -62,15 +58,13 @@ Cerebro.adddata(self, data: 'Any', name: 'Any | None' = None) -> 'Any'
 Cerebro.addstrategy(self, strategy: 'type[Strategy]', *args: 'Any', **kwargs: 'Any') -> 'None'
 ```
 
-参数说明：
-
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `strategy` | `type[Strategy]` | `required` | `bt.Strategy` 子类。 |
 | `*args` | `Any` | `required` | 传给策略构造的 positional 参数。 |
 | `**kwargs` | `Any` | `required` | 传给策略参数系统的 keyword 参数。 |
 
-返回值：`None`。
+返回: `None`。
 
 ## `Cerebro.run`
 
@@ -80,13 +74,11 @@ Cerebro.addstrategy(self, strategy: 'type[Strategy]', *args: 'Any', **kwargs: 'A
 Cerebro.run(self, **kwargs: 'Any') -> 'list[Strategy]'
 ```
 
-参数说明：
-
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `**kwargs` | `Any` | `required` |  |
 
-返回值：`list[Strategy]`。
+返回: `list[Strategy]`。
 
 ```python
 results = cerebro.run()
@@ -101,8 +93,6 @@ strategy = results[0]
 Strategy.buy(self, data: 'Any' = None, size: 'float | None' = None, price: 'float | None' = None, exectype: 'int | None' = None, **kwargs)
 ```
 
-参数说明：
-
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `data` | `Any` | `None` | 目标数据 feed; 默认主数据。 |
@@ -111,7 +101,7 @@ Strategy.buy(self, data: 'Any' = None, size: 'float | None' = None, price: 'floa
 | `exectype` | `int \| None` | `None` | `Order.Market` / `Order.Limit` / `Order.Stop` 等。 |
 | `**kwargs` | `Any` | `required` | 订单元数据,如 `parent`、`oco`、`transmit`、`info`。 |
 
-返回值：`Order`。
+返回: `Order`。
 
 ## `Strategy.sell`
 
@@ -121,8 +111,6 @@ Strategy.buy(self, data: 'Any' = None, size: 'float | None' = None, price: 'floa
 Strategy.sell(self, data: 'Any' = None, size: 'float | None' = None, price: 'float | None' = None, exectype: 'int | None' = None, **kwargs)
 ```
 
-参数说明：
-
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `data` | `Any` | `None` | 目标数据 feed; 默认主数据。 |
@@ -131,7 +119,7 @@ Strategy.sell(self, data: 'Any' = None, size: 'float | None' = None, price: 'flo
 | `exectype` | `int \| None` | `None` | `Order.Market` / `Order.Limit` / `Order.Stop` 等。 |
 | `**kwargs` | `Any` | `required` | 订单元数据,如 `parent`、`oco`、`transmit`、`info`。 |
 
-返回值：`Order`。
+返回: `Order`。
 
 ## `Strategy.buy_bracket`
 
@@ -140,8 +128,6 @@ Strategy.sell(self, data: 'Any' = None, size: 'float | None' = None, price: 'flo
 ```python
 Strategy.buy_bracket(self, data=None, size=None, price=None, plimit=None, exectype=2, valid=None, trailamount=None, trailpercent=None, oargs=None, stopprice=None, stopexec=3, stopargs=None, limitprice=None, limitexec=2, limitargs=None, **kwargs)
 ```
-
-参数说明：
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -162,7 +148,7 @@ Strategy.buy_bracket(self, data=None, size=None, price=None, plimit=None, execty
 | `limitargs` | `Any` | `None` | 止盈订单额外参数。 |
 | `**kwargs` | `Any` | `required` | 透传给底层订单的额外参数。 |
 
-返回值：`list[Order]`: `[main, stop, limit]`。
+返回: `list[Order]`: `[main, stop, limit]`。
 
 ## `Strategy.order_target_percent`
 
@@ -172,83 +158,81 @@ Strategy.buy_bracket(self, data=None, size=None, price=None, plimit=None, execty
 Strategy.order_target_percent(self, data: 'Any' = None, target: 'float' = 0.0, **kwargs)
 ```
 
-参数说明：
-
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `data` | `Any` | `None` | 目标数据 feed; 默认主数据。 |
 | `target` | `float` | `0.0` | 目标权益比例,如 `0.5` 表示 50%。 |
 | `**kwargs` | `Any` | `required` | 透传给 `buy` / `sell` / `close`。 |
 
-返回值：`Order | None`。
+返回: `Order | None`。
 
 ## Engine 完整接口
 
-下表从运行时代码自动抽取,用于补足指南未逐段展开的常用接口。
+下表从运行时代码自动抽取,用于补足 Guide 未逐段展开的常用接口。
 
 ### Cerebro
 
-| 成员 | 类型 | 签名 | 说明 |
+| Member | Kind | Signature | Summary |
 |---|---|---|---|
-| `Cerebro.setcash` | 方法 | `(self, cash: 'float') -> 'None'` |  |
-| `Cerebro.getbroker` | 方法 | `(self) -> 'Any'` |  |
-| `Cerebro.setbroker` | 方法 | `(self, broker: 'Any') -> 'None'` |  |
-| `Cerebro.setcommission` | 方法 | `(self, commission: 'float' = 0.0, margin: 'float' = 0.0, mult: 'float' = 1.0, comminfo: 'Any' = None, name: 'str | None' = None) -> 'None'` | Set commission parameters or a custom CommInfo object. |
-| `Cerebro.set_coc` | 方法 | `(self, coc: 'bool' = True) -> 'None'` |  |
-| `Cerebro.adddata` | 方法 | `(self, data: 'Any', name: 'Any | None' = None) -> 'Any'` |  |
-| `Cerebro.chaindata` | 方法 | `(self, *args: 'Any', **kwargs: 'Any') -> 'Any'` |  |
-| `Cerebro.rolloverdata` | 方法 | `(self, *args: 'Any', **kwargs: 'Any') -> 'Any'` |  |
-| `Cerebro.resampledata` | 方法 | `(self, data: 'Any', timeframe: 'int', compression: 'int' = 1, name: 'str | None' = None, **kwargs: 'Any') -> 'DataFeed'` |  |
-| `Cerebro.replaydata` | 方法 | `(self, data: 'Any', *args: 'Any', **kwargs: 'Any') -> 'Any'` |  |
-| `Cerebro.addstrategy` | 方法 | `(self, strategy: 'type[Strategy]', *args: 'Any', **kwargs: 'Any') -> 'None'` |  |
-| `Cerebro.optstrategy` | 方法 | `(self, strategy: 'type[Strategy]', *args: 'Any', **kwargs: 'Any') -> 'None'` |  |
-| `Cerebro.addanalyzer` | 方法 | `(self, analyzer: 'type[Analyzer]', *args: 'Any', _name=None, **kwargs: 'Any') -> 'None'` |  |
-| `Cerebro.addobserver` | 方法 | `(self, observer: 'type[Any]', *args: 'Any', _name=None, **kwargs: 'Any') -> 'None'` |  |
-| `Cerebro.addwriter` | 方法 | `(self, writer: 'type[Any]', *args: 'Any', **kwargs: 'Any') -> 'None'` |  |
-| `Cerebro.getwriterheaders` | 方法 | `(self) -> 'list[Any]'` |  |
-| `Cerebro.getwriterinfo` | 方法 | `(self) -> 'list[Any]'` |  |
-| `Cerebro.getwritervalues` | 方法 | `(self) -> 'list[Any]'` |  |
-| `Cerebro.addstore` | 方法 | `(self, store: 'Any') -> 'None'` |  |
-| `Cerebro.addtimer` | 方法 | `(self, *args: 'Any', **kwargs: 'Any') -> 'None'` |  |
-| `Cerebro.addcalendar` | 方法 | `(self, calendar: 'Any') -> 'None'` |  |
-| `Cerebro.addsizer` | 方法 | `(self, sizer: 'type[Any]', **kwargs: 'Any') -> 'None'` |  |
-| `Cerebro.setsizer` | 方法 | `(self, sizer: 'type[Any]', **kwargs: 'Any') -> 'None'` |  |
-| `Cerebro.add_signal` | 方法 | `(self, sigtype: 'int', sigcls: 'type', *sigargs: 'Any', **sigkwargs: 'Any') -> 'None'` |  |
-| `Cerebro.signal_strategy` | 方法 | `(self, stratcls: 'type', *args: 'Any', **kwargs: 'Any') -> 'None'` |  |
-| `Cerebro.signal_concurrent` | 方法 | `(self, onoff: 'bool') -> 'None'` |  |
-| `Cerebro.signal_accumulate` | 方法 | `(self, onoff: 'bool') -> 'None'` |  |
-| `Cerebro.runstop` | 方法 | `(self) -> 'None'` |  |
-| `Cerebro.plot` | 方法 | `(self, *args: 'Any', **kwargs: 'Any') -> 'list[Any]'` | Return market replay charts for the most recent run. |
-| `Cerebro.run` | 方法 | `(self, **kwargs: 'Any') -> 'list[Strategy]'` |  |
+| `Cerebro.setcash` | method | `(self, cash: 'float') -> 'None'` |  |
+| `Cerebro.getbroker` | method | `(self) -> 'Any'` |  |
+| `Cerebro.setbroker` | method | `(self, broker: 'Any') -> 'None'` |  |
+| `Cerebro.setcommission` | method | `(self, commission: 'float' = 0.0, margin: 'float' = 0.0, mult: 'float' = 1.0, comminfo: 'Any' = None, name: 'str | None' = None) -> 'None'` | Set commission parameters or a custom CommInfo object. |
+| `Cerebro.set_coc` | method | `(self, coc: 'bool' = True) -> 'None'` |  |
+| `Cerebro.adddata` | method | `(self, data: 'Any', name: 'Any | None' = None) -> 'Any'` |  |
+| `Cerebro.chaindata` | method | `(self, *args: 'Any', **kwargs: 'Any') -> 'Any'` |  |
+| `Cerebro.rolloverdata` | method | `(self, *args: 'Any', **kwargs: 'Any') -> 'Any'` |  |
+| `Cerebro.resampledata` | method | `(self, data: 'Any', timeframe: 'int', compression: 'int' = 1, name: 'str | None' = None, **kwargs: 'Any') -> 'DataFeed'` |  |
+| `Cerebro.replaydata` | method | `(self, data: 'Any', *args: 'Any', **kwargs: 'Any') -> 'Any'` |  |
+| `Cerebro.addstrategy` | method | `(self, strategy: 'type[Strategy]', *args: 'Any', **kwargs: 'Any') -> 'None'` |  |
+| `Cerebro.optstrategy` | method | `(self, strategy: 'type[Strategy]', *args: 'Any', **kwargs: 'Any') -> 'None'` |  |
+| `Cerebro.addanalyzer` | method | `(self, analyzer: 'type[Analyzer]', *args: 'Any', _name=None, **kwargs: 'Any') -> 'None'` |  |
+| `Cerebro.addobserver` | method | `(self, observer: 'type[Any]', *args: 'Any', _name=None, **kwargs: 'Any') -> 'None'` |  |
+| `Cerebro.addwriter` | method | `(self, writer: 'type[Any]', *args: 'Any', **kwargs: 'Any') -> 'None'` |  |
+| `Cerebro.getwriterheaders` | method | `(self) -> 'list[Any]'` |  |
+| `Cerebro.getwriterinfo` | method | `(self) -> 'list[Any]'` |  |
+| `Cerebro.getwritervalues` | method | `(self) -> 'list[Any]'` |  |
+| `Cerebro.addstore` | method | `(self, store: 'Any') -> 'None'` |  |
+| `Cerebro.addtimer` | method | `(self, *args: 'Any', **kwargs: 'Any') -> 'None'` |  |
+| `Cerebro.addcalendar` | method | `(self, calendar: 'Any') -> 'None'` |  |
+| `Cerebro.addsizer` | method | `(self, sizer: 'type[Any]', **kwargs: 'Any') -> 'None'` |  |
+| `Cerebro.setsizer` | method | `(self, sizer: 'type[Any]', **kwargs: 'Any') -> 'None'` |  |
+| `Cerebro.add_signal` | method | `(self, sigtype: 'int', sigcls: 'type', *sigargs: 'Any', **sigkwargs: 'Any') -> 'None'` |  |
+| `Cerebro.signal_strategy` | method | `(self, stratcls: 'type', *args: 'Any', **kwargs: 'Any') -> 'None'` |  |
+| `Cerebro.signal_concurrent` | method | `(self, onoff: 'bool') -> 'None'` |  |
+| `Cerebro.signal_accumulate` | method | `(self, onoff: 'bool') -> 'None'` |  |
+| `Cerebro.runstop` | method | `(self) -> 'None'` |  |
+| `Cerebro.plot` | method | `(self, *args: 'Any', **kwargs: 'Any') -> 'list[Any]'` | Return market replay charts for the most recent run. |
+| `Cerebro.run` | method | `(self, **kwargs: 'Any') -> 'list[Strategy]'` |  |
 
 ### Strategy
 
-| 成员 | 类型 | 签名 | 说明 |
+| Member | Kind | Signature | Summary |
 |---|---|---|---|
-| `Strategy.datetime` | 属性 | `` | Shortcut for self.data.datetime to match backtrader behavior. |
-| `Strategy.position` | 属性 | `` |  |
-| `Strategy.start` | 方法 | `(self)` |  |
-| `Strategy.init` | 方法 | `(self)` |  |
-| `Strategy.prenext` | 方法 | `(self)` |  |
-| `Strategy.next` | 方法 | `(self)` |  |
-| `Strategy.stop` | 方法 | `(self)` |  |
-| `Strategy.notify_order` | 方法 | `(self, order: 'Any')` |  |
-| `Strategy.notify_trade` | 方法 | `(self, trade: 'Any')` |  |
-| `Strategy.notify_cashvalue` | 方法 | `(self, cash: 'float', value: 'float')` |  |
-| `Strategy.getposition` | 方法 | `(self, data: 'Any' = None) -> 'Position'` |  |
-| `Strategy.getdatabyname` | 方法 | `(self, name: 'str') -> 'Any'` |  |
-| `Strategy.getpositionbyname` | 方法 | `(self, name: 'str') -> 'Position'` |  |
-| `Strategy.setsizer` | 方法 | `(self, sizer: 'Any', name: 'Any' = None) -> 'Any'` |  |
-| `Strategy.getsizer` | 方法 | `(self) -> 'Any'` |  |
-| `Strategy.getsizing` | 方法 | `(self, data: 'Any' = None, isbuy: 'bool' = True) -> 'float'` |  |
-| `Strategy.submit_order` | 方法 | `(self, side: 'int', data: 'Any' = None, size: 'float | None' = None, price: 'float | None' = None, exectype: 'int | None' = None, **kwargs)` | Submit a shared event-driven order through the bound broker. |
-| `Strategy.buy` | 方法 | `(self, data: 'Any' = None, size: 'float | None' = None, price: 'float | None' = None, exectype: 'int | None' = None, **kwargs)` |  |
-| `Strategy.sell` | 方法 | `(self, data: 'Any' = None, size: 'float | None' = None, price: 'float | None' = None, exectype: 'int | None' = None, **kwargs)` |  |
-| `Strategy.close` | 方法 | `(self, data: 'Any' = None, size: 'float | None' = None, **kwargs)` |  |
-| `Strategy.cancel` | 方法 | `(self, order: 'Any')` |  |
-| `Strategy.order_target_size` | 方法 | `(self, data: 'Any' = None, target: 'float' = 0, **kwargs)` |  |
-| `Strategy.order_target_value` | 方法 | `(self, data: 'Any' = None, target: 'float' = 0.0, price: 'float | None' = None, **kwargs)` |  |
-| `Strategy.order_target_percent` | 方法 | `(self, data: 'Any' = None, target: 'float' = 0.0, **kwargs)` |  |
-| `Strategy.buy_bracket` | 方法 | `(self, data=None, size=None, price=None, plimit=None, exectype=2, valid=None, trailamount=None, trailpercent=None, oargs=None, stopprice=None, stopexec=3, stopargs=None, limitprice=None, limitexec=2, limitargs=None, **kwargs)` |  |
-| `Strategy.sell_bracket` | 方法 | `(self, data=None, size=None, price=None, plimit=None, exectype=2, valid=None, trailamount=None, trailpercent=None, oargs=None, stopprice=None, stopexec=3, stopargs=None, limitprice=None, limitexec=2, limitargs=None, **kwargs)` |  |
-| `Strategy.addminperiod` | 方法 | `(self, minperiod: 'int') -> 'None'` | Extend the strategy warmup period used before calling ``next``. |
+| `Strategy.datetime` | property | `` | Shortcut for self.data.datetime to match backtrader behavior. |
+| `Strategy.position` | property | `` |  |
+| `Strategy.start` | method | `(self)` |  |
+| `Strategy.init` | method | `(self)` |  |
+| `Strategy.prenext` | method | `(self)` |  |
+| `Strategy.next` | method | `(self)` |  |
+| `Strategy.stop` | method | `(self)` |  |
+| `Strategy.notify_order` | method | `(self, order: 'Any')` |  |
+| `Strategy.notify_trade` | method | `(self, trade: 'Any')` |  |
+| `Strategy.notify_cashvalue` | method | `(self, cash: 'float', value: 'float')` |  |
+| `Strategy.getposition` | method | `(self, data: 'Any' = None) -> 'Position'` |  |
+| `Strategy.getdatabyname` | method | `(self, name: 'str') -> 'Any'` |  |
+| `Strategy.getpositionbyname` | method | `(self, name: 'str') -> 'Position'` |  |
+| `Strategy.setsizer` | method | `(self, sizer: 'Any', name: 'Any' = None) -> 'Any'` |  |
+| `Strategy.getsizer` | method | `(self) -> 'Any'` |  |
+| `Strategy.getsizing` | method | `(self, data: 'Any' = None, isbuy: 'bool' = True) -> 'float'` |  |
+| `Strategy.submit_order` | method | `(self, side: 'int', data: 'Any' = None, size: 'float | None' = None, price: 'float | None' = None, exectype: 'int | None' = None, **kwargs)` | Submit a shared event-driven order through the bound broker. |
+| `Strategy.buy` | method | `(self, data: 'Any' = None, size: 'float | None' = None, price: 'float | None' = None, exectype: 'int | None' = None, **kwargs)` |  |
+| `Strategy.sell` | method | `(self, data: 'Any' = None, size: 'float | None' = None, price: 'float | None' = None, exectype: 'int | None' = None, **kwargs)` |  |
+| `Strategy.close` | method | `(self, data: 'Any' = None, size: 'float | None' = None, **kwargs)` |  |
+| `Strategy.cancel` | method | `(self, order: 'Any')` |  |
+| `Strategy.order_target_size` | method | `(self, data: 'Any' = None, target: 'float' = 0, **kwargs)` |  |
+| `Strategy.order_target_value` | method | `(self, data: 'Any' = None, target: 'float' = 0.0, price: 'float | None' = None, **kwargs)` |  |
+| `Strategy.order_target_percent` | method | `(self, data: 'Any' = None, target: 'float' = 0.0, **kwargs)` |  |
+| `Strategy.buy_bracket` | method | `(self, data=None, size=None, price=None, plimit=None, exectype=2, valid=None, trailamount=None, trailpercent=None, oargs=None, stopprice=None, stopexec=3, stopargs=None, limitprice=None, limitexec=2, limitargs=None, **kwargs)` |  |
+| `Strategy.sell_bracket` | method | `(self, data=None, size=None, price=None, plimit=None, exectype=2, valid=None, trailamount=None, trailpercent=None, oargs=None, stopprice=None, stopexec=3, stopargs=None, limitprice=None, limitexec=2, limitargs=None, **kwargs)` |  |
+| `Strategy.addminperiod` | method | `(self, minperiod: 'int') -> 'None'` | Extend the strategy warmup period used before calling ``next``. |
