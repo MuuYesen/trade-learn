@@ -1,4 +1,4 @@
-# Factor Guide
+# 因子指南
 
 `tradelearn.factor` 提供 alphalens 风格的因子清洗、分组收益、IC、换手和多周期报告。
 

@@ -1,4 +1,4 @@
-# Research Guide
+# 研究指南
 
 `tradelearn.research` 用来组织机器学习策略和指数增强研究里的固定流程。
 

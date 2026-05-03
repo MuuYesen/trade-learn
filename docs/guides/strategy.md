@@ -1,7 +1,7 @@
-# Strategy Writing Guide
+# 策略编写指南
 
 本页由 `scripts/generate_api_reference.py` 自动生成,只说明两种策略入口的共同心智模型。
-完整函数签名请看 Lite / Engine API 签名页,完整工作流请看对应 Guide。
+完整函数签名请看 Lite / Engine API 签名页,完整工作流请看对应指南。
 
 Tradelearn 当前有两个用户入口:
 
@@ -17,7 +17,7 @@ Tradelearn 当前有两个用户入口:
 - Engine 是 Backtrader 数值对齐主入口;修改撮合、订单、broker、生命周期后必须跑 Backtrader 对齐测试。
 - Lite 只验证语法层是否正确接入同一 runtime;底层正确性仍以 Engine/Backtrader 对齐为主。
 
-## Lite Strategy
+## Lite 策略
 
 Lite 策略继承 `tradelearn.lite.Strategy`,通常在 `init()` 声明指标,在 `next()` 写交易逻辑。
 
@@ -76,7 +76,7 @@ stats.strategy
 stats.config
 ```
 
-## Engine Strategy
+## Engine 策略
 
 Engine 策略继承 `tradelearn.engine.Strategy`,通常在 `__init__()` 声明指标,在 `next()` 写交易逻辑。
 

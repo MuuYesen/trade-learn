@@ -1,4 +1,4 @@
-# Indicators Guide
+# 指标指南
 
 指标不下沉 Rust，保持 Python 生态可组合、可核对。
 

@@ -1,4 +1,4 @@
-# Lite Guide
+# Lite 指南
 
 Lite 是推荐起点：写法短，适合快速验证、教学、1.x 风格迁移和多资产目标权重。它不是独立撮合系统，而是同一套 `tradelearn.backtest` runtime 的轻量 facade。
 

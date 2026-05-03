@@ -86,14 +86,13 @@ markdown_extensions:
   - pymdownx.mark
 
 nav:
-  - Quickstart:
-      - Home: README.md
-      - Quickstart: quickstart.md
-  - Concepts:
+  - 首页: README.md
+  - 快速开始: quickstart.md
+  - 核心概念:
       - 架构与边界: concepts/architecture.md
       - Runtime 与 Runner: concepts/runtime.md
       - Stats 结果对象: concepts/stats.md
-  - User Guide:
+  - 用户指南:
       - 策略撰写: guides/strategy.md
       - Lite:
           - Lite 入门: guides/lite.md
@@ -101,31 +100,31 @@ nav:
       - Engine:
           - Engine 入门: guides/engine.md
           - Engine API 签名: guides/engine-api.md
-      - Data Guide: guides/data.md
-      - Indicators Guide: guides/indicators.md
-      - Research Guide: guides/research.md
-      - Factor Guide: guides/factor.md
-      - Optimization Guide: guides/optimization.md
-      - Report / Plot Guide: guides/report.md
+      - 数据指南: guides/data.md
+      - 指标指南: guides/indicators.md
+      - 研究指南: guides/research.md
+      - 因子指南: guides/factor.md
+      - 优化指南: guides/optimization.md
+      - 报告 / 绘图指南: guides/report.md
       - MLflow / Lab / MCP: guides/mlflow-lab-mcp.md
-  - Design Notes:
+  - 设计笔记:
       - 契约与边界: internals/contracts.md
       - 事件循环: internals/event-loop.md
       - 撮合与成交: internals/matching.md
       - Portfolio 模型: internals/portfolio.md
       - 与外部库的语义一致性: internals/consistency.md
       - v1 → v2 迁移: internals/migration.md
-  - Benchmarks:
+  - 性能基线:
       - 性能基线: benchmarks.md
       - 评估与竞品对比: release/evaluation.md
-  - API Reference:
+  - API 参考:
       - 概览: api/reference.md
-      - Lite: api/reference/lite.md
-      - Engine: api/reference/engine.md
-      - Data: api/reference/data.md
-      - Indicators: api/reference/indicators.md
-      - Metrics: api/reference/metrics.md
-      - Factor: api/reference/factor.md
-      - Report: api/reference/report.md
-      - ML: api/reference/ml.md
-      - Research: api/reference/research.md
+      - Lite 参考: api/reference/lite.md
+      - Engine 参考: api/reference/engine.md
+      - 数据: api/reference/data.md
+      - 指标: api/reference/indicators.md
+      - 收益风险指标: api/reference/metrics.md
+      - 因子: api/reference/factor.md
+      - 报告: api/reference/report.md
+      - 机器学习: api/reference/ml.md
+      - 研究: api/reference/research.md

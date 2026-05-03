@@ -186,8 +186,8 @@ bt.tdx.MA(self.data.close, N=20)       # Engine
 
 | 目标 | 阅读 |
 |---|---|
-| 写更完整的 Lite 策略 | [Lite Guide](guides/lite.md) |
-| 写 Backtrader 风格策略 | [Engine Guide](guides/engine.md) |
+| 写更完整的 Lite 策略 | [Lite 指南](guides/lite.md) |
+| 写 Backtrader 风格策略 | [Engine 指南](guides/engine.md) |
 | 理解 Stats 返回对象 | [Stats 结果对象](concepts/stats.md) |
-| 做因子和机器学习研究 | [Research Guide](guides/research.md) |
+| 做因子和机器学习研究 | [研究指南](guides/research.md) |
 | 查看性能和对齐结果 | [性能基线](benchmarks.md) |

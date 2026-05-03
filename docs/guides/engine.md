@@ -1,4 +1,4 @@
-# Engine Guide
+# Engine 指南
 
 Engine 是 Backtrader 风格高级入口，适合复杂事件驱动策略、Analyzer、Observer、Sizer、Signal 和未来 paper/live adapter。
 

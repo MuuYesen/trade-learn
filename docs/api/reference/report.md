@@ -1,8 +1,8 @@
-# Report Reference
+# 报告 参考
 
 HTML、Excel 与研究报告导出。
 
-[Back to API Reference](../reference.md)
+[返回 API 参考](../reference.md)
 
 ::: tradelearn.report
     options:
@@ -12,6 +12,9 @@ HTML、Excel 与研究报告导出。
       show_root_full_path: false
       show_object_full_path: false
       show_bases: false
+      show_docstring_parameters: true
+      show_docstring_returns: true
+      show_docstring_raises: true
       show_signature_annotations: true
       separate_signature: true
       members_order: source

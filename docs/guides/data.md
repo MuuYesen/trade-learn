@@ -1,4 +1,4 @@
-# Data Guide
+# 数据指南
 
 trade-learn 策略层统一面对 OHLCV DataFrame 或 `MultiIndex(timestamp, symbol)` panel。
 

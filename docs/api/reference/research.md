@@ -1,8 +1,8 @@
-# Research Reference
+# 研究 参考
 
 指数增强研发流程记录、预处理与组合构建工具。
 
-[Back to API Reference](../reference.md)
+[返回 API 参考](../reference.md)
 
 ::: tradelearn.research
     options:
@@ -12,6 +12,9 @@
       show_root_full_path: false
       show_object_full_path: false
       show_bases: false
+      show_docstring_parameters: true
+      show_docstring_returns: true
+      show_docstring_raises: true
       show_signature_annotations: true
       separate_signature: true
       members_order: source

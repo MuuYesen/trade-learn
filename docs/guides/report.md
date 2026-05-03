@@ -1,4 +1,4 @@
-# Report / Plot Guide
+# 报告 / 绘图指南
 
 trade-learn 区分 plot 和 report。
 

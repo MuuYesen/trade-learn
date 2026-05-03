@@ -1,4 +1,4 @@
-# Optimization Guide
+# 优化指南
 
 trade-learn 有两层优化入口。
 

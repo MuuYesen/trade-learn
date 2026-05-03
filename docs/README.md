@@ -32,13 +32,13 @@ trade-learn 的目标不是再写一个回测框架，而是把一条**完整的
 | 你的目标 | 推荐阅读 |
 |---|---|
 | 30 行代码跑通第一个回测 | [快速开始](quickstart.md) |
-| 写一个轻量策略 | [Lite Guide](guides/lite.md) |
-| 迁移 backtrader 风格策略 | [Engine Guide](guides/engine.md) |
+| 写一个轻量策略 | [Lite 指南](guides/lite.md) |
+| 迁移 backtrader 风格策略 | [Engine 指南](guides/engine.md) |
 | 理解整体架构 | [架构与边界](concepts/architecture.md) |
 | 做因子、机器学习、组合研究 | [研究流水线](guides/research.md) |
 | 查看性能与对齐结果 | [性能基线](benchmarks.md) |
-| 想理解撮合 / 记账 / 一致性内核 | [Design Notes](internals/contracts.md) |
-| 查完整 API | [API Reference](api/reference.md) |
+| 想理解撮合 / 记账 / 一致性内核 | [设计笔记](internals/contracts.md) |
+| 查完整 API | [API 参考](api/reference.md) |
 
 ## 核心能力
 
