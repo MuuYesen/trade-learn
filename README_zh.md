@@ -1,8 +1,12 @@
 <p align="center">
-  <img src="docs/tradelearn-logo.png" alt="trade-learn logo" width="120" />
+  <img src="docs/tradelearn-logo.png" alt="trade-learn logo" width="260" />
 </p>
 
-# trade-learn
+<h1 align="center">trade-learn</h1>
+
+<p align="center">
+  <strong>Python 写策略与投研流程，Rust 扛事件驱动回测内核。</strong>
+</p>
 
 trade-learn 是一个面向量化研究和事件驱动回测的 Python/Rust 框架：**Python 负责表达策略和投研流程，Rust 负责高频回测内核**。
 
