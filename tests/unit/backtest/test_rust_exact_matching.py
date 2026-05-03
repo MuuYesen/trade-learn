@@ -1015,6 +1015,89 @@ def test_rust_bar_runner_drives_multi_data_cursor_batches() -> None:
     assert seen == [(0, [0, 0, -1]), (1, [1, 0, 0]), (2, [2, 1, 0])]
 
 
+def test_rust_clocked_multi_data_runner_matches_secondary_symbol_orders() -> None:
+    engine = _rust.RustBacktestEngine(
+        [1, 2, 3],
+        [10.0, 11.0, 12.0],
+        [10.0, 11.0, 12.0],
+        [10.0, 11.0, 12.0],
+        [10.0, 11.0, 12.0],
+        [1000.0, 1000.0, 1000.0],
+        1000.0,
+        0.0,
+        False,
+        False,
+        False,
+        0.0,
+        0.0,
+        False,
+        False,
+        False,
+    )
+    runner = _rust.RustClockedMultiDataRunner(
+        ["AAA", "BBB"],
+        [[1, 2, 3], [1, 2, 3]],
+        [[10.0, 11.0, 12.0], [100.0, 110.0, 120.0]],
+        [[10.0, 11.0, 12.0], [100.0, 110.0, 120.0]],
+        [[10.0, 11.0, 12.0], [100.0, 110.0, 120.0]],
+        [[10.0, 11.0, 12.0], [100.0, 110.0, 120.0]],
+        [[1000.0, 1000.0, 1000.0], [1000.0, 1000.0, 1000.0]],
+    )
+
+    class BrokerRefSink:
+        def __init__(self) -> None:
+            self.bound: list[tuple[int, int]] = []
+
+        def bind_rust_order_refs(self, bindings: list[tuple[int, int]]) -> None:
+            self.bound.extend(bindings)
+
+    broker = BrokerRefSink()
+    seen: list[tuple[int, list[int], object]] = []
+
+    def on_bar(cursor, data_cursors, fills, cash, size, price):
+        seen.append((cursor, data_cursors, fills))
+        if cursor == 0:
+            return [(99, "BBB", "buy", "market", 1.0, None, None)]
+        return None
+
+    runner.run(engine, broker, on_bar, 0, 3)
+
+    assert runner.len() == 3
+    assert runner.cursors_at(2) == [2, 2]
+    assert broker.bound == [(99, 1)]
+    assert seen[0] == (0, [0, 0], None)
+    assert seen[1][0:2] == (1, [1, 1])
+    order_ids, sizes, prices, comms, slippages, pnls = seen[1][2]
+    assert (order_ids[0], sizes[0], prices[0], comms[0], slippages[0], pnls[0]) == (
+        1,
+        1.0,
+        110.0,
+        0.0,
+        0.0,
+        0.0,
+    )
+    assert engine.get_position_for_symbol("BBB") == (1.0, 110.0)
+
+
+def test_rust_clocked_multi_data_runner_uses_primary_clock_latest_secondary_bar() -> None:
+    runner = _rust.RustClockedMultiDataRunner(
+        ["AAA", "BBB"],
+        [[1, 2, 3], [1, 3]],
+        [[10.0, 11.0, 12.0], [100.0, 130.0]],
+        [[10.0, 11.0, 12.0], [100.0, 130.0]],
+        [[10.0, 11.0, 12.0], [100.0, 130.0]],
+        [[10.0, 11.0, 12.0], [100.0, 130.0]],
+        [[1000.0, 1000.0, 1000.0], [1000.0, 1000.0]],
+    )
+
+    assert runner.cursors_at(0) == [0, 0]
+    assert runner.cursors_at(1) == [1, 0]
+    assert runner.cursors_at(2) == [2, 1]
+    assert runner.active_count_at(0) == 2
+    assert runner.active_count_at(1) == 2
+    assert runner.active_count_at(2) == 2
+
+
 def test_data_advance_plan_uses_rust_primary_clock_cursors() -> None:
     primary = DataContainer(
         pd.DataFrame(
@@ -1122,6 +1205,101 @@ def test_backtest_engine_fills_secondary_data_orders_with_open_matching() -> Non
     [strategy] = cerebro.run()
 
     assert strategy.getpositionbyname("BBB").size == 1.0
+
+
+def test_backtest_engine_multi_data_uses_clocked_runner_without_python_bar_vectors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    index = pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"], utc=True)
+    primary = pd.DataFrame(
+        {
+            "open": [10.0, 11.0, 12.0],
+            "high": [10.0, 11.0, 12.0],
+            "low": [10.0, 11.0, 12.0],
+            "close": [10.0, 11.0, 12.0],
+            "volume": [1.0, 1.0, 1.0],
+        },
+        index=index,
+    )
+    secondary = pd.DataFrame(
+        {
+            "open": [100.0, 110.0, 120.0],
+            "high": [100.0, 110.0, 120.0],
+            "low": [100.0, 110.0, 120.0],
+            "close": [100.0, 110.0, 120.0],
+            "volume": [1.0, 1.0, 1.0],
+        },
+        index=index,
+    )
+
+    def fail_current_bar_vectors(datas):
+        raise AssertionError("clocked multi-data runner should build active bars in Rust")
+
+    monkeypatch.setattr(RustBroker, "_current_bar_vectors", staticmethod(fail_current_bar_vectors))
+
+    class SecondaryOrderStrategy(Strategy):
+        def next(self) -> None:
+            if len(self) == 1:
+                self.buy(data=self.datas[1], size=1)
+
+    cerebro = Cerebro(match_mode="exact", trade_on_close=False)
+    cerebro.adddata(primary, name="AAA")
+    cerebro.adddata(secondary, name="BBB")
+    cerebro.addstrategy(SecondaryOrderStrategy)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.getpositionbyname("BBB").size == 1.0
+
+
+def test_backtest_engine_trade_on_close_clocked_runner_only_uses_python_vectors_for_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    index = pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"], utc=True)
+    primary = pd.DataFrame(
+        {
+            "open": [10.0, 11.0, 12.0],
+            "high": [10.0, 11.0, 12.0],
+            "low": [10.0, 11.0, 12.0],
+            "close": [10.0, 11.0, 12.0],
+            "volume": [1.0, 1.0, 1.0],
+        },
+        index=index,
+    )
+    secondary = pd.DataFrame(
+        {
+            "open": [100.0, 110.0, 120.0],
+            "high": [100.0, 110.0, 120.0],
+            "low": [100.0, 110.0, 120.0],
+            "close": [100.0, 110.0, 120.0],
+            "volume": [1.0, 1.0, 1.0],
+        },
+        index=index,
+    )
+    original = RustBroker._current_bar_vectors
+    vector_calls = 0
+
+    def count_current_bar_vectors(datas):
+        nonlocal vector_calls
+        vector_calls += 1
+        return original(datas)
+
+    monkeypatch.setattr(RustBroker, "_current_bar_vectors", staticmethod(count_current_bar_vectors))
+
+    class SecondaryOrderStrategy(Strategy):
+        def next(self) -> None:
+            if len(self) == 1:
+                self.buy(data=self.datas[1], size=1)
+
+    cerebro = Cerebro(match_mode="exact", trade_on_close=True)
+    cerebro.adddata(primary, name="AAA")
+    cerebro.adddata(secondary, name="BBB")
+    cerebro.addstrategy(SecondaryOrderStrategy)
+
+    [strategy] = cerebro.run()
+
+    assert strategy.getpositionbyname("BBB").size == 1.0
+    assert vector_calls == 1
 
 
 def test_data_advance_plan_skips_cursor_matrix_for_aligned_feeds() -> None:

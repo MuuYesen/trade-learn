@@ -500,6 +500,36 @@ def _build_data_advance_plan(datas: list[Any]) -> Any | None:
     )
 
 
+def _build_clocked_multi_data_runner(datas: list[Any]) -> Any | None:
+    """Build the Rust clocked multi-data runner when the feed schema is supported."""
+    if len(datas) <= 1:
+        return None
+    try:
+        from tradelearn._rust import RustClockedMultiDataRunner
+    except (ImportError, AttributeError):
+        return None
+
+    symbols: list[str] = []
+    timestamps: list[np.ndarray] = []
+    opens: list[np.ndarray] = []
+    highs: list[np.ndarray] = []
+    lows: list[np.ndarray] = []
+    closes: list[np.ndarray] = []
+    volumes: list[np.ndarray] = []
+    for index, data in enumerate(datas):
+        required = ("_datetime", "_open", "_high", "_low", "_close", "_volume")
+        if not all(hasattr(data, attr) for attr in required):
+            return None
+        symbols.append(str(getattr(data, "_name", None) or f"data{index}"))
+        timestamps.append(np.asarray(data._datetime, dtype=np.int64))
+        opens.append(np.asarray(data._open, dtype=np.float64))
+        highs.append(np.asarray(data._high, dtype=np.float64))
+        lows.append(np.asarray(data._low, dtype=np.float64))
+        closes.append(np.asarray(data._close, dtype=np.float64))
+        volumes.append(np.asarray(data._volume, dtype=np.float64))
+    return RustClockedMultiDataRunner(symbols, timestamps, opens, highs, lows, closes, volumes)
+
+
 def run_backtest(cerebro: Any) -> list[Any]:
     """Unified backtest engine that runs any strategy inheriting from core.Strategy."""
     strategy_cls, args, kwargs = cerebro.strats[0]
@@ -628,12 +658,23 @@ def run_backtest(cerebro: Any) -> list[Any]:
     if min_period == 0:
         min_period = 1
 
-    data_advance_plan = _build_data_advance_plan(cerebro.datas)
+    broker = cerebro.broker
+    use_clocked_multi_data_runner = (
+        isinstance(broker, RustBroker)
+        and getattr(broker, "_engine", None) is not None
+        and len(cerebro.datas) > 1
+    )
+    clocked_multi_data_runner = (
+        _build_clocked_multi_data_runner(cerebro.datas) if use_clocked_multi_data_runner else None
+    )
+    data_advance_plan = (
+        None if clocked_multi_data_runner is not None else _build_data_advance_plan(cerebro.datas)
+    )
     bar_advancers = _build_bar_advancers(
         strategy,
         cerebro.datas,
         indicators + indicators_bt,
-        include_data=data_advance_plan is None,
+        include_data=data_advance_plan is None and clocked_multi_data_runner is None,
     )
 
     if data_advance_plan is None:
@@ -671,7 +712,6 @@ def run_backtest(cerebro: Any) -> list[Any]:
     notify_cashvalue = None
     if type(strategy).notify_cashvalue is not CoreStrategy.notify_cashvalue:
         notify_cashvalue = strategy.notify_cashvalue
-    broker = cerebro.broker
     broker_step = broker.step if broker else None
     broker_process_fills = broker.process_fills if broker else None
     broker_getcash = broker.getcash if broker else None
@@ -759,10 +799,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 _observer_step(observer_nexts)
         return []
 
-    use_multi_data_rust_runner = False
+    use_multi_data_rust_runner = clocked_multi_data_runner is not None
 
     if use_multi_data_rust_runner:
-        if notify_cashvalue is None:
+        if getattr(broker, "_trade_on_close", False):
 
             def on_rust_bar_multi(
                 i: int,
@@ -773,7 +813,36 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 price: float,
             ) -> list[Any] | None:
                 for data, cursor in zip(cerebro.datas, data_cursors, strict=False):
-                    data._advance(cursor)
+                    data._advance(cursor if cursor >= 0 else -1)
+                for advance in bar_advancers:
+                    advance(i)
+                broker._curr_idx = i
+                broker._step_fills_from_collect = fills
+                broker._rust_state_cache = (i, cash, size, price)
+                if fills:
+                    broker_process_fills(strategy, i)
+                if notify_cashvalue is not None:
+                    notify_cashvalue(broker_getcash(), broker_getvalue())
+                if i >= min_start:
+                    run_strategy_next_python(i)
+                    raise_if_runstopped()
+                    if has_analyzer_bar_callbacks:
+                        _analyzer_bar_step(strategy, analyzer_bar_callbacks)
+                    if has_observer_nexts:
+                        _observer_step(observer_nexts)
+                return None
+        elif notify_cashvalue is None:
+
+            def on_rust_bar_multi(
+                i: int,
+                data_cursors: list[int],
+                fills: list[Any],
+                cash: float,
+                size: float,
+                price: float,
+            ) -> list[Any] | None:
+                for data, cursor in zip(cerebro.datas, data_cursors, strict=False):
+                    data._advance(cursor if cursor >= 0 else -1)
                 for advance in bar_advancers:
                     advance(i)
                 broker._curr_idx = i
@@ -801,7 +870,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 price: float,
             ) -> list[Any] | None:
                 for data, cursor in zip(cerebro.datas, data_cursors, strict=False):
-                    data._advance(cursor)
+                    data._advance(cursor if cursor >= 0 else -1)
                 for advance in bar_advancers:
                     advance(i)
                 broker._curr_idx = i
@@ -821,7 +890,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 return None
 
         try:
-            data_advance_plan.run(broker._engine, broker, on_rust_bar_multi, 0, limit)
+            clocked_multi_data_runner.run(broker._engine, broker, on_rust_bar_multi, 0, limit)
         except _RunStopped:
             pass
     elif use_rust_bar_loop:
