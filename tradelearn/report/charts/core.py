@@ -1422,10 +1422,15 @@ def _attach_bar_index(fills: pd.DataFrame, frame: pd.DataFrame) -> pd.DataFrame:
     """Attach nearest market bar index to each fill."""
     if fills.empty:
         return fills
-    bars = frame[["date", "bar_index"]].sort_values("date")
+    bars = frame[["date", "bar_index"]].copy()
+    fills_sorted = fills.copy()
+    
+    bars["date"] = bars["date"].astype("datetime64[ns]")
+    fills_sorted["date"] = fills_sorted["date"].astype("datetime64[ns]")
+    
     projected = pd.merge_asof(
-        fills.sort_values("date"),
-        bars,
+        fills_sorted.sort_values("date"),
+        bars.sort_values("date"),
         on="date",
         direction="nearest",
     )
@@ -1437,9 +1442,13 @@ def _equity_replay_frame(equity: pd.Series, frame: pd.DataFrame) -> pd.DataFrame
     equity_frame = _plot_frame(pd.Series(equity).dropna(), "equity")
     if equity_frame.empty:
         return pd.DataFrame()
-    bars = frame[["date", "bar_index", "close"]].sort_values("date")
+    bars = frame[["date", "bar_index", "close"]].copy()
+    
+    bars["date"] = bars["date"].astype("datetime64[ns]")
+    equity_frame["date"] = equity_frame["date"].astype("datetime64[ns]")
+    
     projected = pd.merge_asof(
-        bars,
+        bars.sort_values("date"),
         equity_frame.sort_values("date"),
         on="date",
         direction="nearest",
