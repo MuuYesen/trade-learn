@@ -213,8 +213,7 @@ class Strategy:
     def close(self, data: Any = None, size: float | None = None, **kwargs):
         data = self._resolve_data(data)
         pos = self.getposition(data)
-        pending = self._pending_size.get(data, 0.0)
-        effective_size = pos.size + pending
+        effective_size = pos.size
         if effective_size > 0:
             return self.sell(data=data, size=size or abs(effective_size), **kwargs)
         elif effective_size < 0:

@@ -58,3 +58,23 @@ def test_strategy_position_uses_broker_before_fallback_state() -> None:
 
     strategy.broker = None
     assert strategy.getposition().size == 99.0
+
+
+def test_strategy_close_uses_current_position_not_pending_size() -> None:
+    data = object()
+
+    class PositionBroker(RecordingBroker):
+        def getposition(self, requested_data):
+            assert requested_data is data
+            return Position(size=1.0, price=10.0)
+
+    strategy = Strategy()
+    strategy.data = data
+    strategy.broker = PositionBroker()
+    strategy._pending_size[data] = 7.0
+
+    strategy.close()
+
+    _owner, _data, side, size, _price, _exectype, _kwargs = strategy.broker.submissions[0]
+    assert side == Order.Sell
+    assert size == 1.0

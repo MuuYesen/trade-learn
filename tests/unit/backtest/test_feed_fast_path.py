@@ -42,6 +42,15 @@ def test_runtime_data_feed_can_use_internal_no_copy_fast_path() -> None:
     assert np.shares_memory(feed.get_array("volume"), frame["volume"].to_numpy())
 
 
+def test_runtime_data_feed_ignores_non_numeric_metadata_columns() -> None:
+    frame = _normalized_frame().assign(symbol="NASDAQ:GOOG")
+
+    feed = RuntimeDataFeed(frame, name="NASDAQ:GOOG")
+
+    assert feed.get_array("close")[0] == 10.5
+    assert feed.get_array("symbol").size == 0
+
+
 def test_build_data_feeds_preserves_default_copy_semantics_on_fast_path() -> None:
     frame = _normalized_frame()
 

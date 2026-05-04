@@ -1,8 +1,12 @@
 [package]
 name = "tradelearn-rust"
-version = "0.1.2"
+version = "1.0.0"
 edition = "2021"
 license = "Apache-2.0"
+description = "Rust event-driven backtest kernel for trade-learn."
+homepage = "https://github.com/MuuYesen/trade-learn"
+repository = "https://github.com/MuuYesen/trade-learn"
+documentation = "https://muuyesen.github.io/trade-learn/"
 publish = false
 
 [lib]

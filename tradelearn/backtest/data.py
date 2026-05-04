@@ -138,7 +138,9 @@ class DataContainer:
         # Add extra columns
         for col in frame.columns:
             if col not in self._arrays:
-                self._arrays[col] = self._float64_array(frame[col])
+                array = self._optional_float64_array(frame[col])
+                if array is not None:
+                    self._arrays[col] = array
         self._bar_buffer = SharedBarBuffer(self, self._arrays)
 
     @staticmethod
@@ -147,6 +149,12 @@ class DataContainer:
         if array.dtype == np.float64:
             return array
         return np.asarray(array, dtype=np.float64)
+
+    @staticmethod
+    def _optional_float64_array(series: pd.Series) -> np.ndarray | None:
+        if not pd.api.types.is_numeric_dtype(series):
+            return None
+        return DataContainer._float64_array(series)
 
     def __len__(self) -> int:
         return self._cursor + 1
