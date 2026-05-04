@@ -12,7 +12,7 @@ def test_cibuildwheel_config_targets_supported_python_and_platforms() -> None:
 
     assert "[tool.cibuildwheel]" in pyproject
     assert 'build = "cp310-* cp311-* cp312-*"' in pyproject
-    assert 'skip = "*-musllinux_* pp*"' in pyproject
+    assert 'skip = "*-musllinux_*"' in pyproject
     assert "[tool.cibuildwheel.linux]" in pyproject
     assert "[tool.cibuildwheel.macos]" in pyproject
     assert "[tool.cibuildwheel.windows]" in pyproject
@@ -32,8 +32,12 @@ def test_release_workflow_builds_cross_platform_artifacts_and_publishes_with_oid
     assert "tags:" in workflow
     assert "v*" in workflow
     assert "ubuntu-latest" in workflow
-    assert "macos-latest" in workflow
+    assert "macos-13" in workflow
+    assert "macos-14" in workflow
+    assert "cibw-archs: x86_64" in workflow
+    assert "cibw-archs: arm64" in workflow
     assert "windows-latest" in workflow
+    assert "CIBW_ARCHS: ${{ matrix.cibw-archs }}" in workflow
     assert "python -m build --sdist" in workflow
     assert "python -m cibuildwheel --output-dir wheelhouse" in workflow
     assert "id-token: write" in workflow
