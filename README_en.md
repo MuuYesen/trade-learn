@@ -137,7 +137,7 @@ class LiteSmaCross(tl.Strategy):
             self.position().close()
 
 
-provider = TradingViewProvider(n_bars=500)
+provider = TradingViewProvider(n_bars=5000)
 bars = provider.history_ohlc("NASDAQ:AAPL", start="2023-01-01", end="2024-01-01")
 
 bt = tl.Backtest(bars, LiteSmaCross, cash=100_000, commission=0.0003, trade_on_close=True)
@@ -169,7 +169,7 @@ class SmaCross(bt.Strategy):
             self.close()
 
 
-provider = TradingViewProvider(n_bars=500)
+provider = TradingViewProvider(n_bars=5000)
 bars = provider.history_ohlc("NASDAQ:AAPL", start="2023-01-01", end="2024-01-01")
 
 cerebro = bt.Cerebro(trade_on_close=True)
