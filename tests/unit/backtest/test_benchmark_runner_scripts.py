@@ -10,6 +10,9 @@ from benchmarks.runners.benchmark_target_weights import (
 )
 from benchmarks.runners.benchmark_target_weight_parity import run_parity_benchmark
 from benchmarks.runners.benchmark_throughput import make_data, run_benchmark, run_engine, run_lite
+from benchmarks.runners.benchmark_research_pipeline import (
+    run_benchmark as run_research_pipeline_benchmark,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -157,3 +160,33 @@ def test_target_weight_parity_benchmark_uses_same_sell_first_semantics() -> None
     assert lite.target_history == engine.target_history
     assert lite.order_count > 0
     assert all(result.bars_per_sec > 0 for result in results)
+
+
+def test_research_pipeline_benchmark_reports_stage12_segments() -> None:
+    result = run_research_pipeline_benchmark(
+        symbols=6,
+        bars=80,
+        holdings=2,
+        lookback=5,
+        rebalance_every=10,
+        split_ratio=0.6,
+        seed=13,
+        write_report=True,
+    )
+
+    assert result.total_bars == 480
+    assert result.final_value > 0.0
+    assert result.weight_dates > 0
+    assert result.report_path is not None and result.report_path.name == "report.html"
+    assert result.artifact_count >= 4
+    assert result.bars_per_sec > 0.0
+    assert [segment.name for segment in result.segments] == [
+        "panel",
+        "factor",
+        "weights",
+        "backtest",
+        "report",
+        "mlflow_artifacts",
+        "total",
+    ]
+    assert all(segment.seconds >= 0.0 for segment in result.segments)

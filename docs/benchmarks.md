@@ -32,6 +32,19 @@ Lite 不是 Backtrader facade，它是更薄的策略语法层。Lite 与 Engine
 
 结论：Engine 与 Backtrader 在最终权益、完成订单数、目标意图数和 rebalance 次数上全部 `EXACT`；Engine 约为 Backtrader 的 **69.7x**，Lite 约为 **119.1x**。这些数字不作为跨机器的绝对性能承诺；正式质量门禁仍然是 Engine 与 Backtrader 的订单生命周期和交易明细保持 `EXACT`。
 
+### Research pipeline 分段耗时
+
+验证入口：[`benchmarks/runners/benchmark_research_pipeline.py`](https://github.com/MuuYesen/trade-learn/blob/v2/benchmarks/runners/benchmark_research_pipeline.py)。该 runner 只看 Stage 12 投研主路径的分段耗时，不和 Backtrader 对比：`panel -> factor -> weights -> backtest -> report -> MLflow artifacts`。
+
+| 分段 | 含义 |
+|---|---|
+| `panel` | 合成/准备 MultiIndex OHLCV panel，并切出 test bars |
+| `factor` | `FeatureSet` 生成因子与标签，`research.Pipeline` fit/transform |
+| `weights` | `Allocator(TopK + EqualWeight + Constraints)` 生成多日期目标权重 |
+| `backtest` | Lite 通过共享 backtest runtime 执行 `target_weights()` |
+| `report` | Reporter 写 `report.html` |
+| `mlflow_artifacts` | 生成 MLflow 可上传的 `artifacts.xlsx` 与拆分 CSV |
+
 ## Examples 对齐审计
 
 `examples/` 里的策略用于检查用户可读策略是否还能保持 Backtrader 语义对齐，不混入大样本吞吐统计。
@@ -53,4 +66,7 @@ uv run python benchmarks/runners/benchmark_throughput.py --bars 550000 --repeat 
 
 uv run python benchmarks/runners/benchmark_target_weight_parity.py \
   --symbols 1000 --bars 5040 --holdings 50 --rebalance-every 21
+
+uv run python benchmarks/runners/benchmark_research_pipeline.py \
+  --symbols 50 --bars 240 --holdings 10
 ```
