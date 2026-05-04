@@ -26,20 +26,18 @@ dependencies = [
     "numpy>=1.26",
     "pandas",
     "scipy",
-    "statsmodels",
     "scikit-learn",
     "opentdx; python_version >= '3.12'",
     "pyarrow",
     "pandas-ta-classic",
+    "tradingview-datafeed",
     "TA-Lib",
     "pynesys-pynecore; python_version >= '3.11'",
     "xlsxwriter",
     "bokeh",
     "causal-learn",
-    "httpx",
     "tqdm",
     "typer",
-    "pydantic",
     "pyyaml",
 ]
 
@@ -62,9 +60,6 @@ lab = [
 mlflow = [
     "mlflow",
 ]
-tv = [
-    "tradingview-datafeed",
-]
 all = [
     "jupyterlab",
     "jupyterlab-git",
@@ -73,7 +68,6 @@ all = [
     "pygwalker",
     "mcp>=1.8.0",
     "mlflow",
-    "tradingview-datafeed",
     "Riskfolio-Lib",
     "optuna",
     "duckdb",
@@ -95,7 +89,6 @@ oracle = [
     "backtesting>=0.6.5",
     "backtrader",
     "opentdx; python_version >= '3.12'",
-    "tradingview-datafeed",
 ]
 
 [tool.setuptools.packages.find]

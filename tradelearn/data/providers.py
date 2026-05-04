@@ -325,24 +325,14 @@ class TradingViewProvider:
     def _make_client(self) -> object:
         if self._client_factory is not None:
             return self._client_factory()
-        try:
-            from tvDatafeed import TvDatafeed
-        except ModuleNotFoundError as exc:
-            raise ModuleNotFoundError(
-                "TradingViewProvider requires tradingview-datafeed. Install it with "
-                "`pip install trade-learn[tv]` or `pip install tradingview-datafeed`."
-            ) from exc
 
+        from tvDatafeed import TvDatafeed
         return TvDatafeed(username=self.username, password=self.password)
 
     @staticmethod
     def _interval_value(freq: Frequency) -> object:
-        interval_name = TRADINGVIEW_INTERVAL[freq]
-        try:
-            from tvDatafeed import Interval
-        except ModuleNotFoundError:
-            return interval_name
-        return getattr(Interval, interval_name)
+        from tvDatafeed import Interval
+        return getattr(Interval, TRADINGVIEW_INTERVAL[freq])
 
 
 def infer_tdx_market(symbol: str) -> tuple[int, str]:

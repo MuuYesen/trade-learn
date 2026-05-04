@@ -56,10 +56,10 @@ def test_pyproject_has_oracle_dependency_group() -> None:
     oracle = pyproject["dependency-groups"]["oracle"]
 
     assert any(dep.startswith("opentdx") for dep in dependencies)
+    assert any(dep.startswith("tradingview-datafeed") for dep in dependencies)
     assert not any(dep.startswith(RETIRED_PROVIDER_NAMES[0]) for dep in dependencies)
     assert not any(dep.startswith("yfinance") for dep in oracle)
     assert any(dep.startswith("opentdx") for dep in oracle)
-    assert any(dep.startswith("tradingview-datafeed") for dep in oracle)
     assert not any(dep.startswith(RETIRED_PROVIDER_NAMES[1]) for dep in oracle)
     assert not any("git+" in dep for dep in dependencies)
     assert not any("git+" in dep for dep in oracle)
