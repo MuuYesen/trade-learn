@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Python for strategy and research, Rust for the event-driven backtest core.</strong>
+  <strong>Python for Strategy and Research, Rust for Event-Driven Backtesting Core.</strong>
 </p>
 
 <p align="center">
@@ -14,12 +14,12 @@
 </p>
 
 <p align="center">
-  <a href="./README.md">中文主页</a>
+  <a href="./README.md">中文版</a> | <a href="./README_ja.md">日本語版</a>
 </p>
 
-**trade-learn** is a high-performance quantitative framework designed to bridge the gap between **Trading** and **Learning**. It is built for Index Enhancement, quantitative research, machine-learning strategies, and event-driven backtesting. By leveraging **Python** for flexible strategy expression and **Rust** for a high-performance matching kernel (handling order processing and portfolio accounting), it provides a unified and reproducible workflow from factor discovery to experiment tracking.
+**trade-learn** is a quantitative framework that integrates **trade** and **learn** into a single pipeline, designed for index enhancement, quant research, machine learning strategies, and event-driven backtesting. Python provides the flexibility for strategy expression, factor research, and model experimentation, while Rust handles the high-frequency backtesting core, including matching, order advancement, and portfolio calculation. From research and backtesting to reporting and experiment tracking, everything revolves around a single reproducible workflow.
 
-It focuses not just on "running a backtest," but on connecting the entire strategy research lifecycle:
+The core pain point it addresses is no longer just "how to run a backtest," but how to weave fragmented research segments into a complete strategy lifecycle:
 
 <p align="center">
   <img src="docs/research-flow.png" alt="trade-learn research flow" width="100%" />
@@ -27,96 +27,54 @@ It focuses not just on "running a backtest," but on connecting the entire strate
 
 ## Implementation Path
 
-trade-learn is not just a collection of features; it is a bridge from "Professional Depth" to "Research Efficiency":
-- **Engine Layer**: Deeply aligned with Backtrader semantics to ensure industrial-grade correctness.
-- **Lite Layer**: Provides a minimal, Pythonic interface for rapid prototyping.
-Both layers share the same high-performance Rust Runtime, ensuring the perfect unification of **Accuracy** and **Speed**.
+trade-learn avoids simple feature stacking; instead, it builds a bridge between "professional depth" and "development efficiency." The underlying **Engine** is deeply aligned with Backtrader semantics to ensure logical correctness, while the upper **Lite** layer provides a minimalist Pythonic interface. Both share a high-performance Runtime, ensuring the perfect unification of "Speed" and "Accuracy."
 
-You can define the "depth" of your strategy freely:
-- **Engine Mode (Backtrader-style)**: Offers atomic control and full lifecycle events, ideal for building complex, production-ready systems.
-- **Lite Mode (Backtesting-like)**: Uses a highly encapsulated, minimal syntax supporting direct target-weight rebalancing, perfect for rapid factor validation.
+You can define the "thickness" of your strategy based on the development stage:
+- **Engine Mode (Deep Research)**: Fully aligned with Backtrader semantics, supporting the complete Analyzer/Sizer/Signal ecosystem. Ideal for building complex, production-grade systems with high precision.
+- **Lite Mode (Agile Validation)**: Follows the minimalism of backtesting.py, supporting direct connection to model weights. Perfect for high-frequency iteration and prototype validation during the factor mining stage.
 
-Beyond mainstream indicators like TDX, TA-Lib, and TradingView, it creatively introduces **Causal Inference** into factor research. Through the built-in `CausalSelector`, it connects feature engineering, causal discovery, and backtesting into a transparent, scientific pipeline.
+It is not only seamlessly compatible with mainstream indicator libraries like TDX, TA-Lib, and TradingView, but also creatively introduces **Causal Inference** into factor research. Through the built-in `CausalSelector`, the project organically links feature selection, parameter optimization, and backtest reports, presenting you with a closed-loop, transparent, and efficient quantitative research pipeline.
 
-## Core Highlights
+## Key Highlights
 
-#### ⚡️ High-Performance Kernel: Rust-Powered Engine
-- **Rust Hybrid Power**: Core matching and accounting are handled by Rust, providing **28x** speedup for single assets and **110x+** for multi-asset portfolios compared to Backtrader.
-- **Automated Dispatching**: Automatically selects between "Single-Bar" and "Panel" runners based on data shape. **Optimized memory layout for Index Enhancement**, allowing researchers to focus solely on `next()` logic.
+#### ⚡️ High-Performance Core: Extreme Performance Driven by Rust
+- **Rust Hybrid Power**: The matching engine and core calculations are powered by Rust, providing **28x** acceleration for single-symbol and **110x+** for multi-asset rebalancing compared to Backtrader.
+- **Automatic Runner Scheduling**: Automatically selects between "Single-Stream Bar-by-Bar" or "Panel Batch" based on data shape. **Optimized memory layout for index enhancement scenarios**, allowing developers to focus solely on `next()` logic.
 
-#### 🛡️ Rigorous Finance: 100% Backtrader Parity
-- **Semantic Consistency**: Fully supports Analyzer / Sizer / Signal ecosystems, ensuring trades are identical to the Backtrader "Oracle" baseline.
-- **Lite Simplicity**: Built on the same runtime, featuring the **`target_weights` API** to turn ML model outputs into backtest decisions with one line of code.
+#### 🛡️ Rigorous Finance: 100% Backtrader Semantic Alignment
+- **Engine-Level Alignment**: Full support for the Analyzer / Sizer / Signal system, ensuring zero logical divergence between Trade logs and the Backtrader Oracle.
+- **Lite Minimalist Expression**: A lightweight syntax built on the same Runtime. **Built-in `target_weights` interface** to convert machine learning model outputs into backtesting decisions with one click.
 
-#### 🧪 Causal Research: Beyond "Spurious Correlation"
-- **Causal-First Selection**: Integrated PC / FCI algorithms to identify true driving paths of factors, combating overfitting and "spurious correlations" at the source.
-- **Integrated Pipeline**: Couples feature engineering, causal discovery, and backtesting into a single, reproducible experiment loop.
+#### 🧪 Causal Research: Scientific Workflow Beyond Correlation
+- **Causal-First Feature Selection**: Built-in causal discovery algorithms like PC / FCI identify the true driving paths of factors, combating "pseudo-correlation" and overfitting from the source.
+- **Pipeline Full-Link Workflow**: Seamlessly couples feature engineering, causal screening, scoring models, portfolio weights, and backtest reports into a reproducible experiment loop.
 
-#### 🌍 Global Ecosystem: Modern Tooling
-- **Dual Convention**: Explicit support for TDX (A-share) and TradingView (Overseas) indicator conventions, compatible with TA-Lib and pandas-ta.
-- **Modern Stack**: Interactive HTML reports, MLflow experiment tracking, and deep integration with JupyterLab / MCP.
+#### 🌍 Global Vision: Multi-Standard Indicators and Modern Ecosystem
+- **Dual-Market Standards**: Explicit support for TDX (A-share) / TradingView (Global) indicator standards, deeply compatible with TA-Lib and pandas-ta.
+- **Modern Tools**: Out-of-the-box HTML interactive reports, MLflow experiment tracking, and deep integration with JupyterLab / MCP.
 
-## Causal Research: Crossing the "Spurious" Trap
+## Causal Research: Beyond the "Pseudo-Correlation" Trap
 
-Most quantitative research stops at **Correlation**, which often leads to "backtest-glory but live-failure" (overfitting). trade-learn uses **Causal Discovery** to help you identify the true drivers of returns:
+Most quantitative research stops at **Correlation**, which often leads to factors performing excellently in backtests but failing rapidly in live trading (overfitting). trade-learn identifies the true drivers behind returns through its built-in **Causal Discovery** mechanism:
 
-- **Causal Feature Selection**: Uses `CausalSelector` to strip away "common-observer" bias, keeping only features with direct causal paths to returns.
-- **Robustness Against Decay**: Alpha factors identified via causal graphs show stronger survival rates during market regime shifts.
-- **Industrial Integration**: Deeply integrated with the `causal-learn` ecosystem, making advanced causal inference as simple as calling `.corr()`.
+- **Causal Feature Selection**: Using `CausalSelector` combined with PC / FCI algorithms, it strips away pseudo-correlated factors caused by "common observations," retaining only features with direct driving capacity for returns.
+- **Resistance to Out-of-Sample Decay**: Alpha factors identified via causal graphs possess stronger survival capabilities during market style shifts, effectively reducing the performance gap from research to production.
+- **Industrial-Grade Integration**: Deeply integrated with the `causal-learn` ecosystem, making cutting-edge causal inference as smooth as calling `corr()`, significantly lowering the barrier for academic algorithms.
 
 ## Who is it for?
 
+*   **⚡️ Agile Developers & Idea Validation**
+    Tired of heavy configurations and wanting to transform ideas into backtest reports within a few lines of code, enjoying a lightweight experience similar to backtesting.py.
 *   **📈 Index Enhancement & Portfolio Management**
-    Teams handling 1000+ symbols who need second-level rebalancing simulations and want to escape the long wait times of traditional frameworks.
-*   **⚡️ Agile Developers & Prototypers**
-    Researchers who want to turn an idea into a report in a few lines of code, enjoying a `backtesting.py`-like experience without sacrificing rigor.
-*   **🧠 Machine Learning & Factor Researchers**
-    Teams wanting to bridge feature engineering, **causal discovery**, and model training (MLflow) into a unified, automated backtesting loop.
-*   **🛠️ Backtrader Veterans**
-    Users who value mature event-driven semantics but seek modern reporting, full-stack pipelines, and a high-performance Rust kernel.
-*   **🔍 Causal Inference Explorers**
-    Researchers dedicated to using Causal Graphs in factor selection to build highly interpretable and robust quantitative systems.
+    Facing large-scale backtesting with 1000+ symbols, utilizing the Rust Panel Runner for second-level rebalancing simulation, saying goodbye to long waits in traditional frameworks.
+*   **🧠 Machine Learning & Factor Research**
+    Aiming to integrate feature engineering, **Causal Discovery**, model training (MLflow tracking), and backtesting into a one-stop automated loop.
+*   **🛠️ Backtrader Power Users**
+    Seeking a more modern reporting system, full-link pipelines, and high-performance Rust backtesting while retaining mature event-driven semantics.
 *   **🌐 Cross-Market & Multi-Strategy Teams**
-    - **Unified Market Specs**: Support for both A-share (TDX) and Overseas (TradingView) conventions in a single system.
-    - **Total System Maintenance**: Manage both rule-based and ML-based strategies without fragmented data or reporting pipelines.
-
-## Performance & Alignment
-
-Our baseline focuses on two cores: **Numerical Parity** and **Throughput**. For full replication, see [Benchmarks](./docs/benchmarks.md).
-
-#### 1. Single Asset Pressure Test: SMA Crossover (550k Bars)
-*   **Principle**: Standard SMA 10/20 crossover strategy. Designed to test the event-driven efficiency and state maintenance of the Rust kernel under long single-stream sequences.
-
-| Engine | Latency | bars/s | **Speedup** | Alignment |
-|---|---:|---:|---:|---:|
-| **Lite** | 1.32s | **414,990** | **27.9x** | Final Value 118,399.33 |
-| **Engine** | 3.37s | **162,883** | **11.0x** | Final Value 118,399.33 |
-| Backtrader | 37.02s | 14,854 | 1.0x | Final Value 118,399.33 |
-
-#### 2. Multi-Asset Portfolio: Top-50 Target Weights (5.04M Bars)
-*   **Principle**: Simulating 1000 symbols with a Top-50 target-weight rebalance. Designed to test Rust's memory layout optimization and concurrent processing for large-scale Panel data.
-
-| Engine | Latency | bars/s | **Speedup** | Alignment |
-|---|---:|---:|---:|---:|
-| **Lite** | 2.40s | **2,094,237** | **119.1x** | Final Value 4,199,638.26 |
-| **Engine** | 4.11s | **1,225,594** | **69.7x** | Final Value 4,199,638.26 |
-| Backtrader | 286.53s | 17,589 | 1.0x | Final Value 4,199,638.26 |
-
-## Consistency Commitment
-
-**trade-learn** treats "Baseline Alignment" as its highest engineering standard, ensuring every calculation withstands industrial scrutiny:
-
-*   **Financial Metrics**: `metrics` (Sharpe, MaxDD, etc.) aligned with `empyrical` at `rtol=1e-10`.
-*   **Multi-Source Indicators**:
-    *   `tl.pta` aligned with `pandas-ta-classic` at `rtol=1e-10`.
-    *   `tl.tdx` aligned with `MyTT` at `rtol=1e-10`.
-    *   `tl.tv` aligned with `pyneCore` (TradingView convention) at `rtol=1e-6`.
-*   **Backtest Engine**:
-    *   **Decision Layer**: **0 difference** in Trades (time, side, size) compared to the Backtrader Oracle implementation.
-    *   **Numerical Layer**: Equity curve at `rtol=1e-6`, summary stats at `rtol=1e-4`.
-
-> [!IMPORTANT]
-> We maintain zero tolerance for numerical discrepancies. Every minor deviation is documented with a root-cause analysis. See [Design Notes → Consistency Audit](docs/internals/consistency.md).
+    Unified indicator standards and reporting systems across A-shares (TDX) and Global markets (TradingView).
+*   **🔍 Causal Inference Explorers**
+    Dedicated to introducing causal graph technology in the factor selection stage to build highly explainable and robust quantitative systems.
 
 ## Installation
 
@@ -124,50 +82,122 @@ Our baseline focuses on two cores: **Numerical Parity** and **Throughput**. For 
 pip install trade-learn
 ```
 
-For the latest features:
+Get the latest version:
+
 ```bash
 pip install git+https://github.com/MuuYesen/trade-learn.git@master
 ```
 
+Optional extras:
+
+| extra | Usage |
+|---|---|
+| `[lab]` | JupyterLab / Jupyter AI / MCP / Pygwalker interactive research environment |
+| `[mlflow]` | MLflow tracking server and experiment artifact recording |
+| `[all]` | Full environment including Lab, MLflow, Riskfolio-Lib, Optuna, DuckDB, etc. |
+
+## Quick Start
+
+**Lite — The Shortest Path** (for fast validation, teaching, and multi-asset target weights):
+
+```python
+import tradelearn.lite as tl
+from tradelearn.data import TradingViewProvider
+
+class LiteSmaCross(tl.Strategy):
+    fast = 10
+    slow = 20
+
+    def init(self):
+        self.fast_ma = tl.tdx.MA(self.data.close, N=self.fast)
+        self.slow_ma = tl.tdx.MA(self.data.close, N=self.slow)
+        self.start_on_bar(self.slow + 1)
+
+    def next(self):
+        if self.fast_ma[0] > self.slow_ma[0] and not self.position():
+            self.buy(size=100)
+        elif self.fast_ma[0] < self.slow_ma[0] and self.position():
+            self.position().close()
+
+provider = TradingViewProvider(n_bars=500)
+bars = provider.history_ohlc("NASDAQ:AAPL", start="2023-01-01", end="2024-01-01")
+
+bt = tl.Backtest(bars, LiteSmaCross, cash=100_000, commission=0.0003, trade_on_close=True)
+stats = bt.run()
+
+print(stats.summary)
+bt.plot()
+bt.report("report.html")
+```
+
+**Engine — Backtrader Style** (for complex/portfolio strategies and future paper/live modes):
+
+```python
+import tradelearn.engine as bt
+from tradelearn.data import TradingViewProvider
+
+class SmaCross(bt.Strategy):
+    params = (("fast", 10), ("slow", 20))
+
+    def __init__(self):
+        self.fast = bt.tdx.MA(self.data.close, N=self.p.fast)
+        self.slow = bt.tdx.MA(self.data.close, N=self.p.slow)
+
+    def next(self):
+        if not self.position and self.fast[0] > self.slow[0]:
+            self.buy(size=100)
+        elif self.position and self.fast[0] < self.slow[0]:
+            self.close()
+
+provider = TradingViewProvider(n_bars=500)
+bars = provider.history_ohlc("NASDAQ:AAPL", start="2023-01-01", end="2024-01-01")
+
+cerebro = bt.Cerebro(trade_on_close=True)
+cerebro.setcash(100_000)
+cerebro.setcommission(0.0003)
+cerebro.adddata(bars, name="AAPL")
+cerebro.addstrategy(SmaCross)
+
+[strategy] = cerebro.run()
+print(strategy.stats.summary)
+
+cerebro.plot()
+cerebro.report("report.html")
+```
+
+## Performance & Alignment
+
+The local baseline focuses on two cores: **Result Alignment** and **Throughput Speed vs Backtrader**. See [Benchmarks](./docs/benchmarks.md) for full commands.
+
+#### 1. Single-Symbol High-Frequency Stress Test: SMA Cross (550k Bars)
+| Engine | Time | bars/s | **Acceleration** | Alignment |
+|---|---:|---:|---:|---:|
+| **Lite** | 1.32s | **414,990** | **27.9x** | Final Value 118,399.33 |
+| **Engine** | 3.37s | **162,883** | **11.0x** | Final Value 118,399.33 |
+| Backtrader | 37.02s | 14,854 | 1.0x | Final Value 118,399.33 |
+
+#### 2. Multi-Symbol Large-Scale Index Enhancement: Top-50 Weights (5.04M Bars)
+| Engine | Time | bars/s | **Acceleration** | Alignment |
+|---|---:|---:|---:|---:|
+| **Lite** | 2.40s | **2,094,237** | **119.1x** | Final Value 4,199,638.26 |
+| **Engine** | 4.11s | **1,225,594** | **69.7x** | Final Value 4,199,638.26 |
+| Backtrader | 286.53s | 17,589 | 1.0x | Final Value 4,199,638.26 |
+
 ## Documentation
 
-*   **Online Documentation**: [**https://muuyesen.github.io/trade-learn/**](https://muuyesen.github.io/trade-learn/)
-*   **Local Handbook**: [`docs/`](./docs/README.md)
+*   **Official Online Docs**: [**https://muuyesen.github.io/trade-learn/**](https://muuyesen.github.io/trade-learn/)
+*   **Local Manual**: [`docs/`](./docs/README.md)
 
-| Topic | Link |
-|---|---|
-| 30-line Quickstart | [Quickstart](./docs/quickstart.md) |
-| Lite / Engine Usage | [Lite Guide](./docs/guides/lite.md) · [Engine Guide](./docs/guides/engine.md) |
-| Architecture & Concepts | [Architecture](./docs/concepts/architecture.md) |
-| Research Pipeline | [Research Guide](./docs/guides/research.md) |
-| Indicator Ecosystem | [Indicators Guide](./docs/guides/indicators.md) |
-| Benchmarks | [Benchmarks](./docs/benchmarks.md) |
-| Internals (Contracts/Matching) | [Design Notes](./docs/internals/contracts.md) |
-| API Reference | [API Reference](./docs/api/reference.md) |
+## Roadmap
 
-## 🚀 Roadmap
-
-*   **v1.0.x (Stable Release - Current)**
-    *   [x] Rust-powered Clocked Multi-Data Runner (Stage 13).
-    *   [x] End-to-end Index Enhancement Pipeline (Research -> Weight -> Backtest).
-    *   [x] Deep integration with MLflow experiment tracking & modern HTML reports.
-*   **v1.1.x (Advanced Research)**
-    *   [ ] **Enhanced Causal Inference**: Integration of more causal graph algorithms (e.g., GIES, Direct-LiNGAM) for better factor interpretability.
-    *   [ ] **High-Performance Connectors**: Native connectors for DolphinDB and DuckDB, enabling second-level reads for billion-bar datasets.
-    *   [ ] **Risk Modeling**: Introduction of Barra-style risk exposure analysis and active return attribution.
-*   **v1.2.x (Live & Production)**
-    *   [ ] **Live Trading Adapters**: Open universal live event interfaces with support for broker terminals like QMT.
-    *   [ ] **Distributed Optimization**: Multi-machine parallel parameter search based on Ray/Optuna.
-    *   [ ] **Agent Integration**: Automated control of quantitative pipelines via MCP protocol and LLM agents.
+*   **v1.0.x (Current - Stable Release)**: Rust clocked runner, index enhancement pipeline, MLflow integration.
+*   **v1.1.x (Advanced Research)**: Enhanced causal inference, high-performance connectors (DolphinDB/DuckDB), Risk models (Barra style).
+*   **v1.2.x (Live & Production)**: Live trading adapters (QMT, etc.), Distributed optimization (Ray/Optuna), Agent integration (MCP).
 
 ## License
 
 Apache-2.0. See [`NOTICE`](./NOTICE) for upstream attributions.
 
-## Acknowledgements
-
-[Quantopian](https://github.com/quantopian) · [Trevor Stephens](https://github.com/trevorstephens) · [PyWhy](https://github.com/py-why) · [dodid](https://github.com/dodid) · [DolphinDB](https://github.com/dolphindb) · [happydasch](https://github.com/happydasch) · [mpquant](https://github.com/mpquant) · [baobao1997](https://github.com/baobao1997)
-
 ## Contact
 
-WeChat: 知守溪的收纳屋 · Email: muyes88@gmail.com
+Email: muyes88@gmail.com
