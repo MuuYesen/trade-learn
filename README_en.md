@@ -1,20 +1,22 @@
 <p align="center">
-  <img src="docs/tradelearn-logo.png" alt="trade-learn logo" width="600" />
+  <img src="docs/tradelearn-logo.png" alt="trade-learn logo" width="550" />
 </p>
 
 <p align="center">
-  <strong>Python for Strategy and Research, Rust for Event-Driven Backtesting Core.</strong>
+  <a href="https://muuyesen.github.io/trade-learn/"><b>Documentation</b></a> |
+  <a href="./README.md"><b>中文版</b></a> |
+  <a href="./README_ja.md"><b>日本語</b></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/pypi-v1.0.0-orange.svg" alt="PyPI version">
-  <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python versions">
-  <img src="https://img.shields.io/badge/license-Apache--2.0-green.svg" alt="License">
-  <img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code style">
+  <strong>Python for Strategy & Research. Rust for High-Performance Backtesting.</strong>
 </p>
 
 <p align="center">
-  <a href="./README.md">中文版</a> | <a href="./README_ja.md">日本語版</a>
+  <img src="https://img.shields.io/badge/pypi-v1.0.0-orange?style=flat-square" alt="PyPI version">
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/code%20style-ruff-000000?style=flat-square" alt="Code style">
 </p>
 
 **trade-learn** is a quantitative framework that integrates **trade** and **learn** into a single pipeline, designed for index enhancement, quant research, machine learning strategies, and event-driven backtesting. Python provides the flexibility for strategy expression, factor research, and model experimentation, while Rust handles the high-frequency backtesting core, including matching, order advancement, and portfolio calculation. From research and backtesting to reporting and experiment tracking, everything revolves around a single reproducible workflow.

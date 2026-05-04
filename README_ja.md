@@ -1,20 +1,22 @@
 <p align="center">
-  <img src="docs/tradelearn-logo.png" alt="trade-learn logo" width="600" />
+  <img src="docs/tradelearn-logo.png" alt="trade-learn logo" width="550" />
 </p>
 
 <p align="center">
-  <strong>Python で戦略と投資研究を、Rust でイベント驱动型バックテストエンジンを。</strong>
+  <a href="https://muuyesen.github.io/trade-learn/"><b>公式ドキュメント</b></a> |
+  <a href="./README.md"><b>中文版</b></a> |
+  <a href="./README_en.md"><b>English</b></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/pypi-v1.0.0-orange.svg" alt="PyPI version">
-  <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python versions">
-  <img src="https://img.shields.io/badge/license-Apache--2.0-green.svg" alt="License">
-  <img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code style">
+  <strong>Python で戦略と投資研究を、Rust で高性能バックテストエンジンを。</strong>
 </p>
 
 <p align="center">
-  <a href="./README.md">中文版</a> | <a href="./README_en.md">English</a>
+  <img src="https://img.shields.io/badge/pypi-v1.0.0-orange?style=flat-square" alt="PyPI version">
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/code%20style-ruff-000000?style=flat-square" alt="Code style">
 </p>
 
 **trade-learn** は、**trade**（取引）と **learn**（学習）を単一のパイプラインに統合したクオンツフレームワークです。インデックス強化、クオンツ研究、機械学習戦略、およびイベント駆動型バックテスト向けに設計されています。Python は戦略の表現、ファクター研究、モデル実験の柔軟性を提供し、Rust は注文マッチング、ポートフォリオ計算、イベントループといった高頻度バックテストコアを担います。研究、バックテストからレポート作成、実験追跡まで、すべてが再現可能な単一のワークフローを中心に展開されます。

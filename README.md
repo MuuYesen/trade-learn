@@ -1,5 +1,11 @@
 <p align="center">
-  <img src="docs/tradelearn-logo.png" alt="trade-learn logo" width="600" />
+  <img src="docs/tradelearn-logo.png" alt="trade-learn logo" width="550" />
+</p>
+
+<p align="center">
+  <a href="https://muuyesen.github.io/trade-learn/"><b>官方文档</b></a> |
+  <a href="./README_en.md"><b>English</b></a> |
+  <a href="./README_ja.md"><b>日本語</b></a>
 </p>
 
 <p align="center">
@@ -7,14 +13,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/pypi-v1.0.0-orange.svg" alt="PyPI version">
-  <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python versions">
-  <img src="https://img.shields.io/badge/license-Apache--2.0-green.svg" alt="License">
-  <img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code style">
-</p>
-
-<p align="center">
-  <a href="./README_en.md">English</a> | <a href="./README_ja.md">日本語</a>
+  <img src="https://img.shields.io/badge/pypi-v1.0.0-orange?style=flat-square" alt="PyPI version">
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/code%20style-ruff-000000?style=flat-square" alt="Code style">
 </p>
 
 **trade-learn** 是一个把 **trade** 和 **learn** 放在同一条链路里的量化框架：面向指数增强、量化研究、机器学习策略和事件驱动回测。Python 保留策略表达、因子研究和模型实验的灵活性，Rust 承担撮合、订单推进、portfolio 计算这类高频回测内核；从研究、回测到报告和实验追踪，都围绕同一套可复现 workflow 展开。
