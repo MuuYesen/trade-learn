@@ -102,6 +102,8 @@ nav:
           - Engine API 签名: guides/engine-api.md
       - 数据指南: guides/data.md
       - 指标指南: guides/indicators.md
+      - 扩展组件: guides/extensions.md
+      - 实盘协议: guides/live.md
       - 研究指南: guides/research.md
       - 因子指南: guides/factor.md
       - 优化指南: guides/optimization.md

@@ -125,74 +125,82 @@ class Stats:
 
 ```python
 class Broker(Protocol):
-    # 下单
-    def place(self, order: Order) -> OrderId: ...
-    def cancel(self, oid: OrderId) -> None: ...
-    def modify(self, oid: OrderId, **kwargs) -> None: ...
+    def place(self, req: OrderRequest) -> OrderAck: ...
+    def cancel(self, broker_oid: str) -> None: ...
+    def modify(self, broker_oid: str, **kwargs) -> None: ...
 
-    # 查询
-    def positions(self) -> list[Position]: ...
-    def account(self) -> Account: ...
-    def order_status(self, oid: OrderId) -> OrderStatus: ...
+    def positions(self) -> list[PositionSnapshot]: ...
+    def account(self) -> AccountSnapshot: ...
+    def order_status(self, broker_oid: str) -> OrderStatusUpdate: ...
 
-    # 异步回调
     def on_fill(self, cb: Callable[[Fill], None]) -> None: ...
-    def on_cancel(self, cb: Callable[[OrderId], None]) -> None: ...
-    def on_reject(self, cb: Callable[[OrderId, str], None]) -> None: ...
+    def on_cancel(self, cb: Callable[[Any], None]) -> None: ...
+    def on_reject(self, cb: Callable[[Any, str], None]) -> None: ...
 
-    # 生命周期
     def connect(self) -> None: ...
     def disconnect(self) -> None: ...
     def is_connected(self) -> bool: ...
 ```
 
-**1.0 仅内置 `SimBroker`**（Rust 核内部回测撮合）；`QMTBroker` 等实盘适配在 1.1 版本提供，必须实现 `Broker` Protocol + `BrokerEventPump`。
+`Broker` 是 backtest / paper / live 共同的目标协议。回测内部可以有更丰富的 `Order` / `Trade` 状态机，但跨 broker 边界只通过这些中性类型通信。
+
+Rust 回测 broker 不需要强行实现这个 Protocol；它是 `tradelearn.backtest` 的高性能实现。QMT / IB / CTP 等实盘适配器应实现 `Broker` Protocol，并通过 `BrokerEventPump` 回流事件。
 
 辅助类型：
 
 ```python
 @dataclass(frozen=True)
-class Order:
+class OrderRequest:
     symbol: str
     side: "buy" | "sell"
-    type: "market" | "limit" | "stop" | "stop_limit"
-    size: float
-    limit: float | None = None
-    stop: float | None = None
-    time_in_force: "day" | "gtc" | "ioc" = "day"
+    qty: float
+    order_type: "market" | "limit" | "stop" | "stop_limit" = "market"
+    limit_price: float | None = None
+    stop_price: float | None = None
+    tif: "day" | "gtc" | "ioc" = "gtc"
+    client_oid: str | None = None
+
+@dataclass(frozen=True)
+class OrderAck:
+    client_oid: str | None
+    broker_oid: str
+    accepted_ts: pd.Timestamp
 
 @dataclass(frozen=True)
 class Fill:
-    order_id: OrderId
+    broker_oid: str
     symbol: str
-    side: str
-    size: float
+    qty: float
     price: float
     commission: float
     ts: pd.Timestamp
 
-@dataclass
-class Position:
+@dataclass(frozen=True)
+class PositionSnapshot:
     symbol: str
-    size: float
+    qty: float
     avg_price: float
-    market_price: float
-    unrealized_pnl: float
-    realized_pnl: float
+    ts: pd.Timestamp
 
-@dataclass
-class Account:
+@dataclass(frozen=True)
+class AccountSnapshot:
     cash: float
     equity: float
-    margin_used: float
-    leverage: float
+    ts: pd.Timestamp
 
-OrderStatus = Literal[
-    "pending", "submitted", "accepted",
-    "filled", "partially_filled",
-    "cancelled", "rejected", "expired",
-]
+@dataclass(frozen=True)
+class OrderStatusUpdate:
+    broker_oid: str
+    status_str: str
+    ts: pd.Timestamp
+    replay: bool = False
 ```
+
+策略层约束：
+
+- 发单只表达意图，不假设下一行代码已经成交。
+- 成交、撤单、拒单、状态变化都通过 broker 事件或回测 runtime 回流。
+- 实盘适配器可以维护自己的 broker 私有状态，但向框架输出时必须转换为上述中性类型。
 
 ## 8. DataFeed Protocol（1.1 实盘预留）
 

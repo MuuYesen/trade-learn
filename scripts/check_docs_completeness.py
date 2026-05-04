@@ -22,6 +22,8 @@ REQUIRED_GUIDE_PAGES = (
     "guides/engine-api.md",
     "guides/data.md",
     "guides/indicators.md",
+    "guides/extensions.md",
+    "guides/live.md",
     "guides/research.md",
     "guides/factor.md",
     "guides/optimization.md",
