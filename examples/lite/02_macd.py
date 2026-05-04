@@ -157,7 +157,7 @@ def run_backtest(symbol):
     
     results_dir = './results'
     os.makedirs(results_dir, exist_ok=True)
-    bt.plot(filename=f'{results_dir}/macd_volume_{symbol}.html', open_browser=False)
+    bt.plot()
     
     return {
         'symbol': symbol,

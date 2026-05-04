@@ -12,14 +12,14 @@ trade-learn 区分 plot 和 report。
 Engine:
 
 ```python
-cerebro.plot("plot.html")
+cerebro.plot()
 cerebro.report("report.html")
 ```
 
 Lite:
 
 ```python
-bt.plot("plot.html")
+bt.plot()
 bt.report("report.html")
 ```
 

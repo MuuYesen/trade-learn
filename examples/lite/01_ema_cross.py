@@ -117,7 +117,7 @@ def run_backtest(symbol):
     os.makedirs(results_dir, exist_ok=True)
     
     # Guardar gráfico
-    bt.plot(filename=f'{results_dir}/ema_cross_{symbol}.html', open_browser=False)
+    bt.plot()
     
     # Retornar estadísticas
     return {

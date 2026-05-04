@@ -53,7 +53,7 @@ bt = tl.Backtest(bars, LiteSmaCross, cash=100_000, commission=0.0003, trade_on_c
 stats = bt.run()
 
 print(stats.summary)
-bt.plot("plot.html")
+bt.plot()
 bt.report("report.html")
 ```
 
@@ -104,7 +104,7 @@ cerebro.addstrategy(SmaCross)
 [strategy] = cerebro.run()
 
 print(strategy.stats.summary)
-cerebro.plot("plot.html")
+cerebro.plot()
 cerebro.report("report.html")
 ```
 
