@@ -108,7 +108,7 @@ include = [
 [tool.cibuildwheel]
 build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
 skip = "*-musllinux_*"
-test-command = "python -c \"import tradelearn._rust as rust; assert rust.tradelearn_rust_version() == '0.2.0'\""
+test-command = "python -c \"import tradelearn._rust as rust; assert rust.tradelearn_rust_version() == '0.2.1'\""
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64"]
