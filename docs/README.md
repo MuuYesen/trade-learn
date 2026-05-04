@@ -4,7 +4,8 @@
   <img src="tradelearn-logo.png" alt="trade-learn logo" width="620" />
 </p>
 
-欢迎来到 **trade-learn** 官方文档。本手册旨在帮助您从零开始，构建、测试并优化工业级的量化交易系统。
+欢迎来到 **trade-learn** 官方文档。
+本手册旨在帮助您从零开始，构建、测试并优化工业级的量化交易系统。
 
 ---
 
@@ -58,7 +59,6 @@
 
 ## 社区与支持
 *   **GitHub**: [MuuYesen/trade-learn](https://github.com/MuuYesen/trade-learn)
-*   **在线演示**: [官方站点](https://muuyesen.github.io/trade-learn/)
 *   **联系作者**: muyes88@gmail.com
 
 !!! note
