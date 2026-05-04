@@ -14,10 +14,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/pypi-v2.0.1-orange?style=flat-square" alt="PyPI version">
+  <img src="https://img.shields.io/badge/pypi-v0.2.2-orange?style=flat-square" alt="PyPI version">
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
-  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/Changelog-v2.0.1-blue?style=flat-square" alt="Changelog">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/Changelog-v0.2.2-blue?style=flat-square" alt="Changelog">
 </p>
 
 **trade-learn** 旨在解决量化投研中研究（Learn）与回测（Trade）脱节的痛点。它通过「Python 表达逻辑 + Rust 原生内核」的混合架构，在确保逻辑与 Backtrader **100% 严苛对齐** 的基础上，实现了多资产回测 **110x+** 的性能飞跃，将大规模验证的耗时从小时级缩短至秒级，为指数增强与机器学习策略提供极速的迭代体验。
