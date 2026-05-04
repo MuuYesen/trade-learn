@@ -59,6 +59,29 @@ REQUIRED_API_REFERENCE_PAGES = (
 )
 
 
+class _MkDocsConfigLoader(yaml.SafeLoader):
+    """YAML loader for mkdocs.yml fields that are only meaningful to MkDocs."""
+
+
+def _construct_python_name(
+    loader: yaml.SafeLoader, suffix: str, node: yaml.nodes.Node
+) -> str:
+    """Treat MkDocs Python object tags as inert strings during static checks."""
+    value = loader.construct_scalar(node)
+    return suffix if not value else f"{suffix} {value}"
+
+
+_MkDocsConfigLoader.add_multi_constructor(
+    "tag:yaml.org,2002:python/name:",
+    _construct_python_name,
+)
+
+
+def load_mkdocs_config(config_path: Path | str = Path("mkdocs.yml")) -> dict[str, Any]:
+    """Load mkdocs.yml for static tests without importing MkDocs extension objects."""
+    return yaml.load(Path(config_path).read_text(encoding="utf-8"), Loader=_MkDocsConfigLoader)
+
+
 @dataclass(frozen=True)
 class DocsCompletenessReport:
     """Structured result for documentation navigation checks."""
@@ -105,7 +128,7 @@ def _missing(required: tuple[str, ...], nav_paths: tuple[str, ...]) -> tuple[str
 def check_docs_completeness(project_root: Path | str = Path(".")) -> DocsCompletenessReport:
     """Check that user-facing guides, design notes, benchmarks, and API docs are linked."""
     root = Path(project_root)
-    config = yaml.safe_load((root / "mkdocs.yml").read_text(encoding="utf-8"))
+    config = load_mkdocs_config(root / "mkdocs.yml")
     nav_paths = _flatten_nav_paths(config["nav"])
 
     return DocsCompletenessReport(

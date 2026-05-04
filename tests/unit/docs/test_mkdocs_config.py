@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
+from scripts.check_docs_completeness import load_mkdocs_config
 
 
 def test_mkdocs_material_config_targets_docs_dir() -> None:
     config_path = Path("mkdocs.yml")
     assert config_path.exists()
 
-    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config = load_mkdocs_config(config_path)
 
     assert config["docs_dir"] == "docs"
     assert config["theme"]["name"] == "material"
