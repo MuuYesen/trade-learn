@@ -5,7 +5,7 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
-## [0.2.1] - 2026-05-05
+## [0.2.2] - 2026-05-05
 
 ### 新增
 - **智能控制台反馈系统**:
