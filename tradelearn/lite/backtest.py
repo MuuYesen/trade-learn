@@ -12,7 +12,7 @@ from tradelearn.backtest.feed import (
     is_normalized_ohlcv_frame,
     normalize_ohlcv_frame,
 )
-from tradelearn.backtest.models import Stats
+from tradelearn.backtest.models import Stats, SummaryDict
 from tradelearn.backtest._optimize import expand_grid
 from tradelearn.backtest.reporting import reporter_from_stats
 from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
@@ -34,7 +34,7 @@ class LiteStats(Mapping[str, Any]):
         self.stats = stats
         self.strategy = strategy
         self.records = records
-        self.summary = dict(stats.summary)
+        self.summary = stats.summary if isinstance(stats.summary, SummaryDict) else SummaryDict(stats.summary)
 
     def __getitem__(self, key: str) -> Any:
         return self.summary[key]
@@ -136,11 +136,15 @@ class Backtest:
 
     def run(self, **kwargs) -> LiteStats:
         """Run the backtest and return statistics."""
+        feeds = len(self.datas)
+        rows = _feed_rows(self.datas)
+        label = f"Backtest ({self._strategy_cls.__name__}, {feeds} feed{'s' if feeds != 1 else ''}, {rows:,} bars)"
+        print(f"{label}...", end="", flush=True)
         LOGGER.info(
             "Backtest started strategy=%s feeds=%s rows=%s cash=%s commission=%s",
             self._strategy_cls.__name__,
-            len(self.datas),
-            _feed_rows(self.datas),
+            feeds,
+            rows,
             self._cash,
             self._commission,
         )
@@ -171,6 +175,7 @@ class Backtest:
             for key, value in getattr(strategy_instance, "_records", {}).items()
         }
         result = LiteStats(self._last_stats, strategy_instance, records)
+        print(" Done ✓")
         LOGGER.info(
             "Backtest finished strategy=%s final_value=%s return_pct=%s total_trades=%s total_fills=%s",
             self._strategy_cls.__name__,
@@ -211,7 +216,10 @@ class Backtest:
 
     def report(self, path: str = "report.html", benchmark=None, sections=None):
         """Write a Tradelearn report for the most recent Lite run."""
-        return self._last_reporter().report(path, benchmark=benchmark, sections=sections)
+        print(f"Generating Report...", end="", flush=True)
+        result = self._last_reporter().report(path, benchmark=benchmark, sections=sections)
+        print(f" Done ✓  →  {result}")
+        return result
 
     def log_mlflow(
         self,

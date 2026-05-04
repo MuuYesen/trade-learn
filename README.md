@@ -140,7 +140,7 @@ class LiteSmaCross(tl.Strategy):
             self.position().close()
 
 
-provider = TradingViewProvider(n_bars=500)
+provider = TradingViewProvider(n_bars=5000)
 bars = provider.history_ohlc("NASDAQ:AAPL", start="2023-01-01", end="2024-01-01")
 
 bt = tl.Backtest(bars, LiteSmaCross, cash=100_000, commission=0.0003, trade_on_close=True)
@@ -150,6 +150,9 @@ print(stats.summary)
 bt.plot()
 bt.report("report.html")
 ```
+
+> [!TIP]
+> **关于多标的逻辑：** 在多标的回测场景下，策略默认会绑定到 `self.data`（主数据源）。这意味着上述代码即使传入了多个标的，也仅会根据第一个标的的信号进行决策。若要实现多标的独立并行交易，需在策略 `init` 中遍历 `self.datas` 为每个标的建立指标。
 
 **Engine——Backtrader 风格**（适合复杂 / 组合策略与未来 paper / live 模式）：
 
@@ -172,7 +175,7 @@ class SmaCross(bt.Strategy):
             self.close()
 
 
-provider = TradingViewProvider(n_bars=500)
+provider = TradingViewProvider(n_bars=5000)
 bars = provider.history_ohlc("NASDAQ:AAPL", start="2023-01-01", end="2024-01-01")
 
 cerebro = bt.Cerebro(trade_on_close=True)
@@ -187,6 +190,9 @@ print(strategy.stats.summary)
 cerebro.plot()
 cerebro.report("report.html")
 ```
+
+> [!TIP]
+> **关于多标的逻辑：** 在多标的回测场景下，策略默认会绑定到 `self.data`（主数据源）。这意味着上述代码即使传入了多个标的，也仅会根据第一个标的的信号进行决策。若要实现多标的独立并行交易，需在策略 `init` 中遍历 `self.datas` 为每个标的建立指标。
 
 ## 投研流水线示例
 

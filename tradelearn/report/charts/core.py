@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from statistics import NormalDist
 
+import numpy as np
 import pandas as pd
 from bokeh.layouts import gridplot
 from bokeh.models import (
@@ -45,6 +46,14 @@ def market_replay(
     has_volume = "volume" in frame and frame["volume"].notna().any()
     fills_frame = _fills_plot_frame(fills) if _fills_have_plot_columns(fills) else pd.DataFrame()
     fills_frame = _attach_bar_index(fills_frame, frame)
+    if has_ohlc and not fills_frame.empty:
+        low_min = float(frame["low"].min())
+        high_max = float(frame["high"].max())
+        span = max(high_max - low_min, abs(high_max) * 1e-6, 1e-9)
+        lo_bound = low_min - span * 0.5
+        hi_bound = high_max + span * 0.5
+        in_range = fills_frame["price"].between(lo_bound, hi_bound)
+        fills_frame = fills_frame[in_range]
     trades_frame = _trade_segments(fills_frame, frame)
 
     x_pad = max((len(frame) - 1) / 20, 1.0)
@@ -193,6 +202,10 @@ def market_replay(
 
     price_plot = _market_section("OHLC / Trades", height=430, x_range=x_range)
     if has_ohlc:
+        low_min = float(frame["low"].min())
+        high_max = float(frame["high"].max())
+        y_pad = max((high_max - low_min) * 0.05, abs(high_max) * 0.001, 1e-9)
+        price_plot.y_range = Range1d(start=low_min - y_pad, end=high_max + y_pad)
         inc = frame["close"] >= frame["open"]
         price_plot.segment(
             "bar_index",
@@ -268,6 +281,19 @@ def market_replay(
         )
         _add_close_index_hover(price_plot, [price_renderer])
 
+    if not trades_frame.empty:
+        price_plot.segment(
+            x0="entry_bar",
+            y0="entry_price",
+            x1="exit_bar",
+            y1="exit_price",
+            source=ColumnDataSource(trades_frame),
+            line_color="line_color",
+            line_width=1.5,
+            line_alpha=0.75,
+            line_dash="dashed",
+            legend_label="Trade",
+        )
     if not fills_frame.empty:
         buys = fills_frame[fills_frame["side"].str.lower().eq("buy")]
         sells = fills_frame[fills_frame["side"].str.lower().eq("sell")]
@@ -335,6 +361,7 @@ def market_replay(
         )
         volume_plot.yaxis.axis_label = "Volume"
         volume_plot.yaxis.formatter = NumeralTickFormatter(format="0 a")
+        volume_plot.yaxis.ticker.desired_num_ticks = 5
         _add_line_hover(
             volume_plot,
             [renderer],
@@ -344,6 +371,25 @@ def market_replay(
 
     for plot in plots[:-1]:
         plot.xaxis.visible = False
+
+    # Map bar_index ticks to date labels on the bottom (visible) x-axis.
+    if plots and "date" in frame.columns:
+        n_ticks = min(8, len(frame))
+        step = max(1, len(frame) // n_ticks)
+        tick_indices = list(range(0, len(frame), step))
+        last_idx = len(frame) - 1
+        # Only add the last bar if it's far enough from the previous tick to avoid overlap.
+        if last_idx not in tick_indices and (last_idx - tick_indices[-1]) >= step // 2:
+            tick_indices.append(last_idx)
+        date_labels = {
+            int(frame.loc[i, "bar_index"]): str(pd.to_datetime(frame.loc[i, "date"]).strftime("%Y-%m-%d"))
+            for i in tick_indices
+        }
+        bottom_plot = plots[-1]
+        bottom_plot.xaxis.ticker = list(date_labels.keys())
+        bottom_plot.xaxis.major_label_overrides = date_labels
+        bottom_plot.xaxis.major_label_orientation = 0.6
+
     for plot in plots:
         _style_market_section(plot)
     _style_market_legend(equity_plot, compact=True)
@@ -1408,7 +1454,11 @@ def _fills_plot_frame(fills: pd.DataFrame) -> pd.DataFrame:
     frame["date"] = pd.to_datetime(frame["datetime"], errors="coerce")
     if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
         frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
-    return frame.dropna(subset=["date", "price"])
+    frame = frame.dropna(subset=["date", "price"])
+    if frame.empty:
+        return frame
+    price_numeric = pd.to_numeric(frame["price"], errors="coerce")
+    return frame[np.isfinite(price_numeric) & (price_numeric > 0)]
 
 
 def _fills_have_plot_columns(fills: pd.DataFrame | None) -> bool:
@@ -1558,7 +1608,7 @@ def _market_section(title: str, *, height: int, x_range):
 
 def _style_market_section(plot) -> None:
     """Apply common Bokeh market Bokeh styling."""
-    plot.min_border_left = 8
+    plot.min_border_left = 50
     plot.min_border_top = 8
     plot.min_border_bottom = 8
     plot.min_border_right = 12

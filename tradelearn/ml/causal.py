@@ -33,6 +33,7 @@ class CausalSelector:
         method = self.method.lower()
         if method not in {"correlation", "pc", "fci"}:
             raise ValueError("method must be one of 'correlation', 'pc', or 'fci'")
+        print(f"Causal Discovery ({method.upper()} method)...", end="", flush=True)
         frame, target = self._split_dataset(data)
         scores = self._score(frame, target)
         ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
@@ -44,7 +45,65 @@ class CausalSelector:
             selected = selected[: self.max_features]
         self.scores_ = scores
         self.selected_features_ = selected
+        print(f" Done ✓  ({len(selected)} feature{'s' if len(selected) != 1 else ''} selected)")
         return self
+
+    def plot(self, filename: str | None = None) -> str:
+        """Render the fitted causal graph as a PNG image.
+
+        Requires ``method='pc'`` or ``method='fci'`` and must be called after
+        :meth:`fit`. Uses ``causallearn.utils.GraphUtils.to_pydot`` to convert
+        the discovered graph structure into a PNG file, mirroring the 1.x
+        ``Graph.fit_causal()`` API.
+        """
+        if not hasattr(self, "graph_"):
+            raise RuntimeError("No fitted graph found. Call fit() first.")
+        try:
+            from causallearn.utils.GraphUtils import GraphUtils
+            import pydot
+        except ImportError as exc:
+            raise ImportError("plot() requires causal-learn and pydot.") from exc
+        
+        if filename is None:
+            filename = f"{self.method}_graph.png"
+        
+        pdy = GraphUtils.to_pydot(self.graph_)
+        try:
+            pdy.write_png(filename)
+        except OSError as exc:
+            if "dot" in str(exc):
+                raise OSError("Graphviz 'dot' binary not found.") from exc
+            raise
+        return filename
+
+    def to_mermaid(self) -> str:
+        """Return a Mermaid.js graph representation of the causal structure."""
+        if not hasattr(self, "graph_"):
+            return "graph LR\n    No_Data"
+        edges = []
+        for edge in self.graph_.get_graph_edges():
+            n1 = edge.get_node1().get_name()
+            n2 = edge.get_node2().get_name()
+            edges.append(f"    {n1} --> {n2}")
+        return "graph LR\n" + ("\n".join(edges) if edges else "    No_Relationships")
+
+    def to_section(self, title: str = "Causal Diagram") -> dict[str, str]:
+        """Return a report section dictionary containing the causal diagram."""
+        graph_code = self.to_mermaid()
+        return {
+            "html": f"""
+            <section class="compact-section">
+                <h2>{title}</h2>
+                <div style="background:white; padding:20px; text-align:center; border:1px solid #eee; border-radius:8px;">
+                    <pre class="mermaid">{graph_code}</pre>
+                </div>
+                <script type="module">
+                    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+                    mermaid.initialize({{ startOnLoad: true, theme: 'neutral' }});
+                </script>
+            </section>
+            """
+        }
 
     def select(self, data: pd.DataFrame) -> list[str]:
         """Return selected feature names after fitting."""
@@ -137,6 +196,7 @@ class CausalSelector:
                 node_names=node_names,
             )
             graph = result[0] if isinstance(result, tuple) else result
+        self.graph_ = graph
         adjacent = _target_adjacent_feature_indices(graph, target_idx, len(feature_names))
         return {name: (1.0 if idx in adjacent else 0.0) for idx, name in enumerate(feature_names)}
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import math
+import sys
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from tradelearn.backtest.models import BarSnapshot, Stats
+from tradelearn.backtest.models import BarSnapshot, Stats, SummaryDict
 from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
 
@@ -246,34 +248,78 @@ def _positions_frame(strategy: Any, fills: pd.DataFrame, index: pd.Index) -> pd.
     return pd.DataFrame(rows, columns=columns)
 
 
+def _resolve_close_series(strategy: Any, frame: pd.DataFrame | None, index: pd.Index) -> np.ndarray | None:
+    """Return per-bar close prices aligned to ``index``, or None if unavailable."""
+    if isinstance(frame, pd.DataFrame) and "close" in frame.columns and len(frame) == len(index):
+        return frame["close"].to_numpy(dtype=float, copy=False)
+    data = getattr(strategy, "data", None)
+    close_arr = getattr(data, "_close", None)
+    if close_arr is not None:
+        try:
+            arr = np.asarray(close_arr, dtype=float)
+        except (TypeError, ValueError):
+            arr = None
+        if arr is not None and len(arr) == len(index):
+            return arr
+    cerebro = getattr(strategy, "cerebro", None)
+    datas = getattr(cerebro, "datas", None) if cerebro is not None else None
+    if datas:
+        primary = datas[0]
+        primary_frame = getattr(primary, "_frame", None)
+        if (
+            isinstance(primary_frame, pd.DataFrame)
+            and "close" in primary_frame.columns
+            and len(primary_frame) == len(index)
+        ):
+            return primary_frame["close"].to_numpy(dtype=float, copy=False)
+        primary_close = getattr(primary, "_close", None)
+        if primary_close is not None:
+            try:
+                arr = np.asarray(primary_close, dtype=float)
+            except (TypeError, ValueError):
+                arr = None
+            if arr is not None and len(arr) == len(index):
+                return arr
+    return None
+
+
 def _build_equity_from_fills(
     strategy: Any,
     index: pd.Index,
     fills: pd.DataFrame,
+    frame: pd.DataFrame | None = None,
 ) -> pd.Series | None:
     if fills.empty or len(index) == 0:
         return None
-    frame = getattr(getattr(strategy, "data", None), "_frame", None)
-    if not isinstance(frame, pd.DataFrame) or "close" not in frame.columns:
+    closes = _resolve_close_series(strategy, frame, index)
+    if closes is None:
         return None
 
     aligned_fills = fills.copy()
     aligned_fills["datetime"] = pd.to_datetime(aligned_fills["datetime"], utc=True)
-    bar_index = pd.DatetimeIndex(index)
-    if bar_index.tz is None:
-        bar_index = bar_index.tz_localize("UTC")
-    else:
-        bar_index = bar_index.tz_convert("UTC")
+    try:
+        bar_index = pd.DatetimeIndex(index)
+        if bar_index.tz is None:
+            bar_index = bar_index.tz_localize("UTC")
+        else:
+            bar_index = bar_index.tz_convert("UTC")
+    except (TypeError, ValueError):
+        return None
 
     fills_by_time: dict[pd.Timestamp, list[dict[str, Any]]] = {}
     for fill in aligned_fills.to_dict("records"):
-        ts = pd.Timestamp(fill["datetime"]).tz_convert("UTC")
+        try:
+            ts = pd.Timestamp(fill["datetime"]).tz_convert("UTC")
+        except (TypeError, ValueError, AttributeError):
+            continue
         fills_by_time.setdefault(ts, []).append(fill)
 
-    cash = float(getattr(strategy.broker, "_cash", strategy.broker.getcash()))
+    # Use the immutable initial cash field (_cash), not getcash() which returns
+    # the live active-cash balance after fills have settled.
+    cash = float(getattr(strategy.broker, "_cash", None) or strategy.broker.getcash())
     position_size = 0.0
     values: list[float] = []
-    for ts, close in zip(bar_index, frame["close"].to_numpy(dtype=float), strict=False):
+    for ts, close in zip(bar_index, closes, strict=False):
         for fill in fills_by_time.get(pd.Timestamp(ts), ()):
             signed_size = float(fill.get("size", 0.0))
             price = float(fill.get("price", 0.0))
@@ -288,9 +334,10 @@ def _build_equity_returns(
     strategy: Any,
     index: pd.Index,
     fills: pd.DataFrame | None = None,
+    frame: pd.DataFrame | None = None,
 ) -> tuple[pd.Series, pd.Series]:
     if fills is not None:
-        fill_equity = _build_equity_from_fills(strategy, index, fills)
+        fill_equity = _build_equity_from_fills(strategy, index, fills, frame)
         if fill_equity is not None:
             returns = fill_equity.pct_change().fillna(0.0)
             returns.name = "returns"
@@ -318,7 +365,16 @@ def _build_equity_returns(
 
 def _stats_config(cerebro: Any) -> dict[str, Any]:
     config = BacktestRuntimeConfig.from_owner(cerebro)
+    
+    # Extract strategy name from cerebro's strategy list if available.
+    strategy_name = "TradeLearn Report"
+    if hasattr(cerebro, "strats") and cerebro.strats:
+        strategy_cls = cerebro.strats[0][0]
+        if hasattr(strategy_cls, "__name__"):
+            strategy_name = strategy_cls.__name__
+
     return {
+        "strategy": strategy_name,
         "callback_batch": getattr(cerebro, "callback_batch", 1),
         "trade_on_close": config.trade_on_close,
         "exactbars": config.exactbars,
@@ -337,16 +393,172 @@ def _return_pct(final_value: float, broker: Any) -> float:
     return (float(final_value) / start_cash - 1.0) * 100.0
 
 
-def _trade_summary(broker: Any) -> tuple[float, float]:
+def _trade_summary(broker: Any, trades: pd.DataFrame | None = None) -> tuple[float, float]:
     trade_summary = getattr(broker, "trade_summary", None)
     if callable(trade_summary):
         total, wins = trade_summary()
         return float(total), float(wins)
+    if trades is not None and not trades.empty and "isclosed" in trades.columns:
+        closed = trades[trades["isclosed"].astype(bool)]
+        total = float(len(closed))
+        wins = float((closed["pnl"] > 0).sum()) if total > 0 else 0.0
+        return total, wins
     return 0.0, 0.0
 
 
 def _win_rate_pct(total_trades: float, wins: float) -> float:
     return wins / total_trades * 100.0 if total_trades else 0.0
+
+
+def _summary_pnl(positions: pd.DataFrame) -> tuple[float, float, float]:
+    """Read realized/unrealized pnl and margin from the last positions row."""
+    if positions is None or positions.empty:
+        return 0.0, 0.0, 0.0
+    last = positions.iloc[-1]
+
+    def _f(value: Any) -> float:
+        try:
+            if value is None or pd.isna(value):
+                return 0.0
+        except (TypeError, ValueError):
+            pass
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    return (
+        _f(last.get("realized_pnl", 0.0)),
+        _f(last.get("unrealized_pnl", 0.0)),
+        _f(last.get("margin_used", 0.0)),
+    )
+
+
+def _summary_max_drawdown(equity: pd.Series) -> float:
+    if equity is None or equity.empty:
+        return 0.0
+    cummax = equity.cummax().replace(0, np.nan)
+    dd = (cummax - equity) / cummax
+    return float(dd.fillna(0.0).max())
+
+
+def _summary_sharpe(returns: pd.Series, periods: int = 252) -> float:
+    """Annualized Sharpe using the metrics module; return 0.0 on degenerate input."""
+    if returns is None or returns.empty:
+        return 0.0
+    if returns[returns != 0.0].shape[0] < 2:
+        return 0.0
+    try:
+        from tradelearn.metrics.risk import sharpe as _sharpe
+
+        value = _sharpe(returns, periods=periods)
+    except Exception:
+        return 0.0
+    if value is None:
+        return 0.0
+    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+        return 0.0
+    return float(value)
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        x = float(value)
+        return x if math.isfinite(x) else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _summary_annual_return(returns: pd.Series, periods: int = 252) -> float:
+    if returns is None or returns.empty or returns[returns != 0.0].shape[0] < 2:
+        return 0.0
+    try:
+        from tradelearn.metrics.returns import annual_return as _ar
+        return _safe_float(_ar(returns, periods=periods)) * 100.0
+    except Exception:
+        return 0.0
+
+
+def _summary_volatility(returns: pd.Series, periods: int = 252) -> float:
+    if returns is None or returns.empty or returns[returns != 0.0].shape[0] < 2:
+        return 0.0
+    try:
+        from tradelearn.metrics.risk import volatility as _vol
+        return _safe_float(_vol(returns, periods=periods)) * 100.0
+    except Exception:
+        return 0.0
+
+
+def _summary_sortino(returns: pd.Series, periods: int = 252) -> float:
+    if returns is None or returns.empty or returns[returns != 0.0].shape[0] < 2:
+        return 0.0
+    try:
+        from tradelearn.metrics.risk import sortino as _sortino
+        return _safe_float(_sortino(returns, periods=periods))
+    except Exception:
+        return 0.0
+
+
+def _summary_calmar(returns: pd.Series, periods: int = 252) -> float:
+    if returns is None or returns.empty or returns[returns != 0.0].shape[0] < 2:
+        return 0.0
+    try:
+        from tradelearn.metrics.risk import calmar as _calmar
+        return _safe_float(_calmar(returns, periods=periods))
+    except Exception:
+        return 0.0
+
+
+def _summary_trade_metrics(trades: pd.DataFrame) -> dict[str, float]:
+    empty = {
+        "profit_factor": 0.0,
+        "expectancy": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "best_trade": 0.0,
+        "worst_trade": 0.0,
+        "max_consec_wins": 0,
+        "max_consec_losses": 0,
+        "total_commission": 0.0,
+    }
+    if trades is None or trades.empty:
+        return empty
+    closed = trades[trades.get("isclosed", pd.Series(dtype=bool)).astype(bool)] if "isclosed" in trades.columns else trades
+    if closed.empty:
+        return empty
+    pnl = closed["pnlcomm"] if "pnlcomm" in closed.columns else closed.get("pnl", pd.Series(dtype=float))
+    wins = pnl[pnl > 0]
+    losses = pnl[pnl < 0]
+    gross_profit = float(wins.sum()) if not wins.empty else 0.0
+    gross_loss = float(losses.sum()) if not losses.empty else 0.0
+    profit_factor = gross_profit / abs(gross_loss) if abs(gross_loss) > 1e-9 else 0.0
+    expectancy = float(pnl.mean()) if not pnl.empty else 0.0
+    avg_win = float(wins.mean()) if not wins.empty else 0.0
+    avg_loss = float(losses.mean()) if not losses.empty else 0.0
+    best = float(pnl.max()) if not pnl.empty else 0.0
+    worst = float(pnl.min()) if not pnl.empty else 0.0
+    # consecutive streaks
+    signs = (pnl > 0).astype(int)
+    max_w = max_l = cur_w = cur_l = 0
+    for s in signs:
+        if s:
+            cur_w += 1; cur_l = 0
+        else:
+            cur_l += 1; cur_w = 0
+        max_w = max(max_w, cur_w)
+        max_l = max(max_l, cur_l)
+    commission = float(closed["commission"].sum()) if "commission" in closed.columns else 0.0
+    return {
+        "profit_factor": profit_factor,
+        "expectancy": expectancy,
+        "avg_win": avg_win,
+        "avg_loss": avg_loss,
+        "best_trade": best,
+        "worst_trade": worst,
+        "max_consec_wins": max_w,
+        "max_consec_losses": max_l,
+        "total_commission": commission,
+    }
 
 
 def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -> Stats:
@@ -362,74 +574,112 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
         final_value = float(strategy.broker.getvalue())
         total_orders = float(len(getattr(strategy.broker, "_orders", ())))
         total_fills = float(len(getattr(strategy.broker, "_fills", ())))
-        total_trades, winning_trades = _trade_summary(strategy.broker)
+
+        # Build summary inputs eagerly (cheap: bounded by # of fills),
+        # but expose DataFrames lazily through factories.
+        eager_fills = _fills_frame(strategy.broker)
+        eager_trades = _trades_frame(eager_fills)
+        eager_positions = _positions_frame(strategy, eager_fills, index)
+        eager_equity, eager_returns = _build_equity_returns(strategy, index, eager_fills, frame)
+        total_trades, winning_trades = _trade_summary(strategy.broker, eager_trades)
+        realized_pnl, unrealized_pnl, margin_used = _summary_pnl(eager_positions)
 
         def equity_factory() -> pd.Series:
-            return _build_equity_returns(strategy, index, fills_factory())[0]
+            return eager_equity
 
         def returns_factory() -> pd.Series:
-            return _build_equity_returns(strategy, index, fills_factory())[1]
+            return eager_returns
 
         def fills_factory() -> pd.DataFrame:
-            return _fills_frame(strategy.broker)
+            return eager_fills
 
         def trades_factory() -> pd.DataFrame:
-            return _trades_frame(fills_factory())
+            return eager_trades
 
         def positions_factory() -> pd.DataFrame:
-            return _positions_frame(strategy, fills_factory(), index)
+            return eager_positions
 
-        return Stats(
+        trade_metrics = _summary_trade_metrics(eager_trades)
+        stats = Stats(
             returns=returns_factory,
             equity=equity_factory,
             trades=trades_factory,
             positions=positions_factory,
             orders=lambda: _orders_frame(strategy.broker),
-            summary={
+            summary=SummaryDict({
                 "bars": float(len(index)),
                 "final_cash": final_cash,
                 "final_value": final_value,
                 "return_pct": _return_pct(final_value, strategy.broker),
-                "final_realized_pnl": 0.0,
-                "final_unrealized_pnl": 0.0,
-                "final_margin_used": 0.0,
-                "max_drawdown": 0.0,
-                "sharpe": float("nan"),
+                "annual_return": _summary_annual_return(eager_returns),
+                "volatility": _summary_volatility(eager_returns),
+                "max_drawdown": _summary_max_drawdown(eager_equity),
+                "sharpe": _summary_sharpe(eager_returns),
+                "sortino": _summary_sortino(eager_returns),
+                "calmar": _summary_calmar(eager_returns),
                 "total_trades": total_trades,
                 "win_rate_pct": _win_rate_pct(total_trades, winning_trades),
+                "profit_factor": trade_metrics["profit_factor"],
+                "expectancy": trade_metrics["expectancy"],
+                "avg_win": trade_metrics["avg_win"],
+                "avg_loss": trade_metrics["avg_loss"],
+                "best_trade": trade_metrics["best_trade"],
+                "worst_trade": trade_metrics["worst_trade"],
+                "max_consec_wins": trade_metrics["max_consec_wins"],
+                "max_consec_losses": trade_metrics["max_consec_losses"],
+                "total_commission": trade_metrics["total_commission"],
+                "final_realized_pnl": realized_pnl,
+                "final_unrealized_pnl": unrealized_pnl,
+                "final_margin_used": margin_used,
                 "total_orders": total_orders,
                 "total_fills": total_fills,
-            },
+            }),
             analyzers={},
             config=_stats_config(cerebro),
             fills=fills_factory,
         )
+        print(stats.summary, file=sys.stderr)
+        return stats
 
     fills = _fills_frame(strategy.broker)
-    equity, returns = _build_equity_returns(strategy, index, fills)
-    drawdowns = (equity.cummax() - equity) / equity.cummax().replace(0, np.nan)
+    equity, returns = _build_equity_returns(strategy, index, fills, frame)
     trades = _trades_frame(fills)
     orders = _orders_frame(strategy.broker)
     positions = _positions_frame(strategy, fills, index)
     final_cash = float(strategy.broker.getcash())
     final_value = float(strategy.broker.getvalue())
-    total_trades, winning_trades = _trade_summary(strategy.broker)
-    summary = {
+    total_trades, winning_trades = _trade_summary(strategy.broker, trades)
+    realized_pnl, unrealized_pnl, margin_used = _summary_pnl(positions)
+    trade_metrics = _summary_trade_metrics(trades)
+    summary = SummaryDict({
         "bars": float(len(index)),
         "final_cash": final_cash,
         "final_value": final_value,
         "return_pct": _return_pct(final_value, strategy.broker),
-        "final_realized_pnl": 0.0,
-        "final_unrealized_pnl": 0.0,
-        "final_margin_used": 0.0,
-        "max_drawdown": float(drawdowns.fillna(0.0).max()) if not drawdowns.empty else 0.0,
-        "sharpe": float("nan"),
+        "annual_return": _summary_annual_return(returns),
+        "volatility": _summary_volatility(returns),
+        "max_drawdown": _summary_max_drawdown(equity),
+        "sharpe": _summary_sharpe(returns),
+        "sortino": _summary_sortino(returns),
+        "calmar": _summary_calmar(returns),
         "total_trades": total_trades,
         "win_rate_pct": _win_rate_pct(total_trades, winning_trades),
+        "profit_factor": trade_metrics["profit_factor"],
+        "expectancy": trade_metrics["expectancy"],
+        "avg_win": trade_metrics["avg_win"],
+        "avg_loss": trade_metrics["avg_loss"],
+        "best_trade": trade_metrics["best_trade"],
+        "worst_trade": trade_metrics["worst_trade"],
+        "max_consec_wins": trade_metrics["max_consec_wins"],
+        "max_consec_losses": trade_metrics["max_consec_losses"],
+        "total_commission": trade_metrics["total_commission"],
+        "final_realized_pnl": realized_pnl,
+        "final_unrealized_pnl": unrealized_pnl,
+        "final_margin_used": margin_used,
         "total_orders": float(len(orders)),
         "total_fills": float(len(fills)),
-    }
-    return Stats(
+    })
+    stats = Stats(
         returns=returns,
         equity=equity,
         trades=trades,
@@ -440,6 +690,8 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
         config=_stats_config(cerebro),
         fills=fills,
     )
+    print(stats.summary, file=sys.stderr)
+    return stats
 
 
 def _build_bar_advancers(

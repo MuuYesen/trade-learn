@@ -148,6 +148,9 @@ bt.plot()
 bt.report("report.html")
 ```
 
+> [!TIP]
+> **Multi-symbol Logic:** In multi-symbol backtesting, the strategy binds to `self.data` (the primary data source) by default. This means the code above will only execute based on the signals of the first symbol even if multiple symbols are provided. To implement independent parallel trading across multiple assets, iterate through `self.datas` in the strategy's `init` to build indicators for each data source.
+
 **Engine — Backtrader Style** (for complex/portfolio strategies and future paper/live modes):
 
 ```python
@@ -184,6 +187,9 @@ print(strategy.stats.summary)
 cerebro.plot()
 cerebro.report("report.html")
 ```
+
+> [!TIP]
+> **Multi-symbol Logic:** In multi-symbol backtesting, the strategy binds to `self.data` (the primary data source) by default. This means the code above will only execute based on the signals of the first symbol even if multiple symbols are provided. To implement independent parallel trading across multiple assets, iterate through `self.datas` in the strategy's `init` to build indicators for each data source.
 
 ## Research Pipeline Example
 

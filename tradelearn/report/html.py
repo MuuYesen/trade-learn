@@ -55,7 +55,16 @@ def write_html_report(
         build_context(reporter, benchmark=benchmark_returns),
     )
     metadata = _metadata(summary, returns, config)
-    top_drawdowns = reporter.top_drawdowns(limit=10)
+    top_drawdowns = reporter.top_drawdowns(limit=5)
+    if not top_drawdowns.empty:
+        # Format max_drawdown as percentage and dates using our clean formatter
+        top_drawdowns = top_drawdowns.copy()
+        if "max_drawdown" in top_drawdowns.columns:
+            top_drawdowns["max_drawdown"] = top_drawdowns["max_drawdown"].apply(lambda x: f"{x:.2%}")
+        for col in ["peak", "valley", "recovery"]:
+            if col in top_drawdowns.columns:
+                top_drawdowns[col] = top_drawdowns[col].apply(_format_date)
+
     plots = {}
     plots["Equity Curve"] = charts.equity_curve(
         reporter.equity_curve(),
@@ -331,15 +340,18 @@ def _metadata(
 ) -> dict[str, str]:
     """Return report header and footer metadata."""
     strategy_name = str(
-        summary.get("strategy_name") or config.get("strategy") or "Tradelearn Report"
+        summary.get("strategy_name") or config.get("strategy") or "TradeLearn Report"
     )
-    run_id = str(config.get("run_id") or summary.get("run_id") or "-")
+    run_id = str(config.get("run_id") or summary.get("run_id") or "")
+    if not run_id or run_id == "-":
+        run_id = datetime.now().strftime("RUN-%Y%m%d-%H%M")
+
     return {
         "strategy_name": strategy_name,
         "run_id": run_id,
         "start": _format_date(returns.index.min()),
         "end": _format_date(returns.index.max()),
-        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "version": _package_version(),
     }
 
@@ -431,6 +443,8 @@ def _format_date(value: Any) -> str:
     """Format report date metadata."""
     if pd.isna(value):
         return "-"
+    if isinstance(value, pd.Timestamp):
+        return str(value.tz_localize(None) if value.tzinfo is None else value.tz_convert(None)).split(".")[0]
     return str(value)
 
 
@@ -461,6 +475,9 @@ def _format_value(value: Any) -> str:
         return ", ".join(str(item) for item in value)
     if isinstance(value, float):
         return f"{value:.6f}"
+    # Strip timezone suffix from timestamps (e.g. +00:00) for cleaner display.
+    if isinstance(value, pd.Timestamp):
+        return str(value.tz_convert(None) if value.tzinfo is not None else value).split(".")[0]
     return str(value)
 
 
@@ -477,18 +494,42 @@ def _metric_label(key: str) -> str:
 
 
 def _format_metric_value(key: str, value: Any) -> str:
-    """Format KPI values compactly without losing raw metric identity."""
+    """Format KPI values compactly and professionally."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return "-"
+    
+    lowered = key.lower()
+    
+    # 1. Handle Count/Integer metrics (Total Trades, Orders, Fills, Bars, Duration)
+    counts = {"trades", "orders", "fills", "bars", "duration"}
+    if any(c in lowered for c in counts):
+        try:
+            return f"{int(float(value)):,}"
+        except (ValueError, TypeError):
+            return str(value)
+
+    # 2. Handle Percentage metrics (Return, Drawdown, Rate, Turnover)
     if isinstance(value, float):
-        if pd.isna(value):
-            return "-"
-        lowered = key.lower()
+        # Fix double-scaling: engine provides 25.0 for 25%, but :.2% expects 0.25
+        if lowered in {"return_pct", "win_rate_pct"}:
+            return f"{value / 100.0:.2%}"
+            
         if any(token in lowered for token in ("return", "drawdown", "rate", "turnover")):
+            # If the value is already large (e.g. > 1.0), it might be pre-scaled (unlikely for QS metrics but safe to check)
+            # Usually QuantStats returns decimal (0.05), but native return_pct returns 5.0
             return f"{value:.2%}"
-        if "ratio" in lowered or lowered in {"alpha", "beta"}:
+            
+        # 3. Handle Ratios (Sharpe, Calmar, Sortino, Alpha, Beta)
+        if "ratio" in lowered or lowered in {"alpha", "beta", "sharpe"}:
             return f"{value:.3f}"
+            
+        # 4. Handle Currency/PnL (Final Cash, Value, PnL)
+        if any(token in lowered for token in ("cash", "value", "pnl")):
+            return f"{value:,.2f}"
+            
+        # Default float formatting
         if abs(value) >= 1000:
             return f"{value:,.2f}"
         return f"{value:.4f}"
-    if isinstance(value, int):
-        return f"{value:,}"
-    return _format_value(value)
+        
+    return str(value)

@@ -46,7 +46,7 @@ def test_reporter_html_writes_single_file_tear_sheet(tmp_path) -> None:
     assert "Equity Curve" in html
     assert "Drawdown" in html
     assert "Annual Returns" in html
-    assert "Top 10 Drawdowns" in html
+    assert "Top 5 Drawdowns" in html
     assert "Monthly Returns Heatmap" in html
     assert "Monthly Returns Distribution" in html
     assert "Rolling Returns" in html
@@ -54,7 +54,7 @@ def test_reporter_html_writes_single_file_tear_sheet(tmp_path) -> None:
     assert "Return Quantiles" in html
     assert "Trade Distribution" in html
     assert "Rolling Sharpe" not in html
-    assert "Tradelearn" in html
+    assert "TradeLearn" in html
     assert "Bokeh" in html
     assert "annual_return" in html
     assert "kpi-grid" in html

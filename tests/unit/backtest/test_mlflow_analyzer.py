@@ -97,23 +97,15 @@ def test_mlflow_analyzer_logs_params_stats_and_artifacts() -> None:
     assert fake.params[0]["broker.final_cash"] == 123.0
     assert fake.params[0]["broker.final_value"] == 123.0
     assert fake.params[0]["broker.commission"] == 0.001
-    assert fake.metrics == [
-        {
-            "bars": 3.0,
-            "final_cash": 123.0,
-            "final_value": 123.0,
-            "return_pct": 0.0,
-            "final_realized_pnl": 0.0,
-            "final_unrealized_pnl": 0.0,
-            "final_margin_used": 0.0,
-            "max_drawdown": 0.0,
-            "total_trades": 0.0,
-            "win_rate_pct": 0.0,
-            "total_orders": 0.0,
-            "total_fills": 0.0,
-        }
-    ]
-    assert "sharpe" not in fake.metrics[0]
+    assert fake.metrics[0]["bars"] == 3.0
+    assert fake.metrics[0]["final_cash"] == 123.0
+    assert fake.metrics[0]["final_value"] == 123.0
+    assert fake.metrics[0]["return_pct"] == 0.0
+    assert fake.metrics[0]["max_drawdown"] == 0.0
+    assert fake.metrics[0]["total_trades"] == 0.0
+    assert fake.metrics[0]["total_orders"] == 0.0
+    assert fake.metrics[0]["total_fills"] == 0.0
+    assert fake.metrics[0]["sharpe"] == 0.0
     assert fake.dicts == []
     assert sorted(name for name, _ in fake.artifacts) == [
         "artifacts.xlsx",

@@ -196,3 +196,5 @@ scratch_doc.txt
 /demo/
 examples/output/
 design/
+benchmarks/output/
+zoo/

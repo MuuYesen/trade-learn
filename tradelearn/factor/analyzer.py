@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from dataclasses import dataclass
 from html import escape
 from pathlib import Path
@@ -21,6 +22,18 @@ class FactorAnalyzer:
     groups: pd.Series | None = None
     periods: int = 252
     quantiles: int = 5
+
+    def __post_init__(self) -> None:
+        """Promote single-index data to MultiIndex to support single-asset analysis."""
+        for attr in ("factor", "forward_returns", "prices", "groups"):
+            val = getattr(self, attr)
+            if val is not None and not isinstance(val.index, pd.MultiIndex):
+                # Add a dummy level to trick multi-index validation
+                new_idx = pd.MultiIndex.from_arrays(
+                    [val.index, ["ASSET"] * len(val)],
+                    names=[val.index.name or "date", "symbol"]
+                )
+                object.__setattr__(self, attr, val.copy().set_axis(new_idx))
 
     @classmethod
     def from_clean_factor_data(
@@ -91,10 +104,20 @@ class FactorAnalyzer:
         return analyzer.summary()
 
     def ic(self, by_group: bool = False) -> pd.Series | pd.DataFrame:
-        """Return per-date Pearson information coefficient.
-
-        When ``by_group=True``, returns a date x group frame.
-        """
+        """Return per-date Pearson information coefficient."""
+        # Fallback for single-asset: Use rolling correlation instead of cross-sectional
+        if self.factor.index.get_level_values(1).nunique() <= 1:
+            # Single asset: calculate rolling 20-day correlation
+            res = (
+                self.factor
+                .rolling(window=20)
+                .corr(self._forward_returns())
+                .dropna()
+            )
+            res.index = res.index.get_level_values(0)
+            res.name = "ic"
+            return res
+        
         return factor_metrics.ic(
             self.factor,
             self._forward_returns(),
@@ -103,10 +126,20 @@ class FactorAnalyzer:
         )
 
     def rank_ic(self, by_group: bool = False) -> pd.Series | pd.DataFrame:
-        """Return per-date Spearman rank information coefficient.
-
-        When ``by_group=True``, returns a date x group frame.
-        """
+        """Return per-date Spearman rank information coefficient."""
+        # Fallback for single-asset: Use rolling rank correlation
+        if self.factor.index.get_level_values(1).nunique() <= 1:
+            y = self._forward_returns()
+            res = (
+                self.factor
+                .rolling(window=20)
+                .apply(lambda x: x.rank().corr(y.loc[x.index].rank()))
+                .dropna()
+            )
+            res.index = res.index.get_level_values(0)
+            res.name = "rank_ic"
+            return res
+            
         return factor_metrics.rank_ic(
             self.factor,
             self._forward_returns(),
@@ -339,7 +372,7 @@ class FactorAnalyzer:
             raise ValueError("FactorAnalyzer has no data to plot")
         script, chart = components(grid)
         html_content = _render_factor_html(
-            title="Tradelearn Factor Analysis",
+            title="TradeLearn Factor Analysis",
             summary=self.summary(),
             quantile_stats=self.quantile_stats(),
             quantile_counts=self.quantile_counts(),
@@ -354,12 +387,15 @@ class FactorAnalyzer:
 
     def report(self, path: str, format: str | None = None) -> Path:
         """Write a factor report using the user-facing report() entrypoint."""
+        print("Factor Analysis Report...", end="", flush=True)
         output = Path(path)
         chosen = (format or output.suffix.lstrip(".") or "html").lower()
         if chosen in {"htm", "html"}:
             if not output.suffix:
                 output = output.with_suffix(".html")
-            return self.html(str(output))
+            result = self.html(str(output))
+            print(f" Done ✓  →  {result}")
+            return result
         raise ValueError(f"Unsupported factor report format: {chosen}")
 
     def _forward_returns(self) -> pd.Series:
@@ -469,12 +505,15 @@ class MultiPeriodFactorAnalyzer:
 
     def report(self, path: str, format: str | None = None, period: int | None = None) -> Path:
         """Write a factor report for a selected prediction horizon."""
+        print("Multi-Period Factor Analysis Report...", end="", flush=True)
         output = Path(path)
         chosen = (format or output.suffix.lstrip(".") or "html").lower()
         if chosen in {"htm", "html"}:
             if not output.suffix:
                 output = output.with_suffix(".html")
-            return self.html(str(output), period=period)
+            result = self.html(str(output), period=period)
+            print(f" Done ✓  →  {result}")
+            return result
         raise ValueError(f"Unsupported factor report format: {chosen}")
 
     def _selected(self, period: int | None) -> FactorAnalyzer:
@@ -587,12 +626,15 @@ class MultiFactorAnalyzer:
 
     def report(self, path: str, format: str | None = None) -> Path:
         """Write a multi-factor report using the user-facing report() entrypoint."""
+        print("Multi-Factor Analysis Report...", end="", flush=True)
         output = Path(path)
         chosen = (format or output.suffix.lstrip(".") or "html").lower()
         if chosen in {"htm", "html"}:
             if not output.suffix:
                 output = output.with_suffix(".html")
-            return self.html(str(output))
+            result = self.html(str(output))
+            print(f" Done ✓  →  {result}")
+            return result
         raise ValueError(f"Unsupported factor report format: {chosen}")
 
     def html(self, path: str) -> Path:
@@ -648,7 +690,7 @@ def _render_factor_html(
     chart: str,
     bokeh_resources: str,
 ) -> str:
-    """Return a compact Alphalens-style factor report HTML page."""
+    """Return a premium Alphalens-style factor report HTML page."""
     summary_title = "Period Summary" if summary_frame is not None else "Factor Summary"
     summary_table = (
         _frame_table(summary_frame)
@@ -659,69 +701,123 @@ def _render_factor_html(
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{escape(title)}</title>
   {bokeh_resources}
   <style>
     :root {{
-      --ink: #1f2d33;
-      --muted: #65737e;
-      --line: #d9e1e6;
-      --panel: #f7fafc;
-      --accent: #54717b;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --accent: #334155;
+      --row-hover: #f1f5f9;
+      --brand: #4f46e5;
     }}
     * {{ box-sizing: border-box; }}
     body {{
       margin: 0;
-      background: #f3f6f8;
+      background: var(--bg);
       color: var(--ink);
-      font: 13px/1.45 -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+      font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
     }}
-    .shell {{ max-width: 1180px; margin: 28px auto; padding: 0 22px; }}
-    header, section {{
-      margin: 0 0 24px;
-      padding: 22px 26px;
-      background: #fff;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      box-shadow: 0 1px 2px rgba(31, 45, 51, .04);
+    .shell {{ max-width: 1400px; margin: 40px auto; padding: 0 32px; }}
+    header {{
+      margin: 0 0 32px;
+      padding: 32px 40px;
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      border-top: 6px solid var(--brand);
+      background: linear-gradient(to bottom right, #ffffff, #fcfdff);
     }}
-    header {{ border-top: 4px solid var(--accent); }}
-    h1, h2 {{ margin: 0 0 14px; line-height: 1.2; }}
-    h1 {{ font-size: 32px; }}
-    h2 {{ font-size: 22px; }}
-    p {{ margin: 0 0 10px; color: var(--muted); }}
+    .report-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 32px;
+    }}
+    .eyebrow {{
+      color: var(--brand);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .15em;
+      margin: 0 0 8px;
+      text-transform: uppercase;
+    }}
+    .meta-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(140px, auto));
+      gap: 8px 40px;
+      padding-bottom: 4px;
+    }}
+    .meta-label {{ color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }}
+    .meta-value {{ color: var(--accent); font-size: 13px; font-weight: 600; white-space: nowrap; }}
+    section {{
+      margin: 0 0 32px;
+      padding: 32px;
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }}
+    h1 {{ margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -0.025em; color: var(--ink); }}
+    h2 {{ margin: 0 0 20px; font-size: 18px; font-weight: 700; color: var(--accent); border-bottom: 2px solid var(--row-hover); padding-bottom: 12px; }}
+    p {{ margin: 0; color: var(--muted); font-size: 15px; }}
     .grid {{
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 340px;
-      gap: 24px;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      gap: 32px;
       align-items: start;
     }}
-    aside {{ position: sticky; top: 18px; }}
-    table {{ border-collapse: collapse; width: 100%; margin: 10px 0 0; }}
-    th, td {{ border: 1px solid var(--line); padding: 7px 9px; text-align: left; }}
-    th {{ background: var(--panel); font-weight: 700; }}
+    aside {{ position: sticky; top: 32px; }}
+    table {{ border-collapse: collapse; width: 100%; margin: 8px 0; min-width: 600px; }}
+    th, td {{ padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--line); }}
+    th {{ background: var(--bg); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }}
+    tr:hover {{ background: var(--row-hover); }}
+    td {{ font-variant-numeric: tabular-nums; }}
     td:last-child, th:last-child {{ text-align: right; }}
-    .summary-table th {{ width: 58%; color: var(--muted); }}
+    .summary-table {{ min-width: 0; }}
+    .summary-table th {{ width: 55%; color: var(--accent); background: none; text-transform: none; font-size: 14px; letter-spacing: normal; padding-left: 0; }}
     .chart {{ overflow: hidden; }}
     .chart > div, .chart .bk-root, .chart .bk-root > div {{
       width: 100% !important;
       max-width: 100% !important;
     }}
-    @media (max-width: 980px) {{
+    .full-width-tables {{ margin-top: 32px; }}
+    .scroll-container {{ overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; border: 1px solid var(--line); }}
+    @media (max-width: 1100px) {{
       .grid {{ grid-template-columns: 1fr; }}
       aside {{ position: static; }}
+      .report-header {{ flex-direction: column; align-items: flex-start; gap: 16px; }}
+      .meta-grid {{ grid-template-columns: 1fr; }}
     }}
   </style>
 </head>
 <body>
   <main class="shell">
     <header>
-      <h1>{escape(title)}</h1>
-      <p>Alphalens-style factor diagnostics: quantile returns, long-short spread,
-      IC, rank IC, turnover, and monthly IC heatmap.</p>
+      <div class="report-header">
+        <div>
+          <p class="eyebrow">TradeLearn Report</p>
+          <h1>{escape(title)}</h1>
+        </div>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <div class="meta-label">Generated</div>
+            <div class="meta-value">{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">Factor Type</div>
+            <div class="meta-value">Alphalens-style</div>
+          </div>
+        </div>
+      </div>
     </header>
+    
     <div class="grid">
-      <div>
+      <div class="main-content">
         <section class="chart">
           <h2>Information Coefficient and Quantile Charts</h2>
           {chart}
@@ -732,16 +828,26 @@ def _render_factor_html(
           <h2>{summary_title}</h2>
           {summary_table}
         </section>
-        <section>
-          <h2>Quantile Statistics</h2>
-          {_frame_table(quantile_stats)}
-        </section>
-        <section>
-          <h2>Quantile Counts</h2>
-          {_frame_table(quantile_counts.tail(10))}
-        </section>
       </aside>
     </div>
+
+    <div class="full-width-tables">
+      <section>
+        <h2>Quantile Statistics</h2>
+        <p style="margin-bottom: 16px; font-size: 13px;">Statistical summary of forward returns for each factor quantile. This table shows the performance distribution and risk metrics across groups.</p>
+        <div class="scroll-container">
+          {_frame_table(quantile_stats)}
+        </div>
+      </section>
+      <section>
+        <h2>Quantile Counts</h2>
+        <p style="margin-bottom: 16px; font-size: 13px;">The number of assets assigned to each quantile at each point in time. This helps verify data density and ensure balanced quantile allocation across the sample period.</p>
+        <div class="scroll-container">
+          {_frame_table(quantile_counts.tail(10))}
+        </div>
+      </section>
+    </div>
+    
     {script}
   </main>
 </body>
@@ -772,10 +878,13 @@ def _frame_table(frame: pd.DataFrame) -> str:
 
 
 def _format_html_value(value: object) -> str:
-    if isinstance(value, float):
-        return f"{value:.6f}"
+    import numpy as np
     if pd.isna(value):
-        return "-"
+        return "—"
+    if isinstance(value, (float, np.floating)):
+        if np.isnan(value) or np.isinf(value):
+            return "—"
+        return f"{value:.4f}"
     return str(value)
 
 

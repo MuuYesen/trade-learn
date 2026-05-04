@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -36,6 +37,123 @@ class Position:
         elif self.size * new_size < 0:
             self.price = price
         self.size = new_size
+
+
+_SUMMARY_FIELDS: tuple[tuple[str | None, str, str], ...] = (
+    (None, "── Overview ──", "section"),
+    ("bars", "Bars", "int"),
+    ("final_cash", "Final Cash", "money"),
+    ("final_value", "Final Value", "money"),
+    (None, "── Returns ──", "section"),
+    ("return_pct", "Return", "pct"),
+    ("annual_return", "Annual Return", "pct"),
+    ("volatility", "Volatility", "pct_plain"),
+    (None, "── Risk ──", "section"),
+    ("max_drawdown", "Max Drawdown", "frac"),
+    ("sharpe", "Sharpe", "ratio"),
+    ("sortino", "Sortino", "ratio"),
+    ("calmar", "Calmar", "ratio"),
+    (None, "── Trades ──", "section"),
+    ("total_trades", "Trades", "int"),
+    ("win_rate_pct", "Win Rate", "pct_plain"),
+    ("profit_factor", "Profit Factor", "ratio"),
+    ("expectancy", "Expectancy", "money_signed"),
+    ("avg_win", "Avg Win", "money_signed"),
+    ("avg_loss", "Avg Loss", "money_signed"),
+    ("best_trade", "Best Trade", "money_signed"),
+    ("worst_trade", "Worst Trade", "money_signed"),
+    ("max_consec_wins", "Max Consec. Wins", "int"),
+    ("max_consec_losses", "Max Consec. Losses", "int"),
+    (None, "── Costs & PnL ──", "section"),
+    ("total_commission", "Commission", "money"),
+    ("final_realized_pnl", "Realized PnL", "money_signed"),
+    ("final_unrealized_pnl", "Unrealized PnL", "money_signed"),
+    ("final_margin_used", "Margin Used", "money"),
+    ("total_orders", "Orders", "int"),
+    ("total_fills", "Fills", "int"),
+)
+
+
+def _format_summary_value(value: Any, kind: str) -> str:
+    if value is None:
+        return "—"
+    try:
+        x = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if math.isnan(x) or math.isinf(x):
+        return "—"
+    if kind == "int":
+        return f"{int(round(x)):,}"
+    if kind == "money":
+        return f"{x:,.2f}"
+    if kind == "money_signed":
+        return f"{x:+,.2f}"
+    if kind == "pct":
+        return f"{x:+.2f}%"
+    if kind == "pct_plain":
+        return f"{x:.2f}%"
+    if kind == "frac":
+        return f"-{x * 100:.2f}%" if x > 0 else f"{x * 100:.2f}%"
+    if kind == "ratio":
+        return f"{x:.2f}"
+    return str(value)
+
+
+class SummaryDict(dict):
+    """Dict subclass that prints as an aligned backtest summary table."""
+
+    _TITLE = "Backtest Summary"
+
+    def __str__(self) -> str:
+        if not self:
+            return f"{self._TITLE}\n(empty)"
+        # Pre-compute which sections have at least one key present in this dict.
+        # Each section owns all data fields until the next section marker.
+        sections_with_data: set[int] = set()
+        cur_section = -1
+        for key, _label, kind in _SUMMARY_FIELDS:
+            if kind == "section":
+                cur_section += 1
+            elif key is not None and key in self and cur_section >= 0:
+                sections_with_data.add(cur_section)
+
+        # Build display rows.
+        rows: list[tuple[str, str | None]] = []
+        seen: set[str] = set()
+        cur_section = -1
+        for key, label, kind in _SUMMARY_FIELDS:
+            if kind == "section":
+                cur_section += 1
+                if cur_section in sections_with_data:
+                    rows.append((label, None))
+                continue
+            if key is not None and key in self:
+                rows.append((label, _format_summary_value(self[key], kind)))
+                seen.add(key)
+        for key, value in self.items():
+            if key in seen:
+                continue
+            rows.append((str(key), _format_summary_value(value, "ratio")))
+
+        data_rows = [(lbl, val) for lbl, val in rows if val is not None]
+        if not data_rows:
+            return f"{self._TITLE}\n(empty)"
+        label_w = max(len(lbl) for lbl, _ in data_rows)
+        value_w = max(len(val) for _, val in data_rows)
+        width = max(label_w + value_w + 6, len(self._TITLE))
+        sep = "─" * width
+        lines = [self._TITLE, sep]
+        for label, value in rows:
+            if value is None:
+                lines.append(f"  {label}")
+            else:
+                lines.append(f"  {label:<{label_w}}  {value:>{value_w}}")
+        lines.append(sep)
+        return "\n".join(lines)
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
 
 @dataclass
