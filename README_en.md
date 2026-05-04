@@ -296,11 +296,11 @@ The local baseline focuses on two cores: **Result Alignment** and **Throughput S
 #### 1. Single-Symbol High-Frequency Stress Test: SMA Cross (550k Bars)
 * **Strategy**: Standard SMA cross. Aims to stress-test Rust's event-driven performance and state maintenance efficiency for long sequences.
 
-| Engine | Time | bars/s | **Acceleration** | Alignment |
-|---|---:|---:|---:|---:|
-| **Lite** | 1.32s | **414,990** | **27.9x** | Final Value 118,399.33 |
-| **Engine** | 3.37s | **162,883** | **11.0x** | Final Value 118,399.33 |
-| Backtrader | 37.02s | 14,854 | 1.0x | Final Value 118,399.33 |
+| Engine Mode | Time | Throughput (Bars/s) | **Acceleration** | Equity | Trades | Closed | Status |
+|---|---|---|---|---|---|---|---|
+| **Tradelearn Lite** | **1.32s** | **414,990** | **27.9x** | **118,399.33** | 10,299 | 5,149 | **EXACT** |
+| **Tradelearn Engine** | **3.37s** | **162,883** | **11.0x** | **118,399.33** | 10,299 | 5,149 | **EXACT** |
+| Backtrader (Oracle) | 37.02s | 14,854 | 1.0x | 118,399.33 | 10,299 | 5,149 | - |
 
 #### 2. Multi-Symbol Large-Scale Index Enhancement: Top-50 Weights (5.04M Bars)
 * **Strategy**: 1000-symbol market-wide stock selection. Aims to stress-test Rust's memory layout optimization and concurrent processing for large-scale Panel data.
