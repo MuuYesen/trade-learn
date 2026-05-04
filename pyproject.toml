@@ -105,6 +105,10 @@ manifest-path = "rust/tradelearn-rust/Cargo.toml"
 module-name = "tradelearn._rust"
 python-source = "."
 features = ["extension-module"]
+include = [
+    { path = "LICENSE", format = "sdist" },
+    { path = "NOTICE", format = "sdist" },
+]
 
 [tool.cibuildwheel]
 build = "cp310-* cp311-* cp312-*"
