@@ -19,7 +19,7 @@
   <img src="https://img.shields.io/badge/code%20style-ruff-000000?style=flat-square" alt="Code style">
 </p>
 
-**trade-learn** is a quantitative framework that integrates **trade** and **learn** into a single pipeline, designed for index enhancement, quant research, machine learning strategies, and event-driven backtesting. Python provides the flexibility for strategy expression, factor research, and model experimentation, while Rust handles the high-frequency backtesting core, including matching, order advancement, and portfolio calculation. From research and backtesting to reporting and experiment tracking, everything revolves around a single reproducible workflow.
+**trade-learn** is a quantitative research framework that deeply integrates **Investment Research (Learn)** and **Trading Backtest (Trade)**. Designed for index enhancement, machine learning strategies, and complex event-driven scenarios, it utilizes a hybrid architecture of "Python for logic + Rust for core." While maintaining the flexibility of Python-based research, it pushes backtesting performance to the extreme through a native Rust core, ensuring a closed-loop, industrial-grade workflow from factor mining and causal discovery to experiment tracking.
 
 The core pain point it addresses is no longer just "how to run a backtest," but how to weave fragmented research segments into a complete strategy lifecycle:
 
