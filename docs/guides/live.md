@@ -1,6 +1,6 @@
 # 实盘协议
 
-trade-learn 1.0 的主能力是事件驱动回测；paper / live 的边界已经通过 `tradelearn.core` 预留。理解这页可以帮助你写不会被回测语义绑死的策略和 broker 适配器。
+trade-learn 2.0 的主能力是事件驱动回测；paper / live 的边界已经通过 `tradelearn.core` 预留。理解这页可以帮助你写不会被回测语义绑死的策略和 broker 适配器。
 
 ## 回测 broker 与实盘 broker 的区别
 
@@ -72,7 +72,7 @@ QMT、IB、CTP、Binance 等适配器应作为独立扩展实现：
 
 ## 当前状态
 
-| 能力 | 1.0 状态 |
+| 能力 | 2.0 状态 |
 |---|---|
 | Rust 事件驱动回测 | 稳定 |
 | Engine / Lite 策略入口 | 稳定 |

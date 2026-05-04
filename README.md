@@ -10,7 +10,9 @@
   <a href="./README_en.md">English version</a>
 </p>
 
-**trade-learn** 是一个面向指数增强、量化研究、机器学习策略和事件驱动回测的 Python / Rust 框架。Python 保留策略表达、因子研究和模型实验的灵活性，Rust 承担撮合、订单推进、portfolio 计算这类高频回测内核——研究、回测、报告与实验追踪连成一条可复现的工作流。
+**trade-learn** 是一个把 **trade** 和 **learn** 放在同一条链路里的量化框架：面向指数增强、量化研究、机器学习策略和事件驱动回测。Python 保留策略表达、因子研究和模型实验的灵活性，Rust 承担撮合、订单推进、portfolio 计算这类高频回测内核；从研究、回测到报告和实验追踪，都围绕同一套可复现 workflow 展开。
+
+当前 wheel 版本为 **`0.2.0.0`**，对应 trade-learn **2.0 架构**；历史 `0.1.1.8` 仅作为 demo / 1.x 迁移参考。
 
 它想解决的不是"怎么跑一段回测"，而是把一条完整的策略研发链路接起来：
 
@@ -18,7 +20,7 @@
   <img src="docs/research-flow.png" alt="trade-learn research flow" width="100%" />
 </p>
 
-trade-learn 的实现路径是先用 Engine 对齐专业 Backtrader 语义，再在同一套 runtime 上构建 Lite。这样 Lite 写起来短，但不是"另起一套简化撮合"：它通过 Engine / Backtrader 这条桥验证底层有效性。
+trade-learn 的实现路径是先用 Engine 对齐专业 Backtrader 语义，再在同一套 runtime 上构建 Lite。这样 Lite 写起来短，但不是"另起一套简化撮合"：它通过 Engine / Backtrader 这条桥验证底层有效性，也让快速写法和专业写法共享同一套 Stats、撮合和报告口径。
 
 你可以像写 Backtrader 一样写专业策略，也可以用 Lite API 快速验证一个想法；可以接入 TDX、TA-Lib、TradingView、pandas-ta-classic 等指标生态，也可以把因子分析、因果特征筛选、Optuna 参数优化、组合权重、回测报告和实验记录放进同一条工作流。
 
@@ -43,32 +45,6 @@ trade-learn 的实现路径是先用 Engine 对齐专业 Backtrader 语义，再
 - 同时覆盖 A 股和海外市场，不想让指标口径、数据形态和报告体系割裂
 - 同时维护规则策略和模型策略，不想让两套策略使用完全不同的数据、报告和实验体系
 
-## 对齐与性能
-
-本机基线只看两个问题：结果是否对齐、吞吐是否明显快于 Backtrader。完整复现命令见 [Benchmarks](./docs/benchmarks.md)。
-
-| 场景 | 引擎 | 数据量 | 耗时 | bars/s | 加速比 | 对齐值 |
-|---|---|---:|---:|---:|---:|---:|
-| 单标的 SMA | Lite | 550,000 bars | 1.3253s | 414,990 | 27.9x | Final Value 118,399.33 |
-| 单标的 SMA | Engine | 550,000 bars | 3.3767s | 162,883 | 11.0x | Final Value 118,399.33 |
-| 单标的 SMA | Backtrader | 550,000 bars | 37.0270s | 14,854 | 1.0x | Final Value 118,399.33 |
-| 1000 标的 top-50 目标权重 | Lite | 5,040,000 bars | 2.407s | 2,094,237 | 119.1x | Final Value 4,199,638.26 |
-| 1000 标的 top-50 目标权重 | Engine | 5,040,000 bars | 4.112s | 1,225,594 | 69.7x | Final Value 4,199,638.26 |
-| 1000 标的 top-50 目标权重 | Backtrader | 5,040,000 bars | 286.538s | 17,589 | 1.0x | Final Value 4,199,638.26 |
-
-## 一致性承诺
-
-trade-learn 把"对照基线"当作工程纪律：
-
-- `metrics`（sharpe / max_dd / sortino / ...）对 empyrical：`rtol=1e-10`
-- `tl.pta` / `bt.pta` 对 pandas-ta-classic：`rtol=1e-10`
-- `tl.tdx` / `bt.tdx` 对 MyTT：`rtol=1e-10`
-- `tl.tv` / `bt.tv` 对 pyneCore / TradingView：`rtol=1e-6`
-- 回测 **trades**（决策层）对 Backtrader oracle：**0 差异**（时间 / 方向 / size）
-- 回测 equity 对 oracle：`rtol=1e-6`，summary：`rtol=1e-4`，每条差异都登记在案
-
-详见 [Design Notes → 与外部库的语义一致性](docs/internals/consistency.md)。
-
 ## 安装
 
 ```bash
@@ -81,7 +57,15 @@ pip install trade-learn
 pip install git+https://github.com/MuuYesen/trade-learn.git@master
 ```
 
-可选 extras：`[lab]`（JupyterLab）、`[live-qmt]`（仅 Windows 实盘 broker，1.1 起提供）。
+可选 extras：
+
+| extra | 用途 |
+|---|---|
+| `[lab]` | JupyterLab / Jupyter AI / MCP / Pygwalker 交互研究环境 |
+| `[mlflow]` | MLflow tracking server 与实验 artifact 记录 |
+| `[all]` | Lab、MLflow、Riskfolio-Lib、Optuna、DuckDB 等完整研究环境 |
+| `[docs]` | 本地构建技术手册网站 |
+| `[dev]` | 测试、lint、wheel 构建工具 |
 
 ## 快速上手
 
@@ -218,56 +202,80 @@ stats = tl.Backtest(test_bars, LitePortfolio, cash=100_000).run(
 )
 ```
 
+**4. Live-style：在策略里只用当前可见窗口推理**
+
+投研流水线适合离线训练和复盘；如果要让策略语义更接近 paper / live，可以把模型和 allocator 放进策略参数，在 `next()` 中用 `history_panel()` 只读取当前已经发生的窗口。
+
+```python
+class LiveStylePortfolio(tl.Strategy):
+    lookback = 20
+
+    def init(self):
+        self.start_on_bar(self.lookback)
+
+    def next(self):
+        if len(self.data) % 20 != 0:
+            return
+
+        panel = self.history_panel(self.lookback)
+        features = self.feature_set.transform(panel).dropna()
+        scores = self.scorer.predict(features)
+        weights = self.allocator.build(scores)
+        self.target_weights(weights, close_missing=True)
+```
+
 完整版本：
 
 | 目标 | 完整脚本 |
 |---|---|
 | Lite 投研 + 回测 + report + MLflow | [`examples/research/index_enhance_lite_pipeline.py`](./examples/research/index_enhance_lite_pipeline.py) |
 | Engine 投研 + 回测 + report + MLflow | [`examples/research/index_enhance_engine_pipeline.py`](./examples/research/index_enhance_engine_pipeline.py) |
+| Lite live-style 当前窗口推理 | [`examples/research/index_enhance_lite_live.py`](./examples/research/index_enhance_lite_live.py) |
+| Engine live-style 当前窗口推理 | [`examples/research/index_enhance_engine_live.py`](./examples/research/index_enhance_engine_live.py) |
 | Engine Backtrader 风格组合调仓 | [`examples/engine/11_target_percent_portfolio.py`](./examples/engine/11_target_percent_portfolio.py) |
 | 资产类别组合策略 | [`examples/engine/12_asset_class_portfolios.py`](./examples/engine/12_asset_class_portfolios.py) |
 
-## Examples 对齐审计
 
-这些值来自 `benchmarks/runners/benchmark_bt.py smart --repeat 1 --warmup 0`，用于证明用户可读示例仍然与 Backtrader oracle 对齐。
+## 对齐与性能
 
-### 单标的 Engine 示例
+本机基线只看两个问题：结果是否对齐、吞吐是否明显快于 Backtrader。完整复现命令见 [性能基准](./docs/benchmarks.md)。
 
-| 策略 | Final Value TL / BT | Closed Trades TL / BT | Closed PnL TL / BT | 状态 |
-|---|---:|---:|---:|---|
-| QuickstartSmaCross | 100026.14 / 100026.14 | 16 / 16 | 26.14 / 26.14 | EXACT |
-| SmaCross | 99630.56 / 99630.56 | 3 / 3 | -247.72 / -247.72 | EXACT |
-| MigratedSmaCross | 99997.70 / 99997.70 | 21 / 21 | -2.30 / -2.30 | EXACT |
-| Turtle | 99995.64 / 99995.64 | 8 / 8 | -4.36 / -4.36 | EXACT |
-| EnhancedRSI | 97875.79 / 97875.79 | 6 / 6 | -2124.21 / -2124.21 | EXACT |
-| BetterMA | 100000.00 / 100000.00 | 0 / 0 | 0.00 / 0.00 | EXACT |
-| MacdTharp | 99998.98 / 99998.98 | 2 / 2 | -1.02 / -1.02 | EXACT |
-| OrderExecutionStrategy | 99994.05 / 99994.05 | 13 / 13 | -5.95 / -5.95 | EXACT |
+| 场景 | 引擎 | 数据量 | 耗时 | bars/s | 加速比 | 对齐值 |
+|---|---|---:|---:|---:|---:|---:|
+| 单标的 SMA | Lite | 550,000 bars | 1.3253s | 414,990 | 27.9x | Final Value 118,399.33 |
+| 单标的 SMA | Engine | 550,000 bars | 3.3767s | 162,883 | 11.0x | Final Value 118,399.33 |
+| 单标的 SMA | Backtrader | 550,000 bars | 37.0270s | 14,854 | 1.0x | Final Value 118,399.33 |
+| 1000 标的 top-50 目标权重 | Lite | 5,040,000 bars | 2.407s | 2,094,237 | 119.1x | Final Value 4,199,638.26 |
+| 1000 标的 top-50 目标权重 | Engine | 5,040,000 bars | 4.112s | 1,225,594 | 69.7x | Final Value 4,199,638.26 |
+| 1000 标的 top-50 目标权重 | Backtrader | 5,040,000 bars | 286.538s | 17,589 | 1.0x | Final Value 4,199,638.26 |
 
-### 多资产 Engine 示例
+## 一致性承诺
 
-| 策略 | Final Value TL / BT | Orders TL / BT | 状态 |
-|---|---:|---:|---|
-| TargetPercentPortfolioStrategy | 104447.50 / 104447.50 | 14 / 14 | EXACT |
-| AssetClassTargetPortfolioStrategy | 104003.95 / 104003.95 | 21 / 21 | EXACT |
-| UniformAssetClassPortfolioStrategy | 104155.45 / 104155.45 | 22 / 22 | EXACT |
-| TrendFilteredPortfolioStrategy | 103430.20 / 103430.20 | 21 / 21 | EXACT |
-| InverseVolatilityPortfolioStrategy | 104410.00 / 104410.00 | 9 / 9 | EXACT |
+trade-learn 把"对照基线"当作工程纪律：
+
+- `metrics`（sharpe / max_dd / sortino / ...）对 empyrical：`rtol=1e-10`
+- `tl.pta` / `bt.pta` 对 pandas-ta-classic：`rtol=1e-10`
+- `tl.tdx` / `bt.tdx` 对 MyTT：`rtol=1e-10`
+- `tl.tv` / `bt.tv` 对 pyneCore / TradingView：`rtol=1e-6`
+- 回测 **trades**（决策层）对 Backtrader oracle：**0 差异**（时间 / 方向 / size）
+- 回测 equity 对 oracle：`rtol=1e-6`，summary：`rtol=1e-4`，每条差异都登记在案
+
+详见 [设计笔记 → 与外部库的语义一致性](docs/internals/consistency.md)。
 
 ## 完整文档
 
 完整技术手册（mkdocs 站点）：[`docs/`](./docs/README.md)
 
-| 主题 | 入口 |
-|---|---|
-| 30 行走通第一个回测 | [快速开始](./docs/quickstart.md) |
-| Lite / Engine 用法 | [Lite Guide](./docs/guides/lite.md) · [Engine Guide](./docs/guides/engine.md) |
-| 架构与边界 | [架构](./docs/concepts/architecture.md) |
-| 因子 / ML / 权重研究流水线 | [Research Guide](./docs/guides/research.md) |
-| 双口径指标（`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`） | [Indicators Guide](./docs/guides/indicators.md) |
-| 性能基线 | [Benchmarks](./docs/benchmarks.md) |
-| 内核（契约 / 撮合 / portfolio / 事件循环） | [Design Notes](./docs/internals/contracts.md) |
-| 完整 API | [API Reference](./docs/api/reference.md) |
+| 主题 | 入口                                                                      |
+|---|-------------------------------------------------------------------------|
+| 30 行走通第一个回测 | [快速开始](./docs/quickstart.md)                                            |
+| Lite / Engine 用法 | [Lite 指南](./docs/guides/lite.md) · [Engine 指南](./docs/guides/engine.md) |
+| 架构与边界 | [架构](./docs/concepts/architecture.md)                                   |
+| 因子 / ML / 权重研究流水线 | [Research 指南](./docs/guides/research.md)                                |
+| 双口径指标（`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`） | [Indicators 指南](./docs/guides/indicators.md)                            |
+| 性能基线 | [性能基准](./docs/benchmarks.md)                                            |
+| 内核（契约 / 撮合 / portfolio / 事件循环） | [设计笔记](./docs/internals/contracts.md)                                   |
+| 完整 API | [API 参考](./docs/api/reference.md)                                       |
 
 本地预览：
 

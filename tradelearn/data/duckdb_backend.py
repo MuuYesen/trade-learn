@@ -32,7 +32,7 @@ class DuckDBBarsBackend:
             except ModuleNotFoundError as exc:
                 raise ImportError(
                     "DuckDBBarsBackend requires duckdb; install with "
-                    "`pip install trade-learn[duckdb]`."
+                    "`pip install trade-learn[all]` or `pip install duckdb`."
                 ) from exc
             conn = duckdb.connect(str(path or ":memory:"))
         self.conn = conn

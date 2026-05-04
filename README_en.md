@@ -58,7 +58,7 @@ For the latest:
 pip install git+https://github.com/MuuYesen/trade-learn.git@master
 ```
 
-Optional extras: `[lab]` (JupyterLab), `[live-qmt]` (Windows-only live broker, available from 1.1).
+Optional extras: `[lab]` (JupyterLab), `[mlflow]` (experiment tracking), `[all]` (full research stack), `[docs]`, and `[dev]`.
 
 ## Quickstart
 

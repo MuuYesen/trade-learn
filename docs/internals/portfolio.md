@@ -45,7 +45,7 @@ equity = cash + Σ (mark_price * size) for all positions
 
 ## 做空持仓
 
-用**负 size** 表示。1.0 采用 1:1 保证金处理，不计算融券利息——这是 Stage 2 边界，与现实差距已知，但保证回测复现性。
+用**负 size** 表示。2.0 采用 1:1 保证金处理，不计算融券利息——这是当前回测边界，与现实差距已知，但保证回测复现性。
 
 ## 报告口径
 
@@ -77,7 +77,7 @@ self.position.price         # 当前持仓均价
 
 ## 已冻结的边界行为
 
-以下行为在 1.0 已冻结，更改需走 breaking change 流程：
+以下行为在 2.0 已冻结，更改需走 breaking change 流程：
 
 - **现金不足 / 保证金不足 → `Rejected`**，不允许负现金，不做 partial fill
 - **单笔反转 fill** → 拆成 close + open 两段 trade（commission 按比例分摊）

@@ -26,12 +26,12 @@ trade-learn 是 Python 量化研究框架,让传统策略与 ML 策略共用 API
 | 项目 | 侧重点 | trade-learn 差异 |
 |---|---|---|
 | qlib | 研究平台偏重数据、模型与实验体系 | trade-learn 是本地优先的 Python 量化研究框架,传统策略与 ML 策略共用 API |
-| vnpy | 交易系统与实盘网关生态 | trade-learn 1.0 聚焦研究与回测 SDK,1.1 通过 QMT 补齐研究到实盘路径 |
+| vnpy | 交易系统与实盘网关生态 | trade-learn 2.0 聚焦研究与回测 SDK，QMT 等实盘适配通过外部扩展接入 |
 | backtrader | 成熟的事件驱动回测 API | trade-learn 提供 compat.backtrader 迁移层,同时接入 模型组件与现代报告体系 |
 | nautilus | 高性能事件驱动交易架构 | trade-learn 采用 Rust 事件型撮合核,但保留轻量 Python SDK 使用体验 |
 
-### 1.0 定位
+### 2.0 定位
 
 - compat.backtrader 承接存量策略
 - Rust 事件型撮合核负责回测一致性与性能
-- QMT 实盘对接进入 1.1,不拖慢 1.0 发版
+- QMT / IB / CTP 等实盘适配走外部 broker 协议，不拖慢 2.0 回测与投研主线

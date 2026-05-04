@@ -1,100 +1,102 @@
 # trade-learn 技术手册
 
 <p align="center">
-  <img src="tradelearn-logo.png" alt="trade-learn logo" width="520" />
+  <img src="tradelearn-logo.png" alt="trade-learn logo" width="620" />
 </p>
 
-**trade-learn** 是一个面向量化研究、机器学习策略与事件驱动回测的 Python / Rust 框架。
+**trade-learn** 是一个面向指数增强、量化研究、机器学习策略和事件驱动回测的 Python / Rust 框架。Python 保留策略、因子、模型和研究流程的表达力；Rust 承担撮合、订单推进、bar runner 和 portfolio 计算这类高频回测内核。
 
-- **Python** 表达策略、因子、模型、研究流程
-- **Rust** 承担撮合、订单推进、bar runner、portfolio 这类高频回测内核
-- **共享同一套契约和 Stats**——研究、回测、报告之间不需要再做格式转换
+> 当前手册面向 **trade-learn 2.0 架构**。Python wheel 版本为 **`0.2.0.0`**，承接历史 `0.1.1.8` demo 版本；文档里的 “1.x” 仅指历史参考或迁移语境，不代表当前 API 承诺。
 
-## 设计目标
+## 核心能力
 
-trade-learn 的目标不是再写一个回测框架，而是把一条**完整的策略研发链路**接起来：
+| 能力 | 说明 |
+|---|---|
+| Lite 轻量入口 | `tradelearn.lite` 写法短，适合快速验证、教学、1.x 风格迁移和多资产目标权重。 |
+| Engine 高级入口 | `tradelearn.engine` 对齐 Backtrader 心智，适合复杂事件驱动策略、Analyzer、Sizer、Signal 和扩展组件。 |
+| Rust 回测内核 | single-data runner 处理单标的数据流；multi-data runner 在同一交易日批量推进全部 active symbols，适合指数增强和组合调仓。 |
+| 指标生态 | `tdx` / `talib` / `tv` / `pta` 明确选择口径，不把不同市场的指标语义混在一起。 |
+| Research pipeline | `FeatureSet`、`Pipeline`、`CausalSelector`、`ResearchRun`、`Allocator` 串起训练 / 测试 / 预处理 / 评分 / 权重。 |
+| 因子与报告 | alphalens / pyfolio 风格分析、HTML 报告、交互式 plot、CSV / XLSX artifacts。 |
+| 实验追踪 | MLflow、JupyterLab、MCP 作为可选能力接入，不改变策略和回测主链。 |
 
-<p align="center">
-  <img src="research-flow.png" alt="trade-learn research flow" width="100%" />
-</p>
+## 入口选择
 
-每一段都是 trade-learn 的一等公民，不需要在框架之外另接 pyfolio / alphalens / empyrical / quantstats。
+| 目标 | 推荐入口 | 说明 |
+|---|---|---|
+| 快速验证一个交易想法 | `tradelearn.lite` | `Backtest(data, Strategy).run()`，策略里直接 `buy()`、`position()`、`target_weights()`。 |
+| 迁移或编写 Backtrader 风格策略 | `tradelearn.engine` | `Cerebro / Strategy / Analyzer / Sizer / Signal` 语义更完整。 |
+| 做因子、预处理、训练测试切分 | `tradelearn.research` | 研究结果可以直接喂给 Lite 或 Engine 回测。 |
+| 做指标口径对齐 | `tradelearn.tdx` / `tradelearn.talib` / `tradelearn.tv` / `tradelearn.pta` | 同一指标入口可用于 Lite 和 Engine 的 line 协议。 |
+| 做报告和实验记录 | `tradelearn.report` / MLflow | `Stats` 是统一结果对象，report 与 artifacts 不区分 Lite / Engine 来源。 |
 
 ## 项目架构
 
 ```mermaid
 flowchart TB
-    user[用户策略层<br/>Lite / Engine]
-    research[投研组织层<br/>FeatureSet / Pipeline / Allocator / Optuna / MLflow]
-    app[应用层<br/>factor / metrics / report / ml]
-    runtime[回测 Runtime<br/>Stats / DataFeed / Broker glue]
-    rust[Rust 内核<br/>single-data runner / multi-data runner / matching / portfolio]
-    live[实盘协议<br/>OrderRequest / Fill / BrokerEventPump]
+    subgraph user[用户层 Python API]
+        lite[tradelearn.lite<br/>1.x 风格轻量入口]
+        engine[tradelearn.engine<br/>Backtrader 风格高级入口]
+        vendor[tdx / talib / tv / pta<br/>指标函数]
+    end
 
-    user --> research
-    user --> runtime
-    research --> app
-    research --> runtime
-    app --> runtime
-    runtime --> rust
-    runtime --> live
+    subgraph research[Python 投研层]
+        data[Data / Indicators / Factor]
+        pipeline[ResearchRun / Allocator<br/>features / scores / weights]
+        report[Report / Plot / MLflow]
+    end
+
+    runtime[共享回测 runtime<br/>tradelearn.backtest<br/>Stats / broker / data / runner glue]
+    core[中性契约<br/>tradelearn.core<br/>Bars / StreamBar / Broker Protocol]
+
+    subgraph rust[Rust 高频内核]
+        runner[Bar Runner<br/>single / multi-data clock]
+        broker[RustBroker<br/>撮合 / 订单 / portfolio]
+    end
+
+    lite --> runtime
+    engine --> runtime
+    vendor --> data
+    data --> pipeline
+    pipeline --> lite
+    pipeline --> engine
+    runtime --> core
+    runtime --> runner
+    runtime --> broker
+    runner --> broker
+    runtime --> report
 ```
 
-这张图对应三条主线：用户写策略，Python 组织研究流程，Rust 负责高频回测内核。Lite 和 Engine 是两个入口，不是两套撮合系统。
+这条分层的核心约束是：**用户入口只负责语法和工作流，业务状态留在 backtest runtime，高频状态推进留在 Rust，跨 backtest / paper / live 的公共语义才进入 core。**
 
-## 它适合谁
+## 设计目标
 
-- **量化研究者**：希望同一份代码同时跑研究、回测、报告，且数值和原生 empyrical / pyfolio / alphalens 严格一致
-- **策略开发者**：想要 backtrader 风格的事件驱动 API，但需要 Rust 内核级别的性能和可复现性
-- **机器学习实验者**：需要把 sklearn / 因果选择 / 因子组合 / 回测和 MLflow 串起来，不重复造轮子
-- **A 股 / 海外双市场用户**：需要 TDX（通达信口径）和 TradingView 双口径指标在同一框架下显式可选
+trade-learn 的目标不是再写一个只会跑单段回测的框架，而是把一条完整策略研发链路接起来。
 
-## 先看什么
+<p align="center">
+  <img src="research-flow.png" alt="trade-learn research flow" width="100%" />
+</p>
 
-| 你的目标 | 推荐阅读 |
-|---|---|
-| 30 行代码跑通第一个回测 | [快速开始](quickstart.md) |
-| 写一个轻量策略 | [Lite 指南](guides/lite.md) |
-| 迁移 backtrader 风格策略 | [Engine 指南](guides/engine.md) |
-| 理解整体架构 | [架构与边界](concepts/architecture.md) |
-| 做因子、机器学习、组合研究 | [研究流水线](guides/research.md) |
-| 查看性能与对齐结果 | [性能基线](benchmarks.md) |
-| 想理解撮合 / 记账 / 一致性内核 | [设计笔记](internals/contracts.md) |
-| 查完整 API | [API 参考](api/reference.md) |
-
-## 核心能力
-
-- **Lite 快速入口**——短语法，适合快速验证、教学、1.x 风格迁移和多资产目标权重
-- **Engine 专业入口**——backtrader 风格 `Cerebro / Strategy / Analyzer / Sizer / Signal`，适合复杂事件驱动策略
-- **Rust 回测内核**——单事件 `EventRunner`，single / multi-data runner 自动选择，回测和实盘共用同一套语义
-- **双市场指标生态**——A 股偏 TDX / MyTT 口径（`tl.tdx` / `bt.tdx`），海外偏 TradingView（`tl.tv` / `bt.tv`）+ pandas-ta-classic / TA-Lib（`tl.pta` / `tl.talib`），用户显式选择
-- **研究流水线**——`FeatureSet` / `Pipeline` / `CausalSelector` / `ResearchRun` / `Allocator` 把训练 / 测试 / 预处理 / 评分 / 权重 / 回测连成一条链
-- **Optuna / MLflow / JupyterLab / MCP**——参数搜索、实验追踪、交互研究、LLM 工具集成
-
-## 入口选择
-
-trade-learn 提供两个用户入口，**底层共享同一套 Rust 回测 runtime，结果数值一致**：
-
-| 入口 | 适合场景 | 运行结果 |
-|---|---|---|
-| `tradelearn.lite` | 快速策略、多资产目标权重、轻量研究、1.x 风格迁移 | `LiteStats`，字段与 Engine `Stats` 对齐 |
-| `tradelearn.engine` | backtrader 风格专业策略、Analyzer、Sizer、Signal、未来 paper / live 模式 | `Strategy.stats` |
-| `tradelearn.research` | 特征、预处理、选股、权重、研究记录 | `ResearchResult` |
-| `tradelearn.factor` | alphalens 风格单因子 / 多因子分析 | `FactorAnalyzer` 报告 |
-| `tradelearn.report` | pyfolio 风格收益、回撤、交易报告 | HTML / CSV / XLSX artifacts |
-
-> `tradelearn.backtest.*` 和 `tradelearn.core.*` 是两个 facade 共享的实现层与中性契约——**不是公开用户 API**。请勿直接 import。Paper / live 适配从 `tradelearn.engine` 一侧扩展，不会再复制一套 backtest runtime。
+上图每一段都对应当前代码中的一等组件：数据读取、指标和因子、探索 / 因果分析、模型、组合权重、事件驱动回测、报告和实验追踪。你可以只用其中一段，也可以把整条链路连成一个可复现实验。
 
 ## 一致性承诺
 
-trade-learn 把"对照基线"当作工程纪律：
+trade-learn 的正确性来自两层验证：
 
-- **metrics**（sharpe / max_dd / sortino / ...）对 empyrical：`rtol=1e-10`
-- **`tl.pta` / `bt.pta`** 对 pandas-ta-classic：`rtol=1e-10`
-- **`tl.tdx` / `bt.tdx`** 对 MyTT：`rtol=1e-10`
-- **`tl.tv` / `bt.tv`** 对 pyneCore / TradingView 截图：`rtol=1e-6`
-- **回测 trades**（决策层）对 backtrader oracle：**0 差异**（时间 / 方向 / size）
-- **回测 equity** 对 backtrader oracle：`rtol=1e-6`
-- **回测 summary** 对 backtrader oracle：`rtol=1e-4`，差异必须可解释、登记在案
+- **Engine 先对齐 Backtrader**：复杂事件驱动语义以 Backtrader 为 oracle，benchmark 会检查最终权益、交易明细、订单生命周期和 PnL。
+- **Lite 复用同一 runtime**：Lite 不是另一套撮合；它只是更短的策略语法，底层 Stats、broker、runner 和 report 与 Engine 共用。
 
-详见 [与外部库的语义一致性](internals/consistency.md)。
+因此，Lite 适合快速写，Engine 适合专业扩展；二者不是两套回测世界。
+
+## 先看什么
+
+| 你想做什么 | 建议阅读 |
+|---|---|
+| 先跑起来 | [快速开始](quickstart.md) |
+| 理解 Lite 和 Engine 的差异 | [策略撰写](guides/strategy.md) |
+| 写 Lite 策略 | [Lite 入门](guides/lite.md) |
+| 写 Backtrader 风格策略 | [Engine 入门](guides/engine.md) |
+| 查看所有常用组件怎么调用 | [组件调用速查](guides/component-usage.md) |
+| 写投研流水线 | [研究指南](guides/research.md) |
+| 扩展指标 / Analyzer / 研究组件 | [扩展组件](guides/extensions.md) |
+| 了解性能和对齐数据 | [性能基线](benchmarks.md) |

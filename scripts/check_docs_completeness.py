@@ -20,6 +20,7 @@ REQUIRED_GUIDE_PAGES = (
     "guides/lite-api.md",
     "guides/engine.md",
     "guides/engine-api.md",
+    "guides/component-usage.md",
     "guides/data.md",
     "guides/indicators.md",
     "guides/extensions.md",

@@ -90,9 +90,9 @@ Analyzer 在同一根 bar 内会同步收到所有订单状态变化：
 
 Rust 不持有 Python 对象生命周期；Python 不直接操作 Rust ledger 内部状态。
 
-## 回测与实盘统一（1.1 EventRunner）
+## 回测与实盘统一（2.x EventRunner）
 
-1.1 起，回测和实盘共用同一个单事件 `EventRunner`：
+2.x 方向上，回测和实盘共用同一个单事件 `EventRunner`：
 
 ```
 HistoricalDriver / LiveDriver / PaperDriver

@@ -56,7 +56,9 @@ Lite 不是 Backtrader facade，它是更薄的策略语法层。Lite 与 Engine
 
 验证入口：[`benchmark_bt.py`](https://github.com/MuuYesen/trade-learn/blob/master/benchmarks/runners/benchmark_bt.py)。每个策略都用 Tradelearn Engine 和 Backtrader 各跑一遍，比较最终权益、平仓交易数、累计 PnL 和扣费后 PnL。
 
-| 策略 | Final Value TL / BT | Closed Trades TL / BT | Closed PnL TL / BT | PnLComm TL / BT | 时间 TL / BT | 状态 |
+表内对比值格式为 `Tradelearn / Backtrader`。
+
+| 策略 | Final Value | Closed Trades | Closed PnL | PnLComm | 时间 | 状态 |
 |---|---:|---:|---:|---:|---:|---|
 | [`QuickstartSmaCross`](https://github.com/MuuYesen/trade-learn/blob/master/examples/engine/01_quickstart.py) | 100026.14 / 100026.14 | 16 / 16 | 26.14 / 26.14 | 26.14 / 26.14 | 15.3ms / 16.2ms | EXACT |
 | [`SmaCross`](https://github.com/MuuYesen/trade-learn/blob/master/examples/engine/02_sma_cross.py) | 99630.56 / 99630.56 | 3 / 3 | -247.72 / -247.72 | -247.72 / -247.72 | 11.1ms / 15.0ms | EXACT |
@@ -71,7 +73,9 @@ Lite 不是 Backtrader facade，它是更薄的策略语法层。Lite 与 Engine
 
 验证入口：[`benchmark_bt.py --include-portfolio`](https://github.com/MuuYesen/trade-learn/blob/master/benchmarks/runners/benchmark_bt.py)。这些策略覆盖 `order_target_percent`、资产类别权重、趋势过滤、反波动权重等组合调仓语义。
 
-| 策略 | Final Value TL / BT | Orders TL / BT | 时间 TL / BT | 加速比 | 状态 |
+表内对比值格式为 `Tradelearn / Backtrader`。
+
+| 策略 | Final Value | Orders | 时间 | 加速比 | 状态 |
 |---|---:|---:|---:|---:|---|
 | [`TargetPercentPortfolioStrategy`](https://github.com/MuuYesen/trade-learn/blob/master/examples/engine/11_target_percent_portfolio.py) | 104447.50 / 104447.50 | 14 / 14 | 9.4ms / 26.8ms | 2.8x | EXACT |
 | [`AssetClassTargetPortfolioStrategy`](https://github.com/MuuYesen/trade-learn/blob/master/examples/engine/12_asset_class_portfolios.py) | 104003.95 / 104003.95 | 21 / 21 | 8.7ms / 27.8ms | 3.2x | EXACT |

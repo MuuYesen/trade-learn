@@ -202,7 +202,7 @@ class OrderStatusUpdate:
 - 成交、撤单、拒单、状态变化都通过 broker 事件或回测 runtime 回流。
 - 实盘适配器可以维护自己的 broker 私有状态，但向框架输出时必须转换为上述中性类型。
 
-## 8. DataFeed Protocol（1.1 实盘预留）
+## 8. DataFeed Protocol（2.x 实盘预留）
 
 ```python
 class DataFeed(Protocol):
@@ -212,7 +212,7 @@ class DataFeed(Protocol):
     def stop(self) -> None: ...
 ```
 
-实现：`HistoricalFeed`（回测，1.0）、`LiveFeed`（实盘，1.1）。
+实现方向：`HistoricalFeed`（回测）和 `LiveFeed`（实盘）都应输出同一套 `StreamBar` 事件。
 
 ## 9. 验证函数（严入宽出）
 
@@ -241,7 +241,7 @@ tradelearn/core/
 
 ## 11. 契约稳定性
 
-1.0 发版后，任何字段、dtype、索引结构变化都视为 **breaking change**，需走主版本升级流程，并在 [v1 → v2 迁移](migration.md) 记录。在 1.0 之前，契约可能调整，但每次都会同步更新本页。
+2.0 发版后，任何字段、dtype、索引结构变化都视为 **breaking change**，需走主版本升级流程，并在 [v1 → v2 迁移](migration.md) 记录。
 
 ## 相关阅读
 

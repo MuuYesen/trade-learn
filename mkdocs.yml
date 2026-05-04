@@ -108,6 +108,7 @@ nav:
       - Engine:
           - Engine 入门: guides/engine.md
           - Engine API 签名: guides/engine-api.md
+      - 组件调用速查: guides/component-usage.md
       - 数据指南: guides/data.md
       - 指标指南: guides/indicators.md
       - 扩展组件: guides/extensions.md

@@ -6753,7 +6753,7 @@ wheels = [
 
 [[package]]
 name = "trade-learn"
-version = "1.0.0"
+version = "0.2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "bokeh" },
@@ -6806,9 +6806,6 @@ docs = [
     { name = "mkdocs-material" },
     { name = "mkdocstrings-python" },
 ]
-duckdb = [
-    { name = "duckdb" },
-]
 lab = [
     { name = "ipywidgets" },
     { name = "jupyter-ai" },
@@ -6819,18 +6816,6 @@ lab = [
 ]
 mlflow = [
     { name = "mlflow" },
-]
-optuna = [
-    { name = "optuna" },
-]
-research = [
-    { name = "optuna" },
-    { name = "riskfolio-lib", version = "7.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "riskfolio-lib", version = "7.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-]
-riskfolio = [
-    { name = "riskfolio-lib", version = "7.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "riskfolio-lib", version = "7.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 
 [package.dev-dependencies]
@@ -6847,7 +6832,6 @@ requires-dist = [
     { name = "causal-learn" },
     { name = "cibuildwheel", marker = "extra == 'dev'" },
     { name = "duckdb", marker = "extra == 'all'" },
-    { name = "duckdb", marker = "extra == 'duckdb'" },
     { name = "httpx" },
     { name = "interrogate", marker = "extra == 'dev'" },
     { name = "ipywidgets", marker = "extra == 'all'" },
@@ -6867,8 +6851,6 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26" },
     { name = "opentdx", marker = "python_full_version >= '3.12'" },
     { name = "optuna", marker = "extra == 'all'" },
-    { name = "optuna", marker = "extra == 'optuna'" },
-    { name = "optuna", marker = "extra == 'research'" },
     { name = "pandas" },
     { name = "pandas-ta-classic" },
     { name = "pyarrow" },
@@ -6880,8 +6862,6 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "pyyaml" },
     { name = "riskfolio-lib", marker = "extra == 'all'" },
-    { name = "riskfolio-lib", marker = "extra == 'research'" },
-    { name = "riskfolio-lib", marker = "extra == 'riskfolio'" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "scikit-learn" },
     { name = "scipy" },
@@ -6892,7 +6872,7 @@ requires-dist = [
     { name = "typer" },
     { name = "xlsxwriter" },
 ]
-provides-extras = ["lab", "mlflow", "all", "dev", "docs", "duckdb", "riskfolio", "optuna", "research"]
+provides-extras = ["lab", "mlflow", "all", "dev", "docs"]
 
 [package.metadata.requires-dev]
 oracle = [

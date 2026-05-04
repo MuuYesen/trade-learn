@@ -6,7 +6,7 @@
 
 ## 订单类型与触发条件
 
-trade-learn 1.0 支持四种订单类型：
+trade-learn 2.0 支持四种订单类型：
 
 | 类型 | 何时触发 | 成交价 |
 |---|---|---|
@@ -38,7 +38,7 @@ trade-learn 1.0 支持四种订单类型：
 
 ```
 submitted → accepted → filled
-                     ↘ partially_filled  (1.0 不支持，预留)
+                     ↘ partially_filled  (2.0 不支持，预留)
                      ↘ cancelled
                      ↘ rejected
                      ↘ expired
@@ -52,7 +52,7 @@ submitted → accepted → filled
 | `gtc` | good-till-cancelled |
 | `ioc` | immediate-or-cancel |
 
-## 1.0 不支持 Partial Fill
+## 2.0 不支持 Partial Fill
 
 若订单数量超过当前 bar 可用 `volume`，订单**直接 rejected**，不会按 volume 部分成交。
 
@@ -66,7 +66,7 @@ submitted → accepted → filled
 - **开空订单**：按 1:1 保证金检查"新增空头名义金额 + commission"，不足则 `Rejected`
 - **平多产生的卖出**：只需覆盖 commission
 
-trade-learn 1.0 **不允许负现金、不做 partial fill**。
+trade-learn 2.0 **不允许负现金、不做 partial fill**。
 
 ## 反转持仓的 trade 拆分
 
@@ -90,7 +90,7 @@ trade-learn 1.0 **不允许负现金、不做 partial fill**。
 | 固定手续费 | 进入同一现金精度（6 位小数） |
 | `FillEvent.slippage` | 精度处理后的成交价与 raw price 之差，四舍五入到 6 位小数 |
 
-> 1.0 **不**做 A 股 100 股手数自动取整。需要的话用户在策略层显式 round。
+> 2.0 **不**做 A 股 100 股手数自动取整。需要的话用户在策略层显式 round。
 
 ## 与 backtrader 的语义对齐
 

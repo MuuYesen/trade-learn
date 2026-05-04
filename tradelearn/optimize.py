@@ -95,12 +95,12 @@ def _import_optuna():
     except ImportError as exc:
         raise ImportError(
             "Optuna is required for this feature. Install with "
-            "`pip install trade-learn[optuna]`."
+            "`pip install trade-learn[all]` or `pip install optuna`."
         ) from exc
     if optuna is None:
         raise ImportError(
             "Optuna is required for this feature. Install with "
-            "`pip install trade-learn[optuna]`."
+            "`pip install trade-learn[all]` or `pip install optuna`."
         )
     return optuna
 

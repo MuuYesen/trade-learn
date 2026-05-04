@@ -444,7 +444,6 @@ class RiskfolioOptimizer:
         """Return optimized target weights from a returns matrix."""
         riskfolio = _import_optional(
             "riskfolio",
-            extra="riskfolio",
             package="Riskfolio-Lib",
         )
         portfolio = riskfolio.Portfolio(returns=returns.astype("float64"))
@@ -477,18 +476,18 @@ class RiskfolioOptimizer:
         return params
 
 
-def _import_optional(module: str, *, extra: str, package: str):
+def _import_optional(module: str, *, package: str):
     try:
         imported = import_module(module)
     except ImportError as exc:
         raise ImportError(
             f"{package} is required for this feature. Install with "
-            f"`pip install trade-learn[{extra}]`."
+            f"`pip install trade-learn[all]` or `pip install {package}`."
         ) from exc
     if imported is None:
         raise ImportError(
             f"{package} is required for this feature. Install with "
-            f"`pip install trade-learn[{extra}]`."
+            f"`pip install trade-learn[all]` or `pip install {package}`."
         )
     return imported
 

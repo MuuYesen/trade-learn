@@ -92,9 +92,9 @@ trade-learn 2.0 是对 1.x 的**完整重构**。1.x 没有现存用户基础，
 | `TRADELEARN_LOG_LEVEL` | `INFO` | 日志级别 |
 | `TRADELEARN_SEED` | unset | 全局随机种子（可复现） |
 
-## 2. 1.0 后的兼容策略
+## 2. 2.0 后的兼容策略
 
-- **1.0 发版 = API 冻结**
+- **2.0 架构发版 = API 冻结**
 - 1.x 的 `0.x.y` patch 不 break API
 - 2.0 允许 break，需要走 breaking change 流程：
   - 本页 Known Differences 登记
@@ -150,8 +150,8 @@ trade-learn 2.0 是对 1.x 的**完整重构**。1.x 没有现存用户基础，
 
 ## 5. 1.x 归档
 
-- 1.0 发版后，1.x 源码归档到 GitHub Release（"Legacy 1.x"）
-- 主仓的 `reference/tradelearn_1x/` 在 1.0 发版后可移除（GitHub Release 已有副本）
+- 2.0 架构发版后，1.x / `0.1.1.8` 源码归档到 GitHub Release（"Legacy 1.x"）
+- 主仓的 `reference/tradelearn_1x/` 在 2.0 架构发版后可移除（GitHub Release 已有副本）
 
 ## 相关阅读
 

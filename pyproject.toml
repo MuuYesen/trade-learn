@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "trade-learn"
-version = "1.0.0"
+version = "0.2.0.0"
 description = "Python quantitative research framework for traditional and ML strategies."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -84,19 +84,6 @@ docs = [
     "mkdocs-material",
     "mkdocstrings-python",
 ]
-duckdb = [
-    "duckdb",
-]
-riskfolio = [
-    "Riskfolio-Lib",
-]
-optuna = [
-    "optuna",
-]
-research = [
-    "Riskfolio-Lib",
-    "optuna",
-]
 
 [dependency-groups]
 oracle = [
@@ -119,7 +106,7 @@ features = ["extension-module"]
 [tool.cibuildwheel]
 build = "cp310-* cp311-* cp312-*"
 skip = "*-musllinux_* pp*"
-test-command = "python -c \"import tradelearn._rust as rust; assert rust.tradelearn_rust_version() == '1.0.0'\""
+test-command = "python -c \"import tradelearn._rust as rust; assert rust.tradelearn_rust_version() == '0.2.0'\""
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64"]
