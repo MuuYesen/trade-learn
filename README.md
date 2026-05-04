@@ -19,10 +19,11 @@
   <img src="https://img.shields.io/badge/code%20style-ruff-000000?style=flat-square" alt="Code style">
 </p>
 
-**trade-learn** 致力于消除量化研究 (Learn) 与回测执行 (Trade) 之间的摩擦。这是一个专为机器学习与指数增强场景打造的高性能框架，采用「Python 灵活性 + Rust 高性能」的混合双核架构。在确保逻辑 100% 对齐 Backtrader 的前提下，它为大规模因子验证提供了极致的吞吐能力，让量化投研从因子挖掘到实验审计实现无缝闭环。
+**trade-learn** 旨在解决量化投研中研究（Learn）与回测（Trade）脱节的痛点。它通过「Python 表达逻辑 + Rust 原生内核」的混合架构，在确保逻辑与 Backtrader **100% 严苛对齐** 的基础上，实现了多资产回测 **110x+** 的性能飞跃，将大规模验证的耗时从小时级缩短至秒级，为指数增强与机器学习策略提供极速的迭代体验。
 
+极致性能之外，项目也同样关注研究的科学性。针对机器学习策略中常见的“伪相关”风险，我们将 **因果推断 (Causal Inference)** 深度集成进投研流程，通过识别真实的因果驱动路径，有效降低样本外衰减，助您构建具备强解释性与稳健性的量化系统。
 
-它打破了传统回测框架只管“跑代码”的局限，将零散的因子挖掘、数据对齐、策略回测与审计追踪，整合为一条完整的全生命周期投研流水线：
+为了让这些科学的方法论真正落地，**trade-learn** 并不只是一个高性能引擎，它更是一套完整且按需内置 **JupyterLab** 与 **MLflow** 的全生命周期投研流水线。它将因子挖掘、策略验证与实验审计有机整合为一套完整的全生命周期投研流水线，确保每一个研究决策都可回溯、可审计，让研究员能够真正专注于核心策略的开发与快速迭代。
 
 <p align="center">
   <img src="docs/research-flow.png" alt="trade-learn research flow" width="100%" />
@@ -30,13 +31,13 @@
 
 ## 实现路径
 
-**trade-learn** 拒绝功能的简单堆砌，而是构建了一座连接“专业深度”与“研发效率”的桥梁：底层通过 **Engine** 深度对齐 Backtrader 语义以夯实逻辑正确性，上层则由 **Lite** 提供极简的 Pythonic 接口。两者共享高性能 Runtime，确保了“快”与“准”的完美统一。
+**trade-learn** 拒绝功能的简单堆砌，而是通过独特的“双模双核”设计，在专业深度与研发效率之间构建了平衡。底层通过 **Engine** 深度对齐 Backtrader 语义以夯实逻辑正确性，上层则由 **Lite** 提供极简的 Pythonic 接口，确保了“快”与“准”的统一。
 
-您可以根据研发阶段自由定义策略的“厚度”：
+您可以根据研发阶段，自由定义策略的深度：
 - **Engine 模式 (深度研发)**：深度对齐 Backtrader 语义，支持 Analyzer/Sizer/Signal 完整生态，适合构建逻辑精密、颗粒度极细的生产级复杂系统。
 - **Lite 模式 (敏捷验证)**：沿袭 backtesting.py 的极简主义，支持模型权重直连，极其适合在因子挖掘阶段进行高频迭代与原型验证。
 
-它不仅无缝兼容 TDX、TA-Lib、TradingView 等主流指标库，更创造性地将**因果推断 (Causal Inference)** 引入因子研究。通过内置的 `CausalSelector`，项目将特征筛选、参数寻优与回测报告有机连接，为您呈现一条闭环、透明且高效的量化投研流水线。
+它不仅无缝兼容 TA-Lib、Pandas-TA-Classic、TDX、TradingView 等主流指标库，更创造性地将**因果推断 (Causal Inference)** 引入因子研究。通过内置的 `CausalSelector`，项目将特征筛选、参数寻优与回测报告有机连接，为您呈现一条闭环、透明且高效的量化投研流水线。
 
 ## 核心亮点
 
@@ -45,12 +46,17 @@
 - **自动 Runner 调度**：根据数据形态自动选择“单流逐 Bar”或“Panel 批量”推进。**针对指数增强场景优化了内存布局**，开发者只需关注 `next()` 逻辑。
 
 #### 🛡️ 严谨金融：Backtrader 语义 100% 对齐
-- **Engine 级对齐**：完整支持 Analyzer / Sizer / Signal 体系，确保回测 Trades 与 Backtrader Oracle 逻辑零差异。
+- **Engine 级对齐**：完整支持 Analyzer / Sizer / Signal 体系，确保回测 Trades 与 Backtrader Oracle 逻辑零差异，高度支持自拓展组件。
 - **Lite 极简表达**：在同一 Runtime 上构建的轻量语法。**内置 `target_weights` 接口**，将机器学习模型输出的权重一键转化为回测决策。
 
 #### 🧪 因果投研：跨越相关性的科学流程
 - **Causal-First 特征筛选**：内置 PC / FCI 等因果发现算法，识别因子的真实驱动路径，从源头对抗回测中的“伪相关”与过拟合。
 - **Pipeline 全链路流水线**：将特征工程、因果筛选、评分模型、组合权重与回测报告无缝耦合，形成可复现的实验闭环。
+
+#### 📦 模块化平台：轻量核心，按需扩展
+- **核心解耦**：默认安装仅包含高性能回测内核，极简依赖，方便集成至服务器或自动化交易系统。
+- **弹性扩展**：通过 `[lab]` 或 `[all]` 扩展，可一键激活 **JupyterLab + MLflow + AI 助手** 组成的集成投研环境，实现“按需加载、随处运行”。
+
 
 #### 🌍 全球视野：多口径指标与现代生态
 - **双市场口径**：显式支持 TDX (A股) / TradingView (海外) 指标口径，深度兼容 TA-Lib 与 pandas-ta。
@@ -99,6 +105,15 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 | `[lab]` | JupyterLab / Jupyter AI / MCP / Pygwalker 交互研究环境 |
 | `[mlflow]` | MLflow tracking server 与实验 artifact 记录 |
 | `[all]` | Lab、MLflow、Riskfolio-Lib、Optuna、DuckDB 等完整研究环境 |
+
+> **💡 安装建议**：
+> 默认安装仅包含核心回测引擎。若需开启包含 JupyterLab 与 MLflow 的全栈投研体验，请指定 `[all]` 扩展进行安装：
+> ```bash
+> pip install "trade-learn[all]"
+> ```
+> 在项目根目录，使用命令行启动 `tradelearn lab` 后，默认可通过 `8888` 端口进入交互式环境，通过 `5050` 端口查看 MLflow 实验记录。
+
+
 
 ## 快速上手
 
@@ -340,10 +355,6 @@ class LiveStylePortfolio(tl.Strategy):
     *   [ ] **实盘适配器**：开放通用实盘事件接口，支持 QMT (国金/华宝) 等券商柜台接入。
     *   [ ] **分布式参数优化**：基于 Ray/Optuna 的多机并行参数搜索。
     *   [ ] **Agent 深度集成**：通过 MCP 协议实现 LLM 对投研流水线的自动化控制。
-
-## 协议
-
-Apache-2.0。融合的上游署名见 [`NOTICE`](./NOTICE)：empyrical / alphalens / pyfolio / quantstats / MyTT / pandas-ta-classic / pyneCore / causallearn / DolphinDB。backtesting.py 与 backtrader 标注为"inspired by"——不复制源码。
 
 ## 致谢
 
