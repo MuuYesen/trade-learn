@@ -146,7 +146,16 @@ def write_excel_report(
 
 def _summary_frame(summary: Mapping[str, Any]) -> pd.DataFrame:
     """Return summary as metric/value rows."""
-    return pd.DataFrame({"metric": list(summary), "value": list(summary.values())})
+    import pandas as pd
+
+    def _safe(v: Any) -> Any:
+        if isinstance(v, pd.Timestamp):
+            return str(v.replace(microsecond=0).tz_localize(None))
+        if isinstance(v, pd.Timedelta):
+            return str(v.floor("s"))
+        return v
+
+    return pd.DataFrame({"metric": list(summary), "value": [_safe(v) for v in summary.values()]})
 
 
 def _drawdowns(reporter: Any) -> pd.DataFrame:

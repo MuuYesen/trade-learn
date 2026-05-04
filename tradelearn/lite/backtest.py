@@ -17,6 +17,7 @@ from tradelearn.backtest._optimize import expand_grid
 from tradelearn.backtest.reporting import reporter_from_stats
 from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
 from tradelearn.core import get_logger
+from tradelearn.utils.console import smart_tqdm as tqdm, smart_print
 
 from .strategy import Strategy
 
@@ -139,7 +140,6 @@ class Backtest:
         feeds = len(self.datas)
         rows = _feed_rows(self.datas)
         label = f"Backtest ({self._strategy_cls.__name__}, {feeds} feed{'s' if feeds != 1 else ''}, {rows:,} bars)"
-        print(f"{label}...", end="", flush=True)
         LOGGER.info(
             "Backtest started strategy=%s feeds=%s rows=%s cash=%s commission=%s",
             self._strategy_cls.__name__,
@@ -175,7 +175,6 @@ class Backtest:
             for key, value in getattr(strategy_instance, "_records", {}).items()
         }
         result = LiteStats(self._last_stats, strategy_instance, records)
-        print(" Done ✓")
         LOGGER.info(
             "Backtest finished strategy=%s final_value=%s return_pct=%s total_trades=%s total_fills=%s",
             self._strategy_cls.__name__,
@@ -193,19 +192,17 @@ class Backtest:
 
         grid = expand_grid(kwargs)
 
-        print(f"Starting Grid Search: {len(grid)} combinations...")
-
         with ProcessPoolExecutor() as executor:
-            results = list(executor.map(_optimize_worker,
+            results = list(tqdm(executor.map(_optimize_worker,
                                         repeat(self._data),
                                         repeat(self._strategy_cls),
                                         repeat(self._cash),
                                         repeat(self._commission),
                                         repeat(self.match_mode),
-                                        grid))
+                                        grid), total=len(grid), desc="Backtest.optimize"))
 
         best_res, best_params = max(results, key=lambda x: x[0]["return_pct"])
-        print(f"Best Params: {best_params}")
+        smart_print(f"Best Params: {best_params}")
         return best_res
 
     def plot(self, *args, **kwargs):
@@ -216,9 +213,9 @@ class Backtest:
 
     def report(self, path: str = "report.html", benchmark=None, sections=None):
         """Write a Tradelearn report for the most recent Lite run."""
-        print(f"Generating Report...", end="", flush=True)
-        result = self._last_reporter().report(path, benchmark=benchmark, sections=sections)
-        print(f" Done ✓  →  {result}")
+        with tqdm(total=1, desc="Backtest.report", leave=True) as pbar:
+            result = self._last_reporter().report(path, benchmark=benchmark, sections=sections)
+            pbar.update(1)
         return result
 
     def log_mlflow(

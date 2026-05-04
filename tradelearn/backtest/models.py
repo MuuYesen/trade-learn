@@ -40,63 +40,76 @@ class Position:
 
 
 _SUMMARY_FIELDS: tuple[tuple[str | None, str, str], ...] = (
-    (None, "── Overview ──", "section"),
-    ("bars", "Bars", "int"),
-    ("final_cash", "Final Cash", "money"),
-    ("final_value", "Final Value", "money"),
-    (None, "── Returns ──", "section"),
-    ("return_pct", "Return", "pct"),
-    ("annual_return", "Annual Return", "pct"),
-    ("volatility", "Volatility", "pct_plain"),
-    (None, "── Risk ──", "section"),
-    ("max_drawdown", "Max Drawdown", "frac"),
-    ("sharpe", "Sharpe", "ratio"),
-    ("sortino", "Sortino", "ratio"),
-    ("calmar", "Calmar", "ratio"),
-    (None, "── Trades ──", "section"),
-    ("total_trades", "Trades", "int"),
-    ("win_rate_pct", "Win Rate", "pct_plain"),
+    ("start", "Start", "date"),
+    ("end", "End", "date"),
+    ("duration", "Duration", "timedelta"),
+    ("exposure_pct", "Exposure Time [%]", "pct_plain"),
+    ("final_value", "Equity Final [$]", "money"),
+    ("peak_value", "Equity Peak [$]", "money"),
+    ("return_pct", "Return [%]", "pct_plain"),
+    ("buy_hold_return_pct", "Buy & Hold Return [%]", "pct_plain"),
+    ("annual_return", "Return (Ann.) [%]", "pct_plain"),
+    ("volatility", "Volatility (Ann.) [%]", "pct_plain"),
+    ("cagr_pct", "CAGR [%]", "pct_plain"),
+    ("sharpe", "Sharpe Ratio", "ratio"),
+    ("sortino", "Sortino Ratio", "ratio"),
+    ("calmar", "Calmar Ratio", "ratio"),
+    ("alpha_pct", "Alpha [%]", "pct_plain"),
+    ("beta", "Beta", "ratio"),
+    ("max_drawdown", "Max. Drawdown [%]", "frac_abs"),
+    ("avg_drawdown", "Avg. Drawdown [%]", "frac_abs"),
+    ("max_dd_duration", "Max. Drawdown Duration", "timedelta"),
+    ("avg_dd_duration", "Avg. Drawdown Duration", "timedelta"),
+    ("total_trades", "# Trades", "int"),
+    ("win_rate_pct", "Win Rate [%]", "pct_plain"),
+    ("best_trade_pct", "Best Trade [%]", "pct_plain"),
+    ("worst_trade_pct", "Worst Trade [%]", "pct_plain"),
+    ("avg_trade_pct", "Avg. Trade [%]", "pct_plain"),
+    ("max_trade_duration", "Max. Trade Duration", "timedelta"),
+    ("avg_trade_duration", "Avg. Trade Duration", "timedelta"),
     ("profit_factor", "Profit Factor", "ratio"),
     ("expectancy", "Expectancy", "money_signed"),
-    ("avg_win", "Avg Win", "money_signed"),
-    ("avg_loss", "Avg Loss", "money_signed"),
-    ("best_trade", "Best Trade", "money_signed"),
-    ("worst_trade", "Worst Trade", "money_signed"),
-    ("max_consec_wins", "Max Consec. Wins", "int"),
-    ("max_consec_losses", "Max Consec. Losses", "int"),
-    (None, "── Costs & PnL ──", "section"),
-    ("total_commission", "Commission", "money"),
-    ("final_realized_pnl", "Realized PnL", "money_signed"),
-    ("final_unrealized_pnl", "Unrealized PnL", "money_signed"),
-    ("final_margin_used", "Margin Used", "money"),
-    ("total_orders", "Orders", "int"),
-    ("total_fills", "Fills", "int"),
+    ("sqn", "SQN", "ratio"),
+    ("kelly_criterion", "Kelly Criterion", "ratio"),
 )
 
 
 def _format_summary_value(value: Any, kind: str) -> str:
     if value is None:
         return "—"
+    if kind == "date":
+        if isinstance(value, pd.Timestamp):
+            return str(value.replace(microsecond=0).tz_localize(None))
+        return str(value)
+    if kind == "timedelta":
+        if isinstance(value, pd.Timedelta):
+            return str(value.floor("s"))
+        return str(value)
+    
     try:
         x = float(value)
     except (TypeError, ValueError):
         return str(value)
+    
     if math.isnan(x) or math.isinf(x):
         return "—"
     if kind == "int":
-        return f"{int(round(x)):,}"
+        return f"{int(round(x)):>15}"
     if kind == "money":
-        return f"{x:,.2f}"
+        return f"{x:>15,.2f}"
     if kind == "money_signed":
-        return f"{x:+,.2f}"
+        return f"{x:>+15,.2f}"
     if kind == "pct":
-        return f"{x:+.2f}%"
+        return f"{x:>+15.2f}"
     if kind == "pct_plain":
-        return f"{x:.2f}%"
+        return f"{x:>15.2f}"
     if kind == "frac":
-        return f"-{x * 100:.2f}%" if x > 0 else f"{x * 100:.2f}%"
+        return f"{x * 100:>15.2f}"
+    if kind == "frac_abs":
+        # Usually drawdowns are negative, we show absolute or handled by engine
+        return f"{abs(x * 100):>15.2f}"
     if kind == "ratio":
-        return f"{x:.2f}"
+        return f"{x:>15.2f}"
     return str(value)
 
 
@@ -108,48 +121,29 @@ class SummaryDict(dict):
     def __str__(self) -> str:
         if not self:
             return f"{self._TITLE}\n(empty)"
-        # Pre-compute which sections have at least one key present in this dict.
-        # Each section owns all data fields until the next section marker.
-        sections_with_data: set[int] = set()
-        cur_section = -1
-        for key, _label, kind in _SUMMARY_FIELDS:
-            if kind == "section":
-                cur_section += 1
-            elif key is not None and key in self and cur_section >= 0:
-                sections_with_data.add(cur_section)
 
-        # Build display rows.
-        rows: list[tuple[str, str | None]] = []
+        rows: list[tuple[str, str]] = []
         seen: set[str] = set()
-        cur_section = -1
+        
         for key, label, kind in _SUMMARY_FIELDS:
-            if kind == "section":
-                cur_section += 1
-                if cur_section in sections_with_data:
-                    rows.append((label, None))
-                continue
             if key is not None and key in self:
                 rows.append((label, _format_summary_value(self[key], kind)))
                 seen.add(key)
+        
+        # Add dynamic strategy/metadata at the bottom
         for key, value in self.items():
-            if key in seen:
+            if key in seen or key in ("bars", "final_cash", "final_margin_used", "total_orders", "total_fills", "final_realized_pnl", "final_unrealized_pnl"):
                 continue
-            rows.append((str(key), _format_summary_value(value, "ratio")))
+            rows.append((str(key), str(value)))
 
-        data_rows = [(lbl, val) for lbl, val in rows if val is not None]
-        if not data_rows:
+        if not rows:
             return f"{self._TITLE}\n(empty)"
-        label_w = max(len(lbl) for lbl, _ in data_rows)
-        value_w = max(len(val) for _, val in data_rows)
-        width = max(label_w + value_w + 6, len(self._TITLE))
-        sep = "─" * width
-        lines = [self._TITLE, sep]
+            
+        label_w = 30
+        lines = []
         for label, value in rows:
-            if value is None:
-                lines.append(f"  {label}")
-            else:
-                lines.append(f"  {label:<{label_w}}  {value:>{value_w}}")
-        lines.append(sep)
+            lines.append(f"{label:<{label_w}}{value:>20}")
+        
         return "\n".join(lines)
 
     def __repr__(self) -> str:

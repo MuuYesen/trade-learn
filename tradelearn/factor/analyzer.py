@@ -10,6 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 from tradelearn.metrics import factor as factor_metrics
+from tradelearn.utils.console import smart_tqdm as tqdm
 
 
 @dataclass(frozen=True)
@@ -387,14 +388,14 @@ class FactorAnalyzer:
 
     def report(self, path: str, format: str | None = None) -> Path:
         """Write a factor report using the user-facing report() entrypoint."""
-        print("Factor Analysis Report...", end="", flush=True)
         output = Path(path)
         chosen = (format or output.suffix.lstrip(".") or "html").lower()
         if chosen in {"htm", "html"}:
             if not output.suffix:
                 output = output.with_suffix(".html")
-            result = self.html(str(output))
-            print(f" Done ✓  →  {result}")
+            with tqdm(total=1, desc="FactorAnalyzer.report", leave=True) as pbar:
+                result = self.html(str(output))
+                pbar.update(1)
             return result
         raise ValueError(f"Unsupported factor report format: {chosen}")
 
@@ -505,14 +506,14 @@ class MultiPeriodFactorAnalyzer:
 
     def report(self, path: str, format: str | None = None, period: int | None = None) -> Path:
         """Write a factor report for a selected prediction horizon."""
-        print("Multi-Period Factor Analysis Report...", end="", flush=True)
         output = Path(path)
         chosen = (format or output.suffix.lstrip(".") or "html").lower()
         if chosen in {"htm", "html"}:
             if not output.suffix:
                 output = output.with_suffix(".html")
-            result = self.html(str(output), period=period)
-            print(f" Done ✓  →  {result}")
+            with tqdm(total=1, desc="MultiPeriodFactorAnalyzer.report", leave=True) as pbar:
+                result = self.html(str(output), period=period)
+                pbar.update(1)
             return result
         raise ValueError(f"Unsupported factor report format: {chosen}")
 
@@ -626,14 +627,14 @@ class MultiFactorAnalyzer:
 
     def report(self, path: str, format: str | None = None) -> Path:
         """Write a multi-factor report using the user-facing report() entrypoint."""
-        print("Multi-Factor Analysis Report...", end="", flush=True)
         output = Path(path)
         chosen = (format or output.suffix.lstrip(".") or "html").lower()
         if chosen in {"htm", "html"}:
             if not output.suffix:
                 output = output.with_suffix(".html")
-            result = self.html(str(output))
-            print(f" Done ✓  →  {result}")
+            with tqdm(total=1, desc="MultiFactorAnalyzer.report", leave=True) as pbar:
+                result = self.html(str(output))
+                pbar.update(1)
             return result
         raise ValueError(f"Unsupported factor report format: {chosen}")
 

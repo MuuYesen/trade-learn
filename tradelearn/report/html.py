@@ -279,15 +279,34 @@ def _summary_table(values: dict[str, Any]) -> str:
 
 
 def _summary_cards(values: dict[str, Any]) -> str:
-    """Render summary values as responsive KPI cards."""
+    """Render summary values as responsive KPI cards, sorted by priority."""
+    # Define a priority order for the most important metrics to show first
+    priority = [
+        "annual_return", "cumulative_return", "annual_volatility",
+        "sharpe_ratio", "calmar_ratio", "sortino_ratio",
+        "max_drawdown", "max_dd_duration", "avg_drawdown", "avg_dd_duration",
+        "win_rate", "profit_factor", "total_trades", "turnover",
+        "exposure_time", "final_value", "peak_value", "final_cash",
+    ]
+    
+    # Filter and sort keys
+    keys = [k for k in values.keys() if str(k) != "strategy_name"]
+    
+    def sort_key(k: str) -> int:
+        try:
+            return priority.index(k)
+        except ValueError:
+            return len(priority)
+
+    sorted_keys = sorted(keys, key=sort_key)
+    
     cards = "".join(
         "<div class=\"kpi-card\""
         f" data-metric=\"{escape(str(key))}\">"
         f"<div class=\"kpi-label\">{escape(_metric_label(str(key)))}</div>"
-        f"<div class=\"kpi-value\">{escape(_format_metric_value(str(key), value))}</div>"
+        f"<div class=\"kpi-value\">{escape(_format_metric_value(str(key), values[key]))}</div>"
         "</div>"
-        for key, value in values.items()
-        if str(key) != "strategy_name"
+        for key in sorted_keys
     )
     return f"<div class=\"kpi-grid\">{cards}</div>"
 
@@ -454,6 +473,10 @@ def _json_safe(value: Any) -> Any:
         return {str(key): _json_safe(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json_safe(item) for item in value]
+    if isinstance(value, pd.Timestamp):
+        return str(value.replace(microsecond=0).tz_localize(None))
+    if isinstance(value, pd.Timedelta):
+        return str(value.floor("s"))
     if pd.isna(value):
         return None
     if hasattr(value, "item"):
@@ -497,11 +520,16 @@ def _format_metric_value(key: str, value: Any) -> str:
     """Format KPI values compactly and professionally."""
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return "-"
-    
+
+    if isinstance(value, pd.Timedelta):
+        return str(value.floor("s"))
+    if isinstance(value, pd.Timestamp):
+        return str(value.replace(microsecond=0).tz_localize(None))
+
     lowered = key.lower()
-    
-    # 1. Handle Count/Integer metrics (Total Trades, Orders, Fills, Bars, Duration)
-    counts = {"trades", "orders", "fills", "bars", "duration"}
+
+    # 1. Handle Count/Integer metrics (Total Trades, Orders, Fills, Bars)
+    counts = {"trades", "orders", "fills", "bars"}
     if any(c in lowered for c in counts):
         try:
             return f"{int(float(value)):,}"

@@ -27,17 +27,17 @@ def test_reporter_summary_uses_metrics_functions() -> None:
         "sortino_ratio",
         "max_drawdown",
         "max_dd_duration",
-        "alpha",
-        "beta",
-        "information_ratio",
-        "active_return",
-        "tracking_error",
         "win_rate",
         "profit_factor",
         "avg_win",
         "avg_loss",
         "total_trades",
         "turnover",
+        "alpha",
+        "beta",
+        "information_ratio",
+        "active_return",
+        "tracking_error",
     ]
     assert summary["annual_return"] == metrics.annual_return(stats.returns, periods=252)
     assert summary["cumulative_return"] == metrics.cum_returns(stats.returns).iloc[-1]
@@ -62,7 +62,7 @@ def test_reporter_summary_uses_metrics_functions() -> None:
 
 def test_reporter_report_logs_output_path_and_format(tmp_path, caplog) -> None:
     path = tmp_path / "report.html"
-    caplog.set_level(logging.INFO, logger="tradelearn.report")
+    caplog.set_level(logging.DEBUG, logger="tradelearn.report")
 
     Reporter(_stats(), periods=252).report(path, benchmark=_benchmark())
 

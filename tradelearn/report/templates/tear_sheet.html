@@ -38,17 +38,29 @@
 
     header,
     section {
-      margin-bottom: 16px;
-      padding: 20px 24px;
+      padding: 24px 32px;
       background: var(--card);
-      border-radius: 12px;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-      border: 1px solid var(--line);
+      border-radius: 16px; /* Smoother, more modern corners */
+      box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04); /* Softer, deep shadow */
+      border: 1px solid #edf2f7;
+      position: relative;
+      overflow: hidden;
     }
 
     header {
-      border-top: 4px solid var(--brand);
-      padding: 24px 32px;
+      padding: 32px 40px;
+      margin-bottom: 24px;
+    }
+
+    /* The smooth purple bar at the top */
+    header::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 6px; /* Increased for more visual weight */
+      background: linear-gradient(90deg, var(--brand), #818cf8);
     }
 
     h1,
@@ -135,19 +147,20 @@
       border-collapse: collapse;
       width: 100%;
       margin: 0;
-      font-size: 12px;
+      font-size: 12px; /* Increased for better visibility */
     }
 
     th,
     td {
       border-bottom: 1px solid var(--line);
-      padding: 10px 12px;
+      padding: 9px 12px;
       text-align: left;
+      line-height: 1.4;
     }
 
     th {
-      background: #f9fafb;
-      color: var(--muted);
+      background: #f1f5f9;
+      color: var(--ink);
       font-weight: 700;
       font-size: 10px;
       text-transform: uppercase;
@@ -160,7 +173,139 @@
 
     td {
       font-variant-numeric: tabular-nums;
-      color: var(--accent);
+      color: var(--ink); /* Darker color for values */
+    }
+
+    /* Targeted compaction for Summary Stats ONLY - LEGIBLE MODE */
+    .summary-stats-container {
+      padding: 20px !important;
+      background: #ffffff !important;
+    }
+
+    .summary-stats-container h2 {
+      font-size: 13px !important;
+      font-weight: 700 !important;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px !important;
+      color: var(--ink) !important;
+      border-bottom: 1px solid var(--line) !important;
+      padding-bottom: 8px !important;
+    }
+
+    /* 7-column grid for Summary Stats - ULTRA DENSITY */
+    .summary-stats-container .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 0;
+      border: 1px solid var(--line);
+      border-bottom: none; /* Let the cells provide the bottom border */
+      border-right: none;
+      border-radius: 8px;
+      overflow: hidden;
+      background-color: #ffffff;
+    }
+
+    .summary-stats-container .kpi-card {
+      padding: 14px 12px !important;
+      background: #ffffff !important;
+      border: none !important;
+      border-right: 1px solid var(--line) !important;
+      border-bottom: 1px solid var(--line) !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      text-align: left;
+      min-height: 62px !important;
+      transition: background 0.1s ease !important;
+    }
+
+    /* Placeholder cells for perfect alignment */
+    .summary-stats-container .kpi-card.placeholder {
+      pointer-events: none;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1.3fr 0.7fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    /* Prevent date wrapping in Drawdowns table and ensure 13px font */
+    .drawdowns-table-container table,
+    .parameters-table-container table {
+      font-size: 13px !important; /* Increased as requested */
+    }
+
+    .drawdowns-table-container td {
+      white-space: nowrap;
+    }
+
+    /* Tighter metric column for parameters */
+    .parameters-table-container td:first-child {
+      font-weight: 700;
+      color: var(--ink);
+      width: 35%;
+    }
+
+    .summary-stats-container .kpi-card:last-child {
+      border-right: none !important;
+    }
+
+    .summary-stats-container .kpi-card:hover {
+      background: #f8fafc !important;
+      transform: none !important;
+    }
+
+    .summary-stats-container .kpi-label {
+      color: var(--muted);
+      font-size: 10px !important;
+      font-weight: 700 !important;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px !important;
+      line-height: 1;
+    }
+
+    .summary-stats-container .kpi-value {
+      color: var(--ink);
+      font-size: 14px !important;
+      font-weight: 800 !important;
+      margin-top: 0 !important;
+      line-height: 1;
+      letter-spacing: -0.01em;
+    }
+
+    @media (min-width: 1600px) {
+      .summary-stats-container .kpi-grid { grid-template-columns: repeat(8, 1fr); }
+    }
+    @media (max-width: 1599px) and (min-width: 1200px) {
+      .summary-stats-container .kpi-grid { grid-template-columns: repeat(7, 1fr); }
+    }
+    @media (max-width: 1199px) {
+      .summary-stats-container .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    @media (max-width: 900px) {
+      .summary-stats-container .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 500px) {
+      .summary-stats-container .kpi-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 1000px) {
+      .summary-stats-container tbody {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 600px) {
+      .summary-stats-container tbody {
+        grid-template-columns: 1fr;
+      }
     }
 
     .table-scroll {
@@ -215,22 +360,26 @@
       letter-spacing: -0.01em;
     }
 
+    .detail-grid:empty {
+      display: none;
+    }
+
     .report-layout {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
-      gap: 16px;
+      gap: 24px;
     }
 
     .chart-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 16px;
+      gap: 24px;
     }
 
     .detail-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-      gap: 16px;
+      gap: 24px;
     }
 
     .chart {
@@ -307,23 +456,23 @@
       </div>
     </header>
     <div class="report-layout">
-      <section class="compact-section">
+      <section class="compact-section summary-stats-container">
         <h2>Summary Stats</h2>
         <p class="section-note">Key performance, risk, and accounting metrics.</p>
         {{ summary_table | safe }}
       </section>
-      <div class="detail-grid">
-        <section class="compact-section">
+      <div class="two-col">
+        <section class="compact-section drawdowns-table-container">
           <h2>Top 5 Drawdowns</h2>
           {{ drawdowns_table | safe }}
         </section>
-        <section class="compact-section">
+        <section class="compact-section parameters-table-container">
           <h2>Experiment Parameters</h2>
           {{ config_table | safe }}
           {{ research_section | safe }}
         </section>
       </div>
-      <div class="detail-grid">
+      {% set detail_content -%}
         {{ benchmark_section | safe }}
         {{ correlation_section | safe }}
         {{ exposure_section | safe }}
@@ -332,7 +481,12 @@
         {{ factor_turnover_section | safe }}
         {{ factor_long_short_section | safe }}
         {{ factor_section | safe }}
+      {%- endset %}
+      {% if detail_content.strip() %}
+      <div class="detail-grid">
+        {{ detail_content | safe }}
       </div>
+      {% endif %}
       {% if charts.get("Price / Trades") %}
       <section class="chart">
         <h2>Price / Trades</h2>
@@ -350,6 +504,29 @@
     </div>
     {{ custom_sections | safe }}
     {{ script | safe }}
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+          // Fill empty slots in Summary Stats grid for perfect alignment
+          const grid = document.querySelector('.summary-stats-container .kpi-grid');
+          if (grid) {
+              const count = grid.children.length;
+              const width = window.innerWidth;
+              let columns = 7;
+              if (width >= 1600) columns = 8;
+              else if (width < 1200) columns = 4;
+              
+              const remainder = count % columns;
+              if (remainder !== 0) {
+                  const needed = columns - remainder;
+                  for (let i = 0; i < needed; i++) {
+                      const placeholder = document.createElement('div');
+                      placeholder.className = 'kpi-card placeholder';
+                      grid.appendChild(placeholder);
+                  }
+              }
+          }
+      });
+    </script>
     <footer>
       <p>TradeLearn {{ metadata.version }} | Generated: {{ metadata.generated_at }}</p>
     </footer>

@@ -8,6 +8,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from tradelearn.utils.console import smart_tqdm as tqdm
 
 CausalBackend = Callable[[pd.DataFrame, pd.Series], dict[str, float] | pd.Series]
 CausalLearnRunner = Callable[..., Any]
@@ -33,19 +34,22 @@ class CausalSelector:
         method = self.method.lower()
         if method not in {"correlation", "pc", "fci"}:
             raise ValueError("method must be one of 'correlation', 'pc', or 'fci'")
-        print(f"Causal Discovery ({method.upper()} method)...", end="", flush=True)
-        frame, target = self._split_dataset(data)
-        scores = self._score(frame, target)
-        ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
-        threshold = self.min_score
-        if method in {"pc", "fci"} and threshold <= 0.0:
-            threshold = 1e-12
-        selected = [name for name, score in ranked if score >= threshold]
-        if self.max_features is not None:
-            selected = selected[: self.max_features]
-        self.scores_ = scores
-        self.selected_features_ = selected
-        print(f" Done ✓  ({len(selected)} feature{'s' if len(selected) != 1 else ''} selected)")
+        
+        with tqdm(total=1, desc=f"CausalSelector.fit({method.upper()})", leave=True) as pbar:
+            frame, target = self._split_dataset(data)
+            scores = self._score(frame, target)
+            ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
+            threshold = self.min_score
+            if method in {"pc", "fci"} and threshold <= 0.0:
+                threshold = 1e-12
+            selected = [name for name, score in ranked if score >= threshold]
+            if self.max_features is not None:
+                selected = selected[: self.max_features]
+            self.scores_ = scores
+            self.selected_features_ = selected
+            pbar.update(1)
+            pbar.set_postfix(selected=len(selected))
+        
         return self
 
     def plot(self, filename: str | None = None) -> str:

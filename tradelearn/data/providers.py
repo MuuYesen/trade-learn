@@ -6,7 +6,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+import logging
+import os
+import sys
+from contextlib import contextmanager
+
 import pandas as pd
+from tradelearn.utils.console import smart_tqdm as tqdm
 
 from tradelearn.core import get_logger
 from tradelearn.data.bars import Frequency, normalize_bars
@@ -103,12 +109,10 @@ class TdxProvider:
                 end,
                 freq,
             )
-            return _combine_bars(
-                [
-                    self.history_ohlc(item, start=start, end=end, freq=freq)
-                    for item in symbol
-                ]
-            )
+            results = []
+            for item in tqdm(symbol, desc="TdxProvider.history_ohlc", leave=True, unit="symbol"):
+                results.append(self.history_ohlc(item, start=start, end=end, freq=freq))
+            return _combine_bars(results)
 
         tdx_symbol = resolve_tdx_symbol(symbol)
         LOGGER.info(
@@ -250,6 +254,18 @@ class TradingViewProvider:
         self.password = password
         self.n_bars = int(n_bars)
         self._client_factory = client_factory
+        # Quiet the verbose tvDatafeed logger
+        logging.getLogger("tvDatafeed").setLevel(logging.ERROR)
+
+    @contextmanager
+    def _suppress_stdout(self):
+        with open(os.devnull, "w") as devnull:
+            old_stdout = sys.stdout
+            sys.stdout = devnull
+            try:
+                yield
+            finally:
+                sys.stdout = old_stdout
 
     def history_ohlc(
         self,
@@ -271,18 +287,16 @@ class TradingViewProvider:
                 end,
                 freq,
             )
-            return _combine_bars(
-                [
-                    self.history_ohlc(
-                        item,
-                        start=start,
-                        end=end,
-                        freq=freq,
-                        exchange=exchange,
-                    )
-                    for item in symbol
-                ]
-            )
+            results = []
+            for item in tqdm(symbol, desc="TradingViewProvider.history_ohlc", leave=True, unit="symbol"):
+                results.append(self.history_ohlc(
+                    item,
+                    start=start,
+                    end=end,
+                    freq=freq,
+                    exchange=exchange,
+                ))
+            return _combine_bars(results)
 
         exchange_name, tv_symbol = _split_tradingview_symbol(symbol, exchange=exchange)
         LOGGER.info(
@@ -327,7 +341,8 @@ class TradingViewProvider:
             return self._client_factory()
 
         from tvDatafeed import TvDatafeed
-        return TvDatafeed(username=self.username, password=self.password)
+        with self._suppress_stdout():
+            return TvDatafeed(username=self.username, password=self.password)
 
     @staticmethod
     def _interval_value(freq: Frequency) -> object:

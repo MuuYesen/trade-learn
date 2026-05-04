@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import sys
 from typing import Any
+from tradelearn.utils.console import smart_tqdm as tqdm, smart_print
 
 import numpy as np
 import pandas as pd
@@ -120,24 +121,29 @@ def _trades_frame(fills: pd.DataFrame) -> pd.DataFrame:
         "pnlcomm",
         "isopen",
         "isclosed",
+        "dtopen",
+        "dtclose",
     ]
     if fills.empty:
         return pd.DataFrame(columns=columns)
 
     position_size = 0.0
     avg_price = 0.0
+    open_datetime = None
     rows: list[dict[str, Any]] = []
     for fill in fills.to_dict("records"):
         signed_size = float(fill.get("size", 0.0))
         price = float(fill.get("price", 0.0))
         comm = float(fill.get("commission", 0.0))
+        curr_dt = fill.get("datetime")
         old_size = position_size
         new_size = old_size + signed_size
         if old_size == 0.0 and abs(new_size) > 1e-9:
             avg_price = price
+            open_datetime = curr_dt
             rows.append(
                 {
-                    "datetime": fill.get("datetime"),
+                    "datetime": curr_dt,
                     "data": fill.get("data"),
                     "size": new_size,
                     "price": price,
@@ -147,13 +153,15 @@ def _trades_frame(fills: pd.DataFrame) -> pd.DataFrame:
                     "pnlcomm": -comm,
                     "isopen": True,
                     "isclosed": False,
+                    "dtopen": open_datetime,
+                    "dtclose": None,
                 }
             )
         elif old_size * new_size <= 0:
             pnl = (price - avg_price) * old_size
             rows.append(
                 {
-                    "datetime": fill.get("datetime"),
+                    "datetime": curr_dt,
                     "data": fill.get("data"),
                     "size": 0.0 if abs(new_size) < 1e-9 else new_size,
                     "price": price,
@@ -163,9 +171,12 @@ def _trades_frame(fills: pd.DataFrame) -> pd.DataFrame:
                     "pnlcomm": pnl - comm,
                     "isopen": False,
                     "isclosed": True,
+                    "dtopen": open_datetime,
+                    "dtclose": curr_dt,
                 }
             )
             avg_price = price if abs(new_size) > 1e-9 else 0.0
+            open_datetime = curr_dt if abs(new_size) > 1e-9 else None
         elif old_size * signed_size > 0:
             total_abs = abs(old_size) + abs(signed_size)
             avg_price = (abs(old_size) * avg_price + abs(signed_size) * price) / total_abs
@@ -561,6 +572,74 @@ def _summary_trade_metrics(trades: pd.DataFrame) -> dict[str, float]:
     }
 
 
+def _summary_exposure_pct(positions: pd.DataFrame) -> float:
+    if positions is None or positions.empty or "size" not in positions.columns:
+        return 0.0
+    exposed_rows = (positions["size"].abs() > 1e-9).sum()
+    return float(exposed_rows) / len(positions) * 100.0
+
+
+def _summary_drawdown_stats(equity: pd.Series) -> dict[str, Any]:
+    if equity is None or equity.empty:
+        return {"max_drawdown": 0.0, "avg_drawdown": 0.0, "max_dd_duration": pd.Timedelta(0), "avg_dd_duration": pd.Timedelta(0)}
+    cummax = equity.cummax()
+    dd = (cummax - equity) / cummax
+    dd_mask = dd > 0
+    # Calculate durations
+    dd_groups = (dd_mask != dd_mask.shift()).cumsum()
+    durations = []
+    for _name, group in dd[dd_mask].groupby(dd_groups):
+        if len(group) > 0:
+            durations.append(group.index[-1] - group.index[0])
+    
+    return {
+        "max_drawdown": float(dd.max()),
+        "avg_drawdown": float(dd[dd_mask].mean()) if dd_mask.any() else 0.0,
+        "max_dd_duration": max(durations) if durations else pd.Timedelta(0),
+        "avg_dd_duration": sum(durations, pd.Timedelta(0)) / len(durations) if durations else pd.Timedelta(0),
+    }
+
+
+def _summary_trade_stats(trades: pd.DataFrame, start_cash: float) -> dict[str, Any]:
+    empty = {
+        "best_trade_pct": 0.0, "worst_trade_pct": 0.0, "avg_trade_pct": 0.0,
+        "max_trade_duration": pd.Timedelta(0), "avg_trade_duration": pd.Timedelta(0),
+        "sqn": 0.0, "kelly_criterion": 0.0
+    }
+    if trades is None or trades.empty:
+        return empty
+    closed = trades[trades.get("isclosed", pd.Series(dtype=bool)).astype(bool)] if "isclosed" in trades.columns else trades
+    if closed.empty:
+        return empty
+    
+    pnl_pct = (closed["pnlcomm"] / start_cash * 100.0) if start_cash > 0 else pd.Series(dtype=float)
+    durations = closed["dtclose"] - closed["dtopen"]
+    
+    wins = closed[closed["pnlcomm"] > 0]
+    win_rate = len(wins) / len(closed)
+    avg_win = wins["pnlcomm"].mean() if not wins.empty else 0.0
+    avg_loss = closed[closed["pnlcomm"] < 0]["pnlcomm"].mean() if not closed[closed["pnlcomm"] < 0].empty else 1e-9
+    win_loss_ratio = abs(avg_win / avg_loss) if abs(avg_loss) > 1e-9 else 0.0
+    
+    # Kelly: W - (1-W)/R
+    kelly = win_rate - (1 - win_rate) / win_loss_ratio if win_loss_ratio > 0 else 0.0
+    
+    # SQN: sqrt(N) * mean / std
+    mean_pnl = closed["pnlcomm"].mean()
+    std_pnl = closed["pnlcomm"].std()
+    sqn = (math.sqrt(len(closed)) * mean_pnl / std_pnl) if std_pnl > 1e-9 else 0.0
+
+    return {
+        "best_trade_pct": float(pnl_pct.max()) if not pnl_pct.empty else 0.0,
+        "worst_trade_pct": float(pnl_pct.min()) if not pnl_pct.empty else 0.0,
+        "avg_trade_pct": float(pnl_pct.mean()) if not pnl_pct.empty else 0.0,
+        "max_trade_duration": durations.max(),
+        "avg_trade_duration": durations.mean(),
+        "sqn": sqn,
+        "kelly_criterion": kelly,
+    }
+
+
 def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -> Stats:
     data = strategy.data
     frame = getattr(data, "_frame", None)
@@ -600,45 +679,53 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
             return eager_positions
 
         trade_metrics = _summary_trade_metrics(eager_trades)
+        dd_stats = _summary_drawdown_stats(eager_equity)
+        initial_cash = float(strategy.broker._cash)
+        ext_trade_stats = _summary_trade_stats(eager_trades, initial_cash)
+
+        summary = SummaryDict({
+            "bars": float(len(index)),
+            "start": index[0] if not index.empty else None,
+            "end": index[-1] if not index.empty else None,
+            "duration": (index[-1] - index[0]) if not index.empty else None,
+            "exposure_pct": _summary_exposure_pct(eager_positions),
+            "final_cash": final_cash,
+            "final_value": final_value,
+            "peak_value": float(eager_equity.max()) if not eager_equity.empty else final_value,
+            "return_pct": _return_pct(final_value, strategy.broker),
+            "annual_return": _summary_annual_return(eager_returns),
+            "volatility": _summary_volatility(eager_returns),
+            "sharpe": _summary_sharpe(eager_returns),
+            "sortino": _summary_sortino(eager_returns),
+            "calmar": _summary_calmar(eager_returns),
+            "max_drawdown": dd_stats["max_drawdown"],
+            "avg_drawdown": dd_stats["avg_drawdown"],
+            "max_dd_duration": dd_stats["max_dd_duration"],
+            "avg_dd_duration": dd_stats["avg_dd_duration"],
+            "total_trades": total_trades,
+            "win_rate_pct": _win_rate_pct(total_trades, winning_trades),
+            "profit_factor": trade_metrics["profit_factor"],
+            "expectancy": trade_metrics["expectancy"],
+            "best_trade_pct": ext_trade_stats["best_trade_pct"],
+            "worst_trade_pct": ext_trade_stats["worst_trade_pct"],
+            "avg_trade_pct": ext_trade_stats["avg_trade_pct"],
+            "max_trade_duration": ext_trade_stats["max_trade_duration"],
+            "avg_trade_duration": ext_trade_stats["avg_trade_duration"],
+            "sqn": ext_trade_stats["sqn"],
+            "kelly_criterion": ext_trade_stats["kelly_criterion"],
+        })
+        
         stats = Stats(
             returns=returns_factory,
             equity=equity_factory,
             trades=trades_factory,
             positions=positions_factory,
             orders=lambda: _orders_frame(strategy.broker),
-            summary=SummaryDict({
-                "bars": float(len(index)),
-                "final_cash": final_cash,
-                "final_value": final_value,
-                "return_pct": _return_pct(final_value, strategy.broker),
-                "annual_return": _summary_annual_return(eager_returns),
-                "volatility": _summary_volatility(eager_returns),
-                "max_drawdown": _summary_max_drawdown(eager_equity),
-                "sharpe": _summary_sharpe(eager_returns),
-                "sortino": _summary_sortino(eager_returns),
-                "calmar": _summary_calmar(eager_returns),
-                "total_trades": total_trades,
-                "win_rate_pct": _win_rate_pct(total_trades, winning_trades),
-                "profit_factor": trade_metrics["profit_factor"],
-                "expectancy": trade_metrics["expectancy"],
-                "avg_win": trade_metrics["avg_win"],
-                "avg_loss": trade_metrics["avg_loss"],
-                "best_trade": trade_metrics["best_trade"],
-                "worst_trade": trade_metrics["worst_trade"],
-                "max_consec_wins": trade_metrics["max_consec_wins"],
-                "max_consec_losses": trade_metrics["max_consec_losses"],
-                "total_commission": trade_metrics["total_commission"],
-                "final_realized_pnl": realized_pnl,
-                "final_unrealized_pnl": unrealized_pnl,
-                "final_margin_used": margin_used,
-                "total_orders": total_orders,
-                "total_fills": total_fills,
-            }),
+            summary=summary,
             analyzers={},
             config=_stats_config(cerebro),
             fills=fills_factory,
         )
-        print(stats.summary, file=sys.stderr)
         return stats
 
     fills = _fills_frame(strategy.broker)
@@ -651,28 +738,40 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
     total_trades, winning_trades = _trade_summary(strategy.broker, trades)
     realized_pnl, unrealized_pnl, margin_used = _summary_pnl(positions)
     trade_metrics = _summary_trade_metrics(trades)
+    dd_stats = _summary_drawdown_stats(equity)
+    initial_cash = float(strategy.broker._cash)
+    ext_trade_stats = _summary_trade_stats(trades, initial_cash)
+
     summary = SummaryDict({
         "bars": float(len(index)),
+        "start": index[0] if not index.empty else None,
+        "end": index[-1] if not index.empty else None,
+        "duration": (index[-1] - index[0]) if not index.empty else None,
+        "exposure_pct": _summary_exposure_pct(positions),
         "final_cash": final_cash,
         "final_value": final_value,
+        "peak_value": float(equity.max()) if not equity.empty else final_value,
         "return_pct": _return_pct(final_value, strategy.broker),
         "annual_return": _summary_annual_return(returns),
         "volatility": _summary_volatility(returns),
-        "max_drawdown": _summary_max_drawdown(equity),
         "sharpe": _summary_sharpe(returns),
         "sortino": _summary_sortino(returns),
         "calmar": _summary_calmar(returns),
+        "max_drawdown": dd_stats["max_drawdown"],
+        "avg_drawdown": dd_stats["avg_drawdown"],
+        "max_dd_duration": dd_stats["max_dd_duration"],
+        "avg_dd_duration": dd_stats["avg_dd_duration"],
         "total_trades": total_trades,
         "win_rate_pct": _win_rate_pct(total_trades, winning_trades),
         "profit_factor": trade_metrics["profit_factor"],
         "expectancy": trade_metrics["expectancy"],
-        "avg_win": trade_metrics["avg_win"],
-        "avg_loss": trade_metrics["avg_loss"],
-        "best_trade": trade_metrics["best_trade"],
-        "worst_trade": trade_metrics["worst_trade"],
-        "max_consec_wins": trade_metrics["max_consec_wins"],
-        "max_consec_losses": trade_metrics["max_consec_losses"],
-        "total_commission": trade_metrics["total_commission"],
+        "best_trade_pct": ext_trade_stats["best_trade_pct"],
+        "worst_trade_pct": ext_trade_stats["worst_trade_pct"],
+        "avg_trade_pct": ext_trade_stats["avg_trade_pct"],
+        "max_trade_duration": ext_trade_stats["max_trade_duration"],
+        "avg_trade_duration": ext_trade_stats["avg_trade_duration"],
+        "sqn": ext_trade_stats["sqn"],
+        "kelly_criterion": ext_trade_stats["kelly_criterion"],
         "final_realized_pnl": realized_pnl,
         "final_unrealized_pnl": unrealized_pnl,
         "final_margin_used": margin_used,
@@ -690,7 +789,7 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
         config=_stats_config(cerebro),
         fills=fills,
     )
-    print(stats.summary, file=sys.stderr)
+    smart_print(stats.summary, file=sys.stderr)
     return stats
 
 
@@ -790,7 +889,6 @@ def run_backtest(cerebro: Any) -> list[Any]:
     cerebro.runtime_config = runtime_config
     strategy_cls, args, kwargs = cerebro.strats[0]
     bind_strategy_context = getattr(cerebro, "_bind_strategy_context", None)
-
     strategy = strategy_cls(*args, **kwargs)
     strategy.cerebro = cerebro
     if callable(bind_strategy_context):
@@ -1065,7 +1163,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
         return []
 
     use_multi_data_rust_runner = clocked_multi_data_runner is not None
-
+    pbar = tqdm(total=limit, desc="Backtest.run", unit="bar", leave=True, delay=0)
     if use_multi_data_rust_runner:
         if getattr(broker, "_trade_on_close", False):
 
@@ -1077,6 +1175,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 size: float,
                 price: float,
             ) -> list[Any] | None:
+                pbar.update(1)
                 for advance_data, cursor in zip(data_advance_methods, data_cursors, strict=False):
                     advance_data(cursor if cursor >= 0 else -1)
                 for advance in bar_advancers:
@@ -1106,6 +1205,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 size: float,
                 price: float,
             ) -> list[Any] | None:
+                pbar.update(1)
                 for advance_data, cursor in zip(data_advance_methods, data_cursors, strict=False):
                     advance_data(cursor if cursor >= 0 else -1)
                 for advance in bar_advancers:
@@ -1134,6 +1234,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 size: float,
                 price: float,
             ) -> list[Any] | None:
+                pbar.update(1)
                 for advance_data, cursor in zip(data_advance_methods, data_cursors, strict=False):
                     advance_data(cursor if cursor >= 0 else -1)
                 for advance in bar_advancers:
@@ -1164,6 +1265,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
             def on_rust_bar(
                 i: int, fills: list[Any], cash: float, size: float, price: float
             ) -> list[Any] | None:
+                pbar.update(1)
                 strategy_pre_next(i)
                 broker._curr_idx = i
                 broker._step_fills_from_collect = fills
@@ -1184,6 +1286,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
             def on_rust_bar(
                 i: int, fills: list[Any], cash: float, size: float, price: float
             ) -> list[Any] | None:
+                pbar.update(1)
                 strategy_pre_next(i)
                 broker._curr_idx = i
                 broker._step_fills_from_collect = fills
@@ -1208,8 +1311,11 @@ def run_backtest(cerebro: Any) -> list[Any]:
     else:
         for i in range(limit):
             on_bar(i)
+            pbar.update(1)
             if bool(getattr(cerebro, "_runstop", False)):
                 break
+
+    pbar.close()
 
     # 4. Lifecycle Stop
     strategy.stop()

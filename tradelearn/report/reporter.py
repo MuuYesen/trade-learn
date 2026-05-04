@@ -79,6 +79,8 @@ class Reporter:
         returns = self._get("returns")
         trades = self._trades()
         summary = dict(self._get("summary", default={}) or {})
+
+        # Consolidated set of high-level metrics
         computed: dict[str, float | int] = {
             "annual_return": metrics.annual_return(returns, periods=self.periods),
             "cumulative_return": metrics.cum_returns(returns).iloc[-1],
@@ -88,7 +90,14 @@ class Reporter:
             "sortino_ratio": metrics.sortino(returns, periods=self.periods),
             "max_drawdown": metrics.max_drawdown(returns),
             "max_dd_duration": self._max_drawdown_duration(returns),
+            "win_rate": metrics.win_rate(trades),
+            "profit_factor": metrics.profit_factor(trades),
+            "avg_win": metrics.avg_win(trades),
+            "avg_loss": metrics.avg_loss(trades),
+            "total_trades": int(len(trades)),
+            "turnover": self._turnover(),
         }
+
         if benchmark is not None:
             computed.update(
                 {
@@ -103,18 +112,29 @@ class Reporter:
                     "tracking_error": tracking_error(returns, benchmark, self.periods),
                 }
             )
-        computed.update(
-            {
-                "win_rate": metrics.win_rate(trades),
-                "profit_factor": metrics.profit_factor(trades),
-                "avg_win": metrics.avg_win(trades),
-                "avg_loss": metrics.avg_loss(trades),
-                "total_trades": int(len(trades)),
-                "turnover": self._turnover(),
-            }
-        )
-        computed.update(self._factor_summary())
-        return computed | summary
+
+        # Merge with engine summary, but avoid redundant keys
+        redundant = {
+            "sharpe", "sortino", "calmar", "volatility", "win_rate_pct",
+            "max_drawdown", "max_dd_duration", "total_trades", "annual_return",
+            "return_pct", # Handled by cumulative_return
+        }
+        
+        # Keys to rename for consistency if they come from engine
+        renames = {
+            "exposure_pct": "exposure_time",
+        }
+
+        merged = computed.copy()
+        for key, value in summary.items():
+            if key in redundant:
+                continue
+            new_key = renames.get(key, key)
+            if new_key not in merged:
+                merged[new_key] = value
+
+        merged.update(self._factor_summary())
+        return merged
 
     def equity_curve(self) -> pd.Series:
         """Return normalized equity curve starting at 1.0."""
@@ -452,7 +472,7 @@ class Reporter:
             if not output.suffix:
                 output = output.with_suffix(".html")
             result = self.html(output, benchmark=benchmark, sections=sections)
-            LOGGER.info(
+            LOGGER.debug(
                 "Report written path=%s format=html benchmark=%s",
                 result,
                 benchmark is not None,
@@ -462,7 +482,7 @@ class Reporter:
             if not output.suffix:
                 output = output.with_suffix(".xlsx")
             result = self.excel(output, benchmark=benchmark, sections=sections)
-            LOGGER.info(
+            LOGGER.debug(
                 "Report written path=%s format=excel benchmark=%s",
                 result,
                 benchmark is not None,
