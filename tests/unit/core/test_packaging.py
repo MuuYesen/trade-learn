@@ -11,7 +11,9 @@ def test_cibuildwheel_config_targets_supported_python_and_platforms() -> None:
     pyproject = PYPROJECT.read_text(encoding="utf-8")
 
     assert "[tool.cibuildwheel]" in pyproject
-    assert 'build = "cp310-* cp311-* cp312-*"' in pyproject
+    assert 'build = "cp310-* cp311-* cp312-* cp313-* cp314-*"' in pyproject
+    assert '"Programming Language :: Python :: 3.13"' in pyproject
+    assert '"Programming Language :: Python :: 3.14"' in pyproject
     assert 'skip = "*-musllinux_*"' in pyproject
     assert "[tool.cibuildwheel.linux]" in pyproject
     assert "[tool.cibuildwheel.macos]" in pyproject

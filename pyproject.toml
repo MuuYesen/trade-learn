@@ -18,6 +18,8 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
 ]
 dependencies = [
@@ -111,7 +113,7 @@ include = [
 ]
 
 [tool.cibuildwheel]
-build = "cp310-* cp311-* cp312-*"
+build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
 skip = "*-musllinux_*"
 test-command = "python -c \"import tradelearn._rust as rust; assert rust.tradelearn_rust_version() == '0.2.0'\""
 
