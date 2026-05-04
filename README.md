@@ -19,9 +19,10 @@
   <img src="https://img.shields.io/badge/code%20style-ruff-000000?style=flat-square" alt="Code style">
 </p>
 
-**trade-learn** 是一个将 **投资研究 (Learn)** 与 **交易回测 (Trade)** 深度整合的量化投研框架。它专为指数增强、机器学习策略和复杂事件驱动场景设计，采用「Python 表达逻辑 + Rust 驱动内核」的混合架构。在保留投研灵活性的同时，通过 Rust 原生内核将回测性能推向极致，确保从因子挖掘、因果发现到实验追踪的全流程都在一套可复现的工业级 Workflow 中闭环。
+**trade-learn** 致力于消除量化研究 (Learn) 与回测执行 (Trade) 之间的摩擦。这是一个专为机器学习与指数增强场景打造的高性能框架，采用「Python 灵活性 + Rust 高性能」的混合双核架构。在确保逻辑 100% 对齐 Backtrader 的前提下，它为大规模因子验证提供了极致的吞吐能力，让量化投研从因子挖掘到实验审计实现无缝闭环。
 
-它关注的核心痛点，不再仅仅是“如何运行一段回测”，而是如何将零散的投研环节编织成一条完整的策略生命周期链路：
+
+它打破了传统回测框架只管“跑代码”的局限，将零散的因子挖掘、数据对齐、策略回测与审计追踪，整合为一条完整的全生命周期投研流水线：
 
 <p align="center">
   <img src="docs/research-flow.png" alt="trade-learn research flow" width="100%" />
@@ -29,7 +30,7 @@
 
 ## 实现路径
 
-trade-learn 拒绝功能的简单堆砌，而是构建了一座连接“专业深度”与“研发效率”的桥梁：底层通过 **Engine** 深度对齐 Backtrader 语义以夯实逻辑正确性，上层则由 **Lite** 提供极简的 Pythonic 接口。两者共享高性能 Runtime，确保了“快”与“准”的完美统一。
+**trade-learn** 拒绝功能的简单堆砌，而是构建了一座连接“专业深度”与“研发效率”的桥梁：底层通过 **Engine** 深度对齐 Backtrader 语义以夯实逻辑正确性，上层则由 **Lite** 提供极简的 Pythonic 接口。两者共享高性能 Runtime，确保了“快”与“准”的完美统一。
 
 您可以根据研发阶段自由定义策略的“厚度”：
 - **Engine 模式 (深度研发)**：深度对齐 Backtrader 语义，支持 Analyzer/Sizer/Signal 完整生态，适合构建逻辑精密、颗粒度极细的生产级复杂系统。

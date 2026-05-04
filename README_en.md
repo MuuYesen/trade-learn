@@ -19,9 +19,9 @@
   <img src="https://img.shields.io/badge/code%20style-ruff-000000?style=flat-square" alt="Code style">
 </p>
 
-**trade-learn** is a quantitative research framework that deeply integrates **Investment Research (Learn)** and **Trading Backtest (Trade)**. Designed for index enhancement, machine learning strategies, and complex event-driven scenarios, it utilizes a hybrid architecture of "Python for logic + Rust for core." While maintaining the flexibility of Python-based research, it pushes backtesting performance to the extreme through a native Rust core, ensuring a closed-loop, industrial-grade workflow from factor mining and causal discovery to experiment tracking.
+**trade-learn** is committed to eliminating the friction between investment research (Learn) and backtest execution (Trade). It is a high-performance framework designed for machine learning and index enhancement scenarios, featuring a hybrid architecture of "Python flexibility + Rust high-performance core." While ensuring 100% logical alignment with Backtrader, it provides extreme throughput for large-scale factor validation, enabling a seamless closed-loop from factor mining to experiment auditing.
 
-The core pain point it addresses is no longer just "how to run a backtest," but how to weave fragmented research segments into a complete strategy lifecycle:
+It breaks the limitations of traditional backtesting frameworks that only focus on "running code," integrating fragmented factor mining, data alignment, strategy backtesting, and audit tracking into a complete full-lifecycle research pipeline:
 
 <p align="center">
   <img src="docs/research-flow.png" alt="trade-learn research flow" width="100%" />
@@ -29,13 +29,13 @@ The core pain point it addresses is no longer just "how to run a backtest," but 
 
 ## Implementation Path
 
-trade-learn avoids simple feature stacking; instead, it builds a bridge between "professional depth" and "development efficiency." The underlying **Engine** is deeply aligned with Backtrader semantics to ensure logical correctness, while the upper **Lite** layer provides a minimalist Pythonic interface. Both share a high-performance Runtime, ensuring the perfect unification of "Speed" and "Accuracy."
+**trade-learn** is not a simple collection of features; it builds a balance between professional depth and research efficiency through its unique "Dual-Mode, Dual-Core" design. The underlying **Engine** is deeply aligned with Backtrader semantics to ensure logical correctness, while the upper **Lite** layer provides a minimalist Pythonic interface.
 
-You can define the "thickness" of your strategy based on the development stage:
-- **Engine Mode (Deep Research)**: Fully aligned with Backtrader semantics, supporting the complete Analyzer/Sizer/Signal ecosystem. Ideal for building complex, production-grade systems with high precision.
-- **Lite Mode (Agile Validation)**: Follows the minimalism of backtesting.py, supporting direct connection to model weights. Perfect for high-frequency iteration and prototype validation during the factor mining stage.
+You can flexibly choose the depth of strategy expression based on the research stage:
+- **Engine Mode (Deep Alignment)**: Full support for the Analyzer/Sizer/Signal ecosystem, specifically designed for building complex, production-grade systems with fine granularity.
+- **Lite Mode (Agile Iteration)**: Extreme minimalism, supporting direct connection to model weights, specifically created for high-frequency iteration and prototype validation during factor mining.
 
-It is not only seamlessly compatible with mainstream indicator libraries like TDX, TA-Lib, and TradingView, but also creatively introduces **Causal Inference** into factor research. Through the built-in `CausalSelector`, the project organically links feature selection, parameter optimization, and backtest reports, presenting you with a closed-loop, transparent, and efficient quantitative research pipeline.
+Furthermore, the project creatively introduces **Causal Inference** into factor research. With the built-in `CausalSelector`, it automatically connects feature selection, parameter optimization, and backtest auditing, providing you with a transparent, scientific, and highly automated research pipeline.
 
 ## Key Highlights
 
