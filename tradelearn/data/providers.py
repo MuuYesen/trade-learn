@@ -325,7 +325,13 @@ class TradingViewProvider:
     def _make_client(self) -> object:
         if self._client_factory is not None:
             return self._client_factory()
-        from tvDatafeed import TvDatafeed
+        try:
+            from tvDatafeed import TvDatafeed
+        except ModuleNotFoundError as exc:
+            raise ModuleNotFoundError(
+                "TradingViewProvider requires tradingview-datafeed. Install it with "
+                "`pip install trade-learn[tv]` or `pip install tradingview-datafeed`."
+            ) from exc
 
         return TvDatafeed(username=self.username, password=self.password)
 

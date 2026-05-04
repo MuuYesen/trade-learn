@@ -27,7 +27,6 @@ dependencies = [
     "statsmodels",
     "scikit-learn",
     "opentdx; python_version >= '3.12'",
-    "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git",
     "pyarrow",
     "pandas-ta-classic",
     "TA-Lib",
@@ -61,6 +60,9 @@ lab = [
 mlflow = [
     "mlflow",
 ]
+tv = [
+    "tradingview-datafeed",
+]
 all = [
     "jupyterlab",
     "jupyterlab-git",
@@ -69,6 +71,7 @@ all = [
     "pygwalker",
     "mcp>=1.8.0",
     "mlflow",
+    "tradingview-datafeed",
     "Riskfolio-Lib",
     "optuna",
     "duckdb",
@@ -90,7 +93,7 @@ oracle = [
     "backtesting>=0.6.5",
     "backtrader",
     "opentdx; python_version >= '3.12'",
-    "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git",
+    "tradingview-datafeed",
 ]
 
 [tool.setuptools.packages.find]

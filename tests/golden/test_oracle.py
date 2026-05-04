@@ -59,9 +59,10 @@ def test_pyproject_has_oracle_dependency_group() -> None:
     assert not any(dep.startswith(RETIRED_PROVIDER_NAMES[0]) for dep in dependencies)
     assert not any(dep.startswith("yfinance") for dep in oracle)
     assert any(dep.startswith("opentdx") for dep in oracle)
+    assert any(dep.startswith("tradingview-datafeed") for dep in oracle)
     assert not any(dep.startswith(RETIRED_PROVIDER_NAMES[1]) for dep in oracle)
-    tvdatafeed = "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git"
-    assert any(dep.startswith(tvdatafeed) for dep in oracle)
+    assert not any("git+" in dep for dep in dependencies)
+    assert not any("git+" in dep for dep in oracle)
 
 
 def test_current_provider_source_uses_opentdx_not_retired_names() -> None:
