@@ -701,24 +701,23 @@ def render_lite_api_guide() -> str:
 def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE_MODULES) -> str:
     """Render the readable API reference index page."""
     parts = [
-        "# API 参考",
+        "# Overview",
         "",
         "本页由 `scripts/generate_api_reference.py` 自动生成。",
         "",
-        "把这里当作 API 地图:需要示例和调用流程时看 Guide;需要完整类、函数、"
-        "参数签名时看模块 Reference。",
+        "把这里当作 Tradelearn 的 API 地图：",
+        "- **Guide**：侧重“怎么用”，提供场景化示例和逻辑说明。",
+        "- **Reference**：侧重“是什么”，提供精确的类/函数签名、参数定义和 Docstrings。",
         "",
-        "## 先看这里",
+        "## 快速链接",
         "",
         "| 目标 | 阅读 |",
         "|---|---|",
         "| 编写 Tradelearn 1.x 风格轻量策略 | [Lite API 签名](../guides/lite-api.md) |",
-        "| 编写 Backtrader 风格事件策略、Analyzer、Observer、Sizer | "
-        "[Engine API 签名](../guides/engine-api.md) |",
-        "| 从零编写策略并理解两种入口差异 | [策略编写指南](../guides/strategy.md) |",
-        "| 查询精确类/函数签名和完整 docstring | 下方模块 Reference 链接 |",
+        "| 编写 Backtrader 风格高级策略 | [Engine API 签名](../guides/engine-api.md) |",
+        "| 理解两种入口的设计差异 | [策略编写指南](../guides/strategy.md) |",
         "",
-        "## 公开模块",
+        "## 公开模块矩阵",
         "",
         "| 模块 | 用途 | 常用入口 | 完整 Reference |",
         "|---|---|---|---|",
@@ -733,36 +732,6 @@ def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE
             f"{entries} | "
             f"[{module.title}](reference/{slug}.md) |"
         )
-    parts.extend(
-        [
-            "",
-            "## 按模块列出公开符号",
-            "",
-        ]
-    )
-    for module in modules:
-        symbols = ", ".join(f"`{name}`" for name in _public_symbol_names(module))
-        parts.extend(
-            [
-                f"### `{module.import_path}`",
-                "",
-                symbols or "_No explicit `__all__`; see full reference._",
-                "",
-            ]
-        )
-    parts.extend(
-        [
-            "",
-            "## Generated Pages",
-            "",
-            "- [Lite API 签名](../guides/lite-api.md)",
-            "- [Engine API 签名](../guides/engine-api.md)",
-            "- [策略编写指南](../guides/strategy.md)",
-        ]
-    )
-    for module in modules:
-        slug = _module_slug(module)
-        parts.append(f"- [`{module.import_path}`](reference/{slug}.md)")
     return "\n".join(parts).rstrip() + "\n"
 
 

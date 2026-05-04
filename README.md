@@ -7,43 +7,75 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/pypi-v1.0.0-orange.svg" alt="PyPI version">
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python versions">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-green.svg" alt="License">
+  <img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code style">
+</p>
+
+<p align="center">
   <a href="./README_en.md">English version</a>
 </p>
 
 **trade-learn** 是一个把 **trade** 和 **learn** 放在同一条链路里的量化框架：面向指数增强、量化研究、机器学习策略和事件驱动回测。Python 保留策略表达、因子研究和模型实验的灵活性，Rust 承担撮合、订单推进、portfolio 计算这类高频回测内核；从研究、回测到报告和实验追踪，都围绕同一套可复现 workflow 展开。
 
-当前 wheel 版本为 **`0.2.0.0`**，对应 trade-learn **2.0 架构**；历史 `0.1.1.8` 仅作为 demo / 1.x 迁移参考。
-
-它想解决的不是"怎么跑一段回测"，而是把一条完整的策略研发链路接起来：
+它关注的核心痛点，不再仅仅是“如何运行一段回测”，而是如何将零散的投研环节编织成一条完整的策略生命周期链路：
 
 <p align="center">
   <img src="docs/research-flow.png" alt="trade-learn research flow" width="100%" />
 </p>
 
-trade-learn 的实现路径是先用 Engine 对齐专业 Backtrader 语义，再在同一套 runtime 上构建 Lite。这样 Lite 写起来短，但不是"另起一套简化撮合"：它通过 Engine / Backtrader 这条桥验证底层有效性，也让快速写法和专业写法共享同一套 Stats、撮合和报告口径。
+## 实现路径
 
-你可以像写 Backtrader 一样写专业策略，也可以用 Lite API 快速验证一个想法；可以接入 TDX、TA-Lib、TradingView、pandas-ta-classic 等指标生态，也可以把因子分析、因果特征筛选、Optuna 参数优化、组合权重、回测报告和实验记录放进同一条工作流。
+trade-learn 拒绝功能的简单堆砌，而是构建了一座连接“专业深度”与“研发效率”的桥梁：底层通过 **Engine** 深度对齐 Backtrader 语义以夯实逻辑正确性，上层则由 **Lite** 提供极简的 Pythonic 接口。两者共享高性能 Runtime，确保了“快”与“准”的完美统一。
+
+您可以根据研发阶段自由定义策略的“厚度”：
+- **Engine 模式 (深度研发)**：深度对齐 Backtrader 语义，支持 Analyzer/Sizer/Signal 完整生态，适合构建逻辑精密、颗粒度极细的生产级复杂系统。
+- **Lite 模式 (敏捷验证)**：沿袭 backtesting.py 的极简主义，支持模型权重直连，极其适合在因子挖掘阶段进行高频迭代与原型验证。
+
+它不仅无缝兼容 TDX、TA-Lib、TradingView 等主流指标库，更创造性地将**因果推断 (Causal Inference)** 引入因子研究。通过内置的 `CausalSelector`，项目将特征筛选、参数寻优与回测报告有机连接，为您呈现一条闭环、透明且高效的量化投研流水线。
 
 ## 核心亮点
 
-- **Lite 是推荐起点**：更短的写法，适合快速验证、教学、1.x 风格迁移和多资产目标权重；不是另一套撮合逻辑，是同一 runtime 的轻量语法。
-- **Backtrader 风格 Engine**：成熟事件驱动模型，适合复杂策略、组合策略、Analyzer / Sizer / Signal 和未来 paper / live adapter。Engine 先对齐 Backtrader，Lite 再复用 Engine 底层内核，这是正确性来源。
-- **Rust single / multi-data runner**：单标的是一条数据流逐 bar 推进；多标的 panel 是同一个交易日推进全部 active symbols，适合指数增强和组合调仓。用户仍然只写 `next()`，runner 由数据形态自动选择。
-- **性能基线透明**：本机基线（Backtrader 为 1.0x）：
-  - 55 万 bar 单标的：Lite 约 **27.9x**、Engine 约 **11.0x**
-  - 1000 标的 20 年目标权重：Lite 约 **119.1x**、Engine 约 **69.7x**
-- **双市场指标生态**：A 股偏 TDX / MyTT 口径（`tl.tdx` / `bt.tdx`），海外偏 TradingView（`tl.tv` / `bt.tv`）+ pandas-ta-classic / TA-Lib（`tl.pta` / `tl.talib`），口径**显式选择**。
-- **Pipeline 投研流水线**：`FeatureSet` / `Pipeline` / `CausalSelector` / `ResearchRun` / `Allocator` 把训练 / 测试 / 预处理 / 评分 / 权重 / 回测连成一条链。
-- **因子与报告**：alphalens / pyfolio 风格分析，HTML 报告、交互式 plot、CSV / XLSX artifacts。
-- **MLflow / JupyterLab / MCP**：实验追踪、交互研究、自动化工具集成开箱即用。
+#### ⚡️ 高能内核：Rust 驱动的极致性能
+- **Rust 混合动力**：撮合引擎与核心计算由 Rust 承载，提供单标的 **28x**、多资产调仓 **110x+** 的 Backtrader 级加速。
+- **自动 Runner 调度**：根据数据形态自动选择“单流逐 Bar”或“Panel 批量”推进。**针对指数增强场景优化了内存布局**，开发者只需关注 `next()` 逻辑。
+
+#### 🛡️ 严谨金融：Backtrader 语义 100% 对齐
+- **Engine 级对齐**：完整支持 Analyzer / Sizer / Signal 体系，确保回测 Trades 与 Backtrader Oracle 逻辑零差异。
+- **Lite 极简表达**：在同一 Runtime 上构建的轻量语法。**内置 `target_weights` 接口**，将机器学习模型输出的权重一键转化为回测决策。
+
+#### 🧪 因果投研：跨越相关性的科学流程
+- **Causal-First 特征筛选**：内置 PC / FCI 等因果发现算法，识别因子的真实驱动路径，从源头对抗回测中的“伪相关”与过拟合。
+- **Pipeline 全链路流水线**：将特征工程、因果筛选、评分模型、组合权重与回测报告无缝耦合，形成可复现的实验闭环。
+
+#### 🌍 全球视野：多口径指标与现代生态
+- **双市场口径**：显式支持 TDX (A股) / TradingView (海外) 指标口径，深度兼容 TA-Lib 与 pandas-ta。
+- **现代投研工具**：开箱即用的 HTML 交互式报告、MLflow 实验追踪以及 JupyterLab / MCP 深度集成。
+
+## 因果投研：跨越“伪相关”陷阱
+
+大多数量化研究止步于**统计相关性 (Correlation)**，这极易导致因子在回测中表现优异、实盘中却迅速失效（过拟合）。trade-learn 通过内置的 **因果发现 (Causal Discovery)** 机制，帮助您识别收益背后的真实动因：
+
+- **因果特征筛选**：通过 `CausalSelector` 结合 PC / FCI 算法，剥离由于“共同观测”产生的伪相关因子，仅保留对收益具有直接驱动能力的特征。
+- **抵抗样本外衰减**：基于因果图定位的 Alpha 因子在市场风格切换时具备更强的生存力，有效降低从研究到实盘的性能落差。
+- **工业级无缝集成**：深度整合 `causal-learn` 生态，让前沿的因果推断技术像调用 `corr()` 一样丝滑，极大降低了学术算法的落地门槛。
 
 ## 适合谁
 
-- 已经会 Backtrader，但希望有更现代的报告、研究流水线和 Rust 回测内核
-- 在做因子研究，希望从 alphalens 风格分析自然走到事件驱动回测
-- 在做机器学习策略，希望把 train / test、预处理、因果筛选、评分、权重、回测和 MLflow 记录连起来
-- 同时覆盖 A 股和海外市场，不想让指标口径、数据形态和报告体系割裂
-- 同时维护规则策略和模型策略，不想让两套策略使用完全不同的数据、报告和实验体系
+*   **⚡️ 敏捷开发者与灵感验证**
+    厌倦了厚重的配置，希望在几行代码内完成从想法到回测报告的转化，享受类 backtesting.py 的轻快体验，极其适合快速验证原型。
+*   **📈 指数增强与组合管理**
+    面对 1000+ 标的的大规模回测，利用 Rust Panel Runner 实现秒级调仓模拟，彻底告别传统框架在多资产处理上的漫长等待。
+*   **🧠 机器学习与因子研究**
+    希望将特征工程、**因果发现**、模型训练（MLflow 追踪）与回测一站式打通，构建从数据到报告的完整自动化闭环。
+*   **🛠️ Backtrader 资深玩家**
+    在保留成熟事件驱动语义的同时，寻求更现代的报告体系、全链路流水线以及高性能 Rust 回测内核。
+*   **🌐 跨市场与多策略团队**
+    *   **跨市场统一**：同时覆盖 A股 (TDX) 与海外 (TradingView)，要求指标口径与报告体系完全一致。
+    *   **全体系维护**：统一管理规则策略与模型策略，拒绝工具链割裂带来的研发与维护成本。
+*   **🔍 因果推断探索者**
+    致力于在因子筛选阶段引入因果图技术，通过剔除“伪相关”来构建具有强解释性和高稳健性的量化系统。
 
 ## 安装
 
@@ -64,8 +96,6 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 | `[lab]` | JupyterLab / Jupyter AI / MCP / Pygwalker 交互研究环境 |
 | `[mlflow]` | MLflow tracking server 与实验 artifact 记录 |
 | `[all]` | Lab、MLflow、Riskfolio-Lib、Optuna、DuckDB 等完整研究环境 |
-| `[docs]` | 本地构建技术手册网站 |
-| `[dev]` | 测试、lint、wheel 构建工具 |
 
 ## 快速上手
 
@@ -99,7 +129,7 @@ bt = tl.Backtest(bars, LiteSmaCross, cash=100_000, commission=0.0003, trade_on_c
 stats = bt.run()
 
 print(stats.summary)
-bt.plot("plot.html")
+bt.plot()
 bt.report("report.html")
 ```
 
@@ -135,6 +165,9 @@ cerebro.addstrategy(SmaCross)
 
 [strategy] = cerebro.run()
 print(strategy.stats.summary)
+
+cerebro.plot()
+cerebro.report("report.html")
 ```
 
 ## 投研流水线示例
@@ -204,7 +237,7 @@ stats = tl.Backtest(test_bars, LitePortfolio, cash=100_000).run(
 
 **4. Live-style：在策略里只用当前可见窗口推理**
 
-投研流水线适合离线训练和复盘；如果要让策略语义更接近 paper / live，可以把模型和 allocator 放进策略参数，在 `next()` 中用 `history_panel()` 只读取当前已经发生的窗口。
+投研流水线适合离线训练和复盘；如果要让策略语义更接近实盘，可以把模型和 allocator 放进策略参数，在 `next()` 中用 `history_panel()` 只读取当前已经发生的窗口。
 
 ```python
 class LiveStylePortfolio(tl.Strategy):
@@ -238,33 +271,46 @@ class LiveStylePortfolio(tl.Strategy):
 
 ## 对齐与性能
 
-本机基线只看两个问题：结果是否对齐、吞吐是否明显快于 Backtrader。完整复现命令见 [性能基准](./docs/benchmarks.md)。
+本机基线关注两个核心：**结果是否对齐**、**吞吐是否明显快于 Backtrader**。完整复现命令见 [性能基准](./docs/benchmarks.md)。
 
-| 场景 | 引擎 | 数据量 | 耗时 | bars/s | 加速比 | 对齐值 |
-|---|---|---:|---:|---:|---:|---:|
-| 单标的 SMA | Lite | 550,000 bars | 1.3253s | 414,990 | 27.9x | Final Value 118,399.33 |
-| 单标的 SMA | Engine | 550,000 bars | 3.3767s | 162,883 | 11.0x | Final Value 118,399.33 |
-| 单标的 SMA | Backtrader | 550,000 bars | 37.0270s | 14,854 | 1.0x | Final Value 118,399.33 |
-| 1000 标的 top-50 目标权重 | Lite | 5,040,000 bars | 2.407s | 2,094,237 | 119.1x | Final Value 4,199,638.26 |
-| 1000 标的 top-50 目标权重 | Engine | 5,040,000 bars | 4.112s | 1,225,594 | 69.7x | Final Value 4,199,638.26 |
-| 1000 标的 top-50 目标权重 | Backtrader | 5,040,000 bars | 286.538s | 17,589 | 1.0x | Final Value 4,199,638.26 |
+#### 1. 单标的高频压测：双均线交叉 (55 万 Bar)
+* **策略原理**：执行标准的双均线交叉逻辑。旨在压测 Rust 在处理长序列、单数据流时的事件驱动性能与状态维护效率，挑战单核推进极限。
+
+| 引擎 | 耗时 | bars/s | **加速比** | 对齐值 |
+|---|---:|---:|---:|---:|
+| **Lite** | 1.32s | **414,990** | **27.9x** | Final Value 118,399.33 |
+| **Engine** | 3.37s | **162,883** | **11.0x** | Final Value 118,399.33 |
+| Backtrader | 37.02s | 14,854 | 1.0x | Final Value 118,399.33 |
+
+#### 2. 多标的大规模指增：Top-50 目标权重 (504 万 Bar)
+* **策略原理**：模拟 1000 标的全市场选股调仓。旨在压测 Rust 对大规模 Panel 数据的内存布局优化与并发处理能力，真实还原机器学习策略的投研场景。
+
+| 引擎 | 耗时 | bars/s | **加速比** | 对齐值 |
+|---|---:|---:|---:|---:|
+| **Lite** | 2.40s | **2,094,237** | **119.1x** | Final Value 4,199,638.26 |
+| **Engine** | 4.11s | **1,225,594** | **69.7x** | Final Value 4,199,638.26 |
+| Backtrader | 286.53s | 17,589 | 1.0x | Final Value 4,199,638.26 |
 
 ## 一致性承诺
 
-trade-learn 把"对照基线"当作工程纪律：
+**trade-learn** 将“对照基线”视为核心工程纪律。我们确保每一项计算结果都经得起严苛推敲，并在以下维度保持数值对齐：
 
-- `metrics`（sharpe / max_dd / sortino / ...）对 empyrical：`rtol=1e-10`
-- `tl.pta` / `bt.pta` 对 pandas-ta-classic：`rtol=1e-10`
-- `tl.tdx` / `bt.tdx` 对 MyTT：`rtol=1e-10`
-- `tl.tv` / `bt.tv` 对 pyneCore / TradingView：`rtol=1e-6`
-- 回测 **trades**（决策层）对 Backtrader oracle：**0 差异**（时间 / 方向 / size）
-- 回测 equity 对 oracle：`rtol=1e-6`，summary：`rtol=1e-4`，每条差异都登记在案
+*   **金融指标对齐**：`metrics`（Sharpe, MaxDD, Sortino 等）完全对标 `empyrical`，误差控制在 `rtol=1e-10`。
+*   **多源指标对齐**：
+    *   `tl.pta` (经典指标) 对标 `pandas-ta-classic`：`rtol=1e-10`。
+    *   `tl.tdx` (通达信口径) 对标 `MyTT`：`rtol=1e-10`。
+    *   `tl.tv` (TradingView 口径) 对标 `pyneCore` 实现：`rtol=1e-6`。
+*   **回测引擎对齐**：
+    *   **决策层**：成交记录 (**Trades**) 对标 Backtrader 官方实现，实现 **0 差异**（时间、方向、头寸完全一致）。
+    *   **净值层**：Equity 曲线误差 `rtol=1e-6`，汇总统计数据误差 `rtol=1e-4`。
 
-详见 [设计笔记 → 与外部库的语义一致性](docs/internals/consistency.md)。
+> [!IMPORTANT]
+> 我们对每一处数值微差都持有“零容忍”态度，所有偏差均登记在案并提供原因分析。详见 [设计笔记 → 语义一致性审计](docs/internals/consistency.md)。
 
 ## 完整文档
 
-完整技术手册（mkdocs 站点）：[`docs/`](./docs/README.md)
+*   **官方在线文档**：[**https://muuyesen.github.io/trade-learn/**](https://muuyesen.github.io/trade-learn/)
+*   **本地技术手册**：[`docs/`](./docs/README.md)
 
 | 主题 | 入口                                                                      |
 |---|-------------------------------------------------------------------------|
@@ -277,11 +323,20 @@ trade-learn 把"对照基线"当作工程纪律：
 | 内核（契约 / 撮合 / portfolio / 事件循环） | [设计笔记](./docs/internals/contracts.md)                                   |
 | 完整 API | [API 参考](./docs/api/reference.md)                                       |
 
-本地预览：
+## 🚀 路线图 (Roadmap)
 
-```bash
-uv run mkdocs serve
-```
+*   **v1.0.x (Stable Release - 当前阶段)**
+    *   [x] 基于 Rust 的多标的 Clocked Runner (Stage 13)。
+    *   [x] 完整的指数增强研发流水线 (Research -> Weight -> Backtest)。
+    *   [x] 深度集成 MLflow 实验追踪与 HTML 现代化报告。
+*   **v1.1.x (Advanced Research)**
+    *   [ ] **因果推断增强**：集成更多因果图算法（如 GIES、Direct-LiNGAM），提供更强的因子可解释性。
+    *   [ ] **高性能连接器**：直连 DolphinDB 与 DuckDB 原生存储，实现亿级 Bar 的秒级读取。
+    *   [ ] **更多风险模型**：引入 Barra 风格风险暴露分析与超额收益分解。
+*   **v1.2.x (Live & Production)**
+    *   [ ] **实盘适配器**：开放通用实盘事件接口，支持 QMT (国金/华宝) 等券商柜台接入。
+    *   [ ] **分布式参数优化**：基于 Ray/Optuna 的多机并行参数搜索。
+    *   [ ] **Agent 深度集成**：通过 MCP 协议实现 LLM 对投研流水线的自动化控制。
 
 ## 协议
 

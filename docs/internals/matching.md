@@ -20,7 +20,7 @@ trade-learn 2.0 支持四种订单类型：
 - 市价单**默认在下一根 bar 的 open 成交**——`next()` 中下的单进入下一次撮合机会
 - `trade_on_close=True` 时，当前 `next()` 创建的市价单允许在**当前 bar close** 成交
 
-详见 [事件循环 → trade_on_close](event-loop.md#trade_on_close)。
+详见 [设计笔记 → 事件循环](event-loop.md)。
 
 ## bar 内 stop + limit 同时触达
 

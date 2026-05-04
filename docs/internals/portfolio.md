@@ -60,7 +60,7 @@ portfolio 输出至少稳定生成以下字段，作为 [Stats](../concepts/stat
 | `equity` | 每日权益曲线 |
 | `drawdown` | 每日回撤 |
 
-> Stage 3 golden tests 同时比较 trade-level 和 daily-level 结果，因此两个层面的 schema 都必须稳定。
+> 核心对齐测试 (Golden Test) 同时比较 trade-level 和 daily-level 结果，因此两个层面的 schema 都必须稳定。
 
 ## 公开 API（backtrader 兼容）
 

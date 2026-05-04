@@ -2,11 +2,18 @@
 
 ## 安装与环境
 
-推荐使用 `uv`：
+直接安装：
 
 ```bash
+pip install trade-learn
+```
+
+推荐使用虚拟环境（如 `uv`）：
+
+```bash
+uv pip install trade-learn
+# 或者克隆源码开发模式
 uv sync
-uv sync --extra lab
 ```
 
 如果需要开发 Rust 扩展：

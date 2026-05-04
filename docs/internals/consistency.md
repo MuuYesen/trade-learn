@@ -1,97 +1,63 @@
 # 与外部库的语义一致性
 
-trade-learn 的核心价值之一是**可对照、可复现**：你写的策略在 trade-learn 上跑出的结果，必须能和原生 backtrader、empyrical、pyfolio、alphalens 等业内基线对照得上。本页列出 trade-learn 在不同层面承诺的一致性目标和容忍度。
+`trade-learn` 将 **“可对照、可复现”** 视为核心生命线。我们深知，如果一个回测框架的数值无法与行业公认的 Oracle 对齐，那么它产生的任何 Alpha 都没有研究价值。
 
-## 为什么这件事重要
+---
 
-trade-learn 把 empyrical / pyfolio / alphalens / pandas-ta-classic / MyTT / pyneCore 的工作融合进自己的 metrics / report / factor / indicators 模块。一旦数值飘了：
+## 我们的承诺：误差分级制度
 
-- 用户无法用 trade-learn 的报告说服老板 / 客户 / 论文评审
-- 同一份策略在 trade-learn 和 backtrader 上的回测结果会不可解释地分叉
-- 框架失去研究工具的可信基础
+我们为框架的每一层都设定了严格的数值对齐指标，所有偏差必须在 `Golden Test` 集中通过验证。
 
-因此 trade-learn 把"对照基线"当作工程纪律而非美好愿望——CI 跑 50+ golden 对照，差异不允许沉默放宽。
-
-## 分层容忍度
-
-| 层 | 对照源 | 容忍度 | 说明 |
+| 层级 | 对齐目标 (Oracle) | 容忍度 (Tolerance) | 技术说明 |
 |---|---|---|---|
-| **metrics 指标函数** | empyrical / pyfolio / alphalens 原版 | `rtol=1e-10` | 纯函数，必须严格一致 |
-| **`tl.pta` / `bt.pta`**（pandas-ta-classic 口径） | pandas-ta-classic 原版 | `rtol=1e-10` | 薄封装，无应有差异 |
-| **`tl.tdx` / `bt.tdx`**（A 股 TDX 口径） | MyTT 原版 | `rtol=1e-10` | 融合 MyTT，须完全一致 |
-| **`tl.tdx` / `bt.tdx`** 抽查 | 通达信软件截图 | `rtol=1e-6` | 手工抽查 3–5 个指标 |
-| **`tl.tv` / `bt.tv`**（TradingView 口径） | pyneCore / TV 截图 | `rtol=1e-6` | pyneCore 版本差异容忍 |
-| **回测 trades**（决策层） | backtrader oracle | **0 差异**（时间/方向/size） | "一份策略可同时运行并比较" |
-| **回测 equity 曲线** | backtrader oracle | `rtol=1e-6` | 浮点累积允许差 |
-| **回测 summary** | backtrader oracle | `rtol=1e-4` | 差异必须可解释、登记在案 |
+| **核心指标 (Metrics)** | empyrical / pyfolio / alphalens | `rtol=1e-10` | 纯数学计算，要求零误差 |
+| **标准指标 (tl.pta)** | pandas-ta-classic | `rtol=1e-10` | 算法口径完全一致 |
+| **A 股口径 (tl.tdx)** | MyTT / 通达信软件 | `rtol=1e-10` | 针对 A 股修正的平滑系数对齐 |
+| **海外口径 (tl.tv)** | pyneCore / TradingView | `rtol=1e-6` | 由于 TV 内部闭源算法，允许微小浮点偏差 |
+| **决策执行 (Trades)** | **Backtrader (Oracle)** | **0 差异** | 时间、方向、Size 必须完美吻合 |
+| **账户净值 (Equity)** | Backtrader (Oracle) | `rtol=1e-6` | 允许由于撮合引擎精度产生的累积差 |
+---
 
-> "0 差异"特指**决策层**——同一时刻、同一方向、同一 size 的 trade 序列必须完全一致。equity 与 summary 因为浮点累积不可避免有微小偏差，但每根 trade 必须能在两侧一一对上。
+## 0 差异决策对齐：Golden Test 机制
 
-## 双口径指标命名
+为了确保 `engine` 模式在逻辑上完全等价于 Backtrader，我们维护了一个 **Golden Test 集**（位于 `tests/golden/`）：
 
-同一个指标在不同生态有不同算法，trade-learn 用三个子命名空间显式区分：
+1.  **策略样本**：包含双均线、RSI 逆势、海龟法则、组合调仓等 10+ 个标准策略。
+2.  **对照执行**：每一版代码提交前，CI 都会在同一组行情数据上同时运行 `trade-learn` 和 `Backtrader`。
+3.  **逐单审计**：系统会对产生的 `Trade` 序列进行逐行扫描，任何一笔订单的时间、价格、手续费如果不匹配，CI 将被强制阻断。
 
-| 命名空间 | 口径来源 | 适用场景 |
-|---|---|---|
-| `tl.pta` / `bt.pta` | pandas-ta-classic | 通用研究、与 ta-lib 对齐 |
-| `tl.tdx` / `bt.tdx` | MyTT（通达信软件口径） | A 股策略，需要和通达信图对得上 |
-| `tl.tv` / `bt.tv` | pyneCore（TradingView 口径） | 海外 / 加密，需要和 TV 图对得上 |
+---
 
-例如：
+## 偏差处理流程 (Divergence Loop)
 
-```python
-import tradelearn.indicators as ta
+!!! note
+    **未登记的差异 = Bug**
+    任何超出容忍度的差异，开发者必须遵循以下流程：
 
-ta.MACD(close)         # pandas-ta-classic 算法
-tl.tdx.MACD(close)     # MyTT / 通达信算法（DIF / DEA / MACD）
-tl.tv.MACD(close)      # pyneCore / TradingView 算法
+```mermaid
+graph TD
+    A[发现数值差异] --> B{是否为可解释差异?}
+    B -- 否 --> C[修复 Rust 内核或 Python 代码]
+    B -- 是 --> D[在 Known Differences 登记簿中记录原因]
+    D --> E[更新 Golden Test 基线]
+    C --> F[重新运行 CI 验证]
+    F --> G[合并至主分支]
 ```
 
-> 用户**显式选择**口径，框架不做自动分派。`tl.pta` 与 `tl.tdx` 在初始化方式、平滑系数等细节上有差异，混用会导致信号时点不同。
+### 什么是“可解释差异”？
+- **浮点数累加顺序**：Rust 侧向量化计算与 Python 侧逐行累加可能导致末位精度不同。
+- **佣金计算舍入**：不同券商口径对 0.5 元以下佣金的取整规则差异。
+- **指标暖机期**：个别第三方指标库在第 0 根 Bar 的初始值处理逻辑与标准库不同。
 
-## 决策层 0 差异的工程做法
+---
 
-`tests/golden/` 维护一份金标数据集：
+## 如何查看差异登记？
 
-```
-tests/golden/
-├── datasets/             # 行情 parquet（TV subset）
-├── strategies/           # 10 个标准策略（SMA / RSI / MACD / KDJ / Supertrend / pairs / momentum / ...）
-├── expected/v1.0/        # backtrader oracle 跑出的 expected
-│   └── (10 策略 × 5 数据集 = 50 组 stats / trades / equity_curve)
-├── indicators/           # 指标金标（pandas-ta / MyTT / pyneCore 输出）
-└── returns/              # metrics 测试用 returns 序列
-```
+任何已被接受的逻辑微差都公开记录在 [版本迁移登记簿](migration.md) 中。我们鼓励用户对比这些差异，确保回测结果的透明度。
 
-CI required check：
-
-- `tests/consistency/` 全通过（metrics、indicators、factor、report 数值层）
-- `tests/golden/` 全通过（trades 0 差异、equity `rtol=1e-6`、summary `rtol=1e-4`）
-
-## 可接受差异的登记簿（Known Differences）
-
-任何**可解释的、被允许保留**的差异都登记在 [v1 → v2 迁移 → Known Differences](migration.md#3-known-differences) 中。**未登记的差异 = bug**，必须修代码而不是修金标。
-
-每条登记必须填齐：
-
-- **位置**：差异出现在哪个函数 / 模块
-- **影响**：谁会遇到、影响什么
-- **原因**：为什么会有差异（算法 / 精度 / 实现方式）
-- **影响评估**：对用户决策的实际影响（通常是"无"或"数值 < X%"）
-- **测试**：对应 consistency test 路径与放宽后的 rtol
-
-## 性能回归守护
-
-正确性之外，速度也不能倒退：
-
-- `benchmarks/` 在 CI 跑 pytest-benchmark
-- 与基线比较，**回归超 20% 失败**
-- 结果归档到 GitHub Pages，公开可见
-
-详见 [性能基线](../benchmarks.md)。
+---
 
 ## 相关阅读
-
-- [v1 → v2 迁移](migration.md)：1.x 与 2.0 的 API 对照与 Known Differences
-- [契约与边界](contracts.md)：定义"什么必须对齐"的字段口径
-- [撮合与成交](matching.md)：决策层 0 差异背后的撮合规则
+- [性能基线](../benchmarks.md)：查看我们在正确性前提下实现的加速比。
+- [撮合与成交](matching.md)：深入了解 0 差异决策背后的物理撮合规则。
+- [Portfolio 模型](portfolio.md)：了解账户记账与 Backtrader 的细微差别。

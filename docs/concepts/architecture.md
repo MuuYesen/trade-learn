@@ -1,28 +1,32 @@
 # 架构与边界
 
-trade-learn 的结构分成三条清晰的线：用户写策略，Python 组织投研流程，Rust 承担高频回测内核。
+`trade-learn` 的设计核心是 **“语法分层，内核收敛”**。它在用户侧提供两套互补的 API，但在底层通过统一的高性能回测 Runtime 实现决策执行。
+
+---
+
+## 全景架构图
 
 ```mermaid
 flowchart TB
     subgraph user[用户层 Python API]
-        lite[tradelearn.lite\n1.x 风格轻量入口]
-        engine[tradelearn.engine\nBacktrader 风格高级入口]
-        ta[tradelearn.tdx / talib / tv\n指标函数]
+        lite[tradelearn.lite<br/>敏捷研究入口]
+        engine[tradelearn.engine<br/>Backtrader 深度对齐入口]
+        ta[tdx / talib / tv / pta<br/>多口径指标]
     end
 
     subgraph research[Python 投研层]
         data[Data / Indicators / Factor]
-        pipeline[ResearchRun / Allocator\nfeatures / scores / weights]
+        pipeline[ResearchRun / Allocator<br/>Causal Selection / Weights]
         report[Report / Plot / MLflow]
     end
 
-    runtime[共享回测 runtime\ntradelearn.backtest\nStats / broker / data / runner glue]
+    runtime[共享回测 Runtime<br/>tradelearn.backtest<br/>Stats / Broker / Runner Glue]
 
-    core[中性契约\ntradelearn.core\nBars / StreamBar / Broker Protocol]
+    core[中性契约<br/>tradelearn.core<br/>Bars / StreamBar / Broker Protocol]
 
     subgraph rust[Rust 高频内核]
-        runner[Bar Runner\nsingle / multi-data clock]
-        broker[RustBroker\n撮合 / 订单 / portfolio]
+        runner[Bar Runner<br/>Single-Symbol / Multi-Data Clock]
+        broker[RustBroker<br/>撮合引擎 / 订单状态机 / Portfolio 记账]
     end
 
     lite --> runtime
@@ -38,64 +42,44 @@ flowchart TB
     runtime --> report
 ```
 
-## 用户入口
+---
 
-| 入口 | 适合谁 | 典型写法 |
+## 权力边界：Python vs Rust
+
+为了在灵活性和性能之间取得平衡，`trade-learn` 对每一层的职责有着严格的界定：
+
+| 维度 | Python 层 (策略与投研) | Rust 层 (高性能内核) |
 |---|---|---|
-| `tradelearn.lite` | 想快速验证想法、迁移 1.x 风格策略、写目标权重组合 | `tl.Backtest(bars, Strategy).run()` |
-| `tradelearn.engine` | 熟悉 Backtrader、需要 Analyzer / Sizer / Signal / 多资产事件语义 | `bt.Cerebro(); cerebro.adddata(bars); cerebro.run()` |
-| `tradelearn.research` | 做因子、预处理、选股、组合权重、实验追踪 | `ResearchRun` / `Allocator` / preprocess transformer |
-| `tradelearn.report` | 从 Stats 或收益序列生成报告和图表 | `stats.report(...)` / `Reporter(...)` |
+| **核心职责** | 策略表达、因子研究、模型训练、报告生成 | 事件循环调度、订单撮合、持仓刷新、盈亏计算 |
+| **数据拥有权** | 拥有 **指标 (Indicators)** 和 **策略状态** | 拥有 **订单队列** 和 **Portfolio 总账** |
+| **性能关键** | 指标计算批量化 (Vectorized) | 撮合与账户刷新指令化 (Event-driven) |
+| **交互媒介** | 策略回调 (`next`, `notify_*`) | Apache Arrow 零拷贝数据交换 |
 
-`tradelearn.backtest` 和 `tradelearn.core` 不是普通用户主入口。它们分别是回测运行时和跨 backtest / paper / live 的中性契约层。
+---
 
-## 分层原则
+## 设计哲学：三条铁律
 
-| 层 | 职责 | 不做什么 |
-|---|---|---|
-| `core` | 跨 backtest / paper / live 的中性契约 | 不放回测状态机、不放 facade 语义 |
-| `backtest` | 公共回测 runtime、Rust broker、Stats、runner glue | 不作为用户主入口 |
-| `engine` | Backtrader 风格高级 API | 不承载 runtime 细节 |
-| `lite` | 轻量策略语法 | 不复制 Engine 的 Analyzer / Sizer / Signal 心智 |
-| `research` / `factor` / `ml` | 投研、因子、机器学习组件 | 不直接控制 broker |
-| `report` | 报告和图表 | 不参与撮合 |
+!!! important
+    ### 1. 结果对齐优先 (Oracle Consistency)
+    `engine` 模式以 Backtrader 为金标 Oracle。任何 API 的引入或性能优化，都不能以牺牲与基线的数值对齐为代价。
 
-## 关键数据流
+    ### 2. 模式共生 (Dual-Mode Parity)
+    `lite` 并非 `engine` 的子集，而是另一种工作流。两者必须共享同一套底层 Runtime 和 `Stats` 结果集，确保同一策略在两套语法下结果完全一致。
 
-```text
-数据 -> 指标 / 因子 -> 预处理 -> 选股 / 权重 -> 事件驱动回测 -> Stats -> 报告 / MLflow
-```
+    ### 3. 生产语义导向 (Production-Ready)
+    所有的回测逻辑必须能够无缝映射到生产环境。RustBroker 仅用于回测，实盘适配器通过 `core` 定义的中性协议进行热插拔，确保回测与实盘“同一套逻辑”。
 
-这条链路里每一段都是一等能力，不需要用户在框架外再拼 pyfolio / alphalens / empyrical / quantstats 的数据格式转换。
+---
 
-## 三条不可变量
+## 运行时原则 (Runtime Principles)
 
-1. **结果对齐优先**：Engine 的撮合结果必须持续对齐 Backtrader 语义，Lite 与 Engine 共用同一套 runtime 和 Stats 口径。
-2. **策略 API 清晰优先**：性能优化不能把用户策略改成向量脚本，也不能牺牲事件驱动心智。
-3. **实盘边界优先**：RustBroker 是回测实现；paper / live broker 通过 `core` 中性契约和事件泵接入，不和回测 broker 混成一套状态机。
+- **确定性执行**：回测过程必须是 100% 可复现的单线程同步执行（除非显式开启分布式寻优）。
+- **指标不下沉**：为了保持与 TA-Lib/TDX 等成熟生态的口径对齐，指标计算保持在 Python 层，通过共享内存与 Rust 核通信。
+- **懒加载与预计算**：行情数据通过 Arrow 预加载至 Rust 侧内存，策略执行过程中 Rust 侧不再触发外部 IO。
 
-## 运行原则
+---
 
-- Python 策略保持事件驱动写法。
-- Rust 负责撮合、bar loop、订单推进和 portfolio。
-- 指标不下沉 Rust，保持 TA-Lib、TDX、TradingView、pandas-ta-classic 等 Python 生态可核对。
-- Engine 与 Lite 共用同一套 backtest runtime 和 Stats 口径。
-- paper/live broker 通过事件契约扩展，不和 Rust 回测 broker 混成同一套实现。
-
-## 配置与环境变量
-
-常用环境变量集中在运行边界，不写进策略类：
-
-| 变量 | 用途 |
-|---|---|
-| `MLFLOW_TRACKING_URI` | MLflow tracking server 地址 |
-| `TRADELEARN_DATA_CACHE_DIR` | 数据缓存目录 |
-| `TRADELEARN_LOG_LEVEL` | 日志等级 |
-| `TRADELEARN_SEED` | 研究或示例里的随机种子 |
-
-## 明确不做
-
-- 不把指标计算下沉到 Rust。
-- 不在 `core` 放 Backtrader / Lite 专属 API。
-- 不把 QMT / IB / CTP 等实盘适配器和 Rust 回测 broker 混成同一个实现。
-- 不在 1.0 把 Web UI / HTTP 服务端作为核心能力。
+## 相关阅读
+- [快速开始](../quickstart.md)：3 分钟跑通第一个策略。
+- [Runtime 与 Runner](runtime.md)：了解 Rust 是如何调度计算任务的。
+- [契约与边界](../internals/contracts.md)：深入 Bar、Order、Fill 的字段定义。

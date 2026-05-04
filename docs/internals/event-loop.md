@@ -1,114 +1,83 @@
-# 事件循环
+# 事件循环 (Event Loop)
 
-trade-learn 的回测引擎是**确定性、单事件、逐 bar 推进**的。本页解释一根 bar 进入引擎后到底发生了什么——包括订单何时撮合、`next()` 何时被调用、Analyzer 何时收到回调，以及多数据源（multi-data）下的对齐规则。
+`trade-learn` 采用确定性的 **“单事件推进”** 模型。本页详细描述一根 Bar 从进入内核到触发策略回调，再到最终订单执行的完整生命周期。
 
-## 单根 bar 的生命周期
+---
 
-每根 bar 进入事件循环时，引擎严格按以下顺序执行：
+## 核心时序图 (The Lifecycle)
 
-1. **读取 bar，更新当前时间戳**
-2. **撮合上一根 bar 的遗留订单**——产生 `Fill` / `Cancel` / `Reject` 事件
-3. **mark-to-market**——用当前 bar 的 close 刷新所有持仓的市值与未实现 PnL
-4. **暖机期判断**：若最长 lookback 尚未达到，跳过 5–6
-5. **调用 Python `strategy.next()`**——用户在此读取行情、指标，调用 `self.buy()` / `self.sell()` / `self.close()`
-6. **将 `next()` 中提交的新订单入队**——下一根 bar 开始才具备撮合资格（`trade_on_close=True` 例外，见下）
-7. **调用当前 bar 的 Analyzer 回调**（`on_order` / `on_fill` / `on_trade` / `on_bar`）
-8. **推进到下一根 bar**
+下图展示了在每一根 Bar 推进时，系统内部各组件的交互顺序：
 
-> 关键点：用户策略看到当前 bar 时，引擎已经完成了订单处理与持仓刷新——`self.position`、`self.broker.getcash()` 反映的都是"含上根遗留订单成交后"的状态。
+```mermaid
+sequenceDiagram
+    participant D as Data Feed (Arrow)
+    participant R as Rust Runner
+    participant B as Rust Broker
+    participant P as Python Strategy
+    participant A as Analyzers
 
-## `trade_on_close` 的意义
-
-默认情况下，`next()` 中创建的市价单在**下一根 bar 的 open** 成交。
-
-```python
-cerebro = Cerebro(trade_on_close=False)   # 默认
+    R->>D: 1. 获取下一根 Bar (Time T)
+    R->>B: 2. 撮合 T-1 提交的遗留订单
+    B-->>P: 3. 发送订单通知 (notify_order/notify_fill)
+    R->>B: 4. Mark-to-Market (按 Bar T 更新市值)
+    
+    rect rgb(240, 240, 240)
+    Note over R,P: 若 warmup 期已结束
+    R->>P: 5. 触发 Strategy.next()
+    P->>B: 6. 提交新订单 (buy/sell)
+    end
+    
+    R->>A: 7. 触发 Analyzer/Observer 回调
+    R->>R: 8. 时钟推进至 T+1
 ```
 
-设置 `trade_on_close=True` 时，当前 `next()` 创建的市价单可在**当前 bar close** 成交：
+---
 
-```python
-cerebro = Cerebro(trade_on_close=True)
-```
+## 步骤深度解析
 
-适合"用收盘价决策、用收盘价成交"的研究型回测，但隐含使用 close 作为决策依据。
+### 1. 撮合优先 (Matching First)
+当新 Bar 到达时，引擎执行的第一项操作是**撮合上一根 Bar 的遗留订单**。
+- 这意味着你在 `next()` 中看到的 `self.position` 已经包含了刚刚成交的订单结果。
+- 这种逻辑确保了回测过程严格遵循“决策 -> 成交 -> 观察结果”的闭环，消除了“偷看未来”的可能性。
 
-## 暖机期（warmup）
+### 2. 成交时点：`trade_on_close` 的差异
+这是项目中最关键的撮合开关，直接决定了策略的成交属性：
 
-暖机期由策略中已注册指标的最长 lookback 自动推导。在暖机期内：
+| 模式 | 成交 Bar | 成交价 | 适用场景 |
+|---|---|---|---|
+| **默认 (False)** | 下一根 Bar | **Open** | 模拟次日开盘下单（最稳健/工业标准） |
+| **trade_on_close=True** | 当前 Bar | **Close** | 模拟收盘竞价成交（投研流水线常用） |
 
-- 引擎照常推进数据缓冲、撮合 / mark-to-market
-- **不调用** `strategy.next()`，避免用户读取未就绪的指标
+!!! warning
+    开启 `trade_on_close=True` 时，务必确保你的决策信号不是直接基于当前 Bar 的 Close 衍生出的极短线指标（如：当日涨幅 > 9% 下单），否则会引入潜在的先验偏差。
 
-如果指标对象未自动暴露 lookback，可在 `Strategy.__init__()` 显式声明：
+### 3. 多数据源对齐 (Multi-Data Alignment)
+在处理多资产组合（如标的 A 和标的 B 时间戳不完全一致）时，`trade-learn` 遵循 **Primary-Clock (主时钟)** 机制：
+- **主数据源**：`datas[0]` 决定了 `next()` 触发的频率。
+- **最新可见原则 (Latest-at-or-before)**：当主时钟走到时间 $T$ 时，副数据源通过 Line 协议返回其在 $T$ 时刻或 $T$ 之前最新的那一根 Bar。
+- **防止窥视**：绝不会返回 $T$ 之后的数据。
 
-```python
-class MyStrategy(Strategy):
-    def __init__(self):
-        self.ma = ta.sma(self.data.close, period=200)
-        self.addminperiod(200)         # 显式暖机期
-```
+### 4. 批处理模式 (`callback_batch`)
+对于机器学习大规模回测，可以将 `callback_batch` 设置为 $N$：
+- 引擎会静默推进 $N$ 根 Bar 并在内存中累积。
+- 到达第 $N$ 根 Bar 时，一次性触发 `next()`。
+- **注意**：这会引入 $N$ 个 Bar 的撮合延迟，主要用于特定周期的高频因子验证场景。
 
-## 多数据源（multi-data）对齐
+---
 
-`datas[0]` 是 **primary feed**（主时钟）。每根 primary bar 触发一次完整的"撮合 → mark → next → analyzer"生命周期。其他 `datas[1..]`（secondary feed）按以下规则对齐：
+## Python ↔ Rust 数据交互
 
-- 在每个 primary timestamp，secondary feed 取自身 `timestamp ≤ primary timestamp` 的最新 bar（**latest-at-or-before**）
-- 若 secondary 在当前 primary timestamp 前没有任何 bar，其 line cursor 保持未就绪——用户读取 `self.datas[1].close[0]` 会得到 `IndexError`，与普通越界访问行为一致
+由于回测内核在 Rust 侧，系统通过 **Apache Arrow** 实现高效的跨语言通信：
+- **行情数据**：一次性通过 Zero-copy 传递给 Rust。
+- **订单/持仓**：通过 FFI 暴露精简的 C-接口，确保 Python 侧访问 `self.position` 时几乎无开销。
 
-> 这条规则避免了"用最短数据截断主数据"和"缺失 bar 时窥视未来"两种典型错误。
+!!! warning
+    **不要在 `next()` 之外维护持久化持仓状态**
+    Rust 内核拥有持仓的总账权。Python 侧的 `self.position` 是一个实时投影，任何不通过 `buy/sell/close` 接口而试图修改持仓的行为都会导致严重的账实不符。
 
-## Analyzer 回调时点
-
-Analyzer 在同一根 bar 内会同步收到所有订单状态变化：
-
-| 回调 | 何时触发 |
-|---|---|
-| `on_order(order)` | 订单状态变化：submitted / accepted / completed / cancelled / rejected / expired |
-| `on_fill(fill)` | 订单成交（仅成交事件，不污染统计） |
-| `on_trade(trade)` | 一笔交易闭环（开 + 平） |
-| `on_bar(bar)` | 当前 bar 的策略逻辑执行后 |
-
-`on_fill` 与 `on_trade` 不接收非成交订单事件，避免被取消 / 拒单干扰盈亏统计。
-
-## `callback_batch` 与批处理
-
-默认 `callback_batch=1`：逐 bar 调用 `next()`。`callback_batch=N>1` 时，引擎按 N 根 bar 一批批量推进：
-
-- 策略在当前 bar 创建的订单**延迟 N 根 primary bar 后**才具备撮合资格
-- `trade_on_close=True` 在 `callback_batch=1` 下保持原有特殊语义；与 `N>1` 组合时遵循批处理延迟
-
-> 该模式是性能优化路径，不改变 `next()` 可观察的事件顺序。绝大多数策略保持默认 `callback_batch=1` 即可。
-
-## Python ↔ Rust 边界
-
-| 责任 | 归属 |
-|---|---|
-| 事件循环、订单队列、撮合、mark-to-market、portfolio 记账 | Rust 核（`_core.so`） |
-| 策略 `__init__` / `next` / `notify_*`、指标计算、Analyzer | Python |
-| 数据传递 | Apache Arrow zero-copy |
-
-Rust 不持有 Python 对象生命周期；Python 不直接操作 Rust ledger 内部状态。
-
-## 回测与实盘统一（2.x EventRunner）
-
-2.x 方向上，回测和实盘共用同一个单事件 `EventRunner`：
-
-```
-HistoricalDriver / LiveDriver / PaperDriver
-      │
-      ▼
-EventRunner.on_bar() / on_broker_event()
-```
-
-硬约束：
-
-- **回测和实盘不分裂成两套策略执行模型**——`strategy.next()` 等用户 API 100% 兼容
-- 历史批量优化只能放在 driver 层，**不得改变 `next()` 可见顺序**
-- 实盘 broker 通过 `BrokerEventPump` 接入，不污染核心事件循环
+---
 
 ## 相关阅读
-
-- [撮合与成交](matching.md)：第 2 步"撮合遗留订单"的具体规则
-- [Portfolio 模型](portfolio.md)：第 3 步"mark-to-market"的记账细节
-- [契约与边界](contracts.md)：Bar / Order / Fill 的字段定义
+- [撮合与成交](matching.md)：深入探讨撮合引擎的微观规则。
+- [Portfolio 模型](portfolio.md)：了解市值计算与账户刷新逻辑。
+- [设计哲学 - 与外部库一致性](consistency.md)：为何我们要对齐 Backtrader。
