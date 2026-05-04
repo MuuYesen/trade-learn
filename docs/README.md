@@ -18,7 +18,29 @@ trade-learn 的目标不是再写一个回测框架，而是把一条**完整的
   <img src="research-flow.png" alt="trade-learn research flow" width="100%" />
 </p>
 
-数据 → 指标 → 因子 → 探索 / 因果分析 → 模型 → 组合权重 → 回测 → 报告 / 实验追踪——每一段都是 trade-learn 的一等公民，不需要在框架之外另接 pyfolio / alphalens / empyrical / quantstats。
+每一段都是 trade-learn 的一等公民，不需要在框架之外另接 pyfolio / alphalens / empyrical / quantstats。
+
+## 项目架构
+
+```mermaid
+flowchart TB
+    user[用户策略层<br/>Lite / Engine]
+    research[投研组织层<br/>FeatureSet / Pipeline / Allocator / Optuna / MLflow]
+    app[应用层<br/>factor / metrics / report / ml]
+    runtime[回测 Runtime<br/>Stats / DataFeed / Broker glue]
+    rust[Rust 内核<br/>single-data runner / multi-data runner / matching / portfolio]
+    live[实盘协议<br/>OrderRequest / Fill / BrokerEventPump]
+
+    user --> research
+    user --> runtime
+    research --> app
+    research --> runtime
+    app --> runtime
+    runtime --> rust
+    runtime --> live
+```
+
+这张图对应三条主线：用户写策略，Python 组织研究流程，Rust 负责高频回测内核。Lite 和 Engine 是两个入口，不是两套撮合系统。
 
 ## 它适合谁
 

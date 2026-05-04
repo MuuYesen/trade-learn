@@ -104,6 +104,64 @@ cerebro = bt.Cerebro()
 cerebro.addanalyzer(OrderCount, _name="orders")
 ```
 
+## Engine 组件扩展示例
+
+Engine 的定位是专业事件驱动入口，扩展方式尽量贴近 Backtrader：指标写成 `bt.Indicator`，分析器写成 `bt.Analyzer`，下单数量逻辑写成 `bt.Sizer`。这些组件只依赖 Engine facade，不需要碰 `backtest` 或 Rust。
+
+### 自定义指标
+
+```python
+import tradelearn.engine as bt
+
+
+class MidPrice(bt.Indicator):
+    lines = ("mid",)
+
+    def __init__(self):
+        self.lines.mid = (self.data.high + self.data.low) / 2.0
+
+
+class AboveMid(bt.Strategy):
+    def __init__(self):
+        self.mid = MidPrice(self.data)
+
+    def next(self):
+        if not self.position and self.data.close[0] > self.mid[0]:
+            self.buy()
+```
+
+### 自定义 Sizer
+
+```python
+class FixedCashSizer(bt.Sizer):
+    params = (("cash_per_trade", 10_000),)
+
+    def _getsizing(self, comminfo, cash, data, isbuy):
+        price = data.close[0]
+        return int(self.p.cash_per_trade / price) if price > 0 else 0
+
+
+cerebro.addsizer(FixedCashSizer, cash_per_trade=20_000)
+```
+
+### 自定义 Analyzer
+
+```python
+class TurnoverAnalyzer(bt.Analyzer):
+    def start(self):
+        self.turnover = 0.0
+
+    def notify_order(self, order):
+        if order.status == order.Completed:
+            self.turnover += abs(order.executed.size * order.executed.price)
+
+    def get_analysis(self):
+        return {"turnover": self.turnover}
+
+
+cerebro.addanalyzer(TurnoverAnalyzer, _name="turnover")
+```
+
 ## Research 扩展
 
 研究层扩展应保持 sklearn-like 心智：`fit` 学训练集状态，`transform` 应用到新数据，`fit_transform` 只是便捷组合。

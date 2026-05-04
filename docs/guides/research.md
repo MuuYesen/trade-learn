@@ -32,6 +32,51 @@ allocator = research.portfolio.Allocator.topk_equal(k=50, gross=0.95, max_weight
 weights = allocator.build(scores)
 ```
 
+## 自定义 Pipeline 工具
+
+`research.Pipeline` 接受 sklearn-like transformer。只要对象提供 `fit()` / `transform()` / `fit_transform()`，就可以放进流水线。约定很简单：
+
+- `fit(train)` 只学习训练集状态，例如分位数、均值、行业暴露系数。
+- `transform(data)` 只应用已学习状态，不能偷看测试集未来数据。
+- 返回值保持原来的 index，方便后续按 `timestamp / symbol` 对齐权重。
+
+```python
+import pandas as pd
+from tradelearn import research
+
+
+class RankNormalizer:
+    def __init__(self, column: str):
+        self.column = column
+
+    def fit(self, data: pd.DataFrame):
+        return self
+
+    def transform(self, data: pd.DataFrame) -> pd.DataFrame:
+        out = data.copy()
+        out[self.column] = out.groupby(level="timestamp")[self.column].rank(pct=True)
+        return out
+
+    def fit_transform(self, data: pd.DataFrame) -> pd.DataFrame:
+        return self.fit(data).transform(data)
+
+
+pipeline = research.Pipeline([
+    RankNormalizer("alpha"),
+    research.preprocess.StandardScaler(columns=["alpha"]),
+])
+
+train = pipeline.fit_transform(train)
+test = pipeline.transform(test)
+```
+
+如果自定义工具还要写入实验记录，可以在 `ResearchRun` 里记录步骤参数：
+
+```python
+run = research.ResearchRun("jp_us_factor_study")
+run.add_step("rank_normalize", category="preprocess", params={"column": "alpha"})
+```
+
 ## 投研语义 vs 实盘语义
 
 | 语义 | 适合场景 | 计算位置 | 回测执行 |
