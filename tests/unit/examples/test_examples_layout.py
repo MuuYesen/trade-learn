@@ -25,19 +25,6 @@ def test_examples_contains_only_strategy_files() -> None:
     assert offenders == []
 
 
-def test_full_workflow_examples_cover_research_to_backtest_flow() -> None:
-    root = Path(__file__).parents[3]
-
-    for name in ("full_workflow_lite.py", "full_workflow_engine.py"):
-        source = (root / "examples" / name).read_text()
-        assert "TradingViewProvider" in source
-        assert "FactorAnalyzer" in source
-        assert "factor_report" in source
-        assert ".report(" in source
-        assert ".plot(" in source
-        assert "log_mlflow" in source or "MLflowAnalyzer" in source
-
-
 def test_research_examples_cover_lite_and_engine_workflows() -> None:
     root = Path(__file__).parents[3]
     examples = root / "examples" / "research"
