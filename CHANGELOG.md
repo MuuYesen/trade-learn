@@ -5,6 +5,12 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
+## [0.2.3] - 2026-05-05
+
+### 修复
+- **进程生命周期管理**: 修复了 `tradelearn lab` 在按下 `Ctrl+C` 后无法彻底关闭 JupyterLab 和 MCP 服务子进程的问题，增加了强制清理逻辑防止端口冲突。
+- **Jupyter 审美优化**: 修复了 Jupyter 环境下进度条显示粉色背景和重复渲染的问题，自动切换至 `tqdm.notebook` 蓝色原生进度条。
+
 ## [0.2.2] - 2026-05-05
 
 ### 新增

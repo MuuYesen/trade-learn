@@ -199,13 +199,24 @@ def start_lab_stack(
         processes.append(popen(plan.mlflow.args, env=_process_env(plan.mlflow.env)))
     mcp_process = popen(plan.mcp.args, env=_process_env(plan.mcp.env))
     processes.append(mcp_process)
+    jupyter_process = popen(plan.jupyter.args, env=_process_env(plan.jupyter.env))
+    processes.append(jupyter_process)
     try:
-        jupyter_process = popen(plan.jupyter.args, env=_process_env(plan.jupyter.env))
         return jupyter_process.wait()
+    except KeyboardInterrupt:
+        return 0
     finally:
         for process in reversed(processes):
             if process.poll() is None:
-                process.terminate()
+                try:
+                    process.terminate()
+                    # Wait up to 2 seconds for clean exit
+                    try:
+                        process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                except Exception:
+                    pass
 
 
 def start_mlflow_server(
@@ -217,7 +228,17 @@ def start_mlflow_server(
 
     _prepare_mlflow_storage(command.args)
     process = popen(command.args, env=_process_env(command.env))
-    return process.wait()
+    try:
+        return process.wait()
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
 
 
 def _process_env(overrides: Mapping[str, str]) -> dict[str, str]:
