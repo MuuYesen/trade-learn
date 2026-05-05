@@ -789,7 +789,6 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
         config=_stats_config(cerebro),
         fills=fills,
     )
-    smart_print(stats.summary, file=sys.stderr)
     return stats
 
 

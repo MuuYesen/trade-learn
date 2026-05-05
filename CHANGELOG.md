@@ -5,6 +5,13 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
+## [0.2.4] - 2026-05-05
+
+### 修复
+- **输出冗余**: 移除了 `Backtest.run()` 内部硬编码的统计摘要打印，由用户决定显示逻辑，解决了 Jupyter 下输出重复的问题。
+- **环境容错**: 优化了 `smart_tqdm` 在 Jupyter 下的加载逻辑，当 `ipywidgets` 不可用时自动降级到文本模式，解决了 `model not found` 的报错。
+- **流同步**: 统一了 Jupyter 环境下的标准输出流，彻底解决了输出背景变粉的问题。
+
 ## [0.2.3] - 2026-05-05
 
 ### 修复

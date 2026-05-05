@@ -1,6 +1,6 @@
 [package]
 name = "tradelearn-rust"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 license = "Apache-2.0"
 description = "Rust event-driven backtest kernel for trade-learn."
