@@ -1,0 +1,60 @@
+{
+  "config": {
+    "broker": {
+      "cash": 100000.0,
+      "commission": 0.0003
+    },
+    "callback_batch": 1,
+    "exactbars": false,
+    "stdstats": true,
+    "strategy": "LiteSmaCross",
+    "trade_on_close": true
+  },
+  "metadata": {
+    "end": "2023-12-29 23:30:00",
+    "generated_at": "2026-05-05 12:38:54",
+    "run_id": "RUN-20260505-1238",
+    "start": "2023-01-03 23:30:00",
+    "strategy_name": "LiteSmaCross",
+    "version": "0.2.0.0"
+  },
+  "summary": {
+    "annual_return": 0.0063942939825269995,
+    "annual_volatility": 0.027275466732195264,
+    "avg_dd_duration": "13 days 13:53:41",
+    "avg_drawdown": 0.01677457120936244,
+    "avg_loss": -972.6666666666679,
+    "avg_trade_duration": "50 days 06:00:00",
+    "avg_trade_pct": -0.08801120000000118,
+    "avg_win": 2585.9999999999986,
+    "bars": 250.0,
+    "best_trade_pct": 2.5806344999999986,
+    "calmar_ratio": 0.152193403455415,
+    "cumulative_return": 0.006343384999999424,
+    "duration": "360 days 00:00:00",
+    "end": "2023-12-29 23:30:00",
+    "expectancy": -88.01120000000117,
+    "exposure_time": 55.55555555555556,
+    "final_cash": 81381.33849999998,
+    "final_margin_used": 18241.0,
+    "final_realized_pnl": -332.0000000000048,
+    "final_unrealized_pnl": 0.0,
+    "final_value": 100634.33849999998,
+    "kelly_criterion": -0.034104480894137146,
+    "max_dd_duration": 106,
+    "max_drawdown": -0.04201426499013938,
+    "max_trade_duration": "145 days 00:00:00",
+    "peak_value": 103991.4634,
+    "profit_factor": 0.8862234407128154,
+    "sharpe_ratio": 0.24727670035518698,
+    "sortino_ratio": 0.35394787143647943,
+    "sqn": -0.09595687508330526,
+    "start": "2023-01-03 23:30:00",
+    "total_fills": 9.0,
+    "total_orders": 9.0,
+    "total_trades": 9,
+    "turnover": null,
+    "win_rate": 0.1111111111111111,
+    "worst_trade_pct": -1.2960067000000024
+  }
+}

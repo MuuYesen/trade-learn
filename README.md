@@ -379,6 +379,12 @@ class LiveStylePortfolio(tl.Strategy):
 - [ ] **实盘交易打通**：对接 `QMT`, `IBKR` 等券商接口，完成从研究到执行的最后一公里。
 - [ ] **Agentic Quant 平台**：最终演进为支持自然语言驱动的全流程投研自动化底座。
 
+## 免责声明 (Disclaimer)
+
+本项目仅用于学术研究与技术交流，不构成任何投资建议。量化交易存在极高风险，回测表现不代表未来实盘收益。开发者不对因使用本项目导致的任何经济损失承担责任。请投资者谨慎决策，风险自担。
+
+*This project is for academic research and technical exchange only and does not constitute any investment advice. Quantitative trading involves high risk; past performance is not indicative of future results. The developers are not responsible for any financial losses incurred through the use of this project. Invest at your own risk.*
+
 ## 致谢
 
 [Quantopian](https://github.com/quantopian) · [Trevor Stephens](https://github.com/trevorstephens) · [PyWhy](https://github.com/py-why) · [dodid](https://github.com/dodid) · [DolphinDB](https://github.com/dolphindb) · [happydasch](https://github.com/happydasch) · [mpquant](https://github.com/mpquant) · [baobao1997](https://github.com/baobao1997)

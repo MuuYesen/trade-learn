@@ -230,6 +230,10 @@ Based on the engineering plan in [PROJECT.md](./design/PROJECT.md), we have divi
 - [ ] **Live Connectivity**: Integration with `QMT`, `IBKR`, and other brokers for the "last mile."
 - [ ] **Agentic Quant Platform**: Evolving into a semantic-driven automation base for quantitative research.
 
+## Disclaimer
+
+This project is for academic research and technical exchange only and does not constitute any investment advice. Quantitative trading involves high risk; past performance is not indicative of future results. The developers are not responsible for any financial losses incurred through the use of this project. Invest at your own risk.
+
 ## Acknowledgements
 
 [Quantopian](https://github.com/quantopian) · [Trevor Stephens](https://github.com/trevorstephens) · [PyWhy](https://github.com/py-why) · [DolphinDB](https://github.com/dolphindb) · [mpquant](https://github.com/mpquant)

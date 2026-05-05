@@ -230,6 +230,10 @@ cerebro.report("report.html")
 - [ ] **実盤コネクティビティ**: `QMT`, `IBKR` 等のブローカー統合。
 - [ ] **Agentic Quant プラットフォーム**: 自然言語駆動の投資研究自動化基座への進化。
 
+## 免責事項 (Disclaimer)
+
+本プロジェクトは学術研究および技術交流のみを目的としており、投資勧誘を目的としたものではありません。クオンツ取引には高いリスクが伴い、バックテストの結果は将来の運用成績を保証するものではありません。本プロジェクトの使用によって生じた、いかなる経済的損失についても、開発者は一切の責任を負いません。投資に関する最終決定は、利用者ご自身の判断と責任で行ってください。
+
 ## 謝辞
 
 [Quantopian](https://github.com/quantopian) · [Trevor Stephens](https://github.com/trevorstephens) · [PyWhy](https://github.com/py-why) · [DolphinDB](https://github.com/dolphindb) · [mpquant](https://github.com/mpquant)
