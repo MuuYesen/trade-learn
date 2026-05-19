@@ -26,6 +26,26 @@ from scripts.check_golden_readiness import (  # noqa: E402
     expected_path,
 )
 
+COMPARABLE_SUMMARY_KEYS = {
+    "annual_return",
+    "avg_trade_pct",
+    "bars",
+    "expectancy",
+    "final_cash",
+    "final_realized_pnl",
+    "final_value",
+    "max_drawdown",
+    "peak_value",
+    "profit_factor",
+    "return_pct",
+    "sharpe",
+    "sqn",
+    "total_fills",
+    "total_orders",
+    "total_trades",
+    "win_rate_pct",
+}
+
 
 def _load_expected(strategy: str, dataset: str, expected_root: Path) -> dict[str, Any]:
     path = expected_path(strategy, dataset, expected_root)
@@ -37,6 +57,18 @@ def _summary_value(payload: dict[str, Any], key: str) -> float:
     if not isinstance(value, int | float):
         raise ValueError(f"summary.{key} must be numeric")
     return float(value)
+
+
+def _numeric_summary(payload: dict[str, Any]) -> dict[str, float]:
+    summary = payload.get("summary", {})
+    if not isinstance(summary, dict):
+        return {}
+    numeric: dict[str, float] = {}
+    for key, value in summary.items():
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            continue
+        numeric[key] = float(value)
+    return numeric
 
 
 def _trade_signature(payload: dict[str, Any]) -> list[tuple[str, float, float, bool, bool]]:
@@ -112,14 +144,21 @@ def _compare_job(
             "dataset": dataset_symbol,
             "reason": "equity differs",
         }
-    for key in ("final_cash", "final_value"):
-        actual_value = _summary_value(actual, key)
-        expected_value = _summary_value(expected, key)
+    actual_summary = _numeric_summary(actual)
+    expected_summary = _numeric_summary(expected)
+    summary_keys = sorted(
+        set(actual_summary) & set(expected_summary) & COMPARABLE_SUMMARY_KEYS
+    )
+    for key in summary_keys:
+        actual_value = actual_summary[key]
+        expected_value = expected_summary[key]
+        if math.isnan(actual_value) and math.isnan(expected_value):
+            continue
         if not math.isclose(actual_value, expected_value, rel_tol=rtol, abs_tol=rtol):
             return {
                 "strategy": strategy,
                 "dataset": dataset_symbol,
-                "reason": f"{key} differs",
+                "reason": f"summary.{key} differs",
                 "actual": actual_value,
                 "expected": expected_value,
             }

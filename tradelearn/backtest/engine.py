@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import math
-import sys
 from typing import Any
-from tradelearn.utils.console import smart_tqdm as tqdm, smart_print
 
 import numpy as np
 import pandas as pd
@@ -11,6 +9,7 @@ import pandas as pd
 from tradelearn.backtest.models import BarSnapshot, Stats, SummaryDict
 from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
+from tradelearn.utils.console import smart_tqdm as tqdm
 
 
 class _AttrDict(dict):
@@ -259,7 +258,11 @@ def _positions_frame(strategy: Any, fills: pd.DataFrame, index: pd.Index) -> pd.
     return pd.DataFrame(rows, columns=columns)
 
 
-def _resolve_close_series(strategy: Any, frame: pd.DataFrame | None, index: pd.Index) -> np.ndarray | None:
+def _resolve_close_series(
+    strategy: Any,
+    frame: pd.DataFrame | None,
+    index: pd.Index,
+) -> np.ndarray | None:
     """Return per-bar close prices aligned to ``index``, or None if unavailable."""
     if isinstance(frame, pd.DataFrame) and "close" in frame.columns and len(frame) == len(index):
         return frame["close"].to_numpy(dtype=float, copy=False)
@@ -405,15 +408,16 @@ def _return_pct(final_value: float, broker: Any) -> float:
 
 
 def _trade_summary(broker: Any, trades: pd.DataFrame | None = None) -> tuple[float, float]:
+    if trades is not None and not trades.empty and "isclosed" in trades.columns:
+        closed = trades[trades["isclosed"].astype(bool)]
+        total = float(len(closed))
+        pnl = closed["pnlcomm"] if "pnlcomm" in closed.columns else closed["pnl"]
+        wins = float((pnl >= 0).sum()) if total > 0 else 0.0
+        return total, wins
     trade_summary = getattr(broker, "trade_summary", None)
     if callable(trade_summary):
         total, wins = trade_summary()
         return float(total), float(wins)
-    if trades is not None and not trades.empty and "isclosed" in trades.columns:
-        closed = trades[trades["isclosed"].astype(bool)]
-        total = float(len(closed))
-        wins = float((closed["pnl"] > 0).sum()) if total > 0 else 0.0
-        return total, wins
     return 0.0, 0.0
 
 
@@ -534,10 +538,18 @@ def _summary_trade_metrics(trades: pd.DataFrame) -> dict[str, float]:
     }
     if trades is None or trades.empty:
         return empty
-    closed = trades[trades.get("isclosed", pd.Series(dtype=bool)).astype(bool)] if "isclosed" in trades.columns else trades
+    closed = (
+        trades[trades.get("isclosed", pd.Series(dtype=bool)).astype(bool)]
+        if "isclosed" in trades.columns
+        else trades
+    )
     if closed.empty:
         return empty
-    pnl = closed["pnlcomm"] if "pnlcomm" in closed.columns else closed.get("pnl", pd.Series(dtype=float))
+    pnl = (
+        closed["pnlcomm"]
+        if "pnlcomm" in closed.columns
+        else closed.get("pnl", pd.Series(dtype=float))
+    )
     wins = pnl[pnl > 0]
     losses = pnl[pnl < 0]
     gross_profit = float(wins.sum()) if not wins.empty else 0.0
@@ -553,9 +565,11 @@ def _summary_trade_metrics(trades: pd.DataFrame) -> dict[str, float]:
     max_w = max_l = cur_w = cur_l = 0
     for s in signs:
         if s:
-            cur_w += 1; cur_l = 0
+            cur_w += 1
+            cur_l = 0
         else:
-            cur_l += 1; cur_w = 0
+            cur_l += 1
+            cur_w = 0
         max_w = max(max_w, cur_w)
         max_l = max(max_l, cur_l)
     commission = float(closed["commission"].sum()) if "commission" in closed.columns else 0.0
@@ -581,7 +595,12 @@ def _summary_exposure_pct(positions: pd.DataFrame) -> float:
 
 def _summary_drawdown_stats(equity: pd.Series) -> dict[str, Any]:
     if equity is None or equity.empty:
-        return {"max_drawdown": 0.0, "avg_drawdown": 0.0, "max_dd_duration": pd.Timedelta(0), "avg_dd_duration": pd.Timedelta(0)}
+        return {
+            "max_drawdown": 0.0,
+            "avg_drawdown": 0.0,
+            "max_dd_duration": pd.Timedelta(0),
+            "avg_dd_duration": pd.Timedelta(0),
+        }
     cummax = equity.cummax()
     dd = (cummax - equity) / cummax
     dd_mask = dd > 0
@@ -591,42 +610,55 @@ def _summary_drawdown_stats(equity: pd.Series) -> dict[str, Any]:
     for _name, group in dd[dd_mask].groupby(dd_groups):
         if len(group) > 0:
             durations.append(group.index[-1] - group.index[0])
-    
+
     return {
         "max_drawdown": float(dd.max()),
         "avg_drawdown": float(dd[dd_mask].mean()) if dd_mask.any() else 0.0,
         "max_dd_duration": max(durations) if durations else pd.Timedelta(0),
-        "avg_dd_duration": sum(durations, pd.Timedelta(0)) / len(durations) if durations else pd.Timedelta(0),
+        "avg_dd_duration": (
+            sum(durations, pd.Timedelta(0)) / len(durations)
+            if durations
+            else pd.Timedelta(0)
+        ),
     }
 
 
 def _summary_trade_stats(trades: pd.DataFrame, start_cash: float) -> dict[str, Any]:
     empty = {
-        "best_trade_pct": 0.0, "worst_trade_pct": 0.0, "avg_trade_pct": 0.0,
-        "max_trade_duration": pd.Timedelta(0), "avg_trade_duration": pd.Timedelta(0),
-        "sqn": 0.0, "kelly_criterion": 0.0
+        "best_trade_pct": 0.0,
+        "worst_trade_pct": 0.0,
+        "avg_trade_pct": 0.0,
+        "max_trade_duration": pd.Timedelta(0),
+        "avg_trade_duration": pd.Timedelta(0),
+        "sqn": 0.0,
+        "kelly_criterion": 0.0,
     }
     if trades is None or trades.empty:
         return empty
-    closed = trades[trades.get("isclosed", pd.Series(dtype=bool)).astype(bool)] if "isclosed" in trades.columns else trades
+    closed = (
+        trades[trades.get("isclosed", pd.Series(dtype=bool)).astype(bool)]
+        if "isclosed" in trades.columns
+        else trades
+    )
     if closed.empty:
         return empty
-    
+
     pnl_pct = (closed["pnlcomm"] / start_cash * 100.0) if start_cash > 0 else pd.Series(dtype=float)
     durations = closed["dtclose"] - closed["dtopen"]
-    
+
     wins = closed[closed["pnlcomm"] > 0]
     win_rate = len(wins) / len(closed)
     avg_win = wins["pnlcomm"].mean() if not wins.empty else 0.0
-    avg_loss = closed[closed["pnlcomm"] < 0]["pnlcomm"].mean() if not closed[closed["pnlcomm"] < 0].empty else 1e-9
+    losses = closed[closed["pnlcomm"] < 0]
+    avg_loss = losses["pnlcomm"].mean() if not losses.empty else 1e-9
     win_loss_ratio = abs(avg_win / avg_loss) if abs(avg_loss) > 1e-9 else 0.0
-    
+
     # Kelly: W - (1-W)/R
     kelly = win_rate - (1 - win_rate) / win_loss_ratio if win_loss_ratio > 0 else 0.0
-    
+
     # SQN: sqrt(N) * mean / std
     mean_pnl = closed["pnlcomm"].mean()
-    std_pnl = closed["pnlcomm"].std()
+    std_pnl = closed["pnlcomm"].std(ddof=0)
     sqn = (math.sqrt(len(closed)) * mean_pnl / std_pnl) if std_pnl > 1e-9 else 0.0
 
     return {
@@ -651,8 +683,6 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
     if lazy_artifacts:
         final_cash = float(strategy.broker.getcash())
         final_value = float(strategy.broker.getvalue())
-        total_orders = float(len(getattr(strategy.broker, "_orders", ())))
-        total_fills = float(len(getattr(strategy.broker, "_fills", ())))
 
         # Build summary inputs eagerly (cheap: bounded by # of fills),
         # but expose DataFrames lazily through factories.

@@ -509,7 +509,6 @@ def build(
 
     if version != "1.x":
         raise GoldenDataError("Stage 0 only supports --version 1.x")
-    validate_reference()
     manifest = filter_manifest_by_engine(load_manifest(), engine)
     out.mkdir(parents=True, exist_ok=True)
     jobs = planned_jobs(manifest)

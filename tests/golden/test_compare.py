@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from scripts import compare_golden
+
 ROOT = Path(__file__).resolve().parents[2]
 SUBPROCESS_ENV = {**os.environ, "ARROW_NUM_THREADS": "1"}
 
@@ -162,3 +164,86 @@ def test_compare_golden_detects_trade_differences(tmp_path: Path) -> None:
     assert payload["ok"] is False
     assert payload["summary"]["failed"] == 1
     assert payload["failures"][0]["reason"] == "trades differ"
+
+
+def test_compare_golden_ignores_unsupported_summary_metrics(tmp_path: Path) -> None:
+    expected_root = tmp_path / "expected"
+    expected_file = expected_root / "sma_cross__GOOG.json"
+    expected_file.parent.mkdir(parents=True)
+    payload = {
+        "summary": {
+            "final_cash": 100000.0,
+            "final_value": 100001.0,
+            "kelly_criterion": 99.0,
+        },
+        "trades": [],
+        "equity": [{"datetime": "2026-01-01 00:00:00", "value": 100001.0}],
+    }
+    expected_file.write_text(json.dumps(payload), encoding="utf-8")
+
+    actual = {
+        "summary": {
+            "final_cash": 100000.0,
+            "final_value": 100001.0,
+            "kelly_criterion": 0.0,
+        },
+        "trades": [],
+        "equity": [{"datetime": "2026-01-01 00:00:00", "value": 100001.0}],
+    }
+    original_run_expected_job = compare_golden.run_expected_job
+    compare_golden.run_expected_job = lambda *_args, **_kwargs: actual
+    try:
+        failure = compare_golden._compare_job(
+            strategy="sma_cross",
+            dataset={"symbol": "GOOG", "engine": "tv"},
+            datasets_root=tmp_path / "datasets",
+            expected_root=expected_root,
+            rtol=1e-4,
+        )
+    finally:
+        compare_golden.run_expected_job = original_run_expected_job
+
+    assert failure is None
+
+
+def test_compare_golden_detects_supported_summary_metric_differences(tmp_path: Path) -> None:
+    expected_root = tmp_path / "expected"
+    expected_file = expected_root / "sma_cross__GOOG.json"
+    expected_file.parent.mkdir(parents=True)
+    expected_file.write_text(
+        json.dumps(
+                {
+                    "summary": {
+                        "final_cash": 100000.0,
+                        "final_value": 100001.0,
+                        "profit_factor": 0.0,
+                    },
+                "trades": [],
+                "equity": [{"datetime": "2026-01-01 00:00:00", "value": 100001.0}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    actual = {
+        "summary": {"final_cash": 100000.0, "final_value": 100001.0, "profit_factor": 2.0},
+        "trades": [],
+        "equity": [{"datetime": "2026-01-01 00:00:00", "value": 100001.0}],
+    }
+    original_run_expected_job = compare_golden.run_expected_job
+    compare_golden.run_expected_job = lambda *_args, **_kwargs: actual
+    try:
+        failure = compare_golden._compare_job(
+            strategy="sma_cross",
+            dataset={"symbol": "GOOG", "engine": "tv"},
+            datasets_root=tmp_path / "datasets",
+            expected_root=expected_root,
+            rtol=1e-4,
+        )
+    finally:
+        compare_golden.run_expected_job = original_run_expected_job
+
+    assert failure is not None
+    assert failure["reason"] == "summary.profit_factor differs"
+    assert failure["actual"] == 2.0
+    assert failure["expected"] == 0.0

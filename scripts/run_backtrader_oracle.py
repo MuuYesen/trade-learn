@@ -35,6 +35,8 @@ SUPPORTED_BACKTRADER_STRATEGIES = (
 def _clean_json_value(value: Any) -> Any:
     if hasattr(value, "isoformat"):
         return value.isoformat()
+    if isinstance(value, pd.Timedelta):
+        return str(value)
     if isinstance(value, float) and math.isnan(value):
         return None
     if isinstance(value, dict):
@@ -59,6 +61,154 @@ def _load_backtrader() -> Any:
             "run `uv sync --group oracle --extra dev`"
         ) from exc
     return bt
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return result if math.isfinite(result) else 0.0
+
+
+def _metric_value(func: Any, *args: Any, scale: float = 1.0, **kwargs: Any) -> float:
+    try:
+        return _safe_float(func(*args, **kwargs)) * scale
+    except Exception:
+        return 0.0
+
+
+def _closed_trade_rows(trades: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [trade for trade in trades if bool(trade.get("isclosed"))]
+
+
+def _prepare_backtrader_bars(bars: pd.DataFrame) -> pd.DataFrame:
+    """Return a single-symbol DatetimeIndex frame consumable by Backtrader."""
+
+    prepared = bars.copy()
+    if isinstance(prepared.index, pd.MultiIndex):
+        if "timestamp" not in prepared.index.names:
+            raise GoldenDataError(
+                "Backtrader oracle requires a timestamp level in Bars MultiIndex"
+            )
+        symbols = (
+            prepared.index.get_level_values("symbol").unique()
+            if "symbol" in prepared.index.names
+            else []
+        )
+        if len(symbols) > 1:
+            raise GoldenDataError(
+                "Backtrader oracle expects one symbol per parquet, "
+                f"got {len(symbols)} symbols"
+            )
+        prepared = prepared.reset_index("symbol", drop=True)
+    if not isinstance(prepared.index, pd.DatetimeIndex):
+        raise GoldenDataError("Backtrader oracle requires a DatetimeIndex")
+    if prepared.index.tz is not None:
+        prepared.index = prepared.index.tz_convert("UTC").tz_localize(None)
+    return prepared.sort_index()
+
+
+def _nested_value(payload: dict[str, Any], *keys: str) -> Any:
+    current: Any = payload
+    for key in keys:
+        if not isinstance(current, dict) or key not in current:
+            return None
+        current = current[key]
+    return current
+
+
+def _analyzer_results(strategy: Any) -> dict[str, Any]:
+    return {
+        "drawdown": dict(strategy.analyzers.drawdown.get_analysis()),
+        "returns": dict(strategy.analyzers.returns.get_analysis()),
+        "sharpe": dict(strategy.analyzers.sharpe.get_analysis()),
+        "sqn": dict(strategy.analyzers.sqn.get_analysis()),
+        "trades": dict(strategy.analyzers.trades.get_analysis()),
+    }
+
+
+def _trade_analyzer_metrics(
+    trade_analyzer: dict[str, Any],
+    initial_cash: float,
+) -> dict[str, float]:
+    total_closed = _safe_float(_nested_value(trade_analyzer, "total", "closed"))
+    won_total = _safe_float(_nested_value(trade_analyzer, "won", "total"))
+    won_pnl_total = _safe_float(_nested_value(trade_analyzer, "won", "pnl", "total"))
+    lost_pnl_total = _safe_float(_nested_value(trade_analyzer, "lost", "pnl", "total"))
+    net_pnl_total = _safe_float(_nested_value(trade_analyzer, "pnl", "net", "total"))
+    net_pnl_average = _safe_float(_nested_value(trade_analyzer, "pnl", "net", "average"))
+    gross_loss = abs(lost_pnl_total)
+    return {
+        "win_rate_pct": won_total / total_closed * 100.0 if total_closed else 0.0,
+        "profit_factor": won_pnl_total / gross_loss if gross_loss > 1e-12 else 0.0,
+        "expectancy": net_pnl_average,
+        "avg_trade_pct": net_pnl_average / initial_cash * 100.0 if initial_cash else 0.0,
+        "final_realized_pnl": net_pnl_total,
+    }
+
+
+def summarize_backtrader_metrics(
+    *,
+    bars: int,
+    initial_cash: float,
+    final_cash: float,
+    final_value: float,
+    orders: int,
+    fills: int,
+    trades: list[dict[str, Any]],
+    equity: pd.Series,
+    analyzers: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return a summary from Backtrader-native results and analyzers."""
+
+    clean_equity = equity.astype("float64") if not equity.empty else pd.Series(dtype="float64")
+    analyzer_payload = analyzers or {}
+    drawdown = analyzer_payload.get("drawdown", {})
+    returns = analyzer_payload.get("returns", {})
+    sharpe = analyzer_payload.get("sharpe", {})
+    sqn = analyzer_payload.get("sqn", {})
+    trade_analyzer = analyzer_payload.get("trades", {})
+    closed = _closed_trade_rows(trades)
+
+    analyzer_closed_trades = _safe_float(_nested_value(trade_analyzer, "total", "closed"))
+    summary = {
+        "bars": float(bars),
+        "initial_cash": float(initial_cash),
+        "final_cash": float(final_cash),
+        "final_value": float(final_value),
+        "peak_value": float(clean_equity.max()) if not clean_equity.empty else float(final_value),
+        "total_return": (float(final_value) / float(initial_cash) - 1.0)
+        if initial_cash
+        else 0.0,
+        "return_pct": (float(final_value) / float(initial_cash) - 1.0) * 100.0
+        if initial_cash
+        else 0.0,
+        "trades": len(trades),
+        "orders": float(orders),
+        "fills": float(fills),
+        "returns": len(clean_equity.pct_change().fillna(0.0)),
+        "total_trades": float(analyzer_closed_trades or len(closed)),
+        "total_orders": float(fills),
+        "total_fills": float(fills),
+    }
+    summary.update(_trade_analyzer_metrics(trade_analyzer, initial_cash))
+    optional_metrics = {
+        "annual_return": _nested_value(returns, "rnorm100"),
+        "log_return": _nested_value(returns, "rtot"),
+        "max_drawdown": _safe_float(_nested_value(drawdown, "max", "drawdown")) / 100.0,
+        "drawdown": _safe_float(_nested_value(drawdown, "drawdown")) / 100.0,
+        "drawdown_len": _nested_value(drawdown, "len"),
+        "max_drawdown_len": _nested_value(drawdown, "max", "len"),
+        "sharpe": _nested_value(sharpe, "sharperatio"),
+        "sqn": _nested_value(sqn, "sqn"),
+    }
+    for key, value in optional_metrics.items():
+        if value is not None:
+            summary[key] = _safe_float(value)
+    if "sharperatio" in sharpe and "sharpe" not in summary:
+        summary["sharpe"] = None
+    return summary
 
 
 def _values(line: Any, size: int) -> list[float]:
@@ -301,6 +451,7 @@ class GoldenRecorder:
             {
                 "datetime": _utc_datetime(strategy.data.datetime.datetime(0)),
                 "value": float(strategy.broker.getvalue()),
+                "position_size": float(strategy.position.size),
             }
         )
 
@@ -337,10 +488,7 @@ def run_backtrader_oracle(
     bt = _load_backtrader()
     if not parquet.exists():
         raise GoldenDataError(f"missing dataset parquet: {parquet}")
-    bars = pd.read_parquet(parquet)
-    if bars.index.tz is not None:
-        bars = bars.copy()
-        bars.index = bars.index.tz_convert("UTC").tz_localize(None)
+    bars = _prepare_backtrader_bars(pd.read_parquet(parquet))
     recorder = GoldenRecorder()
 
     cerebro = bt.Cerebro(stdstats=False)
@@ -348,26 +496,38 @@ def run_backtrader_oracle(
     feed = bt.feeds.PandasData(dataname=bars)
     cerebro.adddata(feed, name=dataset or parquet.stem)
     cerebro.addstrategy(_attach_hooks(_strategy_class(strategy_name), recorder))
+    cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
+    cerebro.addanalyzer(bt.analyzers.Returns, _name="returns")
+    cerebro.addanalyzer(
+        bt.analyzers.SharpeRatio,
+        _name="sharpe",
+        timeframe=bt.TimeFrame.Days,
+        annualize=True,
+        riskfreerate=0.0,
+        stddev_sample=True,
+    )
+    cerebro.addanalyzer(bt.analyzers.SQN, _name="sqn")
+    cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
     [strategy] = cerebro.run()
 
     final_cash = float(strategy.broker.getcash())
     final_value = float(strategy.broker.getvalue())
-    returns = pd.Series(
+    equity = pd.Series(
         [row["value"] for row in recorder.equity],
         index=[row["datetime"] for row in recorder.equity],
         dtype="float64",
-    ).pct_change().fillna(0.0)
-    summary = {
-        "bars": int(len(bars)),
-        "initial_cash": float(cash),
-        "final_cash": final_cash,
-        "final_value": final_value,
-        "total_return": (final_value / cash) - 1.0 if cash else 0.0,
-        "trades": len(recorder.trades),
-        "orders": len(recorder.orders),
-        "fills": len(recorder.fills),
-        "returns": len(returns),
-    }
+    )
+    summary = summarize_backtrader_metrics(
+        bars=int(len(bars)),
+        initial_cash=float(cash),
+        final_cash=final_cash,
+        final_value=final_value,
+        orders=len(recorder.orders),
+        fills=len(recorder.fills),
+        trades=recorder.trades,
+        equity=equity,
+        analyzers=_analyzer_results(strategy),
+    )
     return {
         "version": "v1.0",
         "strategy": strategy_name,
