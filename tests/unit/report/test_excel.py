@@ -297,28 +297,27 @@ class _FactorAnalyzerStub:
             name="ic",
         )
 
-    def rank_ic(self) -> pd.Series:
+    def factor_information_coefficient(self) -> pd.Series:
         """Return factor rank IC series for Excel tests."""
         return pd.Series(
             [0.15, 0.25],
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
-            name="rank_ic",
+            name="factor_information_coefficient",
         )
 
-    def turnover(self) -> pd.Series:
+    def quantile_turnover(self) -> pd.DataFrame:
         """Return factor turnover series for Excel tests."""
-        return pd.Series(
-            [0.30, 0.40],
+        return pd.DataFrame(
+            {1: [0.20, 0.30], 2: [0.40, 0.50]},
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
-            name="turnover",
         )
 
-    def autocorrelation(self) -> pd.Series:
+    def factor_rank_autocorrelation(self) -> pd.Series:
         """Return factor autocorrelation series for Excel tests."""
         return pd.Series(
             [0.60, 0.70],
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
-            name="autocorrelation",
+            name="factor_rank_autocorrelation",
         )
 
     def quantile_cumulative_returns(self) -> pd.DataFrame:

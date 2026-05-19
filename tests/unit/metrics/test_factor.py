@@ -11,6 +11,7 @@ from tradelearn.metrics.factor import (
     ic,
     ic_ir,
     quantile_returns,
+    quantile_turnover,
     rank_ic,
     turnover,
 )
@@ -122,6 +123,38 @@ def test_autocorrelation_and_turnover_track_rank_changes() -> None:
     pd.testing.assert_series_equal(turns, expected_turnover)
 
 
+def test_quantile_turnover_tracks_new_names_in_selected_quantile() -> None:
+    """quantile_turnover returns the share of names newly entering a quantile."""
+    index = pd.MultiIndex.from_tuples(
+        [
+            ("2024-01-01", "AAA"),
+            ("2024-01-01", "BBB"),
+            ("2024-01-01", "CCC"),
+            ("2024-01-02", "AAA"),
+            ("2024-01-02", "BBB"),
+            ("2024-01-02", "CCC"),
+            ("2024-01-03", "AAA"),
+            ("2024-01-03", "BBB"),
+            ("2024-01-03", "CCC"),
+        ],
+        names=["date", "symbol"],
+    )
+    index = pd.MultiIndex.from_arrays(
+        [pd.to_datetime(index.get_level_values(0)), index.get_level_values(1)],
+        names=index.names,
+    )
+    quantiles = pd.Series([1, 2, 2, 1, 1, 2, 2, 1, 2], index=index)
+
+    result = quantile_turnover(quantiles, quantile=2)
+
+    expected = pd.Series(
+        [0.0, 0.5],
+        index=pd.Index(pd.to_datetime(["2024-01-02", "2024-01-03"]), name="date"),
+        name=2,
+    )
+    pd.testing.assert_series_equal(result, expected)
+
+
 def test_factor_metrics_return_nan_or_raise_for_undefined_inputs() -> None:
     """Factor metrics handle undefined ratios and invalid arguments."""
     constant_ic = pd.Series([0.1, 0.1, 0.1])
@@ -139,6 +172,8 @@ def test_factor_metrics_return_nan_or_raise_for_undefined_inputs() -> None:
         quantile_returns(factor, factor, quantiles=0)
     with pytest.raises(ValueError, match="lag"):
         autocorrelation(factor, lag=0)
+    with pytest.raises(ValueError, match="period"):
+        quantile_turnover(factor, quantile=1, period=0)
     with pytest.raises(ValueError, match="MultiIndex"):
         autocorrelation(pd.Series([1.0, 2.0]))
 

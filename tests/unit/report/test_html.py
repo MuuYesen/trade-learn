@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 from tradelearn import metrics
-from tradelearn.report import ReportSection, Reporter
+from tradelearn.report import Reporter, ReportSection
 
 
 def test_html_template_exists() -> None:
@@ -313,28 +313,27 @@ class _FactorAnalyzerStub:
             name="ic",
         )
 
-    def rank_ic(self) -> pd.Series:
+    def factor_information_coefficient(self) -> pd.Series:
         """Return factor rank IC series for report tests."""
         return pd.Series(
             [0.15, 0.25],
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
-            name="rank_ic",
+            name="factor_information_coefficient",
         )
 
-    def turnover(self) -> pd.Series:
+    def quantile_turnover(self) -> pd.DataFrame:
         """Return factor turnover series for report tests."""
-        return pd.Series(
-            [0.30, 0.40],
+        return pd.DataFrame(
+            {1: [0.20, 0.30], 2: [0.40, 0.50]},
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
-            name="turnover",
         )
 
-    def autocorrelation(self) -> pd.Series:
+    def factor_rank_autocorrelation(self) -> pd.Series:
         """Return factor autocorrelation series for report tests."""
         return pd.Series(
             [0.60, 0.70],
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
-            name="autocorrelation",
+            name="factor_rank_autocorrelation",
         )
 
     def quantile_cumulative_returns(self) -> pd.DataFrame:
@@ -362,13 +361,19 @@ class _FactorAnalyzerStub:
             index=[1, 2],
         )
 
-    def quantile_spread(self) -> pd.Series:
+    def compute_mean_returns_spread(self) -> tuple[pd.Series, pd.Series]:
         """Return factor quantile spread for report tests."""
-        return pd.Series(
+        spread = pd.Series(
             [0.02, 0.03],
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
-            name="quantile_spread",
+            name="mean_returns_spread",
         )
+        error = pd.Series(
+            [0.01, 0.01],
+            index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+            name="mean_returns_spread_std_error",
+        )
+        return spread, error
 
     def quantile_counts(self) -> pd.DataFrame:
         """Return factor quantile counts for report tests."""

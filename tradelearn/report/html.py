@@ -119,9 +119,9 @@ def write_html_report(
             plots["Factor Mean Return by Quantile"] = charts.factor_quantile_returns_bar(
                 factor_analyzer.quantile_stats()
             )
-        if factor_analyzer is not None and hasattr(factor_analyzer, "quantile_spread"):
+        if factor_analyzer is not None and hasattr(factor_analyzer, "compute_mean_returns_spread"):
             plots["Factor Quantile Spread"] = charts.factor_quantile_spread(
-                factor_analyzer.quantile_spread()
+                factor_analyzer.compute_mean_returns_spread()[0]
             )
         if factor_analyzer is not None and hasattr(factor_analyzer, "quantile_counts"):
             plots["Factor Quantile Counts"] = charts.quantile_counts(

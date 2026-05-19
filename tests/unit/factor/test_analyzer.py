@@ -19,15 +19,20 @@ def test_factor_analyzer_delegates_core_metrics() -> None:
     analyzer = FactorAnalyzer(factor, forward_returns=forward, periods=12, quantiles=2)
 
     pd.testing.assert_series_equal(analyzer.ic(), factor_metrics.ic(factor, forward))
-    pd.testing.assert_series_equal(analyzer.rank_ic(), factor_metrics.rank_ic(factor, forward))
+    pd.testing.assert_series_equal(
+        analyzer.factor_information_coefficient(),
+        factor_metrics.rank_ic(factor, forward).rename("factor_information_coefficient"),
+    )
     pd.testing.assert_frame_equal(
-        analyzer.quantile_returns(),
+        analyzer.mean_return_by_quantile(),
         factor_metrics.quantile_returns(factor, forward, quantiles=2),
     )
-    pd.testing.assert_series_equal(analyzer.turnover(), factor_metrics.turnover(factor))
+    turnover = analyzer.quantile_turnover(quantile=2)
+    assert turnover.name == 2
+    assert not turnover.empty
     pd.testing.assert_series_equal(
-        analyzer.autocorrelation(),
-        factor_metrics.autocorrelation(factor),
+        analyzer.factor_rank_autocorrelation(),
+        factor_metrics.autocorrelation(factor).rename("factor_rank_autocorrelation"),
     )
     assert math.isclose(
         analyzer.ic_ir(),
@@ -59,9 +64,10 @@ def test_factor_analyzer_computes_returns_from_prices() -> None:
     analyzer = FactorAnalyzer(factor, prices=prices, quantiles=2)
 
     pd.testing.assert_frame_equal(
-        analyzer.factor_returns(),
+        analyzer.mean_return_by_quantile(),
         factor_metrics.factor_returns(factor, prices, quantiles=2),
     )
+    assert list(analyzer.factor_returns().columns) == ["1D"]
 
 
 def test_factor_analyzer_price_derived_ic_uses_symbol_forward_returns() -> None:
@@ -188,7 +194,11 @@ def test_factor_analyzer_multi_period_summary_prefixes_metrics() -> None:
     summary = FactorAnalyzer.multi_period_summary(clean, periods=(1, 5), quantiles=2)
 
     assert list(summary.index) == [1, 5]
-    assert {"ic_mean", "rank_ic_mean", "quantile_spread_mean"}.issubset(summary.columns)
+    assert {
+        "ic_mean",
+        "factor_information_coefficient_mean",
+        "mean_returns_spread_mean",
+    }.issubset(summary.columns)
 
 
 def test_factor_analyzer_summary_contains_stable_keys() -> None:
@@ -202,17 +212,21 @@ def test_factor_analyzer_summary_contains_stable_keys() -> None:
         "ic_mean",
         "ic_std",
         "ic_ir",
-        "rank_ic_mean",
-        "quantile_spread_mean",
-        "quantile_spread_cumulative_return",
-        "turnover_mean",
-        "autocorrelation_mean",
+        "factor_information_coefficient_mean",
+        "mean_returns_spread_mean",
+        "mean_returns_spread_cumulative_return",
+        "quantile_turnover_mean",
+        "factor_rank_autocorrelation_mean",
     }
     assert math.isclose(summary["ic_mean"], analyzer.ic().mean(), rel_tol=1e-12)
-    assert math.isclose(summary["rank_ic_mean"], analyzer.rank_ic().mean(), rel_tol=1e-12)
     assert math.isclose(
-        summary["quantile_spread_mean"],
-        analyzer.quantile_spread().mean(),
+        summary["factor_information_coefficient_mean"],
+        analyzer.factor_information_coefficient().mean(),
+        rel_tol=1e-12,
+    )
+    assert math.isclose(
+        summary["mean_returns_spread_mean"],
+        analyzer.compute_mean_returns_spread()[0].mean(),
         rel_tol=1e-12,
     )
 
@@ -223,7 +237,7 @@ def test_factor_analyzer_quantile_stats_summarizes_groups() -> None:
     analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
 
     stats = analyzer.quantile_stats()
-    quantile_returns = analyzer.quantile_returns()
+    quantile_returns = analyzer.mean_return_by_quantile()
 
     assert list(stats.columns) == ["mean", "std", "count", "cumulative_return"]
     assert list(stats.index) == [1, 2]
@@ -241,7 +255,7 @@ def test_factor_analyzer_quantile_counts_returns_daily_group_sizes() -> None:
     counts = analyzer.quantile_counts()
 
     assert list(counts.columns) == [1, 2]
-    assert counts.index.equals(analyzer.quantile_returns().index)
+    assert counts.index.equals(analyzer.mean_return_by_quantile().index)
     assert counts.loc[pd.Timestamp("2024-01-01"), 1] == 2
     assert counts.loc[pd.Timestamp("2024-01-01"), 2] == 1
     assert counts.loc[pd.Timestamp("2024-01-02"), 1] == 2
@@ -278,7 +292,7 @@ def test_factor_analyzer_quantile_decay_returns_rolling_group_means() -> None:
     analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
 
     decay = analyzer.quantile_decay(window=2)
-    quantile_returns = analyzer.quantile_returns()
+    quantile_returns = analyzer.mean_return_by_quantile()
 
     pd.testing.assert_frame_equal(decay, quantile_returns.rolling(2, min_periods=1).mean())
 
@@ -289,7 +303,7 @@ def test_factor_analyzer_quantile_cumulative_returns_compounds_group_returns() -
     analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
 
     cumulative = analyzer.quantile_cumulative_returns()
-    expected = (1.0 + analyzer.quantile_returns()).cumprod() - 1.0
+    expected = (1.0 + analyzer.mean_return_by_quantile()).cumprod() - 1.0
 
     pd.testing.assert_frame_equal(cumulative, expected)
 
@@ -299,13 +313,13 @@ def test_factor_analyzer_quantile_spread_returns_top_minus_bottom() -> None:
     factor, forward = _factor_and_forward_returns()
     analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
 
-    spread = analyzer.quantile_spread()
-    quantile_returns = analyzer.quantile_returns()
+    spread = analyzer.compute_mean_returns_spread()[0]
+    quantile_returns = analyzer.mean_return_by_quantile()
     expected = quantile_returns[2] - quantile_returns[1]
-    expected.name = "quantile_spread"
+    expected.name = "mean_returns_spread"
 
     pd.testing.assert_series_equal(spread, expected)
-    assert spread.name == "quantile_spread"
+    assert spread.name == "mean_returns_spread"
 
 
 def test_factor_analyzer_long_short_returns_exposes_sides_and_spread() -> None:
@@ -314,14 +328,14 @@ def test_factor_analyzer_long_short_returns_exposes_sides_and_spread() -> None:
     analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
 
     returns = analyzer.long_short_returns()
-    quantile_returns = analyzer.quantile_returns()
+    quantile_returns = analyzer.mean_return_by_quantile()
 
     assert list(returns.columns) == ["long", "short", "spread"]
     pd.testing.assert_series_equal(returns["long"], quantile_returns[2], check_names=False)
     pd.testing.assert_series_equal(returns["short"], quantile_returns[1], check_names=False)
     pd.testing.assert_series_equal(
         returns["spread"],
-        analyzer.quantile_spread(),
+        analyzer.compute_mean_returns_spread()[0],
         check_names=False,
     )
 
@@ -461,7 +475,7 @@ def test_factor_analyzer_html_writes_file(tmp_path) -> None:
     assert output.stat().st_size > 0
     content = output.read_text()
     assert "<html" in content.lower()
-    assert "Tradelearn Factor Analysis" in content
+    assert "TradeLearn Factor Analysis" in content
     assert "Factor Summary" in content
     assert "Quantile Statistics" in content
     assert "Information Coefficient" in content
@@ -599,6 +613,69 @@ def test_clean_factor_and_forward_returns_builds_alphalens_style_frame() -> None
     assert clean.loc[(pd.Timestamp("2024-01-01"), "BBB"), "group"] == "finance"
 
 
+def test_clean_factor_and_forward_returns_drops_tied_bins_like_alphalens() -> None:
+    factor = _series(
+        [
+            ("2024-01-01", "AAA", 1.0),
+            ("2024-01-01", "BBB", 1.0),
+            ("2024-01-01", "CCC", 1.0),
+            ("2024-01-02", "AAA", 1.0),
+            ("2024-01-02", "BBB", 2.0),
+            ("2024-01-02", "CCC", 3.0),
+        ]
+    )
+    prices = _series(
+        [
+            ("2024-01-01", "AAA", 100.0),
+            ("2024-01-01", "BBB", 100.0),
+            ("2024-01-01", "CCC", 100.0),
+            ("2024-01-02", "AAA", 101.0),
+            ("2024-01-02", "BBB", 102.0),
+            ("2024-01-02", "CCC", 103.0),
+            ("2024-01-03", "AAA", 102.0),
+            ("2024-01-03", "BBB", 104.0),
+            ("2024-01-03", "CCC", 106.0),
+        ]
+    )
+    clean = clean_factor_and_forward_returns(
+        factor.rename("value").to_frame(),
+        factor="value",
+        prices=prices,
+        periods=(1,),
+        quantiles=3,
+    )
+
+    assert len(clean) == 3
+    assert pd.Timestamp("2024-01-01") not in clean.index.get_level_values(0)
+    assert set(clean["factor_quantile"]) == {1, 2, 3}
+
+
+def test_factor_analyzer_from_clean_data_uses_existing_factor_quantiles() -> None:
+    index = pd.MultiIndex.from_tuples(
+        [
+            ("2024-01-01", "AAA"),
+            ("2024-01-01", "BBB"),
+            ("2024-01-01", "CCC"),
+        ],
+        names=["date", "symbol"],
+    )
+    clean = pd.DataFrame(
+        {
+            "factor": [1.0, 1.0, 1.0],
+            "forward_return_1": [0.01, 0.02, 0.03],
+            "factor_quantile": [1, 1, 3],
+        },
+        index=index,
+    )
+
+    analyzer = FactorAnalyzer.from_clean_factor_data(clean, periods=(1,), quantiles=3)[1]
+
+    quantile_returns = analyzer.mean_return_by_quantile()
+    assert quantile_returns.loc["2024-01-01", 1] == 0.015
+    assert quantile_returns.loc["2024-01-01", 3] == 0.03
+    assert 2 not in quantile_returns.columns
+
+
 def test_factor_analyzer_group_ic_and_group_neutral_returns() -> None:
     factor = _series(
         [
@@ -632,7 +709,7 @@ def test_factor_analyzer_group_ic_and_group_neutral_returns() -> None:
     analyzer = FactorAnalyzer(factor, forward_returns=forward, groups=groups, quantiles=2)
 
     by_group = analyzer.ic(by_group=True)
-    neutral = analyzer.quantile_returns(group_neutral=True)
+    neutral = analyzer.mean_return_by_quantile(group_neutral=True)
 
     assert set(by_group.columns) == {"finance", "tech"}
     assert list(neutral.columns) == [1, 2]

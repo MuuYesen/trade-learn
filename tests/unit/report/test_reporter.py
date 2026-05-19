@@ -1,7 +1,7 @@
 """Tests for report facade summary statistics."""
 
-from types import SimpleNamespace
 import logging
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -339,7 +339,7 @@ def test_reporter_factor_rank_ic_uses_factor_analyzer() -> None:
         {"returns": _returns(), "trades": pd.DataFrame(), "analyzers": {"factor": analyzer}}
     )
 
-    pd.testing.assert_series_equal(reporter.factor_rank_ic(), analyzer.rank_ic())
+    pd.testing.assert_series_equal(reporter.factor_rank_ic(), analyzer.factor_information_coefficient())
 
 
 def test_reporter_factor_turnover_uses_factor_analyzer() -> None:
@@ -349,7 +349,10 @@ def test_reporter_factor_turnover_uses_factor_analyzer() -> None:
         {"returns": _returns(), "trades": pd.DataFrame(), "analyzers": {"factor": analyzer}}
     )
 
-    pd.testing.assert_series_equal(reporter.factor_turnover(), analyzer.turnover())
+    pd.testing.assert_series_equal(
+        reporter.factor_turnover(),
+        analyzer.quantile_turnover().mean(axis=1).rename("turnover"),
+    )
 
 
 def test_reporter_factor_autocorrelation_uses_factor_analyzer() -> None:
@@ -361,7 +364,7 @@ def test_reporter_factor_autocorrelation_uses_factor_analyzer() -> None:
 
     pd.testing.assert_series_equal(
         reporter.factor_autocorrelation(),
-        analyzer.autocorrelation(),
+        analyzer.factor_rank_autocorrelation(),
     )
 
 
@@ -378,7 +381,7 @@ def test_reporter_summary_includes_factor_analyzer_metrics() -> None:
     summary = reporter.summary()
 
     assert summary["factor_ic_mean"] == 0.12
-    assert summary["factor_rank_ic_mean"] == 0.23
+    assert summary["factor_factor_information_coefficient_mean"] == 0.23
 
 
 def test_reporter_chart_facade_returns_bokeh_figures() -> None:
@@ -475,28 +478,27 @@ class _FactorAnalyzerStub:
             name="ic",
         )
 
-    def rank_ic(self) -> pd.Series:
+    def factor_information_coefficient(self) -> pd.Series:
         """Return factor rank IC series for reporter tests."""
         return pd.Series(
             [0.15, 0.25],
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
-            name="rank_ic",
+            name="factor_information_coefficient",
         )
 
-    def turnover(self) -> pd.Series:
+    def quantile_turnover(self) -> pd.DataFrame:
         """Return factor turnover series for reporter tests."""
-        return pd.Series(
-            [0.30, 0.40],
+        return pd.DataFrame(
+            {1: [0.20, 0.30], 2: [0.40, 0.50]},
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
-            name="turnover",
         )
 
-    def autocorrelation(self) -> pd.Series:
+    def factor_rank_autocorrelation(self) -> pd.Series:
         """Return factor autocorrelation series for reporter tests."""
         return pd.Series(
             [0.60, 0.70],
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
-            name="autocorrelation",
+            name="factor_rank_autocorrelation",
         )
 
     def quantile_cumulative_returns(self) -> pd.DataFrame:
@@ -519,4 +521,4 @@ class _FactorAnalyzerStub:
 
     def summary(self) -> dict[str, float]:
         """Return scalar factor diagnostics for reporter tests."""
-        return {"ic_mean": 0.12, "rank_ic_mean": 0.23}
+        return {"ic_mean": 0.12, "factor_information_coefficient_mean": 0.23}

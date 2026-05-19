@@ -6,6 +6,7 @@ from tradelearn.metrics.factor import (
     ic,
     ic_ir,
     quantile_returns,
+    quantile_turnover,
     rank_ic,
     turnover,
 )
@@ -66,6 +67,7 @@ __all__ = [
     "max_drawdown",
     "omega",
     "profit_factor",
+    "quantile_turnover",
     "quantile_returns",
     "rank_ic",
     "sharpe",

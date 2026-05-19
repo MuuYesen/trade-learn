@@ -435,6 +435,33 @@ def turnover(
     return result
 
 
+def quantile_turnover(
+    factor_quantile: pd.Series,
+    quantile: int,
+    period: int = 1,
+) -> pd.Series:
+    """Return the share of names newly entering ``quantile`` after ``period`` dates."""
+    if period <= 0:
+        raise ValueError("period must be a positive integer")
+    _validate_multiindex(factor_quantile)
+    selected = factor_quantile[factor_quantile == quantile]
+    name_sets = selected.groupby(level=0).apply(
+        lambda values: set(values.index.get_level_values(1))
+    )
+    shifted = name_sets.shift(periods=period)
+    new_names = name_sets.combine(
+        shifted,
+        lambda current, previous: np.nan
+        if not isinstance(previous, set)
+        else current - previous,
+    ).dropna()
+
+    result = new_names.apply(len) / name_sets.loc[new_names.index].apply(len)
+    result.index.name = _date_level_name(factor_quantile)
+    result.name = quantile
+    return result
+
+
 def autocorrelation(
     factor: pd.Series,
     lag: int = 1,
@@ -543,11 +570,16 @@ def _factor_quantiles(factor: pd.Series, quantiles: int) -> pd.Series:
     """Return date-level factor quantiles."""
 
     def _assign(frame: pd.Series) -> pd.Series:
-        labels = pd.qcut(
-            frame.rank(method="first"),
-            q=min(quantiles, len(frame)),
-            labels=False,
-        )
+        try:
+            labels = pd.qcut(
+                frame,
+                q=quantiles,
+                labels=False,
+            )
+        except ValueError as exc:
+            if "Bin edges must be unique" not in str(exc):
+                raise
+            return pd.Series(index=frame.index, dtype="float64")
         return labels.astype(float) + 1
 
     result = factor.groupby(level=0, group_keys=False).apply(_assign)

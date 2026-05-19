@@ -8,6 +8,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+
 import tradelearn.metrics as metrics
 from tradelearn.core import get_logger
 from tradelearn.report import charts
@@ -223,9 +224,9 @@ class Reporter:
     def factor_quantile_spread(self) -> pd.Series:
         """Return factor top-minus-bottom quantile spread from analyzers."""
         factor_analyzer = self._factor_analyzer()
-        if factor_analyzer is None or not hasattr(factor_analyzer, "quantile_spread"):
+        if factor_analyzer is None or not hasattr(factor_analyzer, "compute_mean_returns_spread"):
             return pd.Series(dtype="float64", name="quantile_spread")
-        return pd.Series(factor_analyzer.quantile_spread()).copy()
+        return pd.Series(factor_analyzer.compute_mean_returns_spread()[0]).copy()
 
     def factor_quantile_counts(self) -> pd.DataFrame:
         """Return factor quantile membership counts from analyzers."""
@@ -258,23 +259,26 @@ class Reporter:
     def factor_rank_ic(self) -> pd.Series:
         """Return factor rank information coefficient series from analyzers."""
         factor_analyzer = self._factor_analyzer()
-        if factor_analyzer is None or not hasattr(factor_analyzer, "rank_ic"):
+        if factor_analyzer is None or not hasattr(factor_analyzer, "factor_information_coefficient"):
             return pd.Series(dtype="float64", name="rank_ic")
-        return pd.Series(factor_analyzer.rank_ic()).copy()
+        return pd.Series(factor_analyzer.factor_information_coefficient()).copy()
 
     def factor_turnover(self) -> pd.Series:
         """Return factor turnover series from analyzers."""
         factor_analyzer = self._factor_analyzer()
-        if factor_analyzer is None or not hasattr(factor_analyzer, "turnover"):
+        if factor_analyzer is None or not hasattr(factor_analyzer, "quantile_turnover"):
             return pd.Series(dtype="float64", name="turnover")
-        return pd.Series(factor_analyzer.turnover()).copy()
+        turnover = factor_analyzer.quantile_turnover()
+        if isinstance(turnover, pd.DataFrame):
+            return turnover.mean(axis=1).rename("turnover")
+        return pd.Series(turnover).copy()
 
     def factor_autocorrelation(self) -> pd.Series:
         """Return factor autocorrelation series from analyzers."""
         factor_analyzer = self._factor_analyzer()
-        if factor_analyzer is None or not hasattr(factor_analyzer, "autocorrelation"):
+        if factor_analyzer is None or not hasattr(factor_analyzer, "factor_rank_autocorrelation"):
             return pd.Series(dtype="float64", name="autocorrelation")
-        return pd.Series(factor_analyzer.autocorrelation()).copy()
+        return pd.Series(factor_analyzer.factor_rank_autocorrelation()).copy()
 
     def factor_events_distribution(self) -> pd.DataFrame:
         """Return factor event rows from analyzers."""

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from dataclasses import dataclass
+from datetime import datetime
 from html import escape
 from pathlib import Path
 
@@ -21,12 +21,13 @@ class FactorAnalyzer:
     forward_returns: pd.Series | None = None
     prices: pd.Series | None = None
     groups: pd.Series | None = None
+    factor_quantiles: pd.Series | None = None
     periods: int = 252
     quantiles: int = 5
 
     def __post_init__(self) -> None:
         """Promote single-index data to MultiIndex to support single-asset analysis."""
-        for attr in ("factor", "forward_returns", "prices", "groups"):
+        for attr in ("factor", "forward_returns", "prices", "groups", "factor_quantiles"):
             val = getattr(self, attr)
             if val is not None and not isinstance(val.index, pd.MultiIndex):
                 # Add a dummy level to trick multi-index validation
@@ -70,6 +71,11 @@ class FactorAnalyzer:
             if "group" in clean
             else None
         )
+        factor_quantiles = (
+            pd.Series(clean["factor_quantile"], index=clean.index, name="factor_quantile")
+            if "factor_quantile" in clean
+            else None
+        )
         analyzers = {
             period: cls(
                 factor=factor,
@@ -79,6 +85,7 @@ class FactorAnalyzer:
                     name="forward_returns",
                 ),
                 groups=groups,
+                factor_quantiles=factor_quantiles,
                 periods=annualization_periods,
                 quantiles=quantiles,
             )
@@ -126,7 +133,10 @@ class FactorAnalyzer:
             by_group=by_group,
         )
 
-    def rank_ic(self, by_group: bool = False) -> pd.Series | pd.DataFrame:
+    def factor_information_coefficient(
+        self,
+        by_group: bool = False,
+    ) -> pd.Series | pd.DataFrame:
         """Return per-date Spearman rank information coefficient."""
         # Fallback for single-asset: Use rolling rank correlation
         if self.factor.index.get_level_values(1).nunique() <= 1:
@@ -138,22 +148,42 @@ class FactorAnalyzer:
                 .dropna()
             )
             res.index = res.index.get_level_values(0)
-            res.name = "rank_ic"
+            res.name = "factor_information_coefficient"
             return res
             
-        return factor_metrics.rank_ic(
+        result = factor_metrics.rank_ic(
             self.factor,
             self._forward_returns(),
             groupby=self.groups,
             by_group=by_group,
         )
+        if isinstance(result, pd.Series):
+            result = result.rename("factor_information_coefficient")
+        return result
 
     def ic_ir(self) -> float:
         """Return annualized IC information ratio."""
         return factor_metrics.ic_ir(self.ic(), periods=self.periods)
 
-    def quantile_returns(self, group_neutral: bool = False) -> pd.DataFrame:
+    def mean_information_coefficient(self, by_time: str | None = None) -> pd.Series | pd.DataFrame:
+        """Return mean Spearman IC, optionally grouped by time rule."""
+        values = self.factor_information_coefficient()
+        frame = values.to_frame("1D")
+        if by_time is None:
+            return frame.mean()
+        return frame.groupby(pd.Grouper(freq=by_time)).mean()
+
+    def mean_return_by_quantile(self, group_neutral: bool = False) -> pd.DataFrame:
         """Return mean forward returns by factor quantile."""
+        if self.factor_quantiles is not None and not group_neutral:
+            aligned, quantiles = self._aligned_quantiles()
+            grouped = aligned["returns"].groupby(
+                [aligned.index.get_level_values(0), quantiles]
+            ).mean()
+            result = grouped.unstack().sort_index(axis=1)
+            result.index.name = self.factor.index.names[0]
+            result.columns.name = None
+            return result
         return factor_metrics.quantile_returns(
             self.factor,
             self._forward_returns(),
@@ -162,9 +192,18 @@ class FactorAnalyzer:
             group_neutral=group_neutral,
         )
 
+    def mean_return_by_quantile_std_error(self) -> pd.DataFrame:
+        """Return standard error of forward returns by date and factor quantile."""
+        aligned, quantiles = self._aligned_quantiles()
+        grouped = aligned["returns"].groupby([aligned.index.get_level_values(0), quantiles])
+        result = (grouped.std(ddof=1) / grouped.count() ** 0.5).unstack().sort_index(axis=1)
+        result.index.name = self.factor.index.names[0]
+        result.columns.name = None
+        return result
+
     def quantile_stats(self) -> pd.DataFrame:
         """Return summary statistics by factor quantile."""
-        returns = self.quantile_returns()
+        returns = self.mean_return_by_quantile()
         result = pd.DataFrame(
             {
                 "mean": returns.mean(),
@@ -202,31 +241,37 @@ class FactorAnalyzer:
         """Return rolling mean returns by factor quantile."""
         if window <= 0:
             raise ValueError("window must be a positive integer")
-        return self.quantile_returns().rolling(window, min_periods=1).mean()
+        return self.mean_return_by_quantile().rolling(window, min_periods=1).mean()
 
     def quantile_cumulative_returns(self) -> pd.DataFrame:
         """Return compounded returns by factor quantile."""
-        return (1.0 + self.quantile_returns()).cumprod() - 1.0
+        return (1.0 + self.mean_return_by_quantile()).cumprod() - 1.0
 
-    def quantile_spread(self, reverse: bool = False) -> pd.Series:
-        """Return top-minus-bottom factor quantile returns."""
-        returns = self.quantile_returns()
+    def compute_mean_returns_spread(
+        self,
+        reverse: bool = False,
+    ) -> tuple[pd.Series, pd.Series]:
+        """Return top-minus-bottom quantile spread and joint standard error."""
+        returns = self.mean_return_by_quantile()
+        std_error = self.mean_return_by_quantile_std_error()
         bottom = returns.columns.min()
         top = returns.columns.max()
         spread = returns[bottom] - returns[top] if reverse else returns[top] - returns[bottom]
-        spread.name = "quantile_spread"
-        return spread
+        spread.name = "mean_returns_spread"
+        joint = (std_error[top] ** 2 + std_error[bottom] ** 2) ** 0.5
+        joint.name = "mean_returns_spread_std_error"
+        return spread, joint
 
     def long_short_returns(self) -> pd.DataFrame:
         """Return long, short, and spread factor returns."""
-        returns = self.quantile_returns()
+        returns = self.mean_return_by_quantile()
         bottom = returns.columns.min()
         top = returns.columns.max()
         return pd.DataFrame(
             {
                 "long": returns[top],
                 "short": returns[bottom],
-                "spread": self.quantile_spread(),
+                "spread": self.compute_mean_returns_spread()[0],
             }
         )
 
@@ -234,15 +279,67 @@ class FactorAnalyzer:
         """Return compounded long, short, and spread factor returns."""
         return (1.0 + self.long_short_returns()).cumprod() - 1.0
 
-    def factor_returns(self) -> pd.DataFrame:
-        """Return quantile returns derived from configured prices."""
-        if self.prices is None:
-            return self.quantile_returns()
-        return factor_metrics.factor_returns(
-            self.factor,
-            self.prices,
-            quantiles=self.quantiles,
+    def factor_returns(
+        self,
+        demeaned: bool = True,
+        equal_weight: bool = False,
+    ) -> pd.DataFrame:
+        """Return Alphalens-style factor-weighted returns."""
+        aligned = pd.concat(
+            {"factor": self.factor, "returns": self._forward_returns()},
+            axis=1,
+        ).dropna()
+        weights = _factor_weights(
+            aligned["factor"],
+            demeaned=demeaned,
+            equal_weight=equal_weight,
         )
+        result = aligned["returns"].mul(weights).groupby(level=0).sum(min_count=1).to_frame("1D")
+        result.index.name = self.factor.index.names[0]
+        return result
+
+    def factor_cumulative_returns(
+        self,
+        demeaned: bool = True,
+        equal_weight: bool = False,
+    ) -> pd.Series:
+        """Return compounded Alphalens-style factor returns with starting value 1."""
+        returns = self.factor_returns(demeaned=demeaned, equal_weight=equal_weight)["1D"]
+        result = (1.0 + returns).cumprod()
+        result.name = "factor_cumulative_returns"
+        return result
+
+
+    def average_cumulative_return_by_quantile(
+        self,
+        returns: pd.DataFrame,
+        periods_before: int = 10,
+        periods_after: int = 15,
+        demeaned: bool = True,
+    ) -> pd.DataFrame:
+        """Return average event-window cumulative returns by factor quantile."""
+        _, quantiles = self._aligned_quantiles()
+        demean_by = quantiles if demeaned else None
+
+        def _average_cumulative(q_factor: pd.Series) -> pd.DataFrame:
+            q_returns = _common_start_returns(
+                q_factor,
+                returns,
+                periods_before,
+                periods_after,
+                cumulative=True,
+                mean_by_date=True,
+                demean_by=demean_by,
+            )
+            q_returns = q_returns.replace([float("inf"), float("-inf")], pd.NA)
+            return pd.DataFrame(
+                {
+                    "mean": q_returns.mean(skipna=True, axis=1),
+                    "std": q_returns.std(skipna=True, axis=1),
+                }
+            ).T
+
+        return quantiles.groupby(quantiles).apply(_average_cumulative)
 
     def monthly_ic_heatmap(self, by_group: bool = False) -> pd.DataFrame:
         """Return mean IC by year and month."""
@@ -258,13 +355,34 @@ class FactorAnalyzer:
         """Return average event-window returns around ``(date, symbol)`` events."""
         return factor_metrics.event_returns(prices, events, before=before, after=after)
 
-    def turnover(self) -> pd.Series:
-        """Return factor rank turnover."""
-        return factor_metrics.turnover(self.factor)
+    def quantile_turnover(
+        self,
+        quantile: int | None = None,
+        period: int = 1,
+    ) -> pd.Series | pd.DataFrame:
+        """Return Alphalens-style turnover for one factor quantile or all quantiles."""
+        _, quantiles = self._aligned_quantiles()
+        if quantile is not None:
+            return factor_metrics.quantile_turnover(
+                quantiles,
+                quantile=quantile,
+                period=period,
+            )
+        labels = sorted(int(label) for label in pd.unique(quantiles.dropna()))
+        return pd.DataFrame(
+            {
+                label: factor_metrics.quantile_turnover(
+                    quantiles,
+                    quantile=label,
+                    period=period,
+                )
+                for label in labels
+            }
+        )
 
-    def autocorrelation(self) -> pd.Series:
+    def factor_rank_autocorrelation(self) -> pd.Series:
         """Return factor rank autocorrelation."""
-        return factor_metrics.autocorrelation(self.factor)
+        return factor_metrics.autocorrelation(self.factor).rename("factor_rank_autocorrelation")
 
     def events_distribution(self) -> pd.DataFrame:
         """Return factor observation events for event-count distribution charts."""
@@ -283,21 +401,21 @@ class FactorAnalyzer:
     def summary(self) -> dict[str, float]:
         """Return scalar factor diagnostics."""
         ic_values = self.ic()
-        rank_ic_values = self.rank_ic()
-        turnover_values = self.turnover()
-        autocorrelation_values = self.autocorrelation()
-        quantile_spread_values = self.quantile_spread()
+        information_coefficient_values = self.factor_information_coefficient()
+        autocorrelation_values = self.factor_rank_autocorrelation()
+        mean_returns_spread_values = self.compute_mean_returns_spread()[0]
+        quantile_turnover_values = self.quantile_turnover()
         return {
             "ic_mean": float(ic_values.mean()),
             "ic_std": float(ic_values.std(ddof=1)),
             "ic_ir": self.ic_ir(),
-            "rank_ic_mean": float(rank_ic_values.mean()),
-            "quantile_spread_mean": float(quantile_spread_values.mean()),
-            "quantile_spread_cumulative_return": float(
-                (1.0 + quantile_spread_values).prod() - 1.0
+            "factor_information_coefficient_mean": float(information_coefficient_values.mean()),
+            "mean_returns_spread_mean": float(mean_returns_spread_values.mean()),
+            "mean_returns_spread_cumulative_return": float(
+                (1.0 + mean_returns_spread_values).prod() - 1.0
             ),
-            "turnover_mean": float(turnover_values.mean()),
-            "autocorrelation_mean": float(autocorrelation_values.mean()),
+            "quantile_turnover_mean": float(quantile_turnover_values.mean().mean()),
+            "factor_rank_autocorrelation_mean": float(autocorrelation_values.mean()),
         }
 
     def monotonicity(self) -> dict[str, float]:
@@ -307,7 +425,7 @@ class FactorAnalyzer:
         Returns Spearman rank correlation between quantile rank and mean return,
         and a boolean flag indicating perfect monotonicity.
         """
-        qr = self.quantile_returns()
+        qr = self.mean_return_by_quantile()
         means = qr.mean()
         n = len(means)
         if n < 2:
@@ -334,7 +452,7 @@ class FactorAnalyzer:
         qr = self.quantile_cumulative_returns()
         if not qr.empty:
             items.append(charts.quantile_returns(qr))
-        spread = self.quantile_spread()
+        spread = self.compute_mean_returns_spread()[0]
         if not spread.empty:
             items.append(charts.factor_quantile_spread(spread))
         ls = self.long_short_cumulative_returns()
@@ -345,7 +463,7 @@ class FactorAnalyzer:
             items.append(charts.factor_ic(ic_series))
             items.append(charts.factor_ic_histogram(ic_series))
             items.append(charts.factor_ic_qq(ic_series))
-        ric_series = self.rank_ic()
+        ric_series = self.factor_information_coefficient()
         if not ric_series.empty:
             items.append(charts.factor_rank_ic(ric_series))
         monthly_ic = self.monthly_ic_heatmap()
@@ -357,10 +475,11 @@ class FactorAnalyzer:
         events = self.events_distribution()
         if not events.empty:
             items.append(charts.factor_events_distribution(events))
-        t = self.turnover()
-        ac = self.autocorrelation()
+        t = self.quantile_turnover()
+        ac = self.factor_rank_autocorrelation()
         if not t.empty or not ac.empty:
-            items.append(charts.factor_turnover(t, ac))
+            turnover_series = t.mean(axis=1).rename("turnover") if isinstance(t, pd.DataFrame) else t
+            items.append(charts.factor_turnover(turnover_series, ac))
         return bk_column(*items, sizing_mode="stretch_width") if items else None
 
     def html(self, path: str) -> Path:
@@ -418,10 +537,13 @@ class FactorAnalyzer:
         """Return aligned factor/return rows and per-date quantile labels."""
         if self.quantiles <= 0:
             raise ValueError("quantiles must be a positive integer")
-        aligned = pd.concat(
-            {"factor": self.factor, "returns": self._forward_returns()},
-            axis=1,
-        ).dropna()
+        inputs = {"factor": self.factor, "returns": self._forward_returns()}
+        if self.factor_quantiles is not None:
+            inputs["factor_quantile"] = self.factor_quantiles
+        aligned = pd.concat(inputs, axis=1).dropna()
+        if "factor_quantile" in aligned:
+            quantiles = aligned["factor_quantile"].astype(int)
+            return aligned[["factor", "returns"]], quantiles
 
         def _assign_quantiles(frame: pd.Series) -> pd.Series:
             labels = pd.qcut(
@@ -479,20 +601,29 @@ class MultiPeriodFactorAnalyzer:
             }
         )
 
-    def rank_ic(self, by_group: bool = False) -> pd.Series | pd.DataFrame:
-        """Return rank IC series for every prediction horizon."""
+    def factor_information_coefficient(
+        self,
+        by_group: bool = False,
+    ) -> pd.Series | pd.DataFrame:
+        """Return factor information coefficient for every prediction horizon."""
         return _period_metric_frame(
             {
-                period: analyzer.rank_ic(by_group=by_group)
+                period: analyzer.factor_information_coefficient(by_group=by_group)
                 for period, analyzer in self.analyzers.items()
             }
         )
 
-    def quantile_returns(self, period: int | None = None) -> pd.DataFrame | dict[int, pd.DataFrame]:
-        """Return quantile returns for one or all prediction horizons."""
+    def mean_return_by_quantile(
+        self,
+        period: int | None = None,
+    ) -> pd.DataFrame | dict[int, pd.DataFrame]:
+        """Return mean returns by quantile for one or all prediction horizons."""
         if period is not None:
-            return self.analyzers[period].quantile_returns()
-        return {key: analyzer.quantile_returns() for key, analyzer in self.analyzers.items()}
+            return self.analyzers[period].mean_return_by_quantile()
+        return {
+            key: analyzer.mean_return_by_quantile()
+            for key, analyzer in self.analyzers.items()
+        }
 
     def plot(self, period: int | None = None):
         """Return factor diagnostic charts for a selected prediction horizon."""
@@ -613,11 +744,11 @@ class MultiFactorAnalyzer:
         result.columns.names = ["factor", "period"]
         return result
 
-    def rank_ic(self, by_group: bool = False) -> pd.DataFrame:
-        """Return rank IC series with ``(factor, period)`` columns."""
+    def factor_information_coefficient(self, by_group: bool = False) -> pd.DataFrame:
+        """Return factor information coefficient with ``(factor, period)`` columns."""
         result = pd.concat(
             {
-                factor: analyzer.rank_ic(by_group=by_group)
+                factor: analyzer.factor_information_coefficient(by_group=by_group)
                 for factor, analyzer in self.analyzers.items()
             },
             axis=1,
@@ -921,3 +1052,76 @@ def _period_metric_frame(
     result = pd.concat(frames, axis=1)
     result.columns.name = "period"
     return result
+
+
+def _factor_weights(
+    factor: pd.Series,
+    *,
+    demeaned: bool = True,
+    equal_weight: bool = False,
+) -> pd.Series:
+    """Return Alphalens-style per-date factor portfolio weights."""
+
+    def _to_weights(group: pd.Series) -> pd.Series:
+        values = group.copy()
+        if equal_weight:
+            if demeaned:
+                values = values - values.median()
+            values[values < 0] = -1.0
+            values[values > 0] = 1.0
+            if demeaned:
+                negative = values < 0
+                positive = values > 0
+                if negative.any():
+                    values[negative] /= negative.sum()
+                if positive.any():
+                    values[positive] /= positive.sum()
+        elif demeaned:
+            values = values - values.mean()
+        return values / values.abs().sum()
+
+    return factor.groupby(level=0, group_keys=False).apply(_to_weights)
+
+
+def _common_start_returns(
+    factor: pd.Series,
+    returns: pd.DataFrame,
+    before: int,
+    after: int,
+    *,
+    cumulative: bool = False,
+    mean_by_date: bool = False,
+    demean_by: pd.Series | None = None,
+) -> pd.DataFrame:
+    """Return event-window returns aligned to a common integer offset index."""
+    if not cumulative:
+        returns = (1.0 + returns).cumprod()
+
+    windows = []
+    for timestamp, frame in factor.groupby(level=0):
+        symbols = frame.index.get_level_values(1)
+        try:
+            day_zero = returns.index.get_loc(timestamp)
+        except KeyError:
+            continue
+        start = max(day_zero - before, 0)
+        end = min(day_zero + after + 1, len(returns.index))
+        selected_symbols = set(symbols)
+        demean_symbols = None
+        if demean_by is not None:
+            demean_index = demean_by.loc[timestamp].index
+            demean_symbols = (
+                demean_index.get_level_values(1)
+                if isinstance(demean_index, pd.MultiIndex)
+                else demean_index
+            )
+            selected_symbols |= set(demean_symbols)
+        series = returns.loc[returns.index[start:end], list(selected_symbols)]
+        series.index = range(start - day_zero, end - day_zero)
+        if demean_symbols is not None:
+            mean = series.loc[:, demean_symbols].mean(axis=1)
+            series = series.loc[:, symbols].sub(mean, axis=0)
+        if mean_by_date:
+            series = series.mean(axis=1)
+        windows.append(series)
+    return pd.concat(windows, axis=1)
