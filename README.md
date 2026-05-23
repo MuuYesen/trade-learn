@@ -18,7 +18,7 @@
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
   <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
   <img src="https://img.shields.io/badge/Changelog-v0.2.4-blue?style=flat-square" alt="Changelog">
-  <a href="https://discord.gg/sA3UVEqn"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 **trade-learn** 旨在解决量化投研中「研究（Learn）」与「回测（Trade）」长期脱节的问题。它采用「Python 表达策略逻辑 + Rust 原生回测内核」的混合架构，在与 Backtrader **100% 严格语义对齐** 的前提下，实现多资产回测 **110x+ 的性能提升**，将大规模策略验证从小时级压缩至秒级，为指数增强与机器学习策略提供真正可迭代的研究效率。
