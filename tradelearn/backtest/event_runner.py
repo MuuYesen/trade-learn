@@ -27,6 +27,7 @@ class _BufferDataFeed:
 
     def __init__(self, buffer: RollingBarBuffer) -> None:
         self._buffer = buffer
+        self._name = "data0"
         self.datetime = LineSeries(
             buffer.arrays["datetime"],
             is_datetime=True,
@@ -68,6 +69,7 @@ class EventRunner:
         stream_bar = _coerce_stream_bar(bar)
         self.buffer.append(stream_bar)
         cursor = self.buffer.cursor
+        self.data._name = stream_bar.symbol
         self.data._advance(cursor)
         events = self.poll_broker_events()
         self.strategy._pre_next(cursor)

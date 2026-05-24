@@ -282,6 +282,14 @@ class Cerebro:
 
     def run(self, **kwargs: Any) -> list[Strategy]:
         self._apply_run_kwargs(kwargs)
+        has_live_data = any(bool(getattr(data, "is_live", False)) for data in self.datas)
+        if self.mode == "backtest" and has_live_data:
+            self.mode = "live"
+            if "live_poller" not in self.kwargs:
+                self.kwargs["live_poller"] = self._live_data_poller
+            broker_connect = getattr(self.broker, "connect", None)
+            if callable(broker_connect) and not self.broker.is_connected():
+                broker_connect()
         if self.mode != "backtest":
             return self._run_event_mode()
         specs = list(self.strats)
@@ -339,7 +347,8 @@ class Cerebro:
         if results:
             summary = getattr(getattr(results[-1], "stats", None), "summary", {}) or {}
             LOGGER.info(
-                "Cerebro run finished strategies=%s final_value=%s return_pct=%s total_trades=%s total_fills=%s",
+                "Cerebro run finished strategies=%s final_value=%s return_pct=%s "
+                "total_trades=%s total_fills=%s",
                 len(results),
                 summary.get("final_value", "n/a"),
                 summary.get("return_pct", "n/a"),
@@ -361,6 +370,14 @@ class Cerebro:
             self.set_coc(bool(kwargs["cheat_on_close"]))
         if "trade_on_close" in kwargs:
             self.set_coc(bool(kwargs["trade_on_close"]))
+
+    def _live_data_poller(self):
+        bars = []
+        for data in self.datas:
+            poll = getattr(data, "poll", None)
+            if callable(poll):
+                bars.extend(list(poll()))
+        return bars
 
     def _format_run_results(self, results: list[Strategy]) -> list[Any]:
         if not self._dooptimize:

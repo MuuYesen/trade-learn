@@ -176,6 +176,8 @@ tests/data/
 tests/res/
 
 tradelearn/trader/extension/
+tradelearn/live/
+tests/unit/live/
 
 # trade-learn 2.0 local artifacts
 .worktrees/
