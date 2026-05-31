@@ -77,7 +77,10 @@ Most quantitative research stops at **Correlation**, which often leads to factor
 *   **Index Enhancement & Portfolio Managers**: Simulate rebalancing for 1000+ assets in seconds using the Rust Panel Runner.
 *   **ML & Factor Researchers**: A one-stop automated loop from feature engineering and **Causal Discovery** to MLflow-tracked model training and backtesting.
 *   **Backtrader Power Users**: Modernize your reporting and speed up your research while retaining the mature event-driven semantics you trust.
-*   **Cross-Market Teams**: Maintain consistent indicator standards and reporting systems across A-shares (TDX) and International markets (TradingView).
+*   **Cross-Market & Multi-Strategy Teams**:
+    *   **Cross-market consistency**: Cover A-shares (TDX) and global markets (TradingView) with consistent indicator standards and reporting.
+    *   **Unified strategy operations**: Manage rule-based and model-based strategies in one stack, avoiding fragmented research and maintenance workflows.
+*   **Causal Inference Explorers**: Bring causal graph methods into factor selection to remove pseudo-correlations and build more explainable, robust quantitative systems.
 
 ## Installation
 
@@ -140,6 +143,9 @@ bt.plot()
 bt.report("report.html")
 ```
 
+> [!TIP]
+> **Multi-asset logic:** In multi-asset backtests, the strategy binds to `self.data` by default (the primary data feed). The example above therefore makes decisions from the first asset even if multiple assets are provided. To trade multiple assets independently, iterate over `self.datas` in `init` and create indicators for each feed.
+
 **Engine — Backtrader Style** (Ideal for complex portfolios and future paper/live modes):
 
 ```python
@@ -175,61 +181,191 @@ cerebro.plot()
 cerebro.report("report.html")
 ```
 
+> [!TIP]
+> **Multi-asset logic:** In multi-asset backtests, the strategy binds to `self.data` by default (the primary data feed). The example above therefore makes decisions from the first asset even if multiple assets are provided. To trade multiple assets independently, iterate over `self.datas` in `init` and create indicators for each feed.
+
+## Research Pipeline Example
+
+The README keeps the shortest readable version. Full scripts are available at [`examples/research/index_enhance_lite_pipeline.py`](./examples/research/index_enhance_lite_pipeline.py) and [`examples/research/index_enhance_engine_pipeline.py`](./examples/research/index_enhance_engine_pipeline.py).
+
+**1. Research: build features from raw bars and split train/test data**
+
+```python
+import tradelearn.research as research
+import tradelearn.research.preprocess as pp
+
+feature_set = research.FeatureSet(
+    {
+        "alpha": lambda p: p.close.pct_change(20)
+        / p.close.pct_change().rolling(20).std(),
+        "size": lambda p: p.close,
+    },
+    target={"label": lambda p: p.close.shift(-20) / p.close - 1.0},
+)
+
+features = feature_set.fit_transform(bars, include_target=True).dropna()
+train, test = research.time_split(features, split="2023-09-01", level="timestamp")
+```
+
+**2. Pipeline: preprocess, score with a model, and generate weights**
+
+```python
+from sklearn.ensemble import GradientBoostingRegressor
+import tradelearn.research.portfolio as pf
+
+pipe = research.Pipeline(
+    [
+        pp.Winsorizer(columns=["alpha"], limits=(0.05, 0.95)),
+        pp.Neutralizer(columns=["alpha"], exposures=["size"]),
+        pp.StandardScaler(columns=["alpha"]),
+    ]
+)
+train = pipe.fit_transform(train)
+test = pipe.transform(test)
+
+model = GradientBoostingRegressor(random_state=7)
+model.fit(train[["alpha"]], train["label"])
+scores = research.ModelScorer(model, features=("alpha",), current=False).predict(test)
+
+weights = pf.Allocator(
+    select=pf.TopK(k=2),
+    weight=pf.EqualWeight(gross=0.95),
+    constrain=pf.Constraints(max_weight=0.5, normalize=True),
+).build(scores)
+```
+
+**3. Portfolio: hand target weights to Lite / Engine for execution**
+
+```python
+class LitePortfolio(tl.Strategy):
+    def next(self):
+        if len(self.data) % 20 == 0:
+            self.target_weights(self.research_result.weights[0], close_missing=True)
+
+
+test_bars = research.split_bars(bars, split="2023-09-01")
+stats = tl.Backtest(test_bars, LitePortfolio, cash=100_000).run(
+    research_result=research_result
+)
+```
+
+**4. Live-style: infer only from the currently visible window inside the strategy**
+
+Offline research pipelines are useful for training and review. For semantics closer to live trading, pass the model and allocator into strategy parameters and use `history_panel()` inside `next()` so the strategy only reads data that has already happened.
+
+```python
+class LiveStylePortfolio(tl.Strategy):
+    lookback = 20
+
+    def init(self):
+        self.start_on_bar(self.lookback)
+
+    def next(self):
+        if len(self.data) % 20 != 0:
+            return
+
+        panel = self.history_panel(self.lookback)
+        features = self.feature_set.transform(panel).dropna()
+        scores = self.scorer.predict(features)
+        weights = self.allocator.build(scores)
+        self.target_weights(weights, close_missing=True)
+```
+
+Full versions:
+
+| Goal | Full script |
+|---|---|
+| Lite research + backtest + report + MLflow | [`examples/research/index_enhance_lite_pipeline.py`](./examples/research/index_enhance_lite_pipeline.py) |
+| Engine research + backtest + report + MLflow | [`examples/research/index_enhance_engine_pipeline.py`](./examples/research/index_enhance_engine_pipeline.py) |
+| Lite live-style current-window inference | [`examples/research/index_enhance_lite_live.py`](./examples/research/index_enhance_lite_live.py) |
+| Engine live-style current-window inference | [`examples/research/index_enhance_engine_live.py`](./examples/research/index_enhance_engine_live.py) |
+| Engine Backtrader-style portfolio rebalancing | [`examples/engine/11_target_percent_portfolio.py`](./examples/engine/11_target_percent_portfolio.py) |
+| Asset-class portfolio strategy | [`examples/engine/12_asset_class_portfolios.py`](./examples/engine/12_asset_class_portfolios.py) |
+
 ## Alignment & Performance
 
-Our benchmarks focus on two core metrics: **Result Parity** and **Throughput speedup** compared to Backtrader.
+Local baselines focus on two core checks: **whether results align** and **whether throughput is meaningfully faster than Backtrader**. Full reproduction commands are available in [benchmarks](./docs/benchmarks.md).
 
 #### 1. Single-Asset High-Frequency: SMA Cross (550k Bars)
-| Engine Mode | Time | Throughput (Bars/s) | **Speedup** | Status |
-|---|---|---|---|---|
-| **Tradelearn Lite** | **1.32s** | **414,990** | **27.9x** | **EXACT** |
-| **Tradelearn Engine** | **3.37s** | **162,883** | **11.0x** | **EXACT** |
-| Backtrader (Oracle) | 37.02s | 14,854 | 1.0x | - |
+* **Strategy idea**: Run a standard dual moving average crossover. This stresses Rust's event-driven state maintenance and single-stream throughput over a long sequence.
+
+| Engine Mode | Time | Throughput (Bars/s) | **Speedup** | Final Equity | Orders | Closed Trades | Status |
+|---|---|---|---|---|---|---|---|
+| **Tradelearn Lite** | **1.32s** | **414,990** | **27.9x** | **118,399.33** | 10,299 | 5,149 | **EXACT** |
+| **Tradelearn Engine** | **3.37s** | **162,883** | **11.0x** | **118,399.33** | 10,299 | 5,149 | **EXACT** |
+| Backtrader (Oracle) | 37.02s | 14,854 | 1.0x | 118,399.33 | 10,299 | 5,149 | - |
 
 #### 2. Large-Scale Index Enhance: Top-50 Target Weights (5.04M Bars)
-| Engine Mode | Time | Throughput (Bars/s) | **Speedup** |
-|---|---|---|---|
-| **Tradelearn Lite** | **2.40s** | **2,094,237** | **119.1x** |
-| **Tradelearn Engine** | **4.11s** | **1,225,594** | **69.7x** |
-| Backtrader (Oracle) | 286.53s | 17,589 | 1.0x |
+* **Strategy idea**: Simulate full-market stock selection and rebalancing across 1000 assets. This stresses Rust's panel-data memory layout and large-scale ML research workflow.
+
+| Engine Mode | Time | Throughput (Bars/s) | **Speedup** | Final Equity | Completed Orders | Rebalance Intents | Rebalances |
+|---|---|---|---|---|---|---|---|
+| **Tradelearn Lite** | **2.40s** | **2,094,237** | **119.1x** | **4,199,638.26** | 23,249 | 23,249 | 239 |
+| **Tradelearn Engine** | **4.11s** | **1,225,594** | **69.7x** | **4,199,638.26** | 23,249 | 23,249 | 239 |
+| Backtrader (Oracle) | 286.53s | 17,589 | 1.0x | 4,199,638.26 | 23,249 | 23,249 | 239 |
 
 ## Parity Commitment
 
-**trade-learn** treats "Benchmark Parity" as a core engineering discipline:
-- **Financial Metrics**: Sharpe, MaxDD, etc., align with `empyrical` at `rtol=1e-10`.
-- **Indicators**: `tl.pta` (standard) and `tl.tdx` (China standard) align at `rtol=1e-10`.
-- **Engine Parity**: Trades align with the Backtrader Oracle with **0 difference**.
+**trade-learn** treats "benchmark parity" as a core engineering discipline. Every computed result must withstand strict scrutiny, with numerical alignment maintained across these layers:
+
+*   **Financial metrics parity**: `metrics` (Sharpe, MaxDD, Sortino, etc.) match `empyrical` within `rtol=1e-10`.
+*   **Multi-source indicator parity**:
+    *   `tl.pta` (classic indicators) matches `pandas-ta-classic` within `rtol=1e-10`.
+    *   `tl.tdx` (TDX semantics) matches `MyTT` within `rtol=1e-10`.
+    *   `tl.tv` (TradingView semantics) matches `pyneCore` within `rtol=1e-6`.
+*   **Backtest engine parity**:
+    *   **Decision layer**: trade records (**Trades**) match the official Backtrader implementation with **0 difference** in time, direction, and position.
+    *   **Equity layer**: equity curves align within `rtol=1e-6`, and summary statistics align within `rtol=1e-4`.
+
+> [!IMPORTANT]
+> We treat every numerical deviation with zero tolerance. All differences are registered and explained. See [design notes → semantic consistency audit](docs/internals/consistency.md).
+
+## Full Documentation
+
+*   **Official online docs**: [**https://muuyesen.github.io/trade-learn/**](https://muuyesen.github.io/trade-learn/)
+*   **Local technical manual**: [`docs/`](./docs/README.md)
+
+| Topic | Entry |
+|---|---|
+| First backtest in 30 lines | [Quickstart](./docs/quickstart.md) |
+| Lite / Engine usage | [Lite Guide](./docs/guides/lite.md) · [Engine Guide](./docs/guides/engine.md) |
+| Architecture and boundaries | [Architecture](./docs/concepts/architecture.md) |
+| Factor / ML / weight research pipeline | [Research Guide](./docs/guides/research.md) |
+| Dual-standard indicators (`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`) | [Indicators Guide](./docs/guides/indicators.md) |
+| Performance baseline | [Benchmarks](./docs/benchmarks.md) |
+| Kernel internals (contracts / matching / portfolio / event loop) | [Design Notes](./docs/internals/contracts.md) |
+| Full API | [API Reference](./docs/api/reference.md) |
 
 ## 🚀 Roadmap
 
-Based on the engineering plan in [PROJECT.md](./design/PROJECT.md), we have divided the evolution into five core dimensions:
+Based on the current engineering plan, **trade-learn** evolves along these core dimensions:
 
-#### 🏗️ v1.x (Backtest Engine & Infrastructure)
-- [x] **Rust Hybrid Kernel**: Clocked Multi-Data Runner, **110x+** speedup.
-- [x] **Backtrader Parity**: 100% logic consistency, shared runtime via `bt.Strategy`.
-- [x] **Index Enhance Pipeline**: End-to-end `Data → Factor → Score → Weights`.
-- [x] **Automated Audit**: Deep MLflow integration for code snapshots, params, and reports.
-- [x] **High-Perf Backend**: **DuckDB native connector landed**, supports sub-second reading of billions of bars.
-- [ ] **Risk Models**: Support for Barra-style risk exposure analysis and attribution.
+#### Backtest Engine & Core Foundation
+- [x] **Rust Hybrid Kernel**: Clocked Multi-Data Runner, **110x+** speedup for multi-asset backtests.
+- [x] **Backtrader Semantic Parity**: 100% matching consistency and shared runtime through `bt.Strategy`.
+- [x] **Index Enhancement Pipeline**: Complete `Data → Factor → Score → Weights → target_weights()` workflow.
+- [x] **Automated Experiment Audit**: Deep MLflow integration for code snapshots, parameters, metrics, and reports.
+- [x] **High-Performance Data Backend**: **DuckDB native connector has landed**, supporting local second-level reads and cross-dimensional queries over hundreds of millions of bars.
+- [ ] **Risk Model Integration**: Barra-style risk exposure analysis and excess-return attribution.
 
-#### 🧪 v1.x+ (Scientific Research)
-- [x] **Causal Discovery Base**: Integrated `CausalSelector` (PC/FCI) to identify true drivers.
-- [ ] **Algorithm Expansion**: Integrate GIES, Direct-LiNGAM for enhanced explainability.
-- [ ] **Causal Loop**: Closed-loop integration of causal analysis with parameter optimization.
+#### Scientific Research Capabilities
+- [x] **Causal Discovery Foundation**: Integrated `CausalSelector` (PC/FCI) to identify true alpha drivers during feature engineering.
+- [ ] **Algorithm Expansion**: Add GIES, Direct-LiNGAM, and other advanced algorithms for better explainability and stability.
+- [ ] **Causal Closed Loop**: Automate the loop across causal analysis, parameter optimization, and risk control.
 
-#### 🤖 v1.x+ (Agent & AI Capabilities)
-- [x] **MCP Knowledge Gateway**: **MCP Server is live**, enabling structured API understanding for LLMs.
-- [ ] **Agentic Diagnosis**: LLM-driven analysis of backtest results to identify loss drivers and suggest optimizations.
-- [ ] **LLM Factor Interpreter**: Translate causal discovery results into intuitive financial logic.
+#### Agent & AI Capabilities
+- [x] **MCP Knowledge Gateway**: **MCP Server is live**, enabling structured API understanding and code generation for AI.
+- [ ] **Agentic Strategy Diagnosis**: Use LLMs to analyze backtest results, identify loss drivers, and suggest logic improvements.
+- [ ] **LLM Factor Interpreter**: Translate causal discovery results into intuitive financial investment logic.
 
-#### ⚙️ v1.x+ (Engineering & ML Lifecycle)
-- [x] **Model Registry**: **MLflow-based Model Registry** for full-lifecycle versioning and tracking.
-- [ ] **Distributed Tuning**: Scalable parameter search using Ray / Optuna.
+#### Engineering & ML Lifecycle
+- [x] **Model Registry**: **MLflow-based model registry** for full-lifecycle tracking of feature fingerprints and model versions.
+- [ ] **Distributed Parameter Optimization**: Multi-machine parameter search and Monte Carlo simulation via Ray / Optuna.
 
-#### 🌍 v2.x (Live Trading & Ecosystem)
-- [x] **Universal Event Link**: `EventRunner` semantics for 100% code reuse between backtest and live trading.
-- [ ] **Live Connectivity**: Integration with `QMT`, `IBKR`, and other brokers for the "last mile."
-- [ ] **Agentic Quant Platform**: Evolving into a semantic-driven automation base for quantitative research.
+#### Live Trading & Ecosystem Vision
+- [x] **Universal Live Event Link**: Completed `EventRunner` semantics, enabling 100% code reuse between backtest and live trading.
+- [ ] **Live Trading Connectivity**: Integrate `QMT`, `IBKR`, and other brokers to complete the last mile from research to execution.
+- [ ] **Agentic Quant Platform**: Evolve into a natural-language-driven automation foundation for end-to-end quantitative research.
 
 ## Disclaimer
 
@@ -237,7 +373,7 @@ This project is for academic research and technical exchange only and does not c
 
 ## Acknowledgements
 
-[Quantopian](https://github.com/quantopian) · [Trevor Stephens](https://github.com/trevorstephens) · [PyWhy](https://github.com/py-why) · [DolphinDB](https://github.com/dolphindb) · [mpquant](https://github.com/mpquant)
+[Quantopian](https://github.com/quantopian) · [Trevor Stephens](https://github.com/trevorstephens) · [PyWhy](https://github.com/py-why) · [dodid](https://github.com/dodid) · [DolphinDB](https://github.com/dolphindb) · [happydasch](https://github.com/happydasch) · [mpquant](https://github.com/mpquant) · [baobao1997](https://github.com/baobao1997)
 
 ## Contact
 

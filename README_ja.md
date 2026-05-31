@@ -77,7 +77,10 @@
 *   **インデックス強化とポートフォリオマネージャー**：Rust パネルランナーにより、1000以上の銘柄の調算を数秒でシミュレーション。
 *   **機械学習とファクター研究者**：特徴量、**因果発見**、MLflow 管理のモデル訓練、バックテストをワンストップで自動化。
 *   **Backtrader パワーユーザー**：信頼性の高いイベント駆動セマンティクスを維持しながら、最新のレポート体系と Rust の高速バックテストを享受。
-*   **グローバル戦略チーム**：国内 (TDX) と海外 (TradingView) の市場を、完全に一致した指標基準とレポート体系で管理。
+*   **クロスマーケット / マルチ戦略チーム**：
+    *   **市場横断の一貫性**：A株 (TDX) と海外市場 (TradingView) を、統一された指標基準とレポート体系で扱えます。
+    *   **戦略体系の統一管理**：ルールベース戦略とモデルベース戦略を同じスタックで管理し、分断されたツールチェーンによる研究・保守コストを避けられます。
+*   **因果推論の探求者**：ファクター選択に因果グラフ技術を導入し、「偽の相関」を取り除くことで、説明性と頑健性の高いクオンツシステムを構築できます。
 
 ## インストール
 
@@ -140,6 +143,9 @@ bt.plot()
 bt.report("report.html")
 ```
 
+> [!TIP]
+> **マルチアセットロジックについて：** マルチアセットバックテストでは、戦略はデフォルトで `self.data`（主データフィード）にバインドされます。そのため、上記の例に複数銘柄を渡しても、意思決定は最初の銘柄のシグナルに基づきます。複数銘柄を独立して取引するには、戦略の `init` で `self.datas` を走査し、各フィードごとに指標を作成してください。
+
 **Engine — Backtrader スタイル**（複雑なポートフォリオや将来の実盤モードに最適）：
 
 ```python
@@ -175,61 +181,191 @@ cerebro.plot()
 cerebro.report("report.html")
 ```
 
+> [!TIP]
+> **マルチアセットロジックについて：** マルチアセットバックテストでは、戦略はデフォルトで `self.data`（主データフィード）にバインドされます。そのため、上記の例に複数銘柄を渡しても、意思決定は最初の銘柄のシグナルに基づきます。複数銘柄を独立して取引するには、戦略の `init` で `self.datas` を走査し、各フィードごとに指標を作成してください。
+
+## 投資研究パイプライン例
+
+README には最短で読める版のみを載せています。完全なスクリプトは [`examples/research/index_enhance_lite_pipeline.py`](./examples/research/index_enhance_lite_pipeline.py) と [`examples/research/index_enhance_engine_pipeline.py`](./examples/research/index_enhance_engine_pipeline.py) を参照してください。
+
+**1. Research：生の行情データから特徴量を生成し、訓練 / テストに分割**
+
+```python
+import tradelearn.research as research
+import tradelearn.research.preprocess as pp
+
+feature_set = research.FeatureSet(
+    {
+        "alpha": lambda p: p.close.pct_change(20)
+        / p.close.pct_change().rolling(20).std(),
+        "size": lambda p: p.close,
+    },
+    target={"label": lambda p: p.close.shift(-20) / p.close - 1.0},
+)
+
+features = feature_set.fit_transform(bars, include_target=True).dropna()
+train, test = research.time_split(features, split="2023-09-01", level="timestamp")
+```
+
+**2. Pipeline：前処理、モデルスコアリング、ウェイト生成**
+
+```python
+from sklearn.ensemble import GradientBoostingRegressor
+import tradelearn.research.portfolio as pf
+
+pipe = research.Pipeline(
+    [
+        pp.Winsorizer(columns=["alpha"], limits=(0.05, 0.95)),
+        pp.Neutralizer(columns=["alpha"], exposures=["size"]),
+        pp.StandardScaler(columns=["alpha"]),
+    ]
+)
+train = pipe.fit_transform(train)
+test = pipe.transform(test)
+
+model = GradientBoostingRegressor(random_state=7)
+model.fit(train[["alpha"]], train["label"])
+scores = research.ModelScorer(model, features=("alpha",), current=False).predict(test)
+
+weights = pf.Allocator(
+    select=pf.TopK(k=2),
+    weight=pf.EqualWeight(gross=0.95),
+    constrain=pf.Constraints(max_weight=0.5, normalize=True),
+).build(scores)
+```
+
+**3. Portfolio：目標ウェイトを Lite / Engine に渡して執行**
+
+```python
+class LitePortfolio(tl.Strategy):
+    def next(self):
+        if len(self.data) % 20 == 0:
+            self.target_weights(self.research_result.weights[0], close_missing=True)
+
+
+test_bars = research.split_bars(bars, split="2023-09-01")
+stats = tl.Backtest(test_bars, LitePortfolio, cash=100_000).run(
+    research_result=research_result
+)
+```
+
+**4. Live-style：戦略内では現在見えているウィンドウだけで推論**
+
+投資研究パイプラインはオフライン訓練と検証に適しています。より実盤に近いセマンティクスにする場合は、モデルと allocator を戦略パラメータとして渡し、`next()` の中で `history_panel()` を使って、すでに発生したデータだけを読み取ります。
+
+```python
+class LiveStylePortfolio(tl.Strategy):
+    lookback = 20
+
+    def init(self):
+        self.start_on_bar(self.lookback)
+
+    def next(self):
+        if len(self.data) % 20 != 0:
+            return
+
+        panel = self.history_panel(self.lookback)
+        features = self.feature_set.transform(panel).dropna()
+        scores = self.scorer.predict(features)
+        weights = self.allocator.build(scores)
+        self.target_weights(weights, close_missing=True)
+```
+
+完全版：
+
+| 目的 | 完全なスクリプト |
+|---|---|
+| Lite 投資研究 + バックテスト + report + MLflow | [`examples/research/index_enhance_lite_pipeline.py`](./examples/research/index_enhance_lite_pipeline.py) |
+| Engine 投資研究 + バックテスト + report + MLflow | [`examples/research/index_enhance_engine_pipeline.py`](./examples/research/index_enhance_engine_pipeline.py) |
+| Lite live-style 現在ウィンドウ推論 | [`examples/research/index_enhance_lite_live.py`](./examples/research/index_enhance_lite_live.py) |
+| Engine live-style 現在ウィンドウ推論 | [`examples/research/index_enhance_engine_live.py`](./examples/research/index_enhance_engine_live.py) |
+| Engine Backtrader スタイルのポートフォリオ調整 | [`examples/engine/11_target_percent_portfolio.py`](./examples/engine/11_target_percent_portfolio.py) |
+| 資産クラス別ポートフォリオ戦略 | [`examples/engine/12_asset_class_portfolios.py`](./examples/engine/12_asset_class_portfolios.py) |
+
 ## 同期とパフォーマンス
 
-ベンチマークは、**結果の一致性**と Backtrader 比較での**スループット加速**を重視しています。
+ローカル基準では、**結果が一致しているか**、そして Backtrader と比較して**スループットが明確に速いか**という 2 点を重視しています。完全な再現コマンドは [性能基準](./docs/benchmarks.md) を参照してください。
 
 #### 1. 単一資産高頻度：SMA 交差 (55万 Bar)
-| エンジンモード | 処理時間 | スループット (Bars/s) | **加速比** | 最終状態 |
-|---|---|---|---|---|
-| **Tradelearn Lite** | **1.32s** | **414,990** | **27.9x** | **EXACT** |
-| **Tradelearn Engine** | **3.37s** | **162,883** | **11.0x** | **EXACT** |
-| Backtrader (Oracle) | 37.02s | 14,854 | 1.0x | - |
+* **戦略原理**：標準的な二重移動平均クロスを実行します。長い単一データストリームに対する Rust のイベント駆動性能と状態管理効率を測り、単一コア推進の限界を確認します。
+
+| エンジンモード | 処理時間 | スループット (Bars/s) | **加速比** | 最終資産 | 注文数 | クローズ済み取引 | 状態 |
+|---|---|---|---|---|---|---|---|
+| **Tradelearn Lite** | **1.32s** | **414,990** | **27.9x** | **118,399.33** | 10,299 | 5,149 | **EXACT** |
+| **Tradelearn Engine** | **3.37s** | **162,883** | **11.0x** | **118,399.33** | 10,299 | 5,149 | **EXACT** |
+| Backtrader (Oracle) | 37.02s | 14,854 | 1.0x | 118,399.33 | 10,299 | 5,149 | - |
 
 #### 2. 大規模インデックス強化：Top-50 ターゲットウェイト (504万 Bar)
-| エンジンモード | 処理時間 | スループット (Bars/s) | **加速比** |
-|---|---|---|---|
-| **Tradelearn Lite** | **2.40s** | **2,094,237** | **119.1x** |
-| **Tradelearn Engine** | **4.11s** | **1,225,594** | **69.7x** |
-| Backtrader (Oracle) | 286.53s | 17,589 | 1.0x |
+* **戦略原理**：1000銘柄規模の全市場選股とリバランスを模擬します。Rust の大規模 Panel データ向けメモリレイアウト最適化と並行処理能力を測り、機械学習戦略の研究シナリオを再現します。
+
+| エンジンモード | 処理時間 | スループット (Bars/s) | **加速比** | 最終資産 | 完了注文 | リバランス意図 | リバランス回数 |
+|---|---|---|---|---|---|---|---|
+| **Tradelearn Lite** | **2.40s** | **2,094,237** | **119.1x** | **4,199,638.26** | 23,249 | 23,249 | 239 |
+| **Tradelearn Engine** | **4.11s** | **1,225,594** | **69.7x** | **4,199,638.26** | 23,249 | 23,249 | 239 |
+| Backtrader (Oracle) | 286.53s | 17,589 | 1.0x | 4,199,638.26 | 23,249 | 23,249 | 239 |
 
 ## 一致性の保証
 
-**trade-learn** は「ベンチマーク同期」を核心的な工程規律としています：
-- **金融指標同期**: Sharpe, MaxDD 等は `empyrical` と `rtol=1e-10` で一致。
-- **テクニカル指標同期**: `tl.pta` および `tl.tdx` (国内基準) は `rtol=1e-10` で一致。
-- **エンジン同期**: 売買記録 (Trades) は Backtrader 公式実装と **0 差異** で一致。
+**trade-learn** は「ベンチマーク同期」を核心的な工程規律としています。各計算結果が厳密な検証に耐えられるよう、以下の層で数値一致を維持します：
+
+*   **金融指標同期**：`metrics`（Sharpe, MaxDD, Sortino など）は `empyrical` と `rtol=1e-10` で一致。
+*   **複数ソースの指標同期**：
+    *   `tl.pta`（クラシック指標）は `pandas-ta-classic` と `rtol=1e-10` で一致。
+    *   `tl.tdx`（TDX セマンティクス）は `MyTT` と `rtol=1e-10` で一致。
+    *   `tl.tv`（TradingView セマンティクス）は `pyneCore` と `rtol=1e-6` で一致。
+*   **バックテストエンジン同期**：
+    *   **意思決定層**：取引記録 (**Trades**) は Backtrader 公式実装と、時刻・方向・ポジションで **0 差異**。
+    *   **純資産層**：Equity 曲線は `rtol=1e-6`、サマリー統計は `rtol=1e-4` で一致。
+
+> [!IMPORTANT]
+> すべての数値差分に対してゼロトレランスで臨みます。すべての偏差は登録され、理由を説明します。詳しくは [設計ノート → セマンティクス一致性監査](docs/internals/consistency.md) を参照してください。
+
+## 完全ドキュメント
+
+*   **公式オンラインドキュメント**：[**https://muuyesen.github.io/trade-learn/**](https://muuyesen.github.io/trade-learn/)
+*   **ローカル技術マニュアル**：[`docs/`](./docs/README.md)
+
+| テーマ | 入口 |
+|---|---|
+| 30 行で最初のバックテスト | [クイックスタート](./docs/quickstart.md) |
+| Lite / Engine の使い方 | [Lite ガイド](./docs/guides/lite.md) · [Engine ガイド](./docs/guides/engine.md) |
+| アーキテクチャと境界 | [アーキテクチャ](./docs/concepts/architecture.md) |
+| Factor / ML / Weight 研究パイプライン | [Research ガイド](./docs/guides/research.md) |
+| 二重基準指標（`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`） | [Indicators ガイド](./docs/guides/indicators.md) |
+| 性能基準 | [Benchmarks](./docs/benchmarks.md) |
+| カーネル内部（契約 / マッチング / portfolio / イベントループ） | [設計ノート](./docs/internals/contracts.md) |
+| 完全 API | [API リファレンス](./docs/api/reference.md) |
 
 ## 🚀 ロードマップ (Roadmap)
 
-[PROJECT.md](./design/PROJECT.md) の計画に基づき、以下の核心領域で進化を続けます：
+現在の工程計画に基づき、**trade-learn** は以下の核心領域で進化を続けます：
 
-#### 🏗️ v1.x（バックテストエンジンと研究インフラ）
-- [x] **Rust ハイブリッドカーネル**: Clocked Multi-Data Runner による **110x+** 加速。
-- [x] **Backtrader 同期**: ロジック一致率 100%、`bt.Strategy` によるランタイム共有。
-- [x] **インデックス強化パイプライン**: `Data → Factor → Score → Weights` の一貫性。
-- [x] **自動監査**: MLflow 統合によるコード、パラメータ、レポートの自動記録。
-- [x] **高性能バックエンド**: **DuckDB ネイティブ接続の実装**。億単位の Bar を秒速で読み込み。
-- [ ] **リスクモデル統合**: Barra スタイルのリスク分析と要因分解。
+#### バックテストエンジンと核心基盤
+- [x] **Rust ハイブリッドカーネル**：Clocked Multi-Data Runner により、多資産バックテストで **110x+** 加速。
+- [x] **Backtrader セマンティクス同期**：マッチングロジック 100%、`bt.Strategy` によるランタイム共有。
+- [x] **インデックス強化パイプライン**：`Data → Factor → Score → Weights → target_weights()` の全フローを接続。
+- [x] **自動実験監査**：MLflow と深く統合し、コードスナップショット、パラメータ、指標、レポートを自動記録。
+- [x] **高性能データバックエンド**：**DuckDB ネイティブコネクタが実装済み**。億単位の Bar に対するローカル秒級読み込みと横断クエリをサポート。
+- [ ] **リスクモデル統合**：Barra スタイルのリスクエクスポージャー分析と超過収益分解をサポート。
 
-#### 🧪 v1.x+（科学的投資研究能力）
-- [x] **因果発見の基礎**: `CausalSelector` (PC/FCI) によるアルファの真因特定。
-- [ ] **アルゴリズム拡張**: GIES, Direct-LiNGAM 等による説明性の向上。
-- [ ] **因果クローズドループ**: 因果分析とパラメータ最適化、リスク管理の自動統合。
+#### 科学的投資研究能力
+- [x] **因果発見基盤**：`CausalSelector` (PC/FCI) を統合し、特徴量工程の段階で Alpha の真のドライバーを特定。
+- [ ] **アルゴリズム拡張**：GIES、Direct-LiNGAM などを導入し、説明性と安定性を向上。
+- [ ] **因果駆動クローズドループ**：因果分析、パラメータ最適化、リスク管理を自動化された研究ループとして接続。
 
-#### 🤖 v1.x+（エージェントと AI 能力）
-- [x] **MCP 知識ゲートウェイ**: **MCP Server の公開**。LLM による API とドキュメントの構造的理解。
-- [ ] **エージェントによる戦略診断**: LLM によるバックテスト結果の自動解析と改善提案。
-- [ ] **LLM ファクター解説**: 因果推論の結果を直感的な金融ロジックに翻訳。
+#### エージェントと AI 能力
+- [x] **MCP 知識ゲートウェイ**：**MCP Server は公開済み**。AI による API の構造理解と自動コード生成を可能にします。
+- [ ] **Agentic 戦略診断**：LLM でバックテスト結果を解析し、損失要因を特定してロジック改善案を提示。
+- [ ] **LLM ファクター解釈器**：因果発見の結果を直感的な金融投資ロジックへ翻訳。
 
-#### ⚙️ v1.x+（エンジニアリングと ML ライフサイクル）
-- [x] **モデルレジストリ**: **MLflow によるモデル管理**。特徴量とモデルバージョンの追跡。
-- [ ] **分散パラメータ最適化**: Ray / Optuna によるマルチマシン並列検索。
+#### エンジニアリングと ML ライフサイクル
+- [x] **モデルレジストリ**：**MLflow ベースのモデル登録**により、特徴量指紋とモデルバージョンを全ライフサイクルで追跡。
+- [ ] **分散パラメータ最適化**：Ray / Optuna によるマルチマシンのパラメータ探索とモンテカルロシミュレーション。
 
-#### 🌍 v2.x（実盤取引とエコシステム）
-- [x] **共通イベントリンク**: バックテストと実盤取引でコードを 100% 再利用。
-- [ ] **実盤コネクティビティ**: `QMT`, `IBKR` 等のブローカー統合。
-- [ ] **Agentic Quant プラットフォーム**: 自然言語駆動の投資研究自動化基座への進化。
+#### 実盤取引とエコシステム構想
+- [x] **共通実盤イベントリンク**：`EventRunner` セマンティクスを完成し、バックテストと実盤取引でコードを 100% 再利用可能に。
+- [ ] **実盤取引接続**：`QMT`, `IBKR` などのブローカーを統合し、研究から実行までの最後の一歩を完成。
+- [ ] **Agentic Quant プラットフォーム**：自然言語駆動のエンドツーエンド投資研究自動化基盤へ進化。
 
 ## 免責事項 (Disclaimer)
 
@@ -237,7 +373,7 @@ cerebro.report("report.html")
 
 ## 謝辞
 
-[Quantopian](https://github.com/quantopian) · [Trevor Stephens](https://github.com/trevorstephens) · [PyWhy](https://github.com/py-why) · [DolphinDB](https://github.com/dolphindb) · [mpquant](https://github.com/mpquant)
+[Quantopian](https://github.com/quantopian) · [Trevor Stephens](https://github.com/trevorstephens) · [PyWhy](https://github.com/py-why) · [dodid](https://github.com/dodid) · [DolphinDB](https://github.com/dolphindb) · [happydasch](https://github.com/happydasch) · [mpquant](https://github.com/mpquant) · [baobao1997](https://github.com/baobao1997)
 
 ## お問い合わせ
 
