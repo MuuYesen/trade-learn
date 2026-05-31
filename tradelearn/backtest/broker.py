@@ -856,8 +856,11 @@ class RustBroker:
                 self._step_fills_from_collect = None
             fill_count = self._fill_batch_len(new_fills)
             if fill_count:
-                self._process_rust_fills_batch(strategy, new_fills)
+                filled_order_refs = self._process_rust_fills_batch(strategy, new_fills)
                 self._last_fill_idx += fill_count
+            else:
+                filled_order_refs = set()
+            self._reconcile_unfilled_market_orders(strategy, filled_order_refs)
         elif self._pending_orders:
             raise RuntimeError("RustBroker requires a Rust engine for order matching")
 
@@ -870,18 +873,20 @@ class RustBroker:
             for fill in fills
         )
 
-    def _process_rust_fills_batch(self, strategy: Strategy, fills: Any) -> None:
+    def _process_rust_fills_batch(self, strategy: Strategy, fills: Any) -> set[int]:
         """Synchronize a batch of Rust fills while preserving notification order."""
         self._position_state_cache.clear()
         orders_by_ref_get = self._orders_by_ref.get
         pending_size = strategy._pending_size
         mult = self._mult
         wants_trade_event = self._wants_trade_event(strategy)
+        filled_order_refs: set[int] = set()
 
         for order_id, signed_size, price, comm, pnl in self._iter_rust_fills(fills):
             order = orders_by_ref_get(order_id)
             if order is None:
                 continue
+            filled_order_refs.add(int(order_id))
 
             order.status = Order.Completed
             abs_size = abs(signed_size)
@@ -893,7 +898,8 @@ class RustBroker:
             )
 
             data = order.data
-            pending = pending_size.get(data, 0.0) - signed_size
+            requested_size = float(order.size if order.isbuy() else -order.size)
+            pending = pending_size.get(data, 0.0) - requested_size
             pending_size[data] = 0.0 if abs(pending) < 1e-9 else pending
 
             pos = self._positions.setdefault(data, Position(size=0.0, price=0.0))
@@ -933,3 +939,22 @@ class RustBroker:
             self._notify_order_event(strategy, order)
             self._activate_child_orders(strategy, order)
             self._cancel_oco_siblings(strategy, order)
+        return filled_order_refs
+
+    def _reconcile_unfilled_market_orders(
+        self,
+        strategy: Strategy,
+        filled_order_refs: set[int],
+    ) -> None:
+        """Mirror market orders the Rust matcher dropped because they could not fill."""
+        pending_size = strategy._pending_size
+        for order in self._orders:
+            if order.status != Order.Accepted or order.exectype != Order.Market:
+                continue
+            if int(order.ref) in filled_order_refs:
+                continue
+            requested_size = float(order.size if order.isbuy() else -order.size)
+            pending = pending_size.get(order.data, 0.0) - requested_size
+            pending_size[order.data] = 0.0 if abs(pending) < 1e-9 else pending
+            order.status = Order.Margin
+            self._notify_order_event(strategy, order)

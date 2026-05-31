@@ -52,6 +52,25 @@ def test_target_weight_intents_sell_before_buy_and_close_missing() -> None:
     assert intents[2].qty == 10.0
 
 
+def test_target_weight_intents_order_by_delta_weight_like_backtrader() -> None:
+    data = {"AAA": object(), "BBB": object(), "CCC": object()}
+    snapshots = {
+        "AAA": TargetWeightSnapshot(price=10.0, size=0.0),
+        "BBB": TargetWeightSnapshot(price=10.0, size=0.0),
+        "CCC": TargetWeightSnapshot(price=10.0, size=0.0),
+    }
+
+    intents = build_target_weight_intents(
+        {"AAA": 0.3, "BBB": 0.1, "CCC": 0.2},
+        data_by_symbol=data,
+        snapshots=snapshots,
+        equity=1000.0,
+        close_missing=False,
+    )
+
+    assert [intent.symbol for intent in intents] == ["BBB", "CCC", "AAA"]
+
+
 def test_target_weight_intents_zero_target_closes_full_position_without_rounding_tail() -> None:
     data = {"AAA": object()}
     snapshots = {

@@ -121,5 +121,5 @@ def build_target_weight_intents(
             )
         )
 
-    intents.sort(key=lambda intent: (intent.side == "buy", intent.symbol))
+    intents.sort(key=lambda intent: (intent.delta_weight, intent.symbol))
     return intents

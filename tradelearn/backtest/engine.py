@@ -207,9 +207,9 @@ def _positions_frame(strategy: Any, fills: pd.DataFrame, index: pd.Index) -> pd.
             return False
         return bool(missing) if isinstance(missing, (bool, np.bool_)) else False
 
-    position_size = 0.0
-    avg_price = 0.0
-    realized_pnl = 0.0
+    position_sizes: dict[Any, float] = {}
+    avg_prices: dict[Any, float] = {}
+    realized_pnls: dict[Any, float] = {}
     rows = []
     data_name = getattr(getattr(strategy, "data", None), "_name", None)
     sizes = fills["size"].to_numpy(dtype=float, copy=False)
@@ -219,8 +219,13 @@ def _positions_frame(strategy: Any, fills: pd.DataFrame, index: pd.Index) -> pd.
     fallback_datetime = index[-1] if len(index) else None
 
     for row_idx, (signed_size, price) in enumerate(zip(sizes, prices, strict=True)):
-        previous_size = position_size
-        new_size = position_size + signed_size
+        fill_data = data_values[row_idx] if data_values is not None else None
+        if is_missing_scalar(fill_data):
+            fill_data = data_name
+        previous_size = position_sizes.get(fill_data, 0.0)
+        avg_price = avg_prices.get(fill_data, 0.0)
+        realized_pnl = realized_pnls.get(fill_data, 0.0)
+        new_size = previous_size + signed_size
         if previous_size == 0 or previous_size * signed_size > 0:
             total_abs = abs(previous_size) + abs(signed_size)
             avg_price = (
@@ -232,14 +237,14 @@ def _positions_frame(strategy: Any, fills: pd.DataFrame, index: pd.Index) -> pd.
             realized_pnl += (price - avg_price) * previous_size
             avg_price = price if new_size else 0.0
         position_size = 0.0 if abs(new_size) < 1e-9 else new_size
+        position_sizes[fill_data] = position_size
+        avg_prices[fill_data] = avg_price
+        realized_pnls[fill_data] = realized_pnl
         mark_price = price
         value = position_size * mark_price
         fill_datetime = datetimes[row_idx] if datetimes is not None else None
         if is_missing_scalar(fill_datetime):
             fill_datetime = fallback_datetime
-        fill_data = data_values[row_idx] if data_values is not None else None
-        if is_missing_scalar(fill_data):
-            fill_data = data_name
         rows.append(
             {
                 "datetime": fill_datetime,
@@ -297,6 +302,41 @@ def _resolve_close_series(
     return None
 
 
+def _resolve_close_by_data(
+    strategy: Any,
+    frame: pd.DataFrame | None,
+    index: pd.Index,
+) -> dict[str, np.ndarray]:
+    closes: dict[str, np.ndarray] = {}
+    if isinstance(frame, pd.DataFrame) and isinstance(frame.columns, pd.MultiIndex):
+        for column in frame.columns:
+            parts = tuple(str(part) for part in column)
+            close_levels = [i for i, part in enumerate(parts) if part.lower() == "close"]
+            if not close_levels:
+                continue
+            symbol_parts = [part for i, part in enumerate(parts) if i not in close_levels]
+            if not symbol_parts or len(frame) != len(index):
+                continue
+            closes[str(symbol_parts[0])] = frame[column].to_numpy(dtype=float, copy=False)
+
+    datas = list(getattr(strategy, "datas", []) or [])
+    cerebro = getattr(strategy, "cerebro", None)
+    if not datas and cerebro is not None:
+        datas = list(getattr(cerebro, "datas", []) or [])
+    for data_index, data in enumerate(datas):
+        name = str(getattr(data, "_name", None) or f"data{data_index}")
+        close_arr = getattr(data, "_close", None)
+        if close_arr is None:
+            continue
+        try:
+            arr = np.asarray(close_arr, dtype=float)
+        except (TypeError, ValueError):
+            continue
+        if len(arr) == len(index):
+            closes[name] = arr
+    return closes
+
+
 def _build_equity_from_fills(
     strategy: Any,
     index: pd.Index,
@@ -306,7 +346,9 @@ def _build_equity_from_fills(
     if fills.empty or len(index) == 0:
         return None
     closes = _resolve_close_series(strategy, frame, index)
-    if closes is None:
+    close_by_data = _resolve_close_by_data(strategy, frame, index)
+    has_data_labels = "data" in fills.columns and fills["data"].notna().any()
+    if closes is None and not close_by_data:
         return None
 
     aligned_fills = fills.copy()
@@ -332,15 +374,32 @@ def _build_equity_from_fills(
     # the live active-cash balance after fills have settled.
     cash = float(getattr(strategy.broker, "_cash", None) or strategy.broker.getcash())
     position_size = 0.0
+    position_sizes: dict[str, float] = {}
     values: list[float] = []
-    for ts, close in zip(bar_index, closes, strict=False):
+    for bar_num, ts in enumerate(bar_index):
         for fill in fills_by_time.get(pd.Timestamp(ts), ()):
             signed_size = float(fill.get("size", 0.0))
             price = float(fill.get("price", 0.0))
             commission = float(fill.get("commission", 0.0))
             cash -= signed_size * price + commission
-            position_size += signed_size
-        values.append(cash + position_size * float(close))
+            fill_data = fill.get("data")
+            if has_data_labels and fill_data is not None and not pd.isna(fill_data):
+                key = str(fill_data)
+                position_sizes[key] = position_sizes.get(key, 0.0) + signed_size
+            else:
+                position_size += signed_size
+        if has_data_labels and close_by_data:
+            marked_positions = 0.0
+            for data_key, size in position_sizes.items():
+                close_arr = close_by_data.get(str(data_key))
+                if close_arr is None:
+                    return None
+                marked_positions += size * float(close_arr[bar_num])
+            values.append(cash + marked_positions)
+        else:
+            if closes is None:
+                return None
+            values.append(cash + position_size * float(closes[bar_num]))
     return pd.Series(values, index=index, name="equity", dtype=float)
 
 
