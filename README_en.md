@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://muuyesen.github.io/trade-learn/"><b>Documentation</b></a> |
   <a href="./CHANGELOG.md"><b>Changelog</b></a> |
-  <a href="./README.md"><b>中文简体</b></a> |
+  <a href="./README_zh.md"><b>中文简体</b></a> |
   <a href="./README_ja.md"><b>日本語</b></a>
 </p>
 
