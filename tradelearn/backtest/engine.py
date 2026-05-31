@@ -912,6 +912,20 @@ def _build_clocked_multi_data_runner(datas: list[Any]) -> Any | None:
     return RustClockedMultiDataRunner(symbols, timestamps, opens, highs, lows, closes, volumes)
 
 
+def _load_rust_backtest_engine() -> Any:
+    try:
+        from tradelearn._rust import RustBacktestEngine
+    except (ImportError, AttributeError) as exc:
+        raise RuntimeError(
+            "tradelearn._rust is not available, so RustBroker cannot run order matching. "
+            "If you installed from PyPI, make sure you run outside a source checkout that "
+            "contains a local tradelearn/ package and install with `pip install trade-learn`. "
+            "If you are developing from source, build the extension first with "
+            "`python -m maturin develop --release`."
+        ) from exc
+    return RustBacktestEngine
+
+
 def run_backtest(cerebro: Any) -> list[Any]:
     """Unified backtest engine that runs any strategy inheriting from core.Strategy."""
     runtime_config = BacktestRuntimeConfig.from_owner(cerebro)
@@ -953,34 +967,29 @@ def run_backtest(cerebro: Any) -> list[Any]:
             closes = np.array(data.close._values, dtype=np.float64)
             volumes = np.array(data.volume._values, dtype=np.float64)
 
-        try:
-            from tradelearn._rust import RustBacktestEngine
-        except (ImportError, AttributeError):
-            RustBacktestEngine = None
-
-        if RustBacktestEngine is not None:
-            rust_engine = RustBacktestEngine(
-                timestamps,
-                opens,
-                highs,
-                lows,
-                closes,
-                volumes,
-                runtime_config.cash,
-                runtime_config.commission,
-                runtime_config.trade_on_close,
-                False,
-                False,
-                0.0,
-                0.0,
-                False,
-                False,
-                False,
-                float(cerebro.broker._mult),
-                1.0,
-                runtime_config.match_mode == "smart",
-            )
-            cerebro.broker.bind_engine(rust_engine)
+        RustBacktestEngine = _load_rust_backtest_engine()
+        rust_engine = RustBacktestEngine(
+            timestamps,
+            opens,
+            highs,
+            lows,
+            closes,
+            volumes,
+            runtime_config.cash,
+            runtime_config.commission,
+            runtime_config.trade_on_close,
+            False,
+            False,
+            0.0,
+            0.0,
+            False,
+            False,
+            False,
+            float(cerebro.broker._mult),
+            1.0,
+            runtime_config.match_mode == "smart",
+        )
+        cerebro.broker.bind_engine(rust_engine)
         if hasattr(cerebro.broker, "bind_datas"):
             cerebro.broker.bind_datas(cerebro.datas)
         cerebro.broker._open_prices = opens
