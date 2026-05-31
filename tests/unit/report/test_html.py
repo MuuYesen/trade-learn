@@ -242,6 +242,54 @@ def test_reporter_html_adds_exposure_chart_for_multi_asset_positions(tmp_path) -
     assert "BBB" in html
 
 
+def test_reporter_html_uses_portfolio_replay_for_multi_asset_market_data(tmp_path) -> None:
+    """Multi-asset market data should render allocation and normalized asset panels."""
+    path = tmp_path / "portfolio-report.html"
+    positions = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                [
+                    "2024-01-01",
+                    "2024-01-01",
+                    "2024-01-02",
+                    "2024-01-02",
+                    "2024-01-03",
+                    "2024-01-03",
+                ],
+                utc=True,
+            ),
+            "symbol": ["AAA", "BBB", "AAA", "BBB", "AAA", "BBB"],
+            "value": [60.0, 40.0, 25.0, 75.0, 50.0, 50.0],
+        }
+    )
+    fills = pd.DataFrame(
+        {
+            "datetime": pd.date_range("2024-01-01", periods=4, tz="UTC"),
+            "symbol": ["AAA", "BBB", "AAA", "BBB"],
+            "side": ["buy", "buy", "sell", "sell"],
+            "size": [10.0, 5.0, 4.0, 3.0],
+            "price": [10.6, 15.9, 11.0, 16.5],
+        }
+    )
+
+    Reporter(
+        {
+            "returns": _returns(),
+            "trades": _trades(),
+            "fills": fills,
+            "positions": positions,
+            "summary": {"strategy_name": "portfolio"},
+            "config": {"strategy": "portfolio"},
+        },
+        market_data={"AAA": _market_data(), "BBB": _market_data() * 1.5},
+    ).html(path)
+
+    html = path.read_text()
+    assert "Allocation" in html
+    assert "Assets / Trades" in html
+    assert "OHLC / Trades" not in html
+
+
 def test_reporter_html_accepts_benchmark_series(tmp_path) -> None:
     """Reporter.html adds benchmark metrics, overlay, and rolling beta when provided."""
     path = tmp_path / "benchmark-report.html"
@@ -425,3 +473,16 @@ def _returns() -> pd.Series:
 
 def _trades() -> pd.DataFrame:
     return pd.DataFrame({"pnl": [100.0, -50.0, 25.0, -10.0]})
+
+
+def _market_data() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "open": [10.0, 10.5, 11.0],
+            "high": [10.8, 11.2, 11.7],
+            "low": [9.8, 10.2, 10.8],
+            "close": [10.6, 11.0, 11.5],
+            "volume": [100.0, 110.0, 120.0],
+        },
+        index=pd.date_range("2024-01-01", periods=3, tz="UTC"),
+    )

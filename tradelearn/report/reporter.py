@@ -68,12 +68,12 @@ class Reporter:
         self,
         stats: Any,
         periods: int = 252,
-        market_data: pd.DataFrame | None = None,
+        market_data: Any | None = None,
     ) -> None:
         """Create a reporter from a Stats-like object or mapping."""
         self.stats = stats
         self.periods = periods
-        self.market_data = None if market_data is None else pd.DataFrame(market_data).copy()
+        self.market_data = self._market_data_copy(market_data)
 
     def summary(self, benchmark: pd.Series | None = None) -> dict[str, float | int | str]:
         """Return report summary statistics."""
@@ -347,6 +347,7 @@ class Reporter:
             self.market_data,
             self._get("fills", default=pd.DataFrame()),
             self._get("equity", default=pd.Series(dtype="float64")),
+            positions=self._get("positions", default=pd.DataFrame()),
         )
 
     def price_trades_chart(self):
@@ -503,6 +504,19 @@ class Reporter:
         if isinstance(self.stats, Mapping):
             return self.stats.get(name, default)
         return getattr(self.stats, name, default)
+
+    @staticmethod
+    def _market_data_copy(market_data: Any | None) -> Any | None:
+        """Copy a single market frame or a symbol-to-frame mapping."""
+        if market_data is None:
+            return None
+        if isinstance(market_data, Mapping):
+            return {
+                str(symbol): pd.DataFrame(frame).copy()
+                for symbol, frame in market_data.items()
+                if frame is not None
+            }
+        return pd.DataFrame(market_data).copy()
 
     def _trades(self) -> pd.DataFrame:
         """Return trades in a report-safe frame shape."""

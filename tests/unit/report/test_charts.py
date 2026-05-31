@@ -118,6 +118,22 @@ def test_market_replay_does_not_connect_trade_markers_with_multiline() -> None:
     assert not any(isinstance(renderer.glyph, MultiLine) for renderer in renderers)
 
 
+def test_market_replay_uses_portfolio_layout_for_multi_asset_inputs() -> None:
+    """Multi-asset reports should show portfolio allocation and normalized assets."""
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_multi_asset_fills(),
+        equity=_series("equity"),
+        positions=_portfolio_positions(),
+    )
+
+    titles = _collect_plot_titles(replay)
+
+    assert "Allocation" in titles
+    assert "Assets / Trades" in titles
+    assert "OHLC / Trades" not in titles
+
+
 def _series(name: str) -> pd.Series:
     return pd.Series(
         [1.0, 1.1, 1.05],
@@ -233,6 +249,48 @@ def _market_data() -> pd.DataFrame:
         },
         index=pd.date_range("2024-01-01", periods=3, tz="UTC"),
     )
+
+
+def _portfolio_positions() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                [
+                    "2024-01-01",
+                    "2024-01-01",
+                    "2024-01-02",
+                    "2024-01-02",
+                    "2024-01-03",
+                    "2024-01-03",
+                ],
+                utc=True,
+            ),
+            "symbol": ["AAA", "BBB", "AAA", "BBB", "AAA", "BBB"],
+            "value": [60.0, 40.0, 25.0, 75.0, 50.0, 50.0],
+        }
+    )
+
+
+def _multi_asset_fills() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "datetime": pd.date_range("2024-01-01", periods=4, tz="UTC"),
+            "symbol": ["AAA", "BBB", "AAA", "BBB"],
+            "side": ["buy", "buy", "sell", "sell"],
+            "size": [10.0, 5.0, 4.0, 3.0],
+            "price": [10.6, 15.9, 11.0, 16.5],
+        }
+    )
+
+
+def _collect_plot_titles(layout) -> list[str]:
+    titles: list[str] = []
+    if hasattr(layout, "title") and getattr(layout.title, "text", None):
+        titles.append(layout.title.text)
+    for child in getattr(layout, "children", []):
+        item = child[0] if isinstance(child, tuple) else child
+        titles.extend(_collect_plot_titles(item))
+    return titles
 
 
 def _collect_glyph_renderers(layout) -> list[GlyphRenderer]:

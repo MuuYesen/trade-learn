@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from statistics import NormalDist
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -31,11 +33,18 @@ MARKET_DRAWDOWN = "#fff3c4"
 
 
 def market_replay(
-    market_data: pd.DataFrame,
+    market_data: pd.DataFrame | Mapping[str, pd.DataFrame],
     fills: pd.DataFrame | None = None,
     equity: pd.Series | None = None,
+    positions: pd.DataFrame | None = None,
 ):
     """Return a market replay grid with equity, P/L, OHLC, trades, and volume."""
+    if isinstance(market_data, Mapping):
+        portfolio = _portfolio_market_replay(market_data, fills, equity, positions)
+        if portfolio is not None:
+            return portfolio
+        market_data = next(iter(market_data.values()), pd.DataFrame())
+
     frame = _market_frame(market_data)
     if frame.empty:
         return price_trades(market_data, fills)
@@ -403,6 +412,318 @@ def market_replay(
         toolbar_location="right",
         merge_tools=True,
     )
+
+
+def _portfolio_market_replay(
+    market_data: Mapping[str, pd.DataFrame],
+    fills: pd.DataFrame | None,
+    equity: pd.Series | None,
+    positions: pd.DataFrame | None,
+):
+    """Return a portfolio-first replay grid for multi-asset reports."""
+    asset_frame = _portfolio_asset_frame(market_data)
+    if asset_frame.empty:
+        return None
+
+    base_frame = _portfolio_base_frame(asset_frame)
+    if base_frame.empty:
+        return None
+
+    fills_frame = _fills_plot_frame(fills) if _fills_have_plot_columns(fills) else pd.DataFrame()
+    fills_frame = _attach_portfolio_bar_index(fills_frame, base_frame, asset_frame)
+    trades_frame = _trade_segments(fills_frame, base_frame)
+
+    x_pad = max((len(base_frame) - 1) / 20, 1.0)
+    x_range = Range1d(
+        start=float(base_frame["bar_index"].iloc[0] - x_pad),
+        end=float(base_frame["bar_index"].iloc[-1] + x_pad),
+        min_interval=10,
+    )
+    plots = []
+
+    if equity is not None and not equity.empty:
+        equity_plot = _equity_replay_plot(equity, base_frame, x_range)
+        if equity_plot is not None:
+            plots.append(equity_plot)
+    else:
+        equity_plot = None
+
+    allocation_plot = _allocation_replay_plot(positions, base_frame, x_range)
+    if allocation_plot is not None:
+        plots.append(allocation_plot)
+
+    if not trades_frame.empty:
+        pl_plot = _profit_loss_replay_plot(trades_frame, x_range)
+        plots.append(pl_plot)
+    else:
+        pl_plot = None
+
+    assets_plot = _assets_replay_plot(asset_frame, fills_frame, x_range)
+    plots.append(assets_plot)
+
+    _apply_replay_date_axis(plots, base_frame)
+    for plot in plots:
+        _style_market_section(plot)
+    _style_market_legend(equity_plot, compact=True)
+    _style_market_legend(allocation_plot, compact=True)
+    _style_market_legend(pl_plot)
+    _style_market_legend(assets_plot, compact=True, large_glyphs=True)
+
+    return gridplot(
+        plots,
+        ncols=1,
+        sizing_mode="stretch_width",
+        toolbar_location="right",
+        merge_tools=True,
+    )
+
+
+def _equity_replay_plot(equity: pd.Series, frame: pd.DataFrame, x_range):
+    """Return the replay equity panel."""
+    equity_plot = _market_section("Equity", height=150, x_range=x_range)
+    equity_frame = _equity_replay_frame(equity, frame)
+    if equity_frame.empty:
+        return None
+    eq_source = ColumnDataSource(equity_frame)
+    equity_plot.patch(
+        "bar_index",
+        "drawdown_fill",
+        source=ColumnDataSource(
+            {
+                "bar_index": list(equity_frame["bar_index"])
+                + list(reversed(equity_frame["bar_index"].tolist())),
+                "drawdown_fill": list(equity_frame["relative_equity"])
+                + list(reversed(equity_frame["high_watermark"].tolist())),
+            }
+        ),
+        fill_color=MARKET_DRAWDOWN,
+        line_color="#e2b74e",
+        fill_alpha=0.55,
+        legend_label="Drawdown",
+    )
+    strategy_line = equity_plot.line(
+        "bar_index",
+        "relative_equity",
+        source=eq_source,
+        line_width=2.0,
+        color=MARKET_BLUE,
+        legend_label="Strategy",
+    )
+    equity_plot.line(
+        "bar_index",
+        "buy_hold",
+        source=eq_source,
+        line_width=1.1,
+        color=MARKET_MUTED,
+        line_dash="dashed",
+        legend_label="Buy&Hold",
+    )
+    peak = equity_frame["relative_equity"].idxmax()
+    final = equity_frame.index[-1]
+    max_dd = equity_frame["drawdown"].idxmin()
+    equity_plot.scatter(
+        [equity_frame.loc[peak, "bar_index"]],
+        [equity_frame.loc[peak, "relative_equity"]],
+        color="#49c6d8",
+        line_color="#1d7d8d",
+        size=9,
+        legend_label=f"Peak ({equity_frame.loc[peak, 'relative_equity']:.1%})",
+    )
+    equity_plot.scatter(
+        [equity_frame.loc[final, "bar_index"]],
+        [equity_frame.loc[final, "relative_equity"]],
+        color=MARKET_BLUE,
+        line_color="#1a4f79",
+        size=9,
+        legend_label=f"Final ({equity_frame.loc[final, 'relative_equity']:.1%})",
+    )
+    equity_plot.scatter(
+        [equity_frame.loc[max_dd, "bar_index"]],
+        [equity_frame.loc[max_dd, "relative_equity"]],
+        color=MARKET_DOWN,
+        line_color=MARKET_DOWN_LINE,
+        size=9,
+        legend_label=f"Max Drawdown ({equity_frame.loc[max_dd, 'drawdown']:.1%})",
+    )
+    equity_plot.yaxis.axis_label = "Equity"
+    equity_plot.yaxis.formatter = NumeralTickFormatter(format="0,0.[00]%")
+    _add_line_hover(
+        equity_plot,
+        [strategy_line],
+        [("Date", "@date{%F %T}"), ("Equity", "@relative_equity{0,0.[00]%}")],
+    )
+    return equity_plot
+
+
+def _allocation_replay_plot(positions: pd.DataFrame | None, frame: pd.DataFrame, x_range):
+    """Return a stacked allocation panel when portfolio positions are available."""
+    allocation = _allocation_frame(positions, frame)
+    if allocation.empty:
+        return None
+    plot = _market_section("Allocation", height=120, x_range=x_range)
+    stackers = [
+        column
+        for column in allocation.columns
+        if column not in {"date", "bar_index"} and allocation[column].abs().sum() > 0
+    ]
+    if not stackers:
+        return None
+    source = ColumnDataSource(allocation)
+    colors = _palette(len(stackers))
+    renderers = plot.varea_stack(
+        stackers,
+        x="bar_index",
+        color=colors,
+        alpha=0.78,
+        source=source,
+        legend_label=stackers,
+    )
+    plot.yaxis.axis_label = "Allocation"
+    plot.yaxis.formatter = NumeralTickFormatter(format="0%")
+    plot.y_range.start = 0.0
+    plot.y_range.end = max(1.0, float(allocation[stackers].sum(axis=1).max()) * 1.05)
+    _add_line_hover(
+        plot,
+        renderers,
+        [("Date", "@date{%F %T}")],
+    )
+    return plot
+
+
+def _profit_loss_replay_plot(trades_frame: pd.DataFrame, x_range):
+    """Return the replay trade P/L panel."""
+    plot = _market_section("Profit / Loss", height=120, x_range=x_range)
+    plot.add_layout(
+        Span(location=0, dimension="width", line_color=MARKET_MUTED, line_dash="dashed")
+    )
+    trade_source = ColumnDataSource(trades_frame)
+    win = trades_frame[trades_frame["return_pct"] >= 0]
+    loss = trades_frame[trades_frame["return_pct"] < 0]
+    if not win.empty:
+        plot.scatter(
+            "exit_bar",
+            "return_pct",
+            source=ColumnDataSource(win),
+            marker="triangle",
+            fill_color=MARKET_UP,
+            line_color=MARKET_UP_LINE,
+            size="marker_size",
+            legend_label="Winning Trades",
+        )
+    if not loss.empty:
+        plot.scatter(
+            "exit_bar",
+            "return_pct",
+            source=ColumnDataSource(loss),
+            marker="inverted_triangle",
+            fill_color=MARKET_DOWN,
+            line_color=MARKET_DOWN_LINE,
+            size="marker_size",
+            legend_label="Losing Trades",
+        )
+    min_ret = float(trades_frame["return_pct"].min())
+    max_ret = float(trades_frame["return_pct"].max())
+    ret_span = max(max_ret - min_ret, 0.01)
+    marker_pad = max(ret_span * 0.75, 0.01)
+    plot.y_range.start = min(min_ret - marker_pad, -0.002)
+    plot.y_range.end = max(max_ret + marker_pad, 0.002)
+    hidden = plot.scatter(
+        "exit_bar",
+        "return_pct",
+        source=trade_source,
+        marker="circle",
+        size=1,
+        alpha=0.0,
+    )
+    plot.yaxis.axis_label = "Profit / Loss"
+    plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+    _add_line_hover(
+        plot,
+        [hidden],
+        [
+            ("Exit", "@exit_datetime{%F %T}"),
+            ("Size", "@size{0,0.####}"),
+            ("P/L", "@return_pct{+0.[000]%}"),
+        ],
+        vline=False,
+    )
+    return plot
+
+
+def _assets_replay_plot(asset_frame: pd.DataFrame, fills_frame: pd.DataFrame, x_range):
+    """Return normalized asset price lines with buy/sell markers."""
+    plot = _market_section("Assets / Trades", height=430, x_range=x_range)
+    symbols = list(dict.fromkeys(asset_frame["symbol"].astype(str)))
+    colors = _palette(len(symbols))
+    for index, symbol in enumerate(symbols):
+        symbol_frame = asset_frame[asset_frame["symbol"].eq(symbol)]
+        renderer = plot.line(
+            "bar_index",
+            "normalized_close",
+            source=ColumnDataSource(symbol_frame),
+            line_width=1.7,
+            color=colors[index % len(colors)],
+            legend_label=symbol,
+        )
+        _add_line_hover(
+            plot,
+            [renderer],
+            [
+                ("Date", "@date{%F %T}"),
+                ("Symbol", "@symbol"),
+                ("Normalized", "@normalized_close{0,0.[00]}"),
+                ("Close", "@close{0,0.####}"),
+            ],
+        )
+
+    if not fills_frame.empty:
+        buys = fills_frame[fills_frame["side"].str.lower().eq("buy")]
+        sells = fills_frame[fills_frame["side"].str.lower().eq("sell")]
+        fill_renderers = []
+        if not buys.empty:
+            fill_renderers.append(
+                plot.scatter(
+                    "bar_index",
+                    "normalized_price",
+                    source=ColumnDataSource(buys),
+                    marker="triangle",
+                    size=10,
+                    color=MARKET_UP,
+                    line_color="white",
+                    legend_label="Buy",
+                )
+            )
+        if not sells.empty:
+            fill_renderers.append(
+                plot.scatter(
+                    "bar_index",
+                    "normalized_price",
+                    source=ColumnDataSource(sells),
+                    marker="inverted_triangle",
+                    size=10,
+                    color=MARKET_DOWN,
+                    line_color="white",
+                    legend_label="Sell",
+                )
+            )
+        if fill_renderers:
+            _add_passive_hover(
+                plot,
+                HoverTool(
+                    renderers=fill_renderers,
+                    formatters={"@date": "datetime"},
+                    tooltips=[
+                        ("Date", "@date{%F %T}"),
+                        ("Symbol", "@symbol"),
+                        ("Side", "@side"),
+                        ("Price", "@price{0,0.####}"),
+                        ("Size", "@size{0,0.####}"),
+                    ],
+                ),
+            )
+    plot.yaxis.axis_label = "Normalized Price"
+    return plot
+
 
 def price_trades(market_data: pd.DataFrame, fills: pd.DataFrame | None = None):
     """Return a price curve with buy/sell fill markers."""
@@ -1432,6 +1753,87 @@ def _plot_frame(series: pd.Series, name: str) -> pd.DataFrame:
     return frame
 
 
+def _portfolio_asset_frame(market_data: Mapping[str, pd.DataFrame]) -> pd.DataFrame:
+    """Return normalized long-form prices for a multi-asset replay."""
+    rows = []
+    for symbol, data in market_data.items():
+        frame = _market_frame(pd.DataFrame(data))
+        if frame.empty:
+            continue
+        frame = frame[["date", "close"]].copy()
+        frame["symbol"] = str(symbol)
+        first_close = float(frame["close"].iloc[0])
+        if not first_close:
+            continue
+        frame["normalized_close"] = frame["close"] / first_close * 100.0
+        rows.append(frame)
+    if not rows:
+        return pd.DataFrame()
+    result = pd.concat(rows, ignore_index=True).sort_values(["date", "symbol"])
+    dates = pd.Series(pd.Index(result["date"].dropna().unique()).sort_values())
+    bar_map = {date: float(index) for index, date in enumerate(dates)}
+    result["bar_index"] = result["date"].map(bar_map)
+    return result.dropna(subset=["bar_index", "normalized_close"])
+
+
+def _portfolio_base_frame(asset_frame: pd.DataFrame) -> pd.DataFrame:
+    """Return an equal-weight portfolio benchmark frame for replay alignment."""
+    if asset_frame.empty:
+        return pd.DataFrame()
+    base = (
+        asset_frame.pivot_table(
+            index="date",
+            columns="symbol",
+            values="normalized_close",
+            aggfunc="last",
+        )
+        .sort_index()
+        .ffill()
+    )
+    if base.empty:
+        return pd.DataFrame()
+    frame = pd.DataFrame({"date": base.index, "close": base.mean(axis=1).to_numpy()})
+    frame["bar_index"] = np.arange(len(frame), dtype=float)
+    return frame
+
+
+def _allocation_frame(positions: pd.DataFrame | None, frame: pd.DataFrame) -> pd.DataFrame:
+    """Return replay-aligned positive allocation weights."""
+    if positions is None:
+        return pd.DataFrame()
+    positions_frame = pd.DataFrame(positions).copy()
+    if positions_frame.empty or not {"date", "symbol", "value"}.issubset(positions_frame.columns):
+        return pd.DataFrame()
+    exposure = positions_frame.pivot_table(
+        index="date",
+        columns="symbol",
+        values="value",
+        aggfunc="sum",
+    ).sort_index()
+    if exposure.empty:
+        return pd.DataFrame()
+    exposure.index = pd.to_datetime(exposure.index, errors="coerce")
+    if isinstance(exposure.index.dtype, pd.DatetimeTZDtype):
+        exposure.index = exposure.index.tz_convert("UTC").tz_localize(None)
+    exposure = exposure.apply(pd.to_numeric, errors="coerce").fillna(0.0).clip(lower=0.0)
+    totals = exposure.sum(axis=1)
+    weights = exposure.div(totals.replace(0, np.nan), axis=0).fillna(0.0)
+    dates = pd.to_datetime(frame["date"], errors="coerce")
+    weights = weights.reindex(dates).ffill().fillna(0.0)
+    weights.index = dates
+    keep = list(weights.abs().mean().sort_values(ascending=False).head(8).index)
+    compact = weights[keep].copy()
+    other_columns = [column for column in weights.columns if column not in keep]
+    if other_columns:
+        compact["Others"] = weights[other_columns].sum(axis=1)
+    cash = (1.0 - compact.sum(axis=1)).clip(lower=0.0)
+    if cash.max() > 1e-9:
+        compact["Cash"] = cash
+    result = compact.reset_index().rename(columns={"date": "date"})
+    result["bar_index"] = frame["bar_index"].to_numpy()
+    return result
+
+
 def _market_frame(market_data: pd.DataFrame) -> pd.DataFrame:
     """Return normalized OHLCV data for plotting."""
     if market_data.empty:
@@ -1487,6 +1889,54 @@ def _attach_bar_index(fills: pd.DataFrame, frame: pd.DataFrame) -> pd.DataFrame:
     return projected.dropna(subset=["bar_index"])
 
 
+def _attach_portfolio_bar_index(
+    fills: pd.DataFrame,
+    frame: pd.DataFrame,
+    asset_frame: pd.DataFrame,
+) -> pd.DataFrame:
+    """Attach replay indices and normalized prices to portfolio fill rows."""
+    if fills.empty:
+        return fills
+    projected = _attach_bar_index(fills, frame)
+    if projected.empty:
+        return projected
+    first_close = (
+        asset_frame.sort_values("date")
+        .groupby("symbol", sort=False)["close"]
+        .first()
+        .to_dict()
+    )
+    projected["symbol"] = projected.get("symbol", projected.get("data", "")).astype(str)
+    projected["data"] = projected["symbol"]
+    projected["normalized_price"] = [
+        float(price) / float(first_close.get(symbol, np.nan)) * 100.0
+        for symbol, price in zip(projected["symbol"], projected["price"], strict=True)
+    ]
+    return projected.dropna(subset=["normalized_price"])
+
+
+def _apply_replay_date_axis(plots: list[Any], frame: pd.DataFrame) -> None:
+    """Apply sparse date labels to the bottom replay plot."""
+    if not plots or "date" not in frame.columns:
+        return
+    n_ticks = min(8, len(frame))
+    step = max(1, len(frame) // n_ticks)
+    tick_indices = list(range(0, len(frame), step))
+    last_idx = len(frame) - 1
+    if last_idx not in tick_indices and (last_idx - tick_indices[-1]) >= step // 2:
+        tick_indices.append(last_idx)
+    date_labels = {
+        int(frame.loc[i, "bar_index"]): str(
+            pd.to_datetime(frame.loc[i, "date"]).strftime("%Y-%m-%d")
+        )
+        for i in tick_indices
+    }
+    bottom_plot = plots[-1]
+    bottom_plot.xaxis.ticker = list(date_labels.keys())
+    bottom_plot.xaxis.major_label_overrides = date_labels
+    bottom_plot.xaxis.major_label_orientation = 0.6
+
+
 def _equity_replay_frame(equity: pd.Series, frame: pd.DataFrame) -> pd.DataFrame:
     """Return equity aligned to replay bar indices with derived replay columns."""
     equity_frame = _plot_frame(pd.Series(equity).dropna(), "equity")
@@ -1528,7 +1978,7 @@ def _trade_segments(fills: pd.DataFrame, frame: pd.DataFrame) -> pd.DataFrame:
         if signed == 0:
             signed = abs(float(fill.get("qty", 0.0) or 0.0))
             signed = signed if side == "buy" else -signed
-        data_name = str(fill.get("data", "") or "__default__")
+        data_name = str(fill.get("data", "") or fill.get("symbol", "") or "__default__")
         current = active.get(data_name)
         direction = 1 if signed > 0 else -1
         if current is None:
@@ -1604,6 +2054,23 @@ def _market_section(title: str, *, height: int, x_range):
         border_fill_color="white",
         outline_line_color=MARKET_BORDER,
     )
+
+
+def _palette(count: int) -> list[str]:
+    """Return a stable report palette."""
+    colors = [
+        "#1f77b4",
+        "#ff7f0e",
+        "#2ca02c",
+        "#d62728",
+        "#9467bd",
+        "#8c564b",
+        "#17becf",
+        "#7f7f7f",
+        "#bcbd22",
+        "#e377c2",
+    ]
+    return [colors[index % len(colors)] for index in range(max(count, 1))]
 
 
 def _style_market_section(plot) -> None:

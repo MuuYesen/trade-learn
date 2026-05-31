@@ -30,3 +30,18 @@ from tradelearn.report import Reporter
 
 Reporter.from_returns(returns, positions=positions, transactions=trades).report("report.html")
 ```
+
+## 组合报告
+
+当 `report()` 接收到多个数据源和多资产持仓时，HTML 报告会自动使用组合回放视图，而不是把所有资产的 K 线和交易点挤在同一个 OHLC 坐标里。
+
+组合回放视图包含：
+
+| 面板 | 用途 |
+|---|---|
+| `Equity` | 策略权益、Buy & Hold、峰值、最终值和最大回撤 |
+| `Allocation` | 多资产权重堆叠，展示组合暴露如何随时间变化 |
+| `Profit / Loss` | 按闭环交易展示盈利 / 亏损分布 |
+| `Assets / Trades` | 标准化资产价格曲线和买卖点，避免不同价格尺度互相污染 |
+
+单资产报告仍保留传统 `OHLC / Trades` 视图。

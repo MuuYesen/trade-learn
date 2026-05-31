@@ -9,6 +9,7 @@ from bokeh.plotting import figure
 
 from tradelearn import metrics
 from tradelearn.report import Reporter
+from tradelearn.backtest.reporting import market_data_from_datas
 
 
 def test_reporter_summary_uses_metrics_functions() -> None:
@@ -224,6 +225,25 @@ def test_reporter_exposure_pivots_multi_asset_positions() -> None:
     assert exposure.loc[pd.Timestamp("2024-01-01", tz="UTC"), "BBB"] == pytest.approx(0.4)
     assert exposure.loc[pd.Timestamp("2024-01-02", tz="UTC"), "AAA"] == pytest.approx(0.25)
     assert exposure.loc[pd.Timestamp("2024-01-02", tz="UTC"), "BBB"] == pytest.approx(0.75)
+
+
+def test_market_data_from_datas_preserves_multi_asset_frames() -> None:
+    """Report glue keeps every data feed for portfolio replay charts."""
+    dates = pd.date_range("2024-01-01", periods=2, tz="UTC")
+    first = SimpleNamespace(
+        _name="AAA",
+        _frame=pd.DataFrame({"close": [10.0, 11.0]}, index=dates),
+    )
+    second = SimpleNamespace(
+        _name="BBB",
+        _frame=pd.DataFrame({"close": [20.0, 21.0]}, index=dates),
+    )
+
+    market_data = market_data_from_datas([first, second])
+
+    assert set(market_data) == {"AAA", "BBB"}
+    pd.testing.assert_frame_equal(market_data["AAA"], first._frame)
+    pd.testing.assert_frame_equal(market_data["BBB"], second._frame)
 
 
 def test_reporter_index_enhance_tables_align_benchmark_and_positions() -> None:

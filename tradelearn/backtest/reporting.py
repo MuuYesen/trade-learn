@@ -9,11 +9,22 @@ from tradelearn.report import Reporter
 
 
 def market_data_from_datas(datas: Sequence[Any] | None) -> Any | None:
-    """Return the primary market data frame for report rendering."""
+    """Return market data frames for report rendering."""
 
     if not datas:
         return None
-    return getattr(datas[0], "_frame", None)
+    frames: dict[str, Any] = {}
+    for index, data in enumerate(datas):
+        frame = getattr(data, "_frame", None)
+        if frame is None:
+            continue
+        name = str(getattr(data, "_name", None) or f"data{index}")
+        frames[name] = frame
+    if not frames:
+        return None
+    if len(frames) == 1:
+        return next(iter(frames.values()))
+    return frames
 
 
 def reporter_from_stats(stats: Any, datas: Sequence[Any] | None) -> Reporter:
