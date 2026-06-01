@@ -3,7 +3,7 @@
 import pandas as pd
 from bokeh.plotting import figure
 from bokeh.models import GlyphRenderer
-from bokeh.models.glyphs import Line, MultiLine, Scatter
+from bokeh.models.glyphs import HBar, MultiLine, Scatter
 
 from tradelearn.report.charts import (
     annual_returns,
@@ -119,7 +119,7 @@ def test_market_replay_does_not_connect_trade_markers_with_multiline() -> None:
 
 
 def test_market_replay_uses_portfolio_layout_for_multi_asset_inputs() -> None:
-    """Multi-asset reports should show portfolio allocation and normalized assets."""
+    """Multi-asset reports should show allocation and a holdings timeline."""
     replay = market_replay(
         {"AAA": _market_data(), "BBB": _market_data() * 1.5},
         fills=_multi_asset_fills(),
@@ -130,7 +130,7 @@ def test_market_replay_uses_portfolio_layout_for_multi_asset_inputs() -> None:
     titles = _collect_plot_titles(replay)
 
     assert "Allocation" in titles
-    assert "Normalized Assets / Trades" in titles
+    assert "Holdings / Trades Timeline" in titles
     assert "OHLC / Trades" not in titles
 
 
@@ -145,11 +145,11 @@ def test_market_replay_reconstructs_allocation_from_fills_without_positions() ->
     titles = _collect_plot_titles(replay)
 
     assert "Allocation" in titles
-    assert "Normalized Assets / Trades" in titles
+    assert "Holdings / Trades Timeline" in titles
 
 
-def test_portfolio_replay_limits_visible_assets_by_default() -> None:
-    """Dense portfolio reports should default to the most active assets."""
+def test_portfolio_replay_draws_holdings_timeline() -> None:
+    """Dense portfolio reports should summarize holding periods instead of price spaghetti."""
     symbols = [f"AAA{index}" for index in range(10)]
     replay = market_replay(
         {symbol: _market_data() * (index + 1) for index, symbol in enumerate(symbols)},
@@ -157,21 +157,21 @@ def test_portfolio_replay_limits_visible_assets_by_default() -> None:
         equity=_series("equity"),
     )
 
-    assets_plot = _find_plot(replay, "Normalized Assets / Trades")
-    asset_lines = [
+    timeline = _find_plot(replay, "Holdings / Trades Timeline")
+    holding_bars = [
         renderer
-        for renderer in assets_plot.renderers
-        if isinstance(renderer, GlyphRenderer) and isinstance(renderer.glyph, Line)
+        for renderer in timeline.renderers
+        if isinstance(renderer, GlyphRenderer) and isinstance(renderer.glyph, HBar)
     ]
-    fill_markers = [
+    trade_markers = [
         renderer
-        for renderer in assets_plot.renderers
+        for renderer in timeline.renderers
         if isinstance(renderer, GlyphRenderer) and isinstance(renderer.glyph, Scatter)
     ]
 
-    assert len([renderer for renderer in asset_lines if renderer.visible]) == 8
-    assert any(not renderer.visible for renderer in asset_lines)
-    assert all(renderer.glyph.fill_alpha == 0.58 for renderer in fill_markers)
+    assert holding_bars
+    assert trade_markers
+    assert timeline.yaxis.axis_label == "Asset"
 
 
 def _series(name: str) -> pd.Series:

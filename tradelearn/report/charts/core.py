@@ -12,6 +12,7 @@ from bokeh.layouts import gridplot
 from bokeh.models import (
     ColumnDataSource,
     CrosshairTool,
+    FactorRange,
     HoverTool,
     NumeralTickFormatter,
     Range1d,
@@ -465,8 +466,14 @@ def _portfolio_market_replay(
     else:
         pl_plot = None
 
-    assets_plot = _assets_replay_plot(asset_frame, fills_frame, x_range)
-    plots.append(assets_plot)
+    timeline_plot = _holdings_timeline_plot(
+        positions,
+        base_frame,
+        fills_frame,
+        asset_frame,
+        x_range,
+    )
+    plots.append(timeline_plot)
 
     _apply_replay_date_axis(plots, base_frame)
     for plot in plots:
@@ -474,7 +481,7 @@ def _portfolio_market_replay(
     _style_market_legend(equity_plot, compact=True)
     _style_market_legend(allocation_plot, compact=True)
     _style_market_legend(pl_plot)
-    _style_market_legend(assets_plot, compact=True, large_glyphs=True)
+    _style_market_legend(timeline_plot, compact=True, large_glyphs=True)
 
     return gridplot(
         plots,
@@ -665,91 +672,109 @@ def _profit_loss_replay_plot(trades_frame: pd.DataFrame, x_range):
     return plot
 
 
-def _assets_replay_plot(asset_frame: pd.DataFrame, fills_frame: pd.DataFrame, x_range):
-    """Return normalized asset price lines with buy/sell markers."""
-    plot = _market_section("Normalized Assets / Trades", height=410, x_range=x_range)
-    symbols = list(dict.fromkeys(asset_frame["symbol"].astype(str)))
-    visible_symbols = set(
-        _default_visible_portfolio_symbols(
-            symbols,
-            fills_frame,
-            limit=PORTFOLIO_VISIBLE_ASSET_LIMIT,
-        )
+def _holdings_timeline_plot(
+    positions: pd.DataFrame | None,
+    frame: pd.DataFrame,
+    fills_frame: pd.DataFrame,
+    asset_frame: pd.DataFrame,
+    x_range,
+):
+    """Return a compact holding-period timeline with trade markers."""
+    allocation = _allocation_frame(positions, frame)
+    if allocation.empty:
+        allocation = _allocation_frame_from_fills(fills_frame, asset_frame, frame)
+
+    timeline = _holdings_timeline_frame(allocation)
+    symbols = _timeline_symbols(timeline, fills_frame)
+    plot = _market_section(
+        "Holdings / Trades Timeline",
+        height=max(260, min(430, 90 + len(symbols) * 30)),
+        x_range=x_range,
+        y_range=FactorRange(factors=symbols),
     )
-    colors = _palette(len(symbols))
-    for index, symbol in enumerate(symbols):
-        symbol_frame = asset_frame[asset_frame["symbol"].eq(symbol)]
-        renderer = plot.line(
-            "bar_index",
-            "normalized_close",
-            source=ColumnDataSource(symbol_frame),
-            line_width=1.7,
-            color=colors[index % len(colors)],
-            legend_label=symbol,
+
+    if not timeline.empty:
+        timeline = timeline[timeline["symbol"].isin(symbols)]
+        timeline_source = ColumnDataSource(timeline)
+        holding_renderer = plot.hbar(
+            y="symbol",
+            left="start_bar",
+            right="end_bar",
+            height="height",
+            source=timeline_source,
+            fill_color="color",
+            line_color="color",
+            fill_alpha="alpha",
+            legend_label="Holding",
         )
-        renderer.visible = symbol in visible_symbols
-        _add_line_hover(
+        _add_passive_hover(
             plot,
-            [renderer],
-            [
-                ("Date", "@date{%F %T}"),
-                ("Symbol", "@symbol"),
-                ("Normalized", "@normalized_close{0,0.[00]}"),
-                ("Close", "@close{0,0.####}"),
-            ],
+            HoverTool(
+                renderers=[holding_renderer],
+                formatters={"@start_date": "datetime", "@end_date": "datetime"},
+                tooltips=[
+                    ("Symbol", "@symbol"),
+                    ("Start", "@start_date{%F %T}"),
+                    ("End", "@end_date{%F %T}"),
+                    ("Avg Weight", "@avg_weight{0.[00]%}"),
+                    ("Max Weight", "@max_weight{0.[00]%}"),
+                ],
+            ),
         )
 
-    if not fills_frame.empty:
-        fills_frame = fills_frame[fills_frame["symbol"].astype(str).isin(visible_symbols)]
-        buys = fills_frame[fills_frame["side"].str.lower().eq("buy")]
-        sells = fills_frame[fills_frame["side"].str.lower().eq("sell")]
-        fill_renderers = []
-        if not buys.empty:
-            fill_renderers.append(
-                plot.scatter(
+    if not fills_frame.empty and symbols:
+        fills = fills_frame[fills_frame["symbol"].astype(str).isin(symbols)].copy()
+        if not fills.empty:
+            buys = fills[fills["side"].str.lower().eq("buy")]
+            sells = fills[fills["side"].str.lower().eq("sell")]
+            fill_renderers = []
+            if not buys.empty:
+                buy_renderer = plot.scatter(
                     "bar_index",
-                    "normalized_price",
+                    "symbol",
                     source=ColumnDataSource(buys),
                     marker="triangle",
-                    size=8,
+                    size=6,
                     color=MARKET_UP,
                     line_color="white",
-                    fill_alpha=0.58,
+                    fill_alpha=0.62,
                     line_alpha=0.82,
                     legend_label="Buy",
                 )
-            )
-        if not sells.empty:
-            fill_renderers.append(
-                plot.scatter(
+                buy_renderer.visible = False
+                fill_renderers.append(buy_renderer)
+            if not sells.empty:
+                sell_renderer = plot.scatter(
                     "bar_index",
-                    "normalized_price",
+                    "symbol",
                     source=ColumnDataSource(sells),
                     marker="inverted_triangle",
-                    size=8,
+                    size=6,
                     color=MARKET_DOWN,
                     line_color="white",
-                    fill_alpha=0.58,
+                    fill_alpha=0.62,
                     line_alpha=0.82,
                     legend_label="Sell",
                 )
-            )
-        if fill_renderers:
-            _add_passive_hover(
-                plot,
-                HoverTool(
-                    renderers=fill_renderers,
-                    formatters={"@date": "datetime"},
-                    tooltips=[
-                        ("Date", "@date{%F %T}"),
-                        ("Symbol", "@symbol"),
-                        ("Side", "@side"),
-                        ("Price", "@price{0,0.####}"),
-                        ("Size", "@size{0,0.####}"),
-                    ],
-                ),
-            )
-    plot.yaxis.axis_label = "Normalized Price"
+                sell_renderer.visible = False
+                fill_renderers.append(sell_renderer)
+            if fill_renderers:
+                _add_passive_hover(
+                    plot,
+                    HoverTool(
+                        renderers=fill_renderers,
+                        formatters={"@date": "datetime"},
+                        tooltips=[
+                            ("Date", "@date{%F %T}"),
+                            ("Symbol", "@symbol"),
+                            ("Side", "@side"),
+                            ("Price", "@price{0,0.####}"),
+                            ("Size", "@size{0,0.####}"),
+                        ],
+                    ),
+                )
+
+    plot.yaxis.axis_label = "Asset"
     return plot
 
 
@@ -1905,6 +1930,71 @@ def _allocation_frame_from_fills(
     return result
 
 
+def _holdings_timeline_frame(allocation: pd.DataFrame) -> pd.DataFrame:
+    """Return contiguous holding intervals from replay allocation weights."""
+    if allocation.empty or not {"date", "bar_index"}.issubset(allocation.columns):
+        return pd.DataFrame()
+
+    symbols = [
+        column
+        for column in allocation.columns
+        if column not in {"date", "bar_index", "Cash"} and allocation[column].abs().max() > 1e-9
+    ]
+    if not symbols:
+        return pd.DataFrame()
+
+    colors = dict(zip(symbols, _palette(len(symbols)), strict=True))
+    rows: list[dict[str, Any]] = []
+    for symbol in symbols:
+        weights = pd.to_numeric(allocation[symbol], errors="coerce").fillna(0.0)
+        held = weights > 1e-6
+        if not held.any():
+            continue
+        group_id = held.ne(held.shift(fill_value=False)).cumsum()
+        for _, group in allocation.loc[held].groupby(group_id[held]):
+            group_weights = weights.loc[group.index]
+            avg_weight = float(group_weights.mean())
+            max_weight = float(group_weights.max())
+            start_bar = float(group["bar_index"].iloc[0])
+            end_bar = float(group["bar_index"].iloc[-1])
+            rows.append(
+                {
+                    "symbol": str(symbol),
+                    "start_bar": max(start_bar - 0.45, 0.0),
+                    "end_bar": end_bar + 0.45,
+                    "start_date": group["date"].iloc[0],
+                    "end_date": group["date"].iloc[-1],
+                    "avg_weight": avg_weight,
+                    "max_weight": max_weight,
+                    "height": min(0.82, 0.32 + max_weight * 0.7),
+                    "alpha": min(0.9, 0.35 + max_weight * 1.3),
+                    "color": colors[str(symbol)],
+                }
+            )
+
+    return pd.DataFrame(rows)
+
+
+def _timeline_symbols(timeline: pd.DataFrame, fills: pd.DataFrame) -> list[str]:
+    """Return active symbols ordered by holding and trade activity for the timeline."""
+    symbols: list[str] = []
+    if not timeline.empty:
+        activity = (
+            timeline.assign(activity=(timeline["end_bar"] - timeline["start_bar"]) * timeline["avg_weight"])
+            .groupby("symbol")["activity"]
+            .sum()
+            .sort_values(ascending=False)
+        )
+        symbols.extend(str(symbol) for symbol in activity.index)
+
+    if fills is not None and not fills.empty and "symbol" in fills.columns:
+        for symbol in fills["symbol"].astype(str).value_counts().index:
+            if symbol not in symbols:
+                symbols.append(symbol)
+
+    return list(reversed(symbols[:PORTFOLIO_VISIBLE_ASSET_LIMIT]))
+
+
 def _market_frame(market_data: pd.DataFrame) -> pd.DataFrame:
     """Return normalized OHLCV data for plotting."""
     if market_data.empty:
@@ -2110,8 +2200,9 @@ def _trade_marker_size(size: float) -> float:
     return max(8.0, min(20.0, 8.0 + abs(float(size)) ** 0.5))
 
 
-def _market_section(title: str, *, height: int, x_range):
+def _market_section(title: str, *, height: int, x_range, y_range=None):
     """Return a linked replay figure."""
+    kwargs = {"y_range": y_range} if y_range is not None else {}
     return figure(
         title=title,
         x_axis_type="linear",
@@ -2124,6 +2215,7 @@ def _market_section(title: str, *, height: int, x_range):
         background_fill_color=MARKET_BACKGROUND,
         border_fill_color="white",
         outline_line_color=MARKET_BORDER,
+        **kwargs,
     )
 
 
@@ -2142,28 +2234,6 @@ def _palette(count: int) -> list[str]:
         "#e377c2",
     ]
     return [colors[index % len(colors)] for index in range(max(count, 1))]
-
-
-def _default_visible_portfolio_symbols(
-    symbols: list[str],
-    fills: pd.DataFrame,
-    *,
-    limit: int,
-) -> list[str]:
-    """Return the symbols that should be visible in dense portfolio replay charts."""
-    if len(symbols) <= limit:
-        return symbols
-
-    symbol_rank = {symbol: index for index, symbol in enumerate(symbols)}
-    if fills is None or fills.empty or "symbol" not in fills.columns:
-        return symbols[:limit]
-
-    counts = fills["symbol"].astype(str).value_counts()
-    ranked = sorted(
-        symbols,
-        key=lambda symbol: (-int(counts.get(symbol, 0)), symbol_rank[symbol]),
-    )
-    return ranked[:limit]
 
 
 def _style_market_section(plot) -> None:
