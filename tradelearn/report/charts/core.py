@@ -8,16 +8,18 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from bokeh.layouts import gridplot
+from bokeh.layouts import column, gridplot
 from bokeh.models import (
     ColumnDataSource,
     CrosshairTool,
+    CustomJS,
     FactorRange,
     HoverTool,
     NumeralTickFormatter,
     Range1d,
     Span,
 )
+from bokeh.models.widgets import Select
 from bokeh.plotting import figure
 from bokeh.transform import linear_cmap
 
@@ -468,7 +470,7 @@ def _portfolio_market_replay(
     else:
         pl_plot = None
 
-    activity_plot = _trade_activity_replay_plot(fills_frame, x_range)
+    activity_control, activity_plot = _trade_activity_replay_plot(fills_frame, x_range)
     plots.append(activity_plot)
 
     _apply_replay_date_axis(plots, base_frame)
@@ -479,12 +481,17 @@ def _portfolio_market_replay(
     _style_market_legend(pl_plot)
     _style_market_legend(activity_plot, compact=True, large_glyphs=True)
 
-    return gridplot(
-        plots,
-        ncols=1,
+    return column(
+        gridplot(
+            plots[:-1],
+            ncols=1,
+            sizing_mode="stretch_width",
+            toolbar_location="right",
+            merge_tools=True,
+        ),
+        activity_control,
+        activity_plot,
         sizing_mode="stretch_width",
-        toolbar_location="right",
-        merge_tools=True,
     )
 
 
@@ -671,23 +678,36 @@ def _profit_loss_replay_plot(trades_frame: pd.DataFrame, x_range):
 def _trade_activity_replay_plot(fills_frame: pd.DataFrame, x_range):
     """Return a trade activity panel grouped by asset."""
     activity, symbols = _trade_activity_frame(fills_frame)
+    initial_limit = min(PORTFOLIO_VISIBLE_ASSET_LIMIT, len(symbols))
+    visible_symbols = symbols[:initial_limit]
+    visible = _filter_trade_activity(activity, visible_symbols)
     plot = _market_section(
         "Trade Activity by Asset",
-        height=max(240, min(390, 90 + len(symbols) * 32)),
+        height=_trade_activity_height(initial_limit),
         x_range=x_range,
-        y_range=FactorRange(factors=list(reversed(symbols))),
+        y_range=FactorRange(factors=list(reversed(visible_symbols))),
+    )
+    control = Select(
+        title="Show",
+        value=str(initial_limit),
+        options=_trade_activity_options(symbols),
+        width=220,
     )
 
-    if not activity.empty:
-        buys = activity[activity["side_normalized"].eq("buy")]
-        sells = activity[activity["side_normalized"].eq("sell")]
+    if not visible.empty:
+        buys = visible[visible["side_normalized"].eq("buy")]
+        sells = visible[visible["side_normalized"].eq("sell")]
+        buy_source = ColumnDataSource(buys)
+        sell_source = ColumnDataSource(sells)
+        buy_full_source = ColumnDataSource(activity[activity["side_normalized"].eq("buy")])
+        sell_full_source = ColumnDataSource(activity[activity["side_normalized"].eq("sell")])
         renderers = []
         if not buys.empty:
             renderers.append(
                 plot.scatter(
                     "bar_index",
                     "symbol",
-                    source=ColumnDataSource(buys),
+                    source=buy_source,
                     marker="triangle",
                     size="marker_size",
                     fill_color=MARKET_UP,
@@ -702,7 +722,7 @@ def _trade_activity_replay_plot(fills_frame: pd.DataFrame, x_range):
                 plot.scatter(
                     "bar_index",
                     "symbol",
-                    source=ColumnDataSource(sells),
+                    source=sell_source,
                     marker="inverted_triangle",
                     size="marker_size",
                     fill_color=MARKET_DOWN,
@@ -728,9 +748,52 @@ def _trade_activity_replay_plot(fills_frame: pd.DataFrame, x_range):
                     ],
                 ),
             )
+        control.js_on_change(
+            "value",
+            CustomJS(
+                args={
+                    "buy_source": buy_source,
+                    "sell_source": sell_source,
+                    "buy_full_source": buy_full_source,
+                    "sell_full_source": sell_full_source,
+                    "y_range": plot.y_range,
+                    "plot": plot,
+                    "symbols": symbols,
+                },
+                code="""
+const value = cb_obj.value;
+const limit = value === "all" ? symbols.length : Number.parseInt(value, 10);
+const selected = new Set(symbols.slice(0, limit));
+
+function filterData(fullData) {
+  const result = {};
+  for (const key in fullData) {
+    result[key] = [];
+  }
+  const rows = fullData.symbol ? fullData.symbol.length : 0;
+  for (let index = 0; index < rows; index++) {
+    if (!selected.has(String(fullData.symbol[index]))) {
+      continue;
+    }
+    for (const key in fullData) {
+      result[key].push(fullData[key][index]);
+    }
+  }
+  return result;
+}
+
+buy_source.data = filterData(buy_full_source.data);
+sell_source.data = filterData(sell_full_source.data);
+y_range.factors = symbols.slice(0, limit).reverse();
+plot.height = Math.max(240, Math.min(390, 90 + limit * 32));
+buy_source.change.emit();
+sell_source.change.emit();
+""",
+            ),
+        )
 
     plot.yaxis.axis_label = "Asset"
-    return plot
+    return control, plot
 
 
 def price_trades(market_data: pd.DataFrame, fills: pd.DataFrame | None = None):
@@ -1909,8 +1972,7 @@ def _trade_activity_frame(fills: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
         ordered = list(activity["symbol"].value_counts().index)
     else:
         ordered = list(notional_by_symbol.index)
-    symbols = ordered[:PORTFOLIO_VISIBLE_ASSET_LIMIT]
-    activity = activity[activity["symbol"].isin(symbols)].copy()
+    symbols = ordered
 
     min_notional = float(activity["notional"].min())
     max_notional = float(activity["notional"].max())
@@ -1921,6 +1983,30 @@ def _trade_activity_frame(fills: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
         activity["marker_size"] = 7.0
 
     return activity, symbols
+
+
+def _filter_trade_activity(activity: pd.DataFrame, symbols: list[str]) -> pd.DataFrame:
+    """Return trade activity for visible symbols in display order."""
+    if activity.empty or not symbols:
+        return pd.DataFrame()
+    visible = activity[activity["symbol"].isin(symbols)].copy()
+    visible["symbol"] = pd.Categorical(visible["symbol"], categories=symbols, ordered=True)
+    return visible.sort_values(["symbol", "bar_index"])
+
+
+def _trade_activity_options(symbols: list[str]) -> list[tuple[str, str]]:
+    """Return static-report trade activity visibility options."""
+    count = len(symbols)
+    options = [(str(min(PORTFOLIO_VISIBLE_ASSET_LIMIT, count)), "Top 8 by Notional")]
+    if count > PORTFOLIO_VISIBLE_ASSET_LIMIT:
+        options.append((str(min(15, count)), "Top 15 by Notional"))
+        options.append(("all", "All Assets"))
+    return list(dict.fromkeys(options))
+
+
+def _trade_activity_height(symbol_count: int) -> int:
+    """Return a bounded panel height for visible trade activity rows."""
+    return max(240, min(390, 90 + symbol_count * 32))
 
 
 def _market_frame(market_data: pd.DataFrame) -> pd.DataFrame:

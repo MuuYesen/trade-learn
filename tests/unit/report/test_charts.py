@@ -4,6 +4,7 @@ import pandas as pd
 from bokeh.plotting import figure
 from bokeh.models import GlyphRenderer
 from bokeh.models.glyphs import MultiLine, Scatter
+from bokeh.models.widgets import Select
 
 from tradelearn.report.charts import (
     annual_returns,
@@ -186,6 +187,23 @@ def test_portfolio_replay_draws_trade_activity_by_asset() -> None:
     assert len(activity.y_range.factors) == 8
     assert all(renderer.glyph.size == "marker_size" for renderer in trade_markers)
     assert activity.yaxis.axis_label == "Asset"
+
+
+def test_portfolio_replay_trade_activity_has_visibility_selector() -> None:
+    """Trade activity can expand from the default Top 8 to more assets."""
+    symbols = [f"AAA{index}" for index in range(20)]
+    replay = market_replay(
+        {symbol: _market_data() * (index + 1) for index, symbol in enumerate(symbols)},
+        fills=_many_asset_fills(symbols),
+        equity=_series("equity"),
+    )
+
+    selectors = _collect_models(replay, Select)
+    selector = next(item for item in selectors if item.title == "Show")
+
+    assert selector.value == "8"
+    assert ("15", "Top 15 by Notional") in selector.options
+    assert ("all", "All Assets") in selector.options
 
 
 def _series(name: str) -> pd.Series:
@@ -394,6 +412,16 @@ def _collect_glyph_renderers(layout) -> list[GlyphRenderer]:
         item = child[0] if isinstance(child, tuple) else child
         renderers.extend(_collect_glyph_renderers(item))
     return renderers
+
+
+def _collect_models(layout, model_type):
+    models = []
+    if isinstance(layout, model_type):
+        models.append(layout)
+    for child in getattr(layout, "children", []):
+        item = child[0] if isinstance(child, tuple) else child
+        models.extend(_collect_models(item, model_type))
+    return models
 
 
 def _fills() -> pd.DataFrame:
