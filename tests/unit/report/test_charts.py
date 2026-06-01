@@ -137,8 +137,8 @@ def test_market_replay_uses_portfolio_layout_for_multi_asset_inputs() -> None:
     assert "OHLC / Trades" not in titles
 
 
-def test_portfolio_replay_moves_legends_outside_plot_area() -> None:
-    """Portfolio replay legends should not cover dense chart data."""
+def test_portfolio_replay_uses_compact_above_legends() -> None:
+    """Portfolio replay legends should not narrow the dense chart area."""
     replay = market_replay(
         {"AAA": _market_data(), "BBB": _market_data() * 1.5},
         fills=_closed_trade_fills(),
@@ -149,11 +149,14 @@ def test_portfolio_replay_moves_legends_outside_plot_area() -> None:
     allocation = _find_plot(replay, "Allocation")
     activity = _find_plot(replay, "Trade Activity by Asset")
 
-    allocation_legends = [item for item in allocation.right if isinstance(item, Legend)]
-    activity_legends = [item for item in activity.right if isinstance(item, Legend)]
+    allocation_legends = [item for item in allocation.above if isinstance(item, Legend)]
+    activity_legends = [item for item in activity.above if isinstance(item, Legend)]
     assert allocation_legends
     assert activity_legends
+    assert not [item for item in allocation.right if isinstance(item, Legend)]
+    assert not [item for item in activity.right if isinstance(item, Legend)]
     assert all(legend.click_policy == "hide" for legend in allocation_legends + activity_legends)
+    assert all(legend.background_fill_alpha == 0.0 for legend in allocation_legends + activity_legends)
 
 
 def test_market_replay_keeps_single_asset_mapping_on_ohlc_layout() -> None:

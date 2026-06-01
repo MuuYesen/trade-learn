@@ -2483,31 +2483,33 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
         return
     for legend in list(plot.legend):
         legend.visible = True
-        legend.ncols = 2
-        legend.border_line_width = 1
-        legend.border_line_color = "#d7e0e7"
+        item_count = len(legend.items)
+        legend.ncols = min(item_count, 8 if compact else 4)
+        legend.border_line_width = 0
+        legend.border_line_alpha = 0.0
+        legend.border_line_color = None
         legend.background_fill_color = "white"
-        legend.background_fill_alpha = 0.88
-        legend.padding = 5 if compact else 6
-        legend.spacing = 2 if compact else 1
-        legend.margin = 4
+        legend.background_fill_alpha = 0.0
+        legend.padding = 2 if compact else 3
+        legend.spacing = 4 if compact else 6
+        legend.margin = 0
         if compact and large_glyphs:
-            legend.glyph_width = 32
-            legend.glyph_height = 22
+            legend.glyph_width = 22
+            legend.glyph_height = 16
         else:
-            legend.glyph_width = 18 if compact else (34 if large_glyphs else 28)
-            legend.glyph_height = 12 if compact else (22 if large_glyphs else 18)
+            legend.glyph_width = 16 if compact else (24 if large_glyphs else 20)
+            legend.glyph_height = 10 if compact else (16 if large_glyphs else 14)
         legend.label_text_color = "#33424f"
-        legend.label_text_font_size = "8pt" if compact else "9pt"
+        legend.label_text_font_size = "8pt"
         legend.click_policy = "hide"
         _move_legend_outside(plot, legend)
 
 
 def _move_legend_outside(plot, legend: Legend) -> None:
-    """Move a legend to the right side panel so it does not cover plotted data."""
-    if legend in plot.right:
+    """Move a legend above the plot so it does not cover or narrow plotted data."""
+    if legend in plot.above:
         return
-    plot.add_layout(legend, "right")
+    plot.add_layout(legend, "above")
 
 
 def _make_static_chart(plot) -> None:
