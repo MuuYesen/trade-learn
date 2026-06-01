@@ -285,6 +285,8 @@ def test_reporter_html_uses_portfolio_replay_for_multi_asset_market_data(tmp_pat
     ).html(path)
 
     html = path.read_text()
+    assert "Portfolio Replay" in html
+    assert "Price / Trades" not in html
     assert "Allocation" in html
     assert "Trade Activity by Asset" in html
     assert "OHLC / Trades" not in html

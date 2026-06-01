@@ -67,7 +67,7 @@ def test_engine_plot_and_html_use_reporter_after_run(tmp_path: Path) -> None:
     assert len(charts) == 1
     assert result == path
     assert "Summary Stats" in path.read_text()
-    assert "Price / Trades" in path.read_text()
+    assert "Portfolio Replay" in path.read_text()
     assert hasattr(cerebro, "report")
     assert not hasattr(cerebro, "html")
 

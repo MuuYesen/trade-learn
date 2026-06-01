@@ -83,7 +83,7 @@ def write_html_report(
     plots["Trade Distribution"] = charts.trade_distribution(reporter.trade_distribution())
     price_plot = reporter.price_trades_chart()
     if price_plot is not None:
-        plots["Price / Trades"] = price_plot
+        plots[_market_replay_title(reporter.market_data)] = price_plot
     if not rolling_beta.empty:
         plots["Rolling Beta"] = charts.rolling_beta(rolling_beta)
     if _has_multi_asset_exposure(exposure):
@@ -456,6 +456,15 @@ def _factor_long_short_section(factor_long_short_returns: pd.DataFrame) -> str:
 def _has_multi_asset_exposure(exposure: pd.DataFrame) -> bool:
     """Return whether exposure should be rendered as a multi-asset section."""
     return not exposure.empty and len(exposure.columns) > 1
+
+
+def _market_replay_title(market_data: Any) -> str:
+    """Return the chart section title for the market replay view."""
+    if isinstance(market_data, dict):
+        valid_feeds = [value for value in market_data.values() if not value.empty]
+        if len(valid_feeds) > 1:
+            return "Portfolio Replay"
+    return "Price / Trades"
 
 
 def _format_date(value: Any) -> str:

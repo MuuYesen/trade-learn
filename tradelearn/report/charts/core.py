@@ -15,6 +15,7 @@ from bokeh.models import (
     CustomJS,
     FactorRange,
     HoverTool,
+    Legend,
     NumeralTickFormatter,
     Range1d,
     Span,
@@ -33,6 +34,8 @@ MARKET_GRID = "#e8edf2"
 MARKET_BORDER = "#ccd7e0"
 MARKET_BACKGROUND = "#fbfcfe"
 MARKET_DRAWDOWN = "#fff3c4"
+PORTFOLIO_OTHERS = "#a98578"
+PORTFOLIO_CASH = "#b8c0c7"
 PORTFOLIO_VISIBLE_ASSET_LIMIT = 8
 
 
@@ -620,7 +623,7 @@ def _allocation_replay_plot(
     plot = _market_section("Allocation", height=120, x_range=x_range)
     source = ColumnDataSource(display)
     full_source = ColumnDataSource(allocation)
-    colors = _palette(len(stackers))
+    colors = _allocation_stack_colors(stackers)
     renderers = plot.varea_stack(
         stackers,
         x="bar_index",
@@ -728,7 +731,7 @@ def _trade_activity_replay_plot(
         "Trade Activity by Asset",
         height=_trade_activity_height(len(visible_symbols)),
         x_range=x_range,
-        y_range=FactorRange(factors=list(reversed(visible_symbols))),
+        y_range=FactorRange(factors=_trade_activity_factors(visible_symbols)),
     )
 
     if not visible.empty:
@@ -743,13 +746,13 @@ def _trade_activity_replay_plot(
             renderers.append(
                 plot.scatter(
                     "bar_index",
-                    "symbol",
+                    "y_factor",
                     source=buy_source,
                     marker="triangle",
                     size="marker_size",
                     fill_color=MARKET_UP,
                     line_color="white",
-                    fill_alpha=0.72,
+                    fill_alpha=0.64,
                     line_alpha=0.9,
                     legend_label="Buy",
                 )
@@ -758,13 +761,13 @@ def _trade_activity_replay_plot(
             renderers.append(
                 plot.scatter(
                     "bar_index",
-                    "symbol",
+                    "y_factor",
                     source=sell_source,
                     marker="inverted_triangle",
                     size="marker_size",
                     fill_color=MARKET_DOWN,
                     line_color="white",
-                    fill_alpha=0.72,
+                    fill_alpha=0.64,
                     line_alpha=0.9,
                     legend_label="Sell",
                 )
@@ -801,7 +804,7 @@ def _trade_activity_replay_plot(
             ),
         )
 
-    plot.yaxis.axis_label = "Asset"
+    plot.yaxis.axis_label = "Asset / Side"
     return plot
 
 
@@ -1979,6 +1982,13 @@ def _trade_activity_frame(fills: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
     symbols = ordered
 
     activity["marker_size"] = _trade_activity_marker_sizes(activity["notional"])
+    activity["y_factor"] = list(
+        zip(
+            activity["symbol"],
+            activity["side_normalized"].map({"buy": "Buy", "sell": "Sell"}),
+            strict=True,
+        )
+    )
 
     return activity, symbols
 
@@ -2134,8 +2144,14 @@ function filterData(fullData) {{
 
 buy_source.data = filterData(buy_full_source.data);
 sell_source.data = filterData(sell_full_source.data);
-y_range.factors = symbols.slice(0, limit).reverse();
-plot.height = Math.max(240, Math.min(390, 90 + limit * 32));
+const factors = [];
+const visible = symbols.slice(0, limit).reverse();
+for (const symbol of visible) {{
+  factors.push([symbol, "Sell"]);
+  factors.push([symbol, "Buy"]);
+}}
+y_range.factors = factors;
+plot.height = Math.max(280, Math.min(520, 120 + limit * 54));
 buy_source.change.emit();
 sell_source.change.emit();
 """
@@ -2162,7 +2178,16 @@ def _trade_activity_options(symbols: list[str]) -> list[tuple[str, str]]:
 
 def _trade_activity_height(symbol_count: int) -> int:
     """Return a bounded panel height for visible trade activity rows."""
-    return max(240, min(390, 90 + symbol_count * 32))
+    return max(280, min(520, 120 + symbol_count * 54))
+
+
+def _trade_activity_factors(symbols: list[str]) -> list[tuple[str, str]]:
+    """Return categorical lanes for buy/sell activity per asset."""
+    factors = []
+    for symbol in reversed(symbols):
+        factors.append((symbol, "Sell"))
+        factors.append((symbol, "Buy"))
+    return factors
 
 
 def _market_frame(market_data: pd.DataFrame) -> pd.DataFrame:
@@ -2409,6 +2434,20 @@ def _palette(count: int) -> list[str]:
     return [colors[index % len(colors)] for index in range(max(count, 1))]
 
 
+def _allocation_stack_colors(stackers: list[str]) -> list[str]:
+    """Return portfolio allocation colors with muted residual buckets."""
+    asset_colors = iter(_palette(len([item for item in stackers if item not in {"Others", "Cash"}])))
+    colors = []
+    for stacker in stackers:
+        if stacker == "Others":
+            colors.append(PORTFOLIO_OTHERS)
+        elif stacker == "Cash":
+            colors.append(PORTFOLIO_CASH)
+        else:
+            colors.append(next(asset_colors))
+    return colors
+
+
 def _style_market_section(plot) -> None:
     """Apply common Bokeh market Bokeh styling."""
     plot.min_border_left = 50
@@ -2444,7 +2483,6 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
         return
     for legend in list(plot.legend):
         legend.visible = True
-        legend.location = "top_left"
         legend.ncols = 2
         legend.border_line_width = 1
         legend.border_line_color = "#d7e0e7"
@@ -2462,6 +2500,14 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
         legend.label_text_color = "#33424f"
         legend.label_text_font_size = "8pt" if compact else "9pt"
         legend.click_policy = "hide"
+        _move_legend_outside(plot, legend)
+
+
+def _move_legend_outside(plot, legend: Legend) -> None:
+    """Move a legend to the right side panel so it does not cover plotted data."""
+    if legend in plot.right:
+        return
+    plot.add_layout(legend, "right")
 
 
 def _make_static_chart(plot) -> None:

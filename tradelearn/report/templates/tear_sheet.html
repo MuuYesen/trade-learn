@@ -487,14 +487,19 @@
         {{ detail_content | safe }}
       </div>
       {% endif %}
-      {% if charts.get("Price / Trades") %}
+      {% if charts.get("Portfolio Replay") %}
+      <section class="chart">
+        <h2>Portfolio Replay</h2>
+        {{ charts.get("Portfolio Replay") | safe }}
+      </section>
+      {% elif charts.get("Price / Trades") %}
       <section class="chart">
         <h2>Price / Trades</h2>
         {{ charts.get("Price / Trades") | safe }}
       </section>
       {% endif %}
       <div class="chart-grid">
-        {% for title, chart in charts.items() if title != "Price / Trades" %}
+        {% for title, chart in charts.items() if title not in ("Price / Trades", "Portfolio Replay") %}
         <section class="chart">
           <h2>{{ title }}</h2>
           {{ chart | safe }}

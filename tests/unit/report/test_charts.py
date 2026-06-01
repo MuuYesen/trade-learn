@@ -2,7 +2,7 @@
 
 import pandas as pd
 from bokeh.plotting import figure
-from bokeh.models import GlyphRenderer
+from bokeh.models import GlyphRenderer, Legend
 from bokeh.models.glyphs import MultiLine, Scatter, VBar
 from bokeh.models.widgets import Select
 
@@ -137,6 +137,25 @@ def test_market_replay_uses_portfolio_layout_for_multi_asset_inputs() -> None:
     assert "OHLC / Trades" not in titles
 
 
+def test_portfolio_replay_moves_legends_outside_plot_area() -> None:
+    """Portfolio replay legends should not cover dense chart data."""
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_closed_trade_fills(),
+        equity=_series("equity"),
+        positions=_portfolio_positions(),
+    )
+
+    allocation = _find_plot(replay, "Allocation")
+    activity = _find_plot(replay, "Trade Activity by Asset")
+
+    allocation_legends = [item for item in allocation.right if isinstance(item, Legend)]
+    activity_legends = [item for item in activity.right if isinstance(item, Legend)]
+    assert allocation_legends
+    assert activity_legends
+    assert all(legend.click_policy == "hide" for legend in allocation_legends + activity_legends)
+
+
 def test_market_replay_keeps_single_asset_mapping_on_ohlc_layout() -> None:
     """Single-asset mapping inputs should keep the original OHLC replay layout."""
     replay = market_replay(
@@ -185,9 +204,27 @@ def test_portfolio_replay_draws_trade_activity_by_asset() -> None:
     ]
 
     assert trade_markers
-    assert len(activity.y_range.factors) == 8
+    assert len(activity.y_range.factors) == 16
     assert all(renderer.glyph.size == "marker_size" for renderer in trade_markers)
-    assert activity.yaxis.axis_label == "Asset"
+    assert activity.yaxis.axis_label == "Asset / Side"
+
+
+def test_trade_activity_uses_side_lanes_per_asset() -> None:
+    """Buy and sell markers should use separate categorical lanes."""
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_closed_trade_fills(),
+        equity=_series("equity"),
+    )
+
+    activity = _find_plot(replay, "Trade Activity by Asset")
+    factors = list(activity.y_range.factors)
+
+    assert ("AAA", "Buy") in factors
+    assert ("AAA", "Sell") in factors
+    assert ("BBB", "Buy") in factors
+    assert ("BBB", "Sell") in factors
+    assert activity.yaxis.axis_label == "Asset / Side"
 
 
 def test_portfolio_replay_hides_internal_bar_index_axes() -> None:
