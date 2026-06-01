@@ -44,4 +44,6 @@ Reporter.from_returns(returns, positions=positions, transactions=trades).report(
 | `Profit / Loss` | 按退出时间分桶展示平均盈利 / 亏损，hover 可查看交易数、胜负数和最好 / 最差交易 |
 | `Trade Activity by Asset` | 按资产展示买卖发生的时间和交易规模，默认展示交易最活跃的 8 个资产，可用下拉框切换到 Top 15 或全部资产 |
 
+`Assets` 下拉框会同步控制 `Allocation` 和 `Trade Activity by Asset`。`Equity` 与 `Profit / Loss` 始终保留组合整体视角。
+
 单资产报告，包括只传入一个数据源的 mapping，仍保留传统 `OHLC / Trades` 视图。

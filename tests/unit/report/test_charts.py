@@ -214,7 +214,7 @@ def test_portfolio_replay_aggregates_profit_loss() -> None:
 
 
 def test_portfolio_replay_trade_activity_has_visibility_selector() -> None:
-    """Trade activity can expand from the default Top 8 to more assets."""
+    """Portfolio replay can expand asset-scoped panels from the default Top 8."""
     symbols = [f"AAA{index}" for index in range(20)]
     replay = market_replay(
         {symbol: _market_data() * (index + 1) for index, symbol in enumerate(symbols)},
@@ -223,11 +223,30 @@ def test_portfolio_replay_trade_activity_has_visibility_selector() -> None:
     )
 
     selectors = _collect_models(replay, Select)
-    selector = next(item for item in selectors if item.title == "Show")
+    selector = next(item for item in selectors if item.title == "Assets")
 
     assert selector.value == "8"
     assert ("15", "Top 15 by Notional") in selector.options
     assert ("all", "All Assets") in selector.options
+
+
+def test_portfolio_replay_asset_selector_prepares_allocation_others() -> None:
+    """Allocation keeps hidden assets collapsed for the shared asset selector."""
+    symbols = [f"AAA{index}" for index in range(20)]
+    replay = market_replay(
+        {symbol: _market_data() * (index + 1) for index, symbol in enumerate(symbols)},
+        fills=_many_asset_fills(symbols),
+        equity=_series("equity"),
+    )
+
+    allocation = _find_plot(replay, "Allocation")
+    sources = [
+        renderer.data_source
+        for renderer in allocation.renderers
+        if isinstance(renderer, GlyphRenderer) and hasattr(renderer, "data_source")
+    ]
+
+    assert any("Others" in source.data for source in sources)
 
 
 def _series(name: str) -> pd.Series:

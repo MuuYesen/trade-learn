@@ -454,12 +454,20 @@ def _portfolio_market_replay(
     else:
         equity_plot = None
 
+    activity, symbols = _trade_activity_frame(fills_frame)
+    initial_limit = min(PORTFOLIO_VISIBLE_ASSET_LIMIT, len(symbols))
+    visible_symbols = symbols[:initial_limit]
+    asset_control = _portfolio_asset_selector(symbols, initial_limit)
+
     allocation_plot = _allocation_replay_plot(
         positions,
         base_frame,
         x_range,
         fills_frame,
         asset_frame,
+        symbols,
+        visible_symbols,
+        asset_control,
     )
     if allocation_plot is not None:
         plots.append(allocation_plot)
@@ -470,7 +478,13 @@ def _portfolio_market_replay(
     else:
         pl_plot = None
 
-    activity_control, activity_plot = _trade_activity_replay_plot(fills_frame, x_range)
+    activity_plot = _trade_activity_replay_plot(
+        activity,
+        symbols,
+        visible_symbols,
+        asset_control,
+        x_range,
+    )
     plots.append(activity_plot)
 
     _apply_replay_date_axis(plots, base_frame)
@@ -482,6 +496,7 @@ def _portfolio_market_replay(
     _style_market_legend(activity_plot, compact=True, large_glyphs=True)
 
     return column(
+        asset_control,
         gridplot(
             plots[:-1],
             ncols=1,
@@ -489,7 +504,6 @@ def _portfolio_market_replay(
             toolbar_location="right",
             merge_tools=True,
         ),
-        activity_control,
         activity_plot,
         sizing_mode="stretch_width",
     )
@@ -578,6 +592,9 @@ def _allocation_replay_plot(
     x_range,
     fills: pd.DataFrame | None = None,
     asset_frame: pd.DataFrame | None = None,
+    symbols: list[str] | None = None,
+    visible_symbols: list[str] | None = None,
+    control: Select | None = None,
 ):
     """Return a stacked allocation panel when portfolio positions are available."""
     allocation = _allocation_frame(positions, frame)
@@ -585,15 +602,24 @@ def _allocation_replay_plot(
         allocation = _allocation_frame_from_fills(fills, asset_frame, frame)
     if allocation.empty:
         return None
-    plot = _market_section("Allocation", height=120, x_range=x_range)
-    stackers = [
+    available_stackers = [
         column
         for column in allocation.columns
         if column not in {"date", "bar_index"} and allocation[column].abs().sum() > 0
     ]
-    if not stackers:
+    if not available_stackers:
         return None
-    source = ColumnDataSource(allocation)
+    symbols = [symbol for symbol in (symbols or available_stackers) if symbol in available_stackers]
+    if not symbols:
+        symbols = available_stackers
+    visible_symbols = [
+        symbol for symbol in (visible_symbols or symbols[:PORTFOLIO_VISIBLE_ASSET_LIMIT]) if symbol in symbols
+    ]
+    display = _allocation_display_frame(allocation, symbols, visible_symbols)
+    stackers = [column for column in display.columns if column not in {"date", "bar_index"}]
+    plot = _market_section("Allocation", height=120, x_range=x_range)
+    source = ColumnDataSource(display)
+    full_source = ColumnDataSource(allocation)
     colors = _palette(len(stackers))
     renderers = plot.varea_stack(
         stackers,
@@ -606,12 +632,25 @@ def _allocation_replay_plot(
     plot.yaxis.axis_label = "Allocation"
     plot.yaxis.formatter = NumeralTickFormatter(format="0%")
     plot.y_range.start = 0.0
-    plot.y_range.end = max(1.0, float(allocation[stackers].sum(axis=1).max()) * 1.05)
+    plot.y_range.end = max(1.0, float(display[stackers].sum(axis=1).max()) * 1.05)
     _add_line_hover(
         plot,
         renderers,
         [("Date", "@date{%F %T}")],
     )
+    if control is not None:
+        control.js_on_change(
+            "value",
+            CustomJS(
+                args={
+                    "allocation_source": source,
+                    "allocation_full_source": full_source,
+                    "symbols": symbols,
+                    "stackers": stackers,
+                },
+                code=_allocation_selector_js(),
+            ),
+        )
     return plot
 
 
@@ -660,23 +699,20 @@ def _profit_loss_replay_plot(trades_frame: pd.DataFrame, x_range):
     return plot
 
 
-def _trade_activity_replay_plot(fills_frame: pd.DataFrame, x_range):
+def _trade_activity_replay_plot(
+    activity: pd.DataFrame,
+    symbols: list[str],
+    visible_symbols: list[str],
+    control: Select,
+    x_range,
+):
     """Return a trade activity panel grouped by asset."""
-    activity, symbols = _trade_activity_frame(fills_frame)
-    initial_limit = min(PORTFOLIO_VISIBLE_ASSET_LIMIT, len(symbols))
-    visible_symbols = symbols[:initial_limit]
     visible = _filter_trade_activity(activity, visible_symbols)
     plot = _market_section(
         "Trade Activity by Asset",
-        height=_trade_activity_height(initial_limit),
+        height=_trade_activity_height(len(visible_symbols)),
         x_range=x_range,
         y_range=FactorRange(factors=list(reversed(visible_symbols))),
-    )
-    control = Select(
-        title="Show",
-        value=str(initial_limit),
-        options=_trade_activity_options(symbols),
-        width=220,
     )
 
     if not visible.empty:
@@ -745,40 +781,12 @@ def _trade_activity_replay_plot(fills_frame: pd.DataFrame, x_range):
                     "plot": plot,
                     "symbols": symbols,
                 },
-                code="""
-const value = cb_obj.value;
-const limit = value === "all" ? symbols.length : Number.parseInt(value, 10);
-const selected = new Set(symbols.slice(0, limit));
-
-function filterData(fullData) {
-  const result = {};
-  for (const key in fullData) {
-    result[key] = [];
-  }
-  const rows = fullData.symbol ? fullData.symbol.length : 0;
-  for (let index = 0; index < rows; index++) {
-    if (!selected.has(String(fullData.symbol[index]))) {
-      continue;
-    }
-    for (const key in fullData) {
-      result[key].push(fullData[key][index]);
-    }
-  }
-  return result;
-}
-
-buy_source.data = filterData(buy_full_source.data);
-sell_source.data = filterData(sell_full_source.data);
-y_range.factors = symbols.slice(0, limit).reverse();
-plot.height = Math.max(240, Math.min(390, 90 + limit * 32));
-buy_source.change.emit();
-sell_source.change.emit();
-""",
+                code=_trade_activity_selector_js(),
             ),
         )
 
     plot.yaxis.axis_label = "Asset"
-    return control, plot
+    return plot
 
 
 def price_trades(market_data: pd.DataFrame, fills: pd.DataFrame | None = None):
@@ -1877,15 +1885,11 @@ def _allocation_frame(positions: pd.DataFrame | None, frame: pd.DataFrame) -> pd
     dates = pd.to_datetime(frame["date"], errors="coerce")
     weights = weights.reindex(dates).ffill().fillna(0.0)
     weights.index = dates
-    keep = list(weights.abs().mean().sort_values(ascending=False).head(8).index)
-    compact = weights[keep].copy()
-    other_columns = [column for column in weights.columns if column not in keep]
-    if other_columns:
-        compact["Others"] = weights[other_columns].sum(axis=1)
-    cash = (1.0 - compact.sum(axis=1)).clip(lower=0.0)
+    result = weights.copy()
+    cash = (1.0 - result.sum(axis=1)).clip(lower=0.0)
     if cash.max() > 1e-9:
-        compact["Cash"] = cash
-    result = compact.reset_index().rename(columns={"date": "date"})
+        result["Cash"] = cash
+    result = result.reset_index().rename(columns={"date": "date"})
     result["bar_index"] = frame["bar_index"].to_numpy()
     return result
 
@@ -1927,8 +1931,7 @@ def _allocation_frame_from_fills(
     dates = pd.to_datetime(frame["date"], errors="coerce")
     weights = weights.reindex(dates).ffill().fillna(0.0)
     weights.index = dates
-    keep = list(weights.abs().mean().sort_values(ascending=False).head(8).index)
-    result = weights[keep].reset_index().rename(columns={"date": "date"})
+    result = weights.reset_index().rename(columns={"date": "date"})
     result["bar_index"] = frame["bar_index"].to_numpy()
     return result
 
@@ -2010,6 +2013,107 @@ def _profit_loss_bins(trades: pd.DataFrame) -> pd.DataFrame:
         )
 
     return pd.DataFrame(rows)
+
+
+def _allocation_display_frame(
+    allocation: pd.DataFrame,
+    symbols: list[str],
+    visible_symbols: list[str],
+) -> pd.DataFrame:
+    """Return allocation data with hidden assets collapsed into Others."""
+    result = allocation[["date", "bar_index"]].copy()
+    selected = set(visible_symbols)
+    for symbol in symbols:
+        if symbol in allocation:
+            result[symbol] = allocation[symbol] if symbol in selected else 0.0
+        else:
+            result[symbol] = 0.0
+    hidden = [symbol for symbol in symbols if symbol not in selected and symbol in allocation]
+    result["Others"] = allocation[hidden].sum(axis=1) if hidden else 0.0
+    result["Cash"] = allocation["Cash"] if "Cash" in allocation else 0.0
+    return result
+
+
+def _portfolio_asset_selector(symbols: list[str], initial_limit: int) -> Select:
+    """Return the shared portfolio asset visibility control."""
+    return Select(
+        title="Assets",
+        value=str(initial_limit),
+        options=_trade_activity_options(symbols),
+        width=220,
+    )
+
+
+def _selector_limit_js() -> str:
+    return 'cb_obj.value === "all" ? symbols.length : Number.parseInt(cb_obj.value, 10)'
+
+
+def _allocation_selector_js() -> str:
+    """Return CustomJS code for applying the shared asset selector to allocation."""
+    return f"""
+const limit = {_selector_limit_js()};
+const selected = new Set(symbols.slice(0, limit));
+const full = allocation_full_source.data;
+const next = {{}};
+for (const key of ["date", "bar_index"]) {{
+  next[key] = Array.from(full[key] || []);
+}}
+const rows = next.bar_index ? next.bar_index.length : 0;
+for (const symbol of symbols) {{
+  const values = full[symbol] || Array(rows).fill(0);
+  next[symbol] = selected.has(symbol) ? Array.from(values) : Array(rows).fill(0);
+}}
+next.Others = Array(rows).fill(0);
+for (const symbol of symbols) {{
+  if (selected.has(symbol)) {{
+    continue;
+  }}
+  const values = full[symbol] || Array(rows).fill(0);
+  for (let index = 0; index < rows; index++) {{
+    next.Others[index] += values[index] || 0;
+  }}
+}}
+next.Cash = full.Cash ? Array.from(full.Cash) : Array(rows).fill(0);
+for (const stacker of stackers) {{
+  if (!(stacker in next)) {{
+    next[stacker] = Array(rows).fill(0);
+  }}
+}}
+allocation_source.data = next;
+allocation_source.change.emit();
+"""
+
+
+def _trade_activity_selector_js() -> str:
+    """Return CustomJS code for applying the shared asset selector to trade activity."""
+    return f"""
+const limit = {_selector_limit_js()};
+const selected = new Set(symbols.slice(0, limit));
+
+function filterData(fullData) {{
+  const result = {{}};
+  for (const key in fullData) {{
+    result[key] = [];
+  }}
+  const rows = fullData.symbol ? fullData.symbol.length : 0;
+  for (let index = 0; index < rows; index++) {{
+    if (!selected.has(String(fullData.symbol[index]))) {{
+      continue;
+    }}
+    for (const key in fullData) {{
+      result[key].push(fullData[key][index]);
+    }}
+  }}
+  return result;
+}}
+
+buy_source.data = filterData(buy_full_source.data);
+sell_source.data = filterData(sell_full_source.data);
+y_range.factors = symbols.slice(0, limit).reverse();
+plot.height = Math.max(240, Math.min(390, 90 + limit * 32));
+buy_source.change.emit();
+sell_source.change.emit();
+"""
 
 
 def _filter_trade_activity(activity: pd.DataFrame, symbols: list[str]) -> pd.DataFrame:
