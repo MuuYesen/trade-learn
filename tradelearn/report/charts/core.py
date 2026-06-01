@@ -2250,6 +2250,9 @@ def _apply_replay_date_axis(plots: list[Any], frame: pd.DataFrame) -> None:
     """Apply sparse date labels to the bottom replay plot."""
     if not plots or "date" not in frame.columns:
         return
+    for plot in plots[:-1]:
+        plot.xaxis.visible = False
+
     n_ticks = min(8, len(frame))
     step = max(1, len(frame) // n_ticks)
     tick_indices = list(range(0, len(frame), step))

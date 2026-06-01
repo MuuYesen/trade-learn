@@ -190,6 +190,21 @@ def test_portfolio_replay_draws_trade_activity_by_asset() -> None:
     assert activity.yaxis.axis_label == "Asset"
 
 
+def test_portfolio_replay_hides_internal_bar_index_axes() -> None:
+    """Portfolio replay should expose dates only on the bottom x-axis."""
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_closed_trade_fills(),
+        equity=_series("equity"),
+    )
+
+    assert not _find_plot(replay, "Equity").xaxis[0].visible
+    assert not _find_plot(replay, "Allocation").xaxis[0].visible
+    assert not _find_plot(replay, "Profit / Loss").xaxis[0].visible
+    assert _find_plot(replay, "Trade Activity by Asset").xaxis[0].visible
+    assert _find_plot(replay, "Trade Activity by Asset").xaxis[0].major_label_overrides
+
+
 def test_trade_activity_marker_size_uses_readable_notional_scale() -> None:
     """Trade activity markers should stay readable while preserving relative notional."""
     activity, _symbols = _trade_activity_frame(
