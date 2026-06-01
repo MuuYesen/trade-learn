@@ -448,7 +448,13 @@ def _portfolio_market_replay(
     else:
         equity_plot = None
 
-    allocation_plot = _allocation_replay_plot(positions, base_frame, x_range)
+    allocation_plot = _allocation_replay_plot(
+        positions,
+        base_frame,
+        x_range,
+        fills_frame,
+        asset_frame,
+    )
     if allocation_plot is not None:
         plots.append(allocation_plot)
 
@@ -555,9 +561,17 @@ def _equity_replay_plot(equity: pd.Series, frame: pd.DataFrame, x_range):
     return equity_plot
 
 
-def _allocation_replay_plot(positions: pd.DataFrame | None, frame: pd.DataFrame, x_range):
+def _allocation_replay_plot(
+    positions: pd.DataFrame | None,
+    frame: pd.DataFrame,
+    x_range,
+    fills: pd.DataFrame | None = None,
+    asset_frame: pd.DataFrame | None = None,
+):
     """Return a stacked allocation panel when portfolio positions are available."""
     allocation = _allocation_frame(positions, frame)
+    if allocation.empty and fills is not None and asset_frame is not None:
+        allocation = _allocation_frame_from_fills(fills, asset_frame, frame)
     if allocation.empty:
         return None
     plot = _market_section("Allocation", height=120, x_range=x_range)
@@ -1830,6 +1844,49 @@ def _allocation_frame(positions: pd.DataFrame | None, frame: pd.DataFrame) -> pd
     if cash.max() > 1e-9:
         compact["Cash"] = cash
     result = compact.reset_index().rename(columns={"date": "date"})
+    result["bar_index"] = frame["bar_index"].to_numpy()
+    return result
+
+
+def _allocation_frame_from_fills(
+    fills: pd.DataFrame,
+    asset_frame: pd.DataFrame,
+    frame: pd.DataFrame,
+) -> pd.DataFrame:
+    """Return replay-aligned allocation weights reconstructed from fills."""
+    if fills.empty or not {"symbol", "date", "size"}.issubset(fills.columns):
+        return pd.DataFrame()
+    close = (
+        asset_frame.pivot_table(index="date", columns="symbol", values="close", aggfunc="last")
+        .sort_index()
+        .ffill()
+    )
+    if close.empty:
+        return pd.DataFrame()
+    fills_frame = fills.copy()
+    fills_frame["symbol"] = fills_frame["symbol"].astype(str)
+    fills_frame["signed_size"] = pd.to_numeric(fills_frame["size"], errors="coerce").fillna(0.0)
+    if "side" in fills_frame:
+        side = fills_frame["side"].astype(str).str.lower()
+        abs_size = fills_frame["signed_size"].abs()
+        fills_frame.loc[side.eq("buy"), "signed_size"] = abs_size[side.eq("buy")]
+        fills_frame.loc[side.eq("sell"), "signed_size"] = -abs_size[side.eq("sell")]
+    changes = fills_frame.pivot_table(
+        index="date",
+        columns="symbol",
+        values="signed_size",
+        aggfunc="sum",
+    )
+    changes = changes.reindex(close.index).fillna(0.0)
+    units = changes.cumsum().reindex(close.index).ffill().fillna(0.0)
+    values = units.mul(close, fill_value=0.0).clip(lower=0.0)
+    totals = values.sum(axis=1)
+    weights = values.div(totals.replace(0, np.nan), axis=0).fillna(0.0)
+    dates = pd.to_datetime(frame["date"], errors="coerce")
+    weights = weights.reindex(dates).ffill().fillna(0.0)
+    weights.index = dates
+    keep = list(weights.abs().mean().sort_values(ascending=False).head(8).index)
+    result = weights[keep].reset_index().rename(columns={"date": "date"})
     result["bar_index"] = frame["bar_index"].to_numpy()
     return result
 

@@ -134,6 +134,20 @@ def test_market_replay_uses_portfolio_layout_for_multi_asset_inputs() -> None:
     assert "OHLC / Trades" not in titles
 
 
+def test_market_replay_reconstructs_allocation_from_fills_without_positions() -> None:
+    """Portfolio replay should still show allocation when stats omit positions."""
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_multi_asset_fills(),
+        equity=_series("equity"),
+    )
+
+    titles = _collect_plot_titles(replay)
+
+    assert "Allocation" in titles
+    assert "Assets / Trades" in titles
+
+
 def _series(name: str) -> pd.Series:
     return pd.Series(
         [1.0, 1.1, 1.05],
