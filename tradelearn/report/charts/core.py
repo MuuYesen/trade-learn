@@ -617,60 +617,45 @@ def _allocation_replay_plot(
 
 def _profit_loss_replay_plot(trades_frame: pd.DataFrame, x_range):
     """Return the replay trade P/L panel."""
-    plot = _market_section("Profit / Loss", height=105, x_range=x_range)
+    plot = _market_section("Profit / Loss", height=135, x_range=x_range)
     plot.add_layout(
         Span(location=0, dimension="width", line_color=MARKET_MUTED, line_dash="dashed")
     )
-    trade_source = ColumnDataSource(trades_frame)
-    win = trades_frame[trades_frame["return_pct"] >= 0]
-    loss = trades_frame[trades_frame["return_pct"] < 0]
-    if not win.empty:
-        plot.scatter(
-            "exit_bar",
-            "return_pct",
-            source=ColumnDataSource(win),
-            marker="triangle",
-            fill_color=MARKET_UP,
-            line_color=MARKET_UP_LINE,
-            size="marker_size",
-            legend_label="Winning Trades",
-        )
-    if not loss.empty:
-        plot.scatter(
-            "exit_bar",
-            "return_pct",
-            source=ColumnDataSource(loss),
-            marker="inverted_triangle",
-            fill_color=MARKET_DOWN,
-            line_color=MARKET_DOWN_LINE,
-            size="marker_size",
-            legend_label="Losing Trades",
-        )
-    min_ret = float(trades_frame["return_pct"].min())
-    max_ret = float(trades_frame["return_pct"].max())
-    ret_span = max(max_ret - min_ret, 0.01)
-    marker_pad = max(ret_span * 0.75, 0.01)
-    plot.y_range.start = min(min_ret - marker_pad, -0.002)
-    plot.y_range.end = max(max_ret + marker_pad, 0.002)
-    hidden = plot.scatter(
-        "exit_bar",
-        "return_pct",
-        source=trade_source,
-        marker="circle",
-        size=1,
-        alpha=0.0,
+    bins = _profit_loss_bins(trades_frame)
+    source = ColumnDataSource(bins)
+    bars = plot.vbar(
+        x="bar_index",
+        width="width",
+        top="top",
+        bottom="bottom",
+        source=source,
+        fill_color="color",
+        line_color="color",
+        fill_alpha=0.72,
+        legend_label="Avg P/L",
     )
+    min_ret = float(bins["avg_return"].min())
+    max_ret = float(bins["avg_return"].max())
+    ret_span = max(max_ret - min_ret, 0.01)
+    pad = max(ret_span * 0.35, 0.01)
+    plot.y_range.start = min(min_ret - pad, -0.002)
+    plot.y_range.end = max(max_ret + pad, 0.002)
     plot.yaxis.axis_label = "Profit / Loss"
     plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
-    _add_line_hover(
+    _add_passive_hover(
         plot,
-        [hidden],
-        [
-            ("Exit", "@exit_datetime{%F %T}"),
-            ("Size", "@size{0,0.####}"),
-            ("P/L", "@return_pct{+0.[000]%}"),
-        ],
-        vline=False,
+        HoverTool(
+            renderers=[bars],
+            formatters={"@start_exit": "datetime", "@end_exit": "datetime"},
+            tooltips=[
+                ("Exit Window", "@start_exit{%F} - @end_exit{%F}"),
+                ("Trades", "@trade_count"),
+                ("Wins / Losses", "@wins / @losses"),
+                ("Avg P/L", "@avg_return{+0.[000]%}"),
+                ("Best", "@best_return{+0.[000]%}"),
+                ("Worst", "@worst_return{+0.[000]%}"),
+            ],
+        ),
     )
     return plot
 
@@ -1983,6 +1968,48 @@ def _trade_activity_frame(fills: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
         activity["marker_size"] = 7.0
 
     return activity, symbols
+
+
+def _profit_loss_bins(trades: pd.DataFrame) -> pd.DataFrame:
+    """Return time-binned trade P/L aggregates for readable replay charts."""
+    frame = trades.copy()
+    frame["exit_bar"] = pd.to_numeric(frame["exit_bar"], errors="coerce")
+    frame["return_pct"] = pd.to_numeric(frame["return_pct"], errors="coerce")
+    frame = frame.dropna(subset=["exit_bar", "return_pct"])
+    if frame.empty:
+        return pd.DataFrame()
+
+    min_bar = float(frame["exit_bar"].min())
+    max_bar = float(frame["exit_bar"].max())
+    target_bins = min(72, max(1, int(np.sqrt(len(frame)) * 6)))
+    bin_width = max((max_bar - min_bar) / max(target_bins, 1), 1.0)
+    frame["bin"] = np.floor((frame["exit_bar"] - min_bar) / bin_width).astype(int)
+
+    rows = []
+    for _, group in frame.groupby("bin", sort=True):
+        returns = group["return_pct"]
+        avg_return = float(returns.mean())
+        wins = int((returns >= 0).sum())
+        losses = int((returns < 0).sum())
+        rows.append(
+            {
+                "bar_index": float(group["exit_bar"].mean()),
+                "width": bin_width * 0.82,
+                "top": max(avg_return, 0.0),
+                "bottom": min(avg_return, 0.0),
+                "avg_return": avg_return,
+                "best_return": float(returns.max()),
+                "worst_return": float(returns.min()),
+                "trade_count": int(len(group)),
+                "wins": wins,
+                "losses": losses,
+                "start_exit": group["exit_datetime"].min(),
+                "end_exit": group["exit_datetime"].max(),
+                "color": MARKET_UP if avg_return >= 0 else MARKET_DOWN,
+            }
+        )
+
+    return pd.DataFrame(rows)
 
 
 def _filter_trade_activity(activity: pd.DataFrame, symbols: list[str]) -> pd.DataFrame:

@@ -3,7 +3,7 @@
 import pandas as pd
 from bokeh.plotting import figure
 from bokeh.models import GlyphRenderer
-from bokeh.models.glyphs import MultiLine, Scatter
+from bokeh.models.glyphs import MultiLine, Scatter, VBar
 from bokeh.models.widgets import Select
 
 from tradelearn.report.charts import (
@@ -157,7 +157,7 @@ def test_market_replay_reconstructs_allocation_from_fills_without_positions() ->
     """Portfolio replay should still show allocation when stats omit positions."""
     replay = market_replay(
         {"AAA": _market_data(), "BBB": _market_data() * 1.5},
-        fills=_multi_asset_fills(),
+        fills=_closed_trade_fills(),
         equity=_series("equity"),
     )
 
@@ -187,6 +187,30 @@ def test_portfolio_replay_draws_trade_activity_by_asset() -> None:
     assert len(activity.y_range.factors) == 8
     assert all(renderer.glyph.size == "marker_size" for renderer in trade_markers)
     assert activity.yaxis.axis_label == "Asset"
+
+
+def test_portfolio_replay_aggregates_profit_loss() -> None:
+    """Dense portfolio P/L should use readable aggregate bars."""
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_closed_trade_fills(),
+        equity=_series("equity"),
+    )
+
+    profit_loss = _find_plot(replay, "Profit / Loss")
+    bars = [
+        renderer
+        for renderer in profit_loss.renderers
+        if isinstance(renderer, GlyphRenderer) and isinstance(renderer.glyph, VBar)
+    ]
+    trade_markers = [
+        renderer
+        for renderer in profit_loss.renderers
+        if isinstance(renderer, GlyphRenderer) and isinstance(renderer.glyph, Scatter)
+    ]
+
+    assert bars
+    assert not trade_markers
 
 
 def test_portfolio_replay_trade_activity_has_visibility_selector() -> None:
@@ -351,6 +375,21 @@ def _multi_asset_fills() -> pd.DataFrame:
             "side": ["buy", "buy", "sell", "sell"],
             "size": [10.0, 5.0, 4.0, 3.0],
             "price": [10.6, 15.9, 11.0, 16.5],
+        }
+    )
+
+
+def _closed_trade_fills() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "datetime": pd.to_datetime(
+                ["2024-01-01", "2024-01-02", "2024-01-01", "2024-01-03"],
+                utc=True,
+            ),
+            "symbol": ["AAA", "AAA", "BBB", "BBB"],
+            "side": ["buy", "sell", "buy", "sell"],
+            "size": [10.0, -10.0, 5.0, -5.0],
+            "price": [10.0, 11.0, 15.0, 14.0],
         }
     )
 
