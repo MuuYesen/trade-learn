@@ -3,7 +3,7 @@
 import pandas as pd
 from bokeh.plotting import figure
 from bokeh.models import GlyphRenderer
-from bokeh.models.glyphs import HBar, MultiLine, Scatter
+from bokeh.models.glyphs import MultiLine, Scatter
 
 from tradelearn.report.charts import (
     annual_returns,
@@ -119,7 +119,7 @@ def test_market_replay_does_not_connect_trade_markers_with_multiline() -> None:
 
 
 def test_market_replay_uses_portfolio_layout_for_multi_asset_inputs() -> None:
-    """Multi-asset reports should show allocation and a holdings timeline."""
+    """Multi-asset reports should show allocation and trade activity."""
     replay = market_replay(
         {"AAA": _market_data(), "BBB": _market_data() * 1.5},
         fills=_multi_asset_fills(),
@@ -130,7 +130,8 @@ def test_market_replay_uses_portfolio_layout_for_multi_asset_inputs() -> None:
     titles = _collect_plot_titles(replay)
 
     assert "Allocation" in titles
-    assert "Holdings / Trades Timeline" in titles
+    assert "Trade Activity by Asset" in titles
+    assert "Holdings / Trades Timeline" not in titles
     assert "OHLC / Trades" not in titles
 
 
@@ -148,6 +149,7 @@ def test_market_replay_keeps_single_asset_mapping_on_ohlc_layout() -> None:
     assert "OHLC / Trades" in titles
     assert "Allocation" not in titles
     assert "Holdings / Trades Timeline" not in titles
+    assert "Trade Activity by Asset" not in titles
 
 
 def test_market_replay_reconstructs_allocation_from_fills_without_positions() -> None:
@@ -161,11 +163,11 @@ def test_market_replay_reconstructs_allocation_from_fills_without_positions() ->
     titles = _collect_plot_titles(replay)
 
     assert "Allocation" in titles
-    assert "Holdings / Trades Timeline" in titles
+    assert "Trade Activity by Asset" in titles
 
 
-def test_portfolio_replay_draws_holdings_timeline() -> None:
-    """Dense portfolio reports should summarize holding periods instead of price spaghetti."""
+def test_portfolio_replay_draws_trade_activity_by_asset() -> None:
+    """Dense portfolio reports should summarize trade activity instead of holdings twice."""
     symbols = [f"AAA{index}" for index in range(10)]
     replay = market_replay(
         {symbol: _market_data() * (index + 1) for index, symbol in enumerate(symbols)},
@@ -173,21 +175,17 @@ def test_portfolio_replay_draws_holdings_timeline() -> None:
         equity=_series("equity"),
     )
 
-    timeline = _find_plot(replay, "Holdings / Trades Timeline")
-    holding_bars = [
-        renderer
-        for renderer in timeline.renderers
-        if isinstance(renderer, GlyphRenderer) and isinstance(renderer.glyph, HBar)
-    ]
+    activity = _find_plot(replay, "Trade Activity by Asset")
     trade_markers = [
         renderer
-        for renderer in timeline.renderers
+        for renderer in activity.renderers
         if isinstance(renderer, GlyphRenderer) and isinstance(renderer.glyph, Scatter)
     ]
 
-    assert holding_bars
     assert trade_markers
-    assert timeline.yaxis.axis_label == "Asset"
+    assert len(activity.y_range.factors) == 8
+    assert all(renderer.glyph.size == "marker_size" for renderer in trade_markers)
+    assert activity.yaxis.axis_label == "Asset"
 
 
 def _series(name: str) -> pd.Series:
