@@ -42,9 +42,11 @@ def market_replay(
 ):
     """Return a market replay grid with equity, P/L, OHLC, trades, and volume."""
     if isinstance(market_data, Mapping):
-        portfolio = _portfolio_market_replay(market_data, fills, equity, positions)
-        if portfolio is not None:
-            return portfolio
+        valid_feeds = {key: value for key, value in market_data.items() if not value.empty}
+        if len(valid_feeds) > 1:
+            portfolio = _portfolio_market_replay(valid_feeds, fills, equity, positions)
+            if portfolio is not None:
+                return portfolio
         market_data = next(iter(market_data.values()), pd.DataFrame())
 
     frame = _market_frame(market_data)

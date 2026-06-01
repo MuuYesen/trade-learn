@@ -33,7 +33,7 @@ Reporter.from_returns(returns, positions=positions, transactions=trades).report(
 
 ## 组合报告
 
-当 `report()` 接收到多个数据源和多资产持仓时，HTML 报告会自动使用组合回放视图，而不是把所有资产的 K 线和交易点挤在同一个 OHLC 坐标里。
+当 `report()` 接收到多个有效数据源和多资产持仓时，HTML 报告会自动使用组合回放视图，而不是把所有资产的 K 线和交易点挤在同一个 OHLC 坐标里。
 
 组合回放视图包含：
 
@@ -44,4 +44,4 @@ Reporter.from_returns(returns, positions=positions, transactions=trades).report(
 | `Profit / Loss` | 按闭环交易展示盈利 / 亏损分布 |
 | `Holdings / Trades Timeline` | 按资产展示持仓区间和仓位强度，资产较多时默认展示最活跃的 8 个资产；买卖点默认隐藏，可从图例打开 |
 
-单资产报告仍保留传统 `OHLC / Trades` 视图。
+单资产报告，包括只传入一个数据源的 mapping，仍保留传统 `OHLC / Trades` 视图。

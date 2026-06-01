@@ -134,6 +134,22 @@ def test_market_replay_uses_portfolio_layout_for_multi_asset_inputs() -> None:
     assert "OHLC / Trades" not in titles
 
 
+def test_market_replay_keeps_single_asset_mapping_on_ohlc_layout() -> None:
+    """Single-asset mapping inputs should keep the original OHLC replay layout."""
+    replay = market_replay(
+        {"AAA": _market_data()},
+        fills=_multi_asset_fills(),
+        equity=_series("equity"),
+        positions=_portfolio_positions(),
+    )
+
+    titles = _collect_plot_titles(replay)
+
+    assert "OHLC / Trades" in titles
+    assert "Allocation" not in titles
+    assert "Holdings / Trades Timeline" not in titles
+
+
 def test_market_replay_reconstructs_allocation_from_fills_without_positions() -> None:
     """Portfolio replay should still show allocation when stats omit positions."""
     replay = market_replay(
