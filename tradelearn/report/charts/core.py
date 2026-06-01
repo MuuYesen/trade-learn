@@ -30,6 +30,7 @@ MARKET_GRID = "#e8edf2"
 MARKET_BORDER = "#ccd7e0"
 MARKET_BACKGROUND = "#fbfcfe"
 MARKET_DRAWDOWN = "#fff3c4"
+PORTFOLIO_VISIBLE_ASSET_LIMIT = 8
 
 
 def market_replay(
@@ -606,7 +607,7 @@ def _allocation_replay_plot(
 
 def _profit_loss_replay_plot(trades_frame: pd.DataFrame, x_range):
     """Return the replay trade P/L panel."""
-    plot = _market_section("Profit / Loss", height=120, x_range=x_range)
+    plot = _market_section("Profit / Loss", height=105, x_range=x_range)
     plot.add_layout(
         Span(location=0, dimension="width", line_color=MARKET_MUTED, line_dash="dashed")
     )
@@ -666,8 +667,15 @@ def _profit_loss_replay_plot(trades_frame: pd.DataFrame, x_range):
 
 def _assets_replay_plot(asset_frame: pd.DataFrame, fills_frame: pd.DataFrame, x_range):
     """Return normalized asset price lines with buy/sell markers."""
-    plot = _market_section("Assets / Trades", height=430, x_range=x_range)
+    plot = _market_section("Normalized Assets / Trades", height=410, x_range=x_range)
     symbols = list(dict.fromkeys(asset_frame["symbol"].astype(str)))
+    visible_symbols = set(
+        _default_visible_portfolio_symbols(
+            symbols,
+            fills_frame,
+            limit=PORTFOLIO_VISIBLE_ASSET_LIMIT,
+        )
+    )
     colors = _palette(len(symbols))
     for index, symbol in enumerate(symbols):
         symbol_frame = asset_frame[asset_frame["symbol"].eq(symbol)]
@@ -679,6 +687,7 @@ def _assets_replay_plot(asset_frame: pd.DataFrame, fills_frame: pd.DataFrame, x_
             color=colors[index % len(colors)],
             legend_label=symbol,
         )
+        renderer.visible = symbol in visible_symbols
         _add_line_hover(
             plot,
             [renderer],
@@ -691,6 +700,7 @@ def _assets_replay_plot(asset_frame: pd.DataFrame, fills_frame: pd.DataFrame, x_
         )
 
     if not fills_frame.empty:
+        fills_frame = fills_frame[fills_frame["symbol"].astype(str).isin(visible_symbols)]
         buys = fills_frame[fills_frame["side"].str.lower().eq("buy")]
         sells = fills_frame[fills_frame["side"].str.lower().eq("sell")]
         fill_renderers = []
@@ -701,9 +711,11 @@ def _assets_replay_plot(asset_frame: pd.DataFrame, fills_frame: pd.DataFrame, x_
                     "normalized_price",
                     source=ColumnDataSource(buys),
                     marker="triangle",
-                    size=10,
+                    size=8,
                     color=MARKET_UP,
                     line_color="white",
+                    fill_alpha=0.58,
+                    line_alpha=0.82,
                     legend_label="Buy",
                 )
             )
@@ -714,9 +726,11 @@ def _assets_replay_plot(asset_frame: pd.DataFrame, fills_frame: pd.DataFrame, x_
                     "normalized_price",
                     source=ColumnDataSource(sells),
                     marker="inverted_triangle",
-                    size=10,
+                    size=8,
                     color=MARKET_DOWN,
                     line_color="white",
+                    fill_alpha=0.58,
+                    line_alpha=0.82,
                     legend_label="Sell",
                 )
             )
@@ -2128,6 +2142,28 @@ def _palette(count: int) -> list[str]:
         "#e377c2",
     ]
     return [colors[index % len(colors)] for index in range(max(count, 1))]
+
+
+def _default_visible_portfolio_symbols(
+    symbols: list[str],
+    fills: pd.DataFrame,
+    *,
+    limit: int,
+) -> list[str]:
+    """Return the symbols that should be visible in dense portfolio replay charts."""
+    if len(symbols) <= limit:
+        return symbols
+
+    symbol_rank = {symbol: index for index, symbol in enumerate(symbols)}
+    if fills is None or fills.empty or "symbol" not in fills.columns:
+        return symbols[:limit]
+
+    counts = fills["symbol"].astype(str).value_counts()
+    ranked = sorted(
+        symbols,
+        key=lambda symbol: (-int(counts.get(symbol, 0)), symbol_rank[symbol]),
+    )
+    return ranked[:limit]
 
 
 def _style_market_section(plot) -> None:

@@ -42,6 +42,6 @@ Reporter.from_returns(returns, positions=positions, transactions=trades).report(
 | `Equity` | 策略权益、Buy & Hold、峰值、最终值和最大回撤 |
 | `Allocation` | 多资产权重堆叠，展示组合暴露如何随时间变化 |
 | `Profit / Loss` | 按闭环交易展示盈利 / 亏损分布 |
-| `Assets / Trades` | 标准化资产价格曲线和买卖点，避免不同价格尺度互相污染 |
+| `Normalized Assets / Trades` | 标准化资产价格曲线和买卖点；资产较多时默认展示交易最活跃的 8 个资产，其余资产可从图例中点选查看 |
 
 单资产报告仍保留传统 `OHLC / Trades` 视图。

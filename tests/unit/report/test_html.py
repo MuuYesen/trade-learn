@@ -286,7 +286,7 @@ def test_reporter_html_uses_portfolio_replay_for_multi_asset_market_data(tmp_pat
 
     html = path.read_text()
     assert "Allocation" in html
-    assert "Assets / Trades" in html
+    assert "Normalized Assets / Trades" in html
     assert "OHLC / Trades" not in html
 
 

@@ -3,7 +3,7 @@
 import pandas as pd
 from bokeh.plotting import figure
 from bokeh.models import GlyphRenderer
-from bokeh.models.glyphs import MultiLine
+from bokeh.models.glyphs import Line, MultiLine, Scatter
 
 from tradelearn.report.charts import (
     annual_returns,
@@ -130,7 +130,7 @@ def test_market_replay_uses_portfolio_layout_for_multi_asset_inputs() -> None:
     titles = _collect_plot_titles(replay)
 
     assert "Allocation" in titles
-    assert "Assets / Trades" in titles
+    assert "Normalized Assets / Trades" in titles
     assert "OHLC / Trades" not in titles
 
 
@@ -145,7 +145,33 @@ def test_market_replay_reconstructs_allocation_from_fills_without_positions() ->
     titles = _collect_plot_titles(replay)
 
     assert "Allocation" in titles
-    assert "Assets / Trades" in titles
+    assert "Normalized Assets / Trades" in titles
+
+
+def test_portfolio_replay_limits_visible_assets_by_default() -> None:
+    """Dense portfolio reports should default to the most active assets."""
+    symbols = [f"AAA{index}" for index in range(10)]
+    replay = market_replay(
+        {symbol: _market_data() * (index + 1) for index, symbol in enumerate(symbols)},
+        fills=_many_asset_fills(symbols),
+        equity=_series("equity"),
+    )
+
+    assets_plot = _find_plot(replay, "Normalized Assets / Trades")
+    asset_lines = [
+        renderer
+        for renderer in assets_plot.renderers
+        if isinstance(renderer, GlyphRenderer) and isinstance(renderer.glyph, Line)
+    ]
+    fill_markers = [
+        renderer
+        for renderer in assets_plot.renderers
+        if isinstance(renderer, GlyphRenderer) and isinstance(renderer.glyph, Scatter)
+    ]
+
+    assert len([renderer for renderer in asset_lines if renderer.visible]) == 8
+    assert any(not renderer.visible for renderer in asset_lines)
+    assert all(renderer.glyph.fill_alpha == 0.58 for renderer in fill_markers)
 
 
 def _series(name: str) -> pd.Series:
@@ -297,6 +323,32 @@ def _multi_asset_fills() -> pd.DataFrame:
     )
 
 
+def _many_asset_fills(symbols: list[str]) -> pd.DataFrame:
+    rows = []
+    dates = pd.date_range("2024-01-01", periods=3, tz="UTC")
+    for index, symbol in enumerate(symbols):
+        rows.append(
+            {
+                "datetime": dates[0],
+                "symbol": symbol,
+                "side": "buy",
+                "size": float(index + 1),
+                "price": 10.0 * (index + 1),
+            }
+        )
+        if index < 8:
+            rows.append(
+                {
+                    "datetime": dates[1],
+                    "symbol": symbol,
+                    "side": "sell",
+                    "size": float(index + 1),
+                    "price": 10.5 * (index + 1),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
 def _collect_plot_titles(layout) -> list[str]:
     titles: list[str] = []
     if hasattr(layout, "title") and getattr(layout.title, "text", None):
@@ -305,6 +357,17 @@ def _collect_plot_titles(layout) -> list[str]:
         item = child[0] if isinstance(child, tuple) else child
         titles.extend(_collect_plot_titles(item))
     return titles
+
+
+def _find_plot(layout, title: str):
+    if hasattr(layout, "title") and getattr(layout.title, "text", None) == title:
+        return layout
+    for child in getattr(layout, "children", []):
+        item = child[0] if isinstance(child, tuple) else child
+        result = _find_plot(item, title)
+        if result is not None:
+            return result
+    return None
 
 
 def _collect_glyph_renderers(layout) -> list[GlyphRenderer]:
