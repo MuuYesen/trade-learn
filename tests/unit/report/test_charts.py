@@ -157,6 +157,7 @@ def test_portfolio_replay_uses_compact_above_legends() -> None:
     assert not [item for item in activity.right if isinstance(item, Legend)]
     assert all(legend.click_policy == "hide" for legend in allocation_legends + activity_legends)
     assert all(legend.background_fill_alpha == 0.0 for legend in allocation_legends + activity_legends)
+    assert all(legend.location == "top_left" for legend in allocation_legends + activity_legends)
 
 
 def test_market_replay_keeps_single_asset_mapping_on_ohlc_layout() -> None:
@@ -207,13 +208,13 @@ def test_portfolio_replay_draws_trade_activity_by_asset() -> None:
     ]
 
     assert trade_markers
-    assert len(activity.y_range.factors) == 16
+    assert len(activity.y_range.factors) == 8
     assert all(renderer.glyph.size == "marker_size" for renderer in trade_markers)
-    assert activity.yaxis.axis_label == "Asset / Side"
+    assert activity.yaxis.axis_label == "Asset"
 
 
-def test_trade_activity_uses_side_lanes_per_asset() -> None:
-    """Buy and sell markers should use separate categorical lanes."""
+def test_trade_activity_offsets_sides_without_doubling_asset_axis() -> None:
+    """Buy and sell markers should offset inside each asset row."""
     replay = market_replay(
         {"AAA": _market_data(), "BBB": _market_data() * 1.5},
         fills=_closed_trade_fills(),
@@ -223,11 +224,9 @@ def test_trade_activity_uses_side_lanes_per_asset() -> None:
     activity = _find_plot(replay, "Trade Activity by Asset")
     factors = list(activity.y_range.factors)
 
-    assert ("AAA", "Buy") in factors
-    assert ("AAA", "Sell") in factors
-    assert ("BBB", "Buy") in factors
-    assert ("BBB", "Sell") in factors
-    assert activity.yaxis.axis_label == "Asset / Side"
+    assert factors == ["BBB", "AAA"]
+    assert activity.yaxis.axis_label == "Asset"
+    assert all(isinstance(factor, str) for factor in factors)
 
 
 def test_portfolio_replay_hides_internal_bar_index_axes() -> None:
@@ -243,6 +242,19 @@ def test_portfolio_replay_hides_internal_bar_index_axes() -> None:
     assert not _find_plot(replay, "Profit / Loss").xaxis[0].visible
     assert _find_plot(replay, "Trade Activity by Asset").xaxis[0].visible
     assert _find_plot(replay, "Trade Activity by Asset").xaxis[0].major_label_overrides
+
+
+def test_portfolio_replay_uses_sparse_numeric_y_ticks() -> None:
+    """Numeric replay panels should avoid overly dense y-axis labels."""
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_closed_trade_fills(),
+        equity=_series("equity"),
+    )
+
+    for title in ["Equity", "Allocation", "Profit / Loss"]:
+        plot = _find_plot(replay, title)
+        assert plot.yaxis[0].ticker.desired_num_ticks <= 5
 
 
 def test_trade_activity_marker_size_uses_readable_notional_scale() -> None:

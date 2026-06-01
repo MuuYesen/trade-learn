@@ -22,7 +22,7 @@ from bokeh.models import (
 )
 from bokeh.models.widgets import Select
 from bokeh.plotting import figure
-from bokeh.transform import linear_cmap
+from bokeh.transform import dodge, linear_cmap
 
 MARKET_UP = "#2ca36c"
 MARKET_DOWN = "#d65a5a"
@@ -731,7 +731,7 @@ def _trade_activity_replay_plot(
         "Trade Activity by Asset",
         height=_trade_activity_height(len(visible_symbols)),
         x_range=x_range,
-        y_range=FactorRange(factors=_trade_activity_factors(visible_symbols)),
+        y_range=FactorRange(factors=list(reversed(visible_symbols))),
     )
 
     if not visible.empty:
@@ -746,7 +746,7 @@ def _trade_activity_replay_plot(
             renderers.append(
                 plot.scatter(
                     "bar_index",
-                    "y_factor",
+                    dodge("symbol", 0.18, range=plot.y_range),
                     source=buy_source,
                     marker="triangle",
                     size="marker_size",
@@ -761,7 +761,7 @@ def _trade_activity_replay_plot(
             renderers.append(
                 plot.scatter(
                     "bar_index",
-                    "y_factor",
+                    dodge("symbol", -0.18, range=plot.y_range),
                     source=sell_source,
                     marker="inverted_triangle",
                     size="marker_size",
@@ -804,7 +804,7 @@ def _trade_activity_replay_plot(
             ),
         )
 
-    plot.yaxis.axis_label = "Asset / Side"
+    plot.yaxis.axis_label = "Asset"
     return plot
 
 
@@ -2147,11 +2147,10 @@ sell_source.data = filterData(sell_full_source.data);
 const factors = [];
 const visible = symbols.slice(0, limit).reverse();
 for (const symbol of visible) {{
-  factors.push([symbol, "Sell"]);
-  factors.push([symbol, "Buy"]);
+  factors.push(symbol);
 }}
 y_range.factors = factors;
-plot.height = Math.max(280, Math.min(520, 120 + limit * 54));
+plot.height = Math.max(280, Math.min(520, 120 + limit * 32));
 buy_source.change.emit();
 sell_source.change.emit();
 """
@@ -2178,16 +2177,7 @@ def _trade_activity_options(symbols: list[str]) -> list[tuple[str, str]]:
 
 def _trade_activity_height(symbol_count: int) -> int:
     """Return a bounded panel height for visible trade activity rows."""
-    return max(280, min(520, 120 + symbol_count * 54))
-
-
-def _trade_activity_factors(symbols: list[str]) -> list[tuple[str, str]]:
-    """Return categorical lanes for buy/sell activity per asset."""
-    factors = []
-    for symbol in reversed(symbols):
-        factors.append((symbol, "Sell"))
-        factors.append((symbol, "Buy"))
-    return factors
+    return max(280, min(520, 120 + symbol_count * 32))
 
 
 def _market_frame(market_data: pd.DataFrame) -> pd.DataFrame:
@@ -2464,6 +2454,9 @@ def _style_market_section(plot) -> None:
     plot.axis.minor_tick_line_color = None
     plot.axis.major_label_text_color = "#52616f"
     plot.axis.axis_label_text_color = "#52616f"
+    for axis in plot.yaxis:
+        if hasattr(axis.ticker, "desired_num_ticks"):
+            axis.ticker.desired_num_ticks = min(axis.ticker.desired_num_ticks, 5)
     plot.title.text_color = "#24313a"
     plot.title.text_font_size = "11pt"
     plot.title.text_font_style = "bold"
@@ -2483,6 +2476,7 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
         return
     for legend in list(plot.legend):
         legend.visible = True
+        legend.location = "top_left"
         item_count = len(legend.items)
         legend.ncols = min(item_count, 8 if compact else 4)
         legend.border_line_width = 0
