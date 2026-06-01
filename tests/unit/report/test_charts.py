@@ -42,6 +42,7 @@ from tradelearn.report.charts import (
     transaction_time_histogram,
     turnover,
 )
+from tradelearn.report.charts.core import _trade_activity_frame
 
 
 def test_report_charts_return_bokeh_figures() -> None:
@@ -187,6 +188,29 @@ def test_portfolio_replay_draws_trade_activity_by_asset() -> None:
     assert len(activity.y_range.factors) == 8
     assert all(renderer.glyph.size == "marker_size" for renderer in trade_markers)
     assert activity.yaxis.axis_label == "Asset"
+
+
+def test_trade_activity_marker_size_uses_readable_notional_scale() -> None:
+    """Trade activity markers should stay readable while preserving relative notional."""
+    activity, _symbols = _trade_activity_frame(
+        pd.DataFrame(
+            {
+                "date": pd.date_range("2024-01-01", periods=5, tz="UTC"),
+                "symbol": ["AAA", "AAA", "BBB", "BBB", "CCC"],
+                "side": ["buy", "sell", "buy", "sell", "buy"],
+                "bar_index": [0, 1, 2, 3, 4],
+                "size": [1.0, 2.0, 10.0, 100.0, 10000.0],
+                "price": [10.0, 10.0, 10.0, 10.0, 10.0],
+            }
+        )
+    )
+
+    sizes = activity.sort_values("notional")["marker_size"].to_list()
+
+    assert sizes[0] >= 7.0
+    assert sizes[-1] <= 18.0
+    assert sizes == sorted(sizes)
+    assert sizes[2] > sizes[0]
 
 
 def test_portfolio_replay_aggregates_profit_loss() -> None:

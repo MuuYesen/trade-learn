@@ -1978,15 +1978,24 @@ def _trade_activity_frame(fills: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
         ordered = list(notional_by_symbol.index)
     symbols = ordered
 
-    min_notional = float(activity["notional"].min())
-    max_notional = float(activity["notional"].max())
-    if max_notional > min_notional:
-        scale = (activity["notional"] - min_notional) / (max_notional - min_notional)
-        activity["marker_size"] = (5.0 + scale * 8.0).clip(lower=5.0, upper=13.0)
-    else:
-        activity["marker_size"] = 7.0
+    activity["marker_size"] = _trade_activity_marker_sizes(activity["notional"])
 
     return activity, symbols
+
+
+def _trade_activity_marker_sizes(notional: pd.Series) -> pd.Series:
+    """Return readable marker sizes from trade notional using perceptual scaling."""
+    values = pd.to_numeric(notional, errors="coerce").fillna(0.0).clip(lower=0.0)
+    if values.empty:
+        return pd.Series(dtype=float)
+
+    low = float(values.quantile(0.10))
+    high = float(values.quantile(0.95))
+    if not np.isfinite(low) or not np.isfinite(high) or high <= low:
+        return pd.Series(10.0, index=values.index, dtype=float)
+
+    normalized = ((values - low) / (high - low)).clip(lower=0.0, upper=1.0)
+    return 7.0 + np.sqrt(normalized) * 11.0
 
 
 def _profit_loss_bins(trades: pd.DataFrame) -> pd.DataFrame:
