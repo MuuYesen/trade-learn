@@ -190,7 +190,7 @@ def test_portfolio_replay_draws_trade_activity_by_asset() -> None:
 
 
 def test_portfolio_replay_aggregates_profit_loss() -> None:
-    """Dense portfolio P/L should use readable aggregate bars."""
+    """Dense portfolio P/L should show readable P/L bars and count context."""
     replay = market_replay(
         {"AAA": _market_data(), "BBB": _market_data() * 1.5},
         fills=_closed_trade_fills(),
@@ -210,6 +210,8 @@ def test_portfolio_replay_aggregates_profit_loss() -> None:
     ]
 
     assert bars
+    assert any(renderer.name == "trade_count_background" for renderer in bars)
+    assert "trade_count" in profit_loss.extra_y_ranges
     assert not trade_markers
 
 

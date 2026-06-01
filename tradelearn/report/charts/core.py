@@ -662,6 +662,22 @@ def _profit_loss_replay_plot(trades_frame: pd.DataFrame, x_range):
     )
     bins = _profit_loss_bins(trades_frame)
     source = ColumnDataSource(bins)
+    max_count = max(float(bins["trade_count"].max()), 1.0)
+    plot.extra_y_ranges["trade_count"] = Range1d(start=0.0, end=max_count * 1.12)
+    count_bars = plot.vbar(
+        x="bar_index",
+        width="width",
+        top="trade_count",
+        bottom=0,
+        source=source,
+        fill_color="#93a4b3",
+        line_color="#93a4b3",
+        fill_alpha=0.18,
+        line_alpha=0.0,
+        y_range_name="trade_count",
+        legend_label="Trade Count",
+        name="trade_count_background",
+    )
     bars = plot.vbar(
         x="bar_index",
         width="width",
@@ -684,7 +700,7 @@ def _profit_loss_replay_plot(trades_frame: pd.DataFrame, x_range):
     _add_passive_hover(
         plot,
         HoverTool(
-            renderers=[bars],
+            renderers=[bars, count_bars],
             formatters={"@start_exit": "datetime", "@end_exit": "datetime"},
             tooltips=[
                 ("Exit Window", "@start_exit{%F} - @end_exit{%F}"),
