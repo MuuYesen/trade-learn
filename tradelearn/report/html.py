@@ -251,6 +251,7 @@ def _render_html(
         returns_count=len(returns),
         script=script,
         summary_table=_summary_cards(summary),
+        closed_trades_count=_closed_trade_count(trades),
         trades_count=len(trades),
         custom_sections=custom_sections,
     )
@@ -262,6 +263,14 @@ def _template_environment() -> Environment:
         autoescape=select_autoescape(["html", "xml"]),
         loader=FileSystemLoader(TEMPLATE_DIR),
     )
+
+
+def _closed_trade_count(trades: pd.DataFrame) -> int:
+    if trades is None or trades.empty:
+        return 0
+    if "isclosed" not in trades.columns:
+        return int(len(trades))
+    return int(trades["isclosed"].astype(bool).sum())
 
 
 def _summary_table(values: dict[str, Any]) -> str:

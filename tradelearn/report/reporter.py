@@ -80,6 +80,7 @@ class Reporter:
         returns = self._get("returns")
         trades = self._trades()
         summary = dict(self._get("summary", default={}) or {})
+        closed_trades = _closed_trades(trades)
 
         # Consolidated set of high-level metrics
         computed: dict[str, float | int] = {
@@ -91,11 +92,11 @@ class Reporter:
             "sortino_ratio": metrics.sortino(returns, periods=self.periods),
             "max_drawdown": metrics.max_drawdown(returns),
             "max_dd_duration": self._max_drawdown_duration(returns),
-            "win_rate": metrics.win_rate(trades),
-            "profit_factor": metrics.profit_factor(trades),
-            "avg_win": metrics.avg_win(trades),
-            "avg_loss": metrics.avg_loss(trades),
-            "total_trades": int(len(trades)),
+            "win_rate": metrics.win_rate(closed_trades),
+            "profit_factor": metrics.profit_factor(closed_trades),
+            "avg_win": metrics.avg_win(closed_trades),
+            "avg_loss": metrics.avg_loss(closed_trades),
+            "total_trades": int(len(closed_trades)),
             "turnover": self._turnover(),
         }
 
@@ -501,9 +502,11 @@ class Reporter:
 
     def _get(self, name: str, default: Any = None) -> Any:
         """Read a field from mapping or object stats."""
+        if hasattr(self.stats, name):
+            return getattr(self.stats, name)
         if isinstance(self.stats, Mapping):
             return self.stats.get(name, default)
-        return getattr(self.stats, name, default)
+        return default
 
     @staticmethod
     def _market_data_copy(market_data: Any | None) -> Any | None:
@@ -631,3 +634,9 @@ class Reporter:
             else:
                 current = 0
         return longest
+
+
+def _closed_trades(trades: pd.DataFrame) -> pd.DataFrame:
+    if trades is None or trades.empty or "isclosed" not in trades.columns:
+        return trades
+    return trades[trades["isclosed"].astype(bool)]

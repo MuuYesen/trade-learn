@@ -1,7 +1,9 @@
 """Tests for report facade summary statistics."""
 
 import logging
+from collections.abc import Iterator, Mapping
 from types import SimpleNamespace
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -91,6 +93,52 @@ def test_reporter_summary_accepts_mapping_stats_and_existing_summary() -> None:
     assert "alpha" not in summary
     assert "beta" not in summary
     assert "information_ratio" not in summary
+
+
+def test_reporter_summary_counts_closed_trades_when_available() -> None:
+    """Reporter summary uses the same closed-trade count as the backtest engine."""
+    stats = _stats()
+    stats.trades = pd.DataFrame(
+        {
+            "pnl": [0.0, 100.0, 0.0, -25.0, 0.0],
+            "isclosed": [False, True, False, True, False],
+        }
+    )
+
+    summary = Reporter(stats, periods=252).summary()
+
+    assert summary["total_trades"] == 2
+    assert summary["win_rate"] == 0.5
+
+
+def test_reporter_reads_artifact_attributes_before_mapping_summary() -> None:
+    """LiteStats-like mappings expose summary keys plus artifact attributes."""
+
+    class StatsMapping(Mapping[str, Any]):
+        summary = {"strategy_name": "demo"}
+        returns = _returns()
+        trades = pd.DataFrame({"pnl": [0.0, 100.0], "isclosed": [False, True]})
+        positions = pd.DataFrame()
+        orders = pd.DataFrame()
+        config = {"strategy": "demo"}
+        analyzers = {}
+
+        def __getitem__(self, key: str) -> Any:
+            return self.summary[key]
+
+        def __iter__(self) -> Iterator[str]:
+            return iter(self.summary)
+
+        def __len__(self) -> int:
+            return len(self.summary)
+
+        def get(self, key: str, default: Any = None) -> Any:
+            return self.summary.get(key, default)
+
+    summary = Reporter(StatsMapping(), periods=252).summary()
+
+    assert summary["total_trades"] == 1
+    assert summary["strategy_name"] == "demo"
 
 
 def test_reporter_equity_curve_and_drawdown_delegate_metrics() -> None:

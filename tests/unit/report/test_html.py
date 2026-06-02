@@ -62,6 +62,23 @@ def test_reporter_html_writes_single_file_tear_sheet(tmp_path) -> None:
     assert 'data-metric="strategy_name"' not in html
 
 
+def test_reporter_html_labels_trade_rows_separately(tmp_path) -> None:
+    """Report metadata distinguishes closed trades from raw trade rows."""
+    path = tmp_path / "report.html"
+    stats = _stats()
+    stats.trades = pd.DataFrame(
+        {
+            "pnl": [0.0, 100.0, 0.0],
+            "isclosed": [False, True, False],
+        }
+    )
+
+    Reporter(stats, periods=252).html(path)
+
+    html = path.read_text()
+    assert "returns=5, closed trades=1, trade rows=3" in html
+
+
 def test_reporter_report_dispatches_html_by_suffix(tmp_path) -> None:
     """Reporter.report writes HTML when the output suffix is .html."""
     path = tmp_path / "report.html"
