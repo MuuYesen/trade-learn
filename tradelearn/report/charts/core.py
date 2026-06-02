@@ -8,6 +8,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from bokeh.events import MouseLeave, MouseMove
 from bokeh.layouts import column, gridplot
 from bokeh.models import (
     ColumnDataSource,
@@ -411,6 +412,7 @@ def market_replay(
 
     for plot in plots:
         _style_market_section(plot)
+    _sync_replay_crosshair(plots)
     _style_market_legend(equity_plot, compact=True)
     _style_market_legend(pl_plot if not trades_frame.empty else None)
     _style_market_legend(price_plot, compact=True, large_glyphs=True)
@@ -488,13 +490,13 @@ def _portfolio_market_replay(
         visible_symbols,
         asset_control,
         x_range,
-        base_frame,
     )
     plots.append(activity_plot)
 
     _apply_replay_date_axis(plots, base_frame)
     for plot in plots:
         _style_market_section(plot)
+    _sync_replay_crosshair(plots)
     _style_market_legend(equity_plot, compact=True)
     _style_market_legend(allocation_plot, compact=True)
     _style_market_legend(pl_plot)
@@ -727,7 +729,6 @@ def _trade_activity_replay_plot(
     visible_symbols: list[str],
     control: Select,
     x_range,
-    frame: pd.DataFrame | None = None,
 ):
     """Return a trade activity panel grouped by asset."""
     visible = _filter_trade_activity(activity, visible_symbols)
@@ -792,7 +793,6 @@ def _trade_activity_replay_plot(
                     ],
                 ),
             )
-        date_hover_source = _add_trade_activity_date_hover(plot, frame, visible_symbols)
         control.js_on_change(
             "value",
             CustomJS(
@@ -804,7 +804,6 @@ def _trade_activity_replay_plot(
                     "y_range": plot.y_range,
                     "plot": plot,
                     "symbols": symbols,
-                    "date_hover_source": date_hover_source,
                 },
                 code=_trade_activity_selector_js(),
             ),
@@ -812,40 +811,6 @@ def _trade_activity_replay_plot(
 
     plot.yaxis.axis_label = "Asset"
     return plot
-
-
-def _add_trade_activity_date_hover(
-    plot,
-    frame: pd.DataFrame | None,
-    visible_symbols: list[str],
-) -> ColumnDataSource | None:
-    """Add a passive x-axis date hover layer to the trade activity panel."""
-    if frame is None or frame.empty or not visible_symbols:
-        return None
-    hover_frame = frame[["date", "bar_index"]].copy()
-    hover_frame["symbol"] = list(reversed(visible_symbols))[0]
-    source = ColumnDataSource(hover_frame)
-    renderer = plot.line(
-        "bar_index",
-        "symbol",
-        source=source,
-        line_alpha=0.0,
-        line_width=8,
-        name="trade_activity_date_hover",
-    )
-    _add_passive_hover(
-        plot,
-        HoverTool(
-            renderers=[renderer],
-            formatters={"@date": "datetime"},
-            tooltips=[
-                ("Date", "@date{%F}"),
-                ("Bar", "@bar_index{0,0}"),
-            ],
-            mode="vline",
-        ),
-    )
-    return source
 
 
 def price_trades(market_data: pd.DataFrame, fills: pd.DataFrame | None = None):
@@ -2191,12 +2156,6 @@ for (const symbol of visible) {{
 }}
 y_range.factors = factors;
 plot.height = Math.max(280, Math.min(520, 120 + limit * 32));
-if (date_hover_source && date_hover_source.data && date_hover_source.data.bar_index) {{
-  const hoverRows = date_hover_source.data.bar_index.length;
-  const hoverSymbol = visible.length > 0 ? visible[0] : "";
-  date_hover_source.data.symbol = Array(hoverRows).fill(hoverSymbol);
-  date_hover_source.change.emit();
-}}
 buy_source.change.emit();
 sell_source.change.emit();
 """
@@ -2509,6 +2468,44 @@ def _style_market_section(plot) -> None:
     plot.toolbar.logo = None
     plot.add_tools(CrosshairTool(dimensions="both"))
     _hide_market_legend(plot)
+
+
+def _sync_replay_crosshair(plots: list[Any]) -> None:
+    """Add a shared vertical guide across linked replay panels."""
+    spans = []
+    for plot in plots:
+        span = Span(
+            location=0,
+            dimension="height",
+            line_color="#24313a",
+            line_alpha=0.55,
+            line_width=1,
+            visible=False,
+            name="shared_replay_crosshair",
+        )
+        plot.add_layout(span)
+        spans.append(span)
+
+    move = CustomJS(
+        args={"spans": spans},
+        code="""
+for (const span of spans) {
+  span.location = cb_obj.x;
+  span.visible = true;
+}
+""",
+    )
+    leave = CustomJS(
+        args={"spans": spans},
+        code="""
+for (const span of spans) {
+  span.visible = false;
+}
+""",
+    )
+    for plot in plots:
+        plot.js_on_event(MouseMove, move)
+        plot.js_on_event(MouseLeave, leave)
 
 
 def _hide_market_legend(plot) -> None:

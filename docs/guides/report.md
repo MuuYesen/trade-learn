@@ -45,6 +45,6 @@ Reporter.from_returns(returns, positions=positions, transactions=trades).report(
 | `Trade Activity by Asset` | 按资产展示交易发生时间与交易规模，买卖方向在同一资产行内上下错位，箭头大小按成交额做分位数裁剪和感知缩放，hover 会显示日期与成交信息；默认展示交易最活跃的 8 个资产，可用下拉框切换到 Top 15 或全部资产 |
 
 `Assets` 下拉框会同步控制 `Allocation` 和 `Trade Activity by Asset`。`Equity` 与 `Profit / Loss` 始终保留组合整体视角。
-组合回放图的图例位于图表上方左侧，采用浅色描边样式，并保留点击隐藏 / 显示序列的交互。
+组合回放图共享垂直日期参考线，图例位于图表上方左侧，采用浅色描边样式，并保留点击隐藏 / 显示序列的交互。
 
 单资产报告，包括只传入一个数据源的 mapping，仍保留传统 `OHLC / Trades` 视图。

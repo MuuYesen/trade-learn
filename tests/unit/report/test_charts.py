@@ -2,7 +2,7 @@
 
 import pandas as pd
 from bokeh.plotting import figure
-from bokeh.models import FixedTicker, GlyphRenderer, HoverTool, Legend
+from bokeh.models import FixedTicker, GlyphRenderer, HoverTool, Legend, Span
 from bokeh.models.glyphs import MultiLine, Scatter, VBar
 from bokeh.models.widgets import Select
 
@@ -265,8 +265,8 @@ def test_portfolio_replay_uses_sparse_numeric_y_ticks() -> None:
     assert allocation.yaxis[0].ticker.ticks == [0.0, 0.25, 0.5, 0.75, 1.0]
 
 
-def test_trade_activity_has_date_hover_layer() -> None:
-    """Trade activity should expose date context while moving across the x-axis."""
+def test_trade_activity_uses_one_trade_hover() -> None:
+    """Trade activity should avoid duplicate hover boxes while preserving trade dates."""
     replay = market_replay(
         {"AAA": _market_data(), "BBB": _market_data() * 1.5},
         fills=_closed_trade_fills(),
@@ -274,20 +274,39 @@ def test_trade_activity_has_date_hover_layer() -> None:
     )
 
     activity = _find_plot(replay, "Trade Activity by Asset")
-    date_hover_renderer = next(
+    assert not [
         renderer
         for renderer in activity.renderers
         if isinstance(renderer, GlyphRenderer) and renderer.name == "trade_activity_date_hover"
-    )
+    ]
     hover_tools = [
         tool
         for tool in activity.tools
-        if isinstance(tool, HoverTool) and date_hover_renderer in list(tool.renderers)
+        if isinstance(tool, HoverTool)
     ]
 
-    assert hover_tools
-    assert hover_tools[0].mode == "vline"
-    assert ("Date", "@date{%F}") in hover_tools[0].tooltips
+    assert len(hover_tools) == 1
+    assert ("Date", "@date{%F %T}") in hover_tools[0].tooltips
+
+
+def test_portfolio_replay_syncs_crosshair_across_panels() -> None:
+    """Portfolio panels should share a vertical crosshair for date comparison."""
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_closed_trade_fills(),
+        equity=_series("equity"),
+    )
+
+    for title in ["Equity", "Allocation", "Profit / Loss", "Trade Activity by Asset"]:
+        plot = _find_plot(replay, title)
+        spans = [
+            model
+            for model in plot.select({"name": "shared_replay_crosshair"})
+            if isinstance(model, Span)
+        ]
+        assert spans
+        assert spans[0].dimension == "height"
+        assert spans[0].visible is False
 
 
 def test_trade_activity_marker_size_uses_readable_notional_scale() -> None:
