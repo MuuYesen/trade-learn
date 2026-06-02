@@ -638,12 +638,14 @@ def _allocation_replay_plot(
     )
     for renderer, stacker in zip(renderers, stackers):
         renderer.name = stacker
-    hover_source = ColumnDataSource(_allocation_hover_frame(display, stackers))
+    hover_source = ColumnDataSource(
+        _allocation_hover_frame(display, stackers, top_count=len(visible_symbols))
+    )
     hover_renderer = plot.vbar(
         x="bar_index",
         width=0.95,
-        top="top",
-        bottom="bottom",
+        top=1.0,
+        bottom=0.0,
         source=hover_source,
         fill_color="white",
         fill_alpha=0.01,
@@ -662,8 +664,9 @@ def _allocation_replay_plot(
             formatters={"@date": "datetime"},
             tooltips=[
                 ("Date", "@date{%F %T}"),
-                ("Asset", "@asset"),
-                ("Allocation", "@allocation{0.0%}"),
+                ("Total Invested", "@invested{0.0%}"),
+                ("Cash", "@cash{0.0%}"),
+                ("Top Holdings", "@top_holdings{safe}"),
             ],
         ),
     )
@@ -2112,27 +2115,43 @@ def _allocation_display_frame(
     return result
 
 
-def _allocation_hover_frame(display: pd.DataFrame, stackers: list[str]) -> pd.DataFrame:
-    """Return transparent stacked hit regions for allocation hover."""
+def _allocation_hover_frame(
+    display: pd.DataFrame,
+    stackers: list[str],
+    *,
+    top_count: int,
+) -> pd.DataFrame:
+    """Return one hover row per date with a holdings summary."""
     rows = []
     for _, row in display.iterrows():
-        bottom = 0.0
-        for stacker in stackers:
-            allocation = float(row.get(stacker, 0.0) or 0.0)
-            top = bottom + allocation
-            if allocation > 1e-12:
-                rows.append(
-                    {
-                        "date": row["date"],
-                        "bar_index": row["bar_index"],
-                        "asset": stacker,
-                        "allocation": allocation,
-                        "bottom": bottom,
-                        "top": top,
-                    }
-                )
-            bottom = top
-    return pd.DataFrame(rows, columns=["date", "bar_index", "asset", "allocation", "bottom", "top"])
+        holdings = [
+            (stacker, float(row.get(stacker, 0.0) or 0.0))
+            for stacker in stackers
+            if stacker not in {"Cash"} and float(row.get(stacker, 0.0) or 0.0) > 1e-12
+        ]
+        holdings.sort(key=lambda item: item[1], reverse=True)
+        top_holdings = holdings[:top_count]
+        rows.append(
+            {
+                "date": row["date"],
+                "bar_index": row["bar_index"],
+                "invested": sum(value for name, value in holdings if name != "Others"),
+                "cash": float(row.get("Cash", 0.0) or 0.0),
+                "top_count": top_count,
+                "top_holdings": _format_allocation_holdings(top_holdings),
+            }
+        )
+    return pd.DataFrame(
+        rows,
+        columns=["date", "bar_index", "invested", "cash", "top_count", "top_holdings"],
+    )
+
+
+def _format_allocation_holdings(holdings: list[tuple[str, float]]) -> str:
+    """Return an HTML summary for allocation hover."""
+    if not holdings:
+        return "-"
+    return "<br>".join(f"{name}: {value:.1%}" for name, value in holdings)
 
 
 def _portfolio_asset_selector(symbols: list[str], initial_limit: int) -> Select:
@@ -2181,23 +2200,30 @@ for (const stacker of stackers) {{
   }}
 }}
 allocation_source.data = next;
-const hover = {{date: [], bar_index: [], asset: [], allocation: [], bottom: [], top: []}};
+function formatHolding(name, value) {{
+  return `${{name}}: ${{(value * 100).toFixed(1)}}%`;
+}}
+const hover = {{date: [], bar_index: [], invested: [], cash: [], top_count: [], top_holdings: []}};
 for (let index = 0; index < rows; index++) {{
-  let bottom = 0;
+  const holdings = [];
   for (const stacker of stackers) {{
+    if (stacker === "Cash") {{
+      continue;
+    }}
     const values = next[stacker] || [];
     const allocation = values[index] || 0;
-    const top = bottom + allocation;
     if (allocation > 1e-12) {{
-      hover.date.push(next.date[index]);
-      hover.bar_index.push(next.bar_index[index]);
-      hover.asset.push(stacker);
-      hover.allocation.push(allocation);
-      hover.bottom.push(bottom);
-      hover.top.push(top);
+      holdings.push([stacker, allocation]);
     }}
-    bottom = top;
   }}
+  holdings.sort((left, right) => right[1] - left[1]);
+  const topHoldings = holdings.slice(0, limit);
+  hover.date.push(next.date[index]);
+  hover.bar_index.push(next.bar_index[index]);
+  hover.invested.push(holdings.filter((item) => item[0] !== "Others").reduce((total, item) => total + item[1], 0));
+  hover.cash.push(next.Cash ? (next.Cash[index] || 0) : 0);
+  hover.top_count.push(limit);
+  hover.top_holdings.push(topHoldings.length ? topHoldings.map((item) => formatHolding(item[0], item[1])).join("<br>") : "-");
 }}
 allocation_hover_source.data = hover;
 allocation_source.change.emit();

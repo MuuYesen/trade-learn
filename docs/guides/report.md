@@ -40,7 +40,7 @@ Reporter.from_returns(returns, positions=positions, transactions=trades).report(
 | 面板 | 用途 |
 |---|---|
 | `Equity` | 策略权益、Buy & Hold、峰值、最终值和最大回撤 |
-| `Allocation` | 多资产权重堆叠，展示组合暴露如何随时间变化；`Others` 与 `Cash` 使用低饱和颜色降低干扰 |
+| `Allocation` | 多资产权重堆叠，展示组合暴露如何随时间变化；hover 汇总当天现金、总暴露和当前下拉数量对应的 Top Holdings；`Others` 与 `Cash` 使用低饱和颜色降低干扰 |
 | `Profit / Loss` | 按退出时间分桶展示平均盈利 / 亏损，灰色背景表示交易数量，hover 可查看交易数、胜负数和最好 / 最差交易 |
 | `Trade Activity by Asset` | 按资产展示交易发生时间与交易规模，买卖方向在同一资产行内上下错位，箭头大小按成交额做分位数裁剪和感知缩放，竖线标记调仓 / 成交日期，hover 会显示日期与成交信息；默认展示交易最活跃的 8 个资产，可用下拉框切换到 Top 15 或全部资产 |
 

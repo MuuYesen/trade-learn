@@ -324,11 +324,12 @@ def test_profit_loss_hover_uses_single_renderer() -> None:
     assert [renderer.name for renderer in hover_tools[0].renderers] == ["avg_pl_bars"]
 
 
-def test_allocation_hover_shows_asset_weight() -> None:
-    """Allocation hover should identify the date, asset, and allocation weight."""
+def test_allocation_hover_shows_holdings_summary() -> None:
+    """Allocation hover should summarize the selected holdings count for that date."""
+    symbols = [f"AAA{index}" for index in range(10)]
     replay = market_replay(
-        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
-        fills=_closed_trade_fills(),
+        {symbol: _market_data() * (index + 1) for index, symbol in enumerate(symbols)},
+        fills=_many_asset_fills(symbols),
         equity=_series("equity"),
     )
 
@@ -344,8 +345,10 @@ def test_allocation_hover_shows_asset_weight() -> None:
     assert hover_tools[0].renderers == [hover_renderer]
     assert isinstance(hover_renderer.glyph, VBar)
     assert ("Date", "@date{%F %T}") in hover_tools[0].tooltips
-    assert ("Asset", "@asset") in hover_tools[0].tooltips
-    assert ("Allocation", "@allocation{0.0%}") in hover_tools[0].tooltips
+    assert ("Total Invested", "@invested{0.0%}") in hover_tools[0].tooltips
+    assert ("Cash", "@cash{0.0%}") in hover_tools[0].tooltips
+    assert ("Top Holdings", "@top_holdings{safe}") in hover_tools[0].tooltips
+    assert set(hover_renderer.data_source.data["top_count"]) == {8}
 
 
 def test_trade_activity_draws_rebalance_separators() -> None:
