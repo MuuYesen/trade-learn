@@ -1,6 +1,7 @@
 """Tests for HTML report export."""
 
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -26,6 +27,7 @@ def test_html_template_uses_modern_responsive_report_layout() -> None:
     assert "report-layout" in text
     assert "table-scroll" in text
     assert "grid-template-columns: repeat(auto-fit" in text
+    assert re.search(r"\.chart-grid\s*\{[^}]*align-items:\s*start;", text, re.S)
     assert "overflow-x: auto" in text
 
 
