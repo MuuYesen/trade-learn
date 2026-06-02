@@ -497,6 +497,7 @@ def _portfolio_market_replay(
     for plot in plots:
         _style_market_section(plot)
     _sync_replay_crosshair(plots)
+    _style_trade_activity_rows(activity_plot)
     _style_market_legend(equity_plot, compact=True)
     _style_market_legend(allocation_plot, compact=True)
     _style_market_legend(pl_plot)
@@ -2305,6 +2306,15 @@ def _trade_rebalance_separator_frame(activity: pd.DataFrame, visible_symbols: li
             "y1": [visible[0]] * len(bars),
         }
     )
+
+
+def _style_trade_activity_rows(plot) -> None:
+    """Make asset rows easier to scan without overpowering trade markers."""
+    plot.ygrid.grid_line_color = "#d5dee7"
+    plot.ygrid.grid_line_alpha = 0.95
+    plot.ygrid.grid_line_width = 1
+    plot.ygrid.band_fill_color = "#f4f7fa"
+    plot.ygrid.band_fill_alpha = 0.28
 
 
 def _trade_activity_options(symbols: list[str]) -> list[tuple[str, str]]:

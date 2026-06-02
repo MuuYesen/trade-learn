@@ -370,6 +370,21 @@ def test_trade_activity_draws_rebalance_separators() -> None:
     assert separator.glyph.line_alpha <= 0.25
 
 
+def test_trade_activity_separates_asset_rows() -> None:
+    """Trade activity rows should be visually separated by asset."""
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_closed_trade_fills(),
+        equity=_series("equity"),
+    )
+
+    plot = _find_plot(replay, "Trade Activity by Asset")
+
+    assert plot.ygrid[0].grid_line_alpha >= 0.9
+    assert plot.ygrid[0].grid_line_width >= 1
+    assert plot.ygrid[0].band_fill_alpha > 0
+
+
 def test_trade_activity_marker_size_uses_readable_notional_scale() -> None:
     """Trade activity markers should stay readable while preserving relative notional."""
     activity, _symbols = _trade_activity_frame(
