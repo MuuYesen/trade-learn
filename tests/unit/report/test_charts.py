@@ -86,6 +86,24 @@ def test_report_charts_return_bokeh_figures() -> None:
     assert all(isinstance(plot, type(figure())) for plot in plots)
 
 
+def test_report_charts_use_report_title_style() -> None:
+    """Bokeh titles should match the report visual system."""
+    plots = [
+        correlation_matrix(_correlation()),
+        monthly_heatmap(_monthly_returns()),
+        market_replay(_market_data(), fills=_fills(), equity=_series("equity")),
+    ]
+
+    for plot in plots:
+        for item in _collect_plots(plot):
+            if getattr(item.title, "text", None):
+                assert item.title.text_color == "#2f3b52"
+                assert item.title.text_font_size == "13px"
+                assert item.title.text_font_style == "bold"
+                assert item.title.align == "left"
+                assert item.title.offset == 8
+
+
 def test_equity_curve_marks_top_drawdown_peak_and_valley() -> None:
     """Equity curve marks top drawdown peak and valley dates."""
     drawdowns = pd.DataFrame(
@@ -731,6 +749,16 @@ def _collect_plot_titles(layout) -> list[str]:
         item = child[0] if isinstance(child, tuple) else child
         titles.extend(_collect_plot_titles(item))
     return titles
+
+
+def _collect_plots(layout) -> list:
+    plots = []
+    if hasattr(layout, "title"):
+        plots.append(layout)
+    for child in getattr(layout, "children", []):
+        item = child[0] if isinstance(child, tuple) else child
+        plots.extend(_collect_plots(item))
+    return plots
 
 
 def _find_plot(layout, title: str):

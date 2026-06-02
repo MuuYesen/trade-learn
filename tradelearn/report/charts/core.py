@@ -36,6 +36,7 @@ MARKET_GRID = "#e8edf2"
 MARKET_BORDER = "#ccd7e0"
 MARKET_BACKGROUND = "#fbfcfe"
 MARKET_DRAWDOWN = "#fff3c4"
+MARKET_TITLE = "#2f3b52"
 PORTFOLIO_OTHERS = "#a98578"
 PORTFOLIO_CASH = "#b8c0c7"
 PORTFOLIO_VISIBLE_ASSET_LIMIT = 8
@@ -2695,9 +2696,7 @@ def _style_market_section(plot) -> None:
     for axis in plot.yaxis:
         if hasattr(axis.ticker, "desired_num_ticks"):
             axis.ticker.desired_num_ticks = min(axis.ticker.desired_num_ticks, 5)
-    plot.title.text_color = "#24313a"
-    plot.title.text_font_size = "11pt"
-    plot.title.text_font_style = "bold"
+    _style_plot_title(plot)
     plot.toolbar.logo = None
     plot.add_tools(CrosshairTool(dimensions="both"))
     _hide_market_legend(plot)
@@ -2784,12 +2783,23 @@ def _move_legend_outside(plot, legend: Legend) -> None:
 
 def _make_static_chart(plot) -> None:
     """Render report support charts without visible interactive controls."""
+    _style_plot_title(plot)
     plot.toolbar_location = None
     plot.toolbar.tools = []
     plot.toolbar.logo = None
     plot.toolbar.active_drag = None
     plot.toolbar.active_scroll = None
     plot.toolbar.active_inspect = None
+
+
+def _style_plot_title(plot) -> None:
+    """Apply the report title treatment to Bokeh figures."""
+    plot.title.text_color = MARKET_TITLE
+    plot.title.text_font_size = "13px"
+    plot.title.text_font_style = "bold"
+    plot.title.text_font = "Arial"
+    plot.title.align = "left"
+    plot.title.offset = 8
 
 
 def _add_line_hover(plot, renderers, tooltips, *, vline: bool = True) -> None:
