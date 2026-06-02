@@ -198,15 +198,15 @@ class Reporter:
 
     def trade_distribution(self, bins: int = 20) -> pd.DataFrame:
         """Return trade PnL histogram bins."""
-        return trade_distribution(self._trades(), bins=bins)
+        return trade_distribution(_closed_trades(self._trades()), bins=bins)
 
     def exposure(self) -> pd.DataFrame:
         """Return daily symbol exposure weights."""
-        return exposure_weights(self._get("positions", default=pd.DataFrame()))
+        return exposure_weights(self._positions_frame(self._get("positions", default=pd.DataFrame())))
 
     def correlation_matrix(self) -> pd.DataFrame:
         """Return multi-asset exposure correlation matrix."""
-        return exposure_correlation(self._get("positions", default=pd.DataFrame()))
+        return exposure_correlation(self._positions_frame(self._get("positions", default=pd.DataFrame())))
 
     def factor_quantile_returns(self) -> pd.DataFrame:
         """Return factor quantile cumulative returns from analyzers."""
@@ -562,6 +562,8 @@ class Reporter:
             return frame
         if {"datetime", "symbol", "value"}.issubset(frame.columns):
             return frame.rename(columns={"datetime": "date"})
+        if {"datetime", "data", "value"}.issubset(frame.columns):
+            return frame.rename(columns={"datetime": "date", "data": "symbol"})
         if frame.empty:
             return pd.DataFrame()
         original_index_name = frame.index.name

@@ -252,6 +252,23 @@ def test_reporter_trade_distribution_bins_trade_pnl() -> None:
     assert distribution.attrs["median"] == pytest.approx(_trades()["pnl"].median())
 
 
+def test_reporter_trade_distribution_uses_closed_trades_when_available() -> None:
+    """Trade distribution ignores open trade rows from engine-style trade frames."""
+    trades = pd.DataFrame(
+        {
+            "pnl": [0.0, 100.0, 0.0, -50.0, 0.0],
+            "isclosed": [False, True, False, True, False],
+        }
+    )
+    reporter = Reporter({"returns": _returns(), "trades": trades})
+
+    distribution = reporter.trade_distribution(bins=5)
+
+    assert distribution["count"].sum() == 2
+    assert distribution.attrs["mean"] == pytest.approx(25.0)
+    assert distribution.attrs["median"] == pytest.approx(25.0)
+
+
 def test_reporter_exposure_pivots_multi_asset_positions() -> None:
     """Reporter.exposure returns daily symbol exposure weights."""
     positions = pd.DataFrame(
@@ -273,6 +290,29 @@ def test_reporter_exposure_pivots_multi_asset_positions() -> None:
     assert exposure.loc[pd.Timestamp("2024-01-01", tz="UTC"), "BBB"] == pytest.approx(0.4)
     assert exposure.loc[pd.Timestamp("2024-01-02", tz="UTC"), "AAA"] == pytest.approx(0.25)
     assert exposure.loc[pd.Timestamp("2024-01-02", tz="UTC"), "BBB"] == pytest.approx(0.75)
+
+
+def test_reporter_exposure_accepts_engine_position_column_names() -> None:
+    """Engine position frames use datetime/data/value columns."""
+    positions = pd.DataFrame(
+        {
+            "datetime": pd.to_datetime(
+                ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
+                utc=True,
+            ),
+            "data": ["AAA", "BBB", "AAA", "BBB"],
+            "value": [80.0, 20.0, 50.0, 50.0],
+        }
+    )
+    reporter = Reporter({"returns": _returns(), "trades": pd.DataFrame(), "positions": positions})
+
+    exposure = reporter.exposure()
+    correlation = reporter.correlation_matrix()
+
+    assert list(exposure.columns) == ["AAA", "BBB"]
+    assert exposure.loc[pd.Timestamp("2024-01-01", tz="UTC"), "AAA"] == pytest.approx(0.8)
+    assert exposure.loc[pd.Timestamp("2024-01-02", tz="UTC"), "BBB"] == pytest.approx(0.5)
+    assert correlation.shape == (2, 2)
 
 
 def test_market_data_from_datas_preserves_multi_asset_frames() -> None:
