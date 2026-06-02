@@ -101,6 +101,19 @@ def test_equity_curve_marks_top_drawdown_peak_and_valley() -> None:
     assert any(renderer.name == "drawdown_valley" for renderer in plot.renderers)
 
 
+def test_monthly_heatmap_uses_readable_neutral_color_and_hover() -> None:
+    """Near-zero monthly returns should not look like blank white cells."""
+    plot = monthly_heatmap(pd.DataFrame({1: [0.01], 2: [0.0], 3: [-0.02]}, index=[2024]))
+
+    rect = plot.renderers[0]
+    mapper = rect.glyph.fill_color["transform"]
+    assert "#f7f7f7" not in mapper.palette
+    assert mapper.nan_color != "white"
+    hover_tools = [tool for tool in plot.tools if isinstance(tool, HoverTool)]
+    assert hover_tools
+    assert ("Return", "@return{+0.00%}") in hover_tools[0].tooltips
+
+
 def test_support_charts_are_static_but_market_replay_keeps_toolbar() -> None:
     """Only the market replay chart keeps visible interactive controls in reports."""
     static_plot = equity_curve(_series("equity"))

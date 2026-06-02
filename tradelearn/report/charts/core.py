@@ -987,6 +987,9 @@ def monthly_heatmap(monthly: pd.DataFrame):
     values = monthly.drop(index="month_avg", errors="ignore")
     months = [column for column in range(1, 13) if column in values.columns]
     years = [str(year) for year in values.index]
+    numeric_returns = pd.to_numeric(values[months].stack(), errors="coerce") if months else pd.Series(dtype=float)
+    max_abs = float(numeric_returns.abs().max()) if not numeric_returns.dropna().empty else 0.05
+    bound = max(max_abs, 0.01)
     data = {"month": [], "year": [], "return": []}
     for year in values.index:
         for month in months:
@@ -1003,9 +1006,10 @@ def monthly_heatmap(monthly: pd.DataFrame):
     )
     mapper = linear_cmap(
         "return",
-        palette=["#d62728", "#f7f7f7", "#2ca02c"],
-        low=-0.05,
-        high=0.05,
+        palette=["#b91c1c", "#dc5a5a", "#e9eef3", "#58b96a", "#198c2d"],
+        low=-bound,
+        high=bound,
+        nan_color="#f1f4f7",
     )
     plot.rect(
         "month",
@@ -1017,6 +1021,16 @@ def monthly_heatmap(monthly: pd.DataFrame):
         line_color="white",
     )
     _make_static_chart(plot)
+    _add_passive_hover(
+        plot,
+        HoverTool(
+            tooltips=[
+                ("Year", "@year"),
+                ("Month", "@month"),
+                ("Return", "@return{+0.00%}"),
+            ],
+        ),
+    )
     return plot
 
 
