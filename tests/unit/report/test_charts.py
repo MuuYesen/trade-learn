@@ -98,10 +98,10 @@ def test_report_charts_use_report_title_style() -> None:
         for item in _collect_plots(plot):
             if getattr(item.title, "text", None):
                 assert item.title.text_color == "#2f3b52"
-                assert item.title.text_font_size == "13px"
+                assert item.title.text_font_size == "16px"
                 assert item.title.text_font_style == "bold"
                 assert item.title.align == "left"
-                assert item.title.offset == 8
+                assert item.title.offset == 12
 
 
 def test_equity_curve_marks_top_drawdown_peak_and_valley() -> None:

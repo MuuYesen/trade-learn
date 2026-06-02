@@ -2795,11 +2795,11 @@ def _make_static_chart(plot) -> None:
 def _style_plot_title(plot) -> None:
     """Apply the report title treatment to Bokeh figures."""
     plot.title.text_color = MARKET_TITLE
-    plot.title.text_font_size = "13px"
+    plot.title.text_font_size = "16px"
     plot.title.text_font_style = "bold"
     plot.title.text_font = "Arial"
     plot.title.align = "left"
-    plot.title.offset = 8
+    plot.title.offset = 12
 
 
 def _add_line_hover(plot, renderers, tooltips, *, vline: bool = True) -> None:
