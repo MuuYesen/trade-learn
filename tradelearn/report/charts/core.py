@@ -2530,9 +2530,9 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
         legend.border_line_color = "#d7e0e7"
         legend.background_fill_color = "white"
         legend.background_fill_alpha = 0.82
-        legend.padding = 5 if compact else 6
-        legend.spacing = 10 if compact else 12
-        legend.margin = 12
+        legend.padding = 3
+        legend.spacing = 8 if compact else 10
+        legend.margin = 2
         if compact and large_glyphs:
             legend.glyph_width = 22
             legend.glyph_height = 16

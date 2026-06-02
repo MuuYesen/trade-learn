@@ -158,7 +158,8 @@ def test_portfolio_replay_uses_compact_above_legends() -> None:
     assert all(legend.click_policy == "hide" for legend in allocation_legends + activity_legends)
     assert all(legend.background_fill_alpha >= 0.7 for legend in allocation_legends + activity_legends)
     assert all(legend.location == "top_left" for legend in allocation_legends + activity_legends)
-    assert all(legend.margin >= 6 for legend in allocation_legends + activity_legends)
+    assert all(legend.margin <= 4 for legend in allocation_legends + activity_legends)
+    assert all(legend.padding <= 3 for legend in allocation_legends + activity_legends)
     assert allocation_legends[0].ncols == len(allocation_legends[0].items)
 
 
