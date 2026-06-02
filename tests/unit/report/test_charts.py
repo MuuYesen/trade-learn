@@ -3,7 +3,7 @@
 import pandas as pd
 from bokeh.plotting import figure
 from bokeh.models import FixedTicker, GlyphRenderer, HoverTool, Legend, Span
-from bokeh.models.glyphs import MultiLine, Scatter, Segment, VBar
+from bokeh.models.glyphs import HBar, MultiLine, Scatter, Segment, VBar
 from bokeh.models.widgets import Select
 
 from tradelearn.report.charts import (
@@ -351,6 +351,25 @@ def test_allocation_hover_shows_holdings_summary() -> None:
     assert set(hover_renderer.data_source.data["top_count"]) == {8}
 
 
+def test_allocation_legend_matches_selected_assets() -> None:
+    """Allocation legend should only show selected assets plus summary buckets."""
+    symbols = [f"AAA{index}" for index in range(10)]
+    replay = market_replay(
+        {symbol: _market_data() * (index + 1) for index, symbol in enumerate(symbols)},
+        fills=_many_asset_fills(symbols),
+        equity=_series("equity"),
+    )
+
+    plot = _find_plot(replay, "Allocation")
+    legend = next(item for item in plot.above if isinstance(item, Legend))
+    visible_labels = [item.label.value for item in legend.items if item.visible]
+    hidden_labels = [item.label.value for item in legend.items if not item.visible]
+
+    assert len([label for label in visible_labels if label not in {"Others", "Cash"}]) == 8
+    assert visible_labels[-2:] == ["Others", "Cash"]
+    assert len(hidden_labels) == 2
+
+
 def test_trade_activity_draws_rebalance_separators() -> None:
     """Trade activity should mark each rebalance/trade date with subtle separators."""
     replay = market_replay(
@@ -380,6 +399,14 @@ def test_trade_activity_separates_asset_rows() -> None:
 
     plot = _find_plot(replay, "Trade Activity by Asset")
 
+    row_boxes = next(
+        renderer
+        for renderer in plot.renderers
+        if isinstance(renderer, GlyphRenderer) and renderer.name == "trade_asset_row_boxes"
+    )
+
+    assert isinstance(row_boxes.glyph, HBar)
+    assert row_boxes.glyph.line_alpha >= 0.5
     assert plot.ygrid[0].grid_line_alpha >= 0.9
     assert plot.ygrid[0].grid_line_width >= 1
     assert plot.ygrid[0].band_fill_alpha > 0

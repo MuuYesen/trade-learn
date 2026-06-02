@@ -639,6 +639,7 @@ def _allocation_replay_plot(
     )
     for renderer, stacker in zip(renderers, stackers):
         renderer.name = stacker
+    _sync_allocation_legend(plot, visible_symbols)
     hover_source = ColumnDataSource(
         _allocation_hover_frame(display, stackers, top_count=len(visible_symbols))
     )
@@ -679,6 +680,7 @@ def _allocation_replay_plot(
                     "allocation_source": source,
                     "allocation_full_source": full_source,
                     "allocation_hover_source": hover_source,
+                    "allocation_legend_items": list(plot.legend[0].items) if plot.legend else [],
                     "symbols": symbols,
                     "stackers": stackers,
                 },
@@ -765,6 +767,19 @@ def _trade_activity_replay_plot(
         x_range=x_range,
         y_range=FactorRange(factors=list(reversed(visible_symbols))),
     )
+    row_boxes_source = ColumnDataSource(_trade_activity_row_box_frame(visible_symbols, x_range))
+    plot.hbar(
+        y="symbol",
+        height=1.0,
+        left="left",
+        right="right",
+        source=row_boxes_source,
+        fill_alpha=0.0,
+        line_color="#c7d4df",
+        line_alpha=0.72,
+        line_width=1,
+        name="trade_asset_row_boxes",
+    )
 
     if not visible.empty:
         separators_source = ColumnDataSource(_trade_rebalance_separator_frame(visible, visible_symbols))
@@ -843,6 +858,7 @@ def _trade_activity_replay_plot(
                     "sell_full_source": sell_full_source,
                     "separators_source": separators_source,
                     "separators_full_source": separators_full_source,
+                    "row_boxes_source": row_boxes_source,
                     "y_range": plot.y_range,
                     "plot": plot,
                     "symbols": symbols,
@@ -2155,6 +2171,16 @@ def _format_allocation_holdings(holdings: list[tuple[str, float]]) -> str:
     return "<br>".join(f"{name}: {value:.1%}" for name, value in holdings)
 
 
+def _sync_allocation_legend(plot, visible_symbols: list[str]) -> None:
+    """Show selected allocation assets plus summary buckets in the legend."""
+    if not plot.legend:
+        return
+    selected = set(visible_symbols) | {"Others", "Cash"}
+    for item in plot.legend[0].items:
+        label = getattr(item.label, "value", None)
+        item.visible = label in selected
+
+
 def _portfolio_asset_selector(symbols: list[str], initial_limit: int) -> Select:
     """Return the shared portfolio asset visibility control."""
     return Select(
@@ -2227,6 +2253,10 @@ for (let index = 0; index < rows; index++) {{
   hover.top_holdings.push(topHoldings.length ? topHoldings.map((item) => formatHolding(item[0], item[1])).join("<br>") : "-");
 }}
 allocation_hover_source.data = hover;
+for (const item of allocation_legend_items) {{
+  const label = item.label && item.label.value;
+  item.visible = selected.has(label) || label === "Others" || label === "Cash";
+}}
 allocation_source.change.emit();
 allocation_hover_source.change.emit();
 """
@@ -2264,6 +2294,11 @@ for (const symbol of visible) {{
 }}
 y_range.factors = factors;
 plot.height = Math.max(280, Math.min(520, 120 + limit * 32));
+row_boxes_source.data = {{
+  symbol: visible,
+  left: Array(visible.length).fill(plot.x_range.start),
+  right: Array(visible.length).fill(plot.x_range.end),
+}};
 const separatorFull = separators_full_source.data;
 const separatorBars = new Set();
 const separatorRows = separatorFull.symbol ? separatorFull.symbol.length : 0;
@@ -2280,6 +2315,7 @@ separators_source.data = {{
 }};
 buy_source.change.emit();
 sell_source.change.emit();
+row_boxes_source.change.emit();
 separators_source.change.emit();
 """
 
@@ -2304,6 +2340,18 @@ def _trade_rebalance_separator_frame(activity: pd.DataFrame, visible_symbols: li
             "bar_index": bars,
             "y0": [visible[-1]] * len(bars),
             "y1": [visible[0]] * len(bars),
+        }
+    )
+
+
+def _trade_activity_row_box_frame(visible_symbols: list[str], x_range) -> pd.DataFrame:
+    """Return full-row boxes for each visible asset."""
+    visible = list(reversed(visible_symbols))
+    return pd.DataFrame(
+        {
+            "symbol": visible,
+            "left": [x_range.start] * len(visible),
+            "right": [x_range.end] * len(visible),
         }
     )
 
