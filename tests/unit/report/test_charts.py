@@ -102,8 +102,8 @@ def test_report_charts_use_report_title_style() -> None:
                 assert item.title.text_font_style == "bold"
                 assert item.title.align == "left"
                 assert item.title.text_align == "left"
-                assert item.title.offset == 12
-                assert item.title.standoff == 18
+                assert item.title.offset == -48
+                assert item.title.standoff == 28
 
 
 def test_equity_curve_marks_top_drawdown_peak_and_valley() -> None:

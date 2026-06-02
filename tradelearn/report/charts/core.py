@@ -2800,8 +2800,8 @@ def _style_plot_title(plot) -> None:
     plot.title.text_font = "Arial"
     plot.title.align = "left"
     plot.title.text_align = "left"
-    plot.title.offset = 12
-    plot.title.standoff = 18
+    plot.title.offset = -48
+    plot.title.standoff = 28
 
 
 def _add_line_hover(plot, renderers, tooltips, *, vline: bool = True) -> None:
