@@ -103,12 +103,15 @@ def test_equity_curve_marks_top_drawdown_peak_and_valley() -> None:
 
 def test_monthly_heatmap_uses_readable_neutral_color_and_hover() -> None:
     """Near-zero monthly returns should not look like blank white cells."""
-    plot = monthly_heatmap(pd.DataFrame({1: [0.01], 2: [0.0], 3: [-0.02]}, index=[2024]))
+    plot = monthly_heatmap(pd.DataFrame({1: [0.01], 2: [0.0], 3: [-0.02], 4: [pd.NA]}, index=[2024]))
 
     rect = plot.renderers[0]
     mapper = rect.glyph.fill_color["transform"]
     assert "#f7f7f7" not in mapper.palette
     assert mapper.nan_color != "white"
+    assert rect.data_source.data["label"] == ["+1.00%", "+0.00%", "-2.00%", "--"]
+    assert "label_color" in rect.data_source.data
+    assert any(renderer.name == "monthly_return_labels" for renderer in plot.renderers)
     hover_tools = [tool for tool in plot.tools if isinstance(tool, HoverTool)]
     assert hover_tools
     assert ("Return", "@return{+0.00%}") in hover_tools[0].tooltips

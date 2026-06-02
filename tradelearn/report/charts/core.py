@@ -990,12 +990,17 @@ def monthly_heatmap(monthly: pd.DataFrame):
     numeric_returns = pd.to_numeric(values[months].stack(), errors="coerce") if months else pd.Series(dtype=float)
     max_abs = float(numeric_returns.abs().max()) if not numeric_returns.dropna().empty else 0.05
     bound = max(max_abs, 0.01)
-    data = {"month": [], "year": [], "return": []}
+    data = {"month": [], "year": [], "return": [], "label": [], "label_color": []}
     for year in values.index:
         for month in months:
+            value = pd.to_numeric(pd.Series([values.loc[year, month]]), errors="coerce").iloc[0]
             data["month"].append(str(month))
             data["year"].append(str(year))
-            data["return"].append(values.loc[year, month])
+            data["return"].append(value)
+            data["label"].append("--" if pd.isna(value) else f"{float(value):+.2%}")
+            data["label_color"].append(
+                "#ffffff" if pd.notna(value) and abs(float(value)) >= bound * 0.55 else "#2f3a4a"
+            )
     plot = figure(
         title="Monthly Returns Heatmap",
         x_range=[str(month) for month in months],
@@ -1011,14 +1016,26 @@ def monthly_heatmap(monthly: pd.DataFrame):
         high=bound,
         nan_color="#f1f4f7",
     )
+    source = ColumnDataSource(data)
     plot.rect(
         "month",
         "year",
         width=0.95,
         height=0.95,
-        source=data,
+        source=source,
         fill_color=mapper,
         line_color="white",
+    )
+    plot.text(
+        "month",
+        "year",
+        text="label",
+        source=source,
+        text_align="center",
+        text_baseline="middle",
+        text_color="label_color",
+        text_font_size="9pt",
+        name="monthly_return_labels",
     )
     _make_static_chart(plot)
     _add_passive_hover(
