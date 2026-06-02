@@ -1469,7 +1469,7 @@ def factor_quantile_returns_bar(stats: pd.DataFrame):
     frame["quantile"] = frame["quantile"].astype(str)
     frame["color"] = [MARKET_UP if value >= 0 else MARKET_DOWN for value in frame["mean"]]
     plot = figure(
-        title="Mean Return by Quantile",
+        title="Factor Mean Return by Quantile",
         x_range=list(frame["quantile"]),
         height=220,
         sizing_mode="stretch_width",
@@ -1491,7 +1491,7 @@ def factor_quantile_returns_violin(forward_returns: pd.DataFrame):
         else []
     )
     plot = figure(
-        title="Quantile Returns Violin",
+        title="Factor Quantile Returns Violin",
         x_range=(-0.5, max(0.5, len(quantiles) - 0.5)),
         height=260,
         sizing_mode="stretch_width",
@@ -1529,7 +1529,7 @@ def factor_quantile_spread(spread: pd.Series):
     """Return top-minus-bottom quantile spread time series."""
     frame = _plot_frame(pd.Series(spread).dropna(), "spread")
     plot = figure(
-        title="Quantile Spread",
+        title="Factor Quantile Spread",
         x_axis_type="datetime",
         height=220,
         sizing_mode="stretch_width",
@@ -1597,7 +1597,7 @@ def factor_ic(ic: pd.Series):
 def factor_ic_histogram(ic: pd.Series):
     """Return an IC distribution histogram."""
     values = pd.Series(ic).dropna()
-    plot = figure(title="IC Histogram", height=220, sizing_mode="stretch_width")
+    plot = figure(title="Factor IC Histogram", height=220, sizing_mode="stretch_width")
     if not values.empty:
         buckets = min(20, max(1, len(values)))
         counts = pd.cut(values, bins=buckets).value_counts(sort=False)
@@ -1627,7 +1627,7 @@ def factor_ic_histogram(ic: pd.Series):
 def factor_ic_qq(ic: pd.Series):
     """Return an IC normal QQ chart."""
     values = pd.Series(ic).dropna().sort_values().reset_index(drop=True)
-    plot = figure(title="IC QQ", height=220, sizing_mode="stretch_width")
+    plot = figure(title="Factor IC QQ", height=220, sizing_mode="stretch_width")
     if not values.empty:
         dist = NormalDist()
         n = len(values)
@@ -1716,7 +1716,7 @@ def quantile_counts(counts: pd.DataFrame):
     if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
         frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
     plot = figure(
-        title="Quantile Counts",
+        title="Factor Quantile Counts",
         x_axis_type="datetime",
         height=220,
         sizing_mode="stretch_width",
@@ -1768,7 +1768,7 @@ def factor_events_distribution(events: pd.DataFrame | pd.MultiIndex | pd.Series)
     """Return event count distribution over time."""
     frame = _events_frame(events)
     plot = figure(
-        title="Events Distribution",
+        title="Factor Events Distribution",
         x_axis_type="datetime",
         height=220,
         sizing_mode="stretch_width",

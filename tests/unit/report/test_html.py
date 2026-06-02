@@ -79,6 +79,20 @@ def test_reporter_html_labels_trade_rows_separately(tmp_path) -> None:
     assert "returns=5, closed trades=1, trade rows=3" in html
 
 
+def test_reporter_html_omits_outer_chart_titles(tmp_path) -> None:
+    """Chart cards rely on Bokeh titles instead of duplicating section headings."""
+    path = tmp_path / "report.html"
+
+    Reporter(_stats(), periods=252).html(path)
+
+    html = path.read_text()
+    assert "<h2>Summary Stats</h2>" in html
+    assert "<h2>Annual Returns</h2>" not in html
+    assert "<h2>Monthly Returns Heatmap</h2>" not in html
+    assert "Annual Returns" in html
+    assert "Monthly Returns Heatmap" in html
+
+
 def test_reporter_report_dispatches_html_by_suffix(tmp_path) -> None:
     """Reporter.report writes HTML when the output suffix is .html."""
     path = tmp_path / "report.html"
@@ -156,9 +170,10 @@ def test_reporter_html_adds_price_trades_chart_when_market_data_exists(tmp_path)
     Reporter(stats, market_data=market_data).html(path)
 
     html = path.read_text()
-    assert "Price / Trades" in html
+    assert "<h2>Price / Trades</h2>" not in html
     assert "Buy" in html
     assert "Sell" in html
+    assert "OHLC / Trades" in html
     assert "Equity Curve" in html
     assert "Drawdown" in html
     assert "Monthly Returns Heatmap" in html
@@ -302,7 +317,7 @@ def test_reporter_html_uses_portfolio_replay_for_multi_asset_market_data(tmp_pat
     ).html(path)
 
     html = path.read_text()
-    assert "Portfolio Replay" in html
+    assert "<h2>Portfolio Replay</h2>" not in html
     assert "Price / Trades" not in html
     assert "Allocation" in html
     assert "Trade Activity by Asset" in html
