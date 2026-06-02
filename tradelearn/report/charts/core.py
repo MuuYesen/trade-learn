@@ -997,9 +997,9 @@ def monthly_heatmap(monthly: pd.DataFrame):
             data["month"].append(str(month))
             data["year"].append(str(year))
             data["return"].append(value)
-            data["label"].append("--" if pd.isna(value) else f"{float(value):+.2%}")
+            data["label"].append("--" if pd.isna(value) else f"{float(value):+.1%}")
             data["label_color"].append(
-                "#ffffff" if pd.notna(value) and abs(float(value)) >= bound * 0.55 else "#2f3a4a"
+                "#ffffff" if pd.notna(value) and abs(float(value)) >= bound * 0.72 else "#344054"
             )
     plot = figure(
         title="Monthly Returns Heatmap",
@@ -1034,8 +1034,8 @@ def monthly_heatmap(monthly: pd.DataFrame):
         text_align="center",
         text_baseline="middle",
         text_color={"field": "label_color"},
-        text_font_size="10pt",
-        text_font_style="bold",
+        text_font_size="8pt",
+        text_font_style="normal",
         name="monthly_return_labels",
     )
     label_renderer.level = "annotation"

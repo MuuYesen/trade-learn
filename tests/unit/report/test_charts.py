@@ -109,10 +109,12 @@ def test_monthly_heatmap_uses_readable_neutral_color_and_hover() -> None:
     mapper = rect.glyph.fill_color["transform"]
     assert "#f7f7f7" not in mapper.palette
     assert mapper.nan_color != "white"
-    assert rect.data_source.data["label"] == ["+1.00%", "+0.00%", "-2.00%", "--"]
+    assert rect.data_source.data["label"] == ["+1.0%", "+0.0%", "-2.0%", "--"]
     assert "label_color" in rect.data_source.data
     label_renderer = next(renderer for renderer in plot.renderers if renderer.name == "monthly_return_labels")
     assert label_renderer.glyph.text_color.field == "label_color"
+    assert label_renderer.glyph.text_font_size == "8pt"
+    assert label_renderer.glyph.text_font_style == "normal"
     assert label_renderer.level == "annotation"
     hover_tools = [tool for tool in plot.tools if isinstance(tool, HoverTool)]
     assert hover_tools
