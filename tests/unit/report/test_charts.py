@@ -309,6 +309,38 @@ def test_portfolio_replay_syncs_crosshair_across_panels() -> None:
         assert spans[0].visible is False
 
 
+def test_profit_loss_hover_uses_single_renderer() -> None:
+    """Profit/Loss hover should not stack duplicate tooltips from background bars."""
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_closed_trade_fills(),
+        equity=_series("equity"),
+    )
+
+    plot = _find_plot(replay, "Profit / Loss")
+    hover_tools = [tool for tool in plot.tools if isinstance(tool, HoverTool)]
+
+    assert len(hover_tools) == 1
+    assert [renderer.name for renderer in hover_tools[0].renderers] == ["avg_pl_bars"]
+
+
+def test_allocation_hover_shows_asset_weight() -> None:
+    """Allocation hover should identify the date, asset, and allocation weight."""
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_closed_trade_fills(),
+        equity=_series("equity"),
+    )
+
+    plot = _find_plot(replay, "Allocation")
+    hover_tools = [tool for tool in plot.tools if isinstance(tool, HoverTool)]
+
+    assert hover_tools
+    assert ("Date", "@date{%F %T}") in hover_tools[0].tooltips
+    assert ("Asset", "$name") in hover_tools[0].tooltips
+    assert ("Allocation", "@$name{0.0%}") in hover_tools[0].tooltips
+
+
 def test_trade_activity_marker_size_uses_readable_notional_scale() -> None:
     """Trade activity markers should stay readable while preserving relative notional."""
     activity, _symbols = _trade_activity_frame(

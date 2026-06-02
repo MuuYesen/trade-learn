@@ -636,6 +636,8 @@ def _allocation_replay_plot(
         source=source,
         legend_label=stackers,
     )
+    for renderer, stacker in zip(renderers, stackers):
+        renderer.name = stacker
     plot.yaxis.axis_label = "Allocation"
     plot.yaxis.formatter = NumeralTickFormatter(format="0%")
     plot.yaxis.ticker = FixedTicker(ticks=[0.0, 0.25, 0.5, 0.75, 1.0])
@@ -644,7 +646,11 @@ def _allocation_replay_plot(
     _add_line_hover(
         plot,
         renderers,
-        [("Date", "@date{%F %T}")],
+        [
+            ("Date", "@date{%F %T}"),
+            ("Asset", "$name"),
+            ("Allocation", "@$name{0.0%}"),
+        ],
     )
     if control is not None:
         control.js_on_change(
@@ -696,6 +702,7 @@ def _profit_loss_replay_plot(trades_frame: pd.DataFrame, x_range):
         line_color="color",
         fill_alpha=0.72,
         legend_label="Avg P/L",
+        name="avg_pl_bars",
     )
     min_ret = float(bins["avg_return"].min())
     max_ret = float(bins["avg_return"].max())
@@ -708,7 +715,7 @@ def _profit_loss_replay_plot(trades_frame: pd.DataFrame, x_range):
     _add_passive_hover(
         plot,
         HoverTool(
-            renderers=[bars, count_bars],
+            renderers=[bars],
             formatters={"@start_exit": "datetime", "@end_exit": "datetime"},
             tooltips=[
                 ("Exit Window", "@start_exit{%F} - @end_exit{%F}"),
