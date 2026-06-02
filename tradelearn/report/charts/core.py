@@ -638,19 +638,34 @@ def _allocation_replay_plot(
     )
     for renderer, stacker in zip(renderers, stackers):
         renderer.name = stacker
+    hover_source = ColumnDataSource(_allocation_hover_frame(display, stackers))
+    hover_renderer = plot.vbar(
+        x="bar_index",
+        width=0.95,
+        top="top",
+        bottom="bottom",
+        source=hover_source,
+        fill_color="white",
+        fill_alpha=0.01,
+        line_alpha=0.0,
+        name="allocation_hover_segments",
+    )
     plot.yaxis.axis_label = "Allocation"
     plot.yaxis.formatter = NumeralTickFormatter(format="0%")
     plot.yaxis.ticker = FixedTicker(ticks=[0.0, 0.25, 0.5, 0.75, 1.0])
     plot.y_range.start = 0.0
     plot.y_range.end = max(1.0, float(display[stackers].sum(axis=1).max()) * 1.05)
-    _add_line_hover(
+    _add_passive_hover(
         plot,
-        renderers,
-        [
-            ("Date", "@date{%F %T}"),
-            ("Asset", "$name"),
-            ("Allocation", "@$name{0.0%}"),
-        ],
+        HoverTool(
+            renderers=[hover_renderer],
+            formatters={"@date": "datetime"},
+            tooltips=[
+                ("Date", "@date{%F %T}"),
+                ("Asset", "@asset"),
+                ("Allocation", "@allocation{0.0%}"),
+            ],
+        ),
     )
     if control is not None:
         control.js_on_change(
@@ -659,6 +674,7 @@ def _allocation_replay_plot(
                 args={
                     "allocation_source": source,
                     "allocation_full_source": full_source,
+                    "allocation_hover_source": hover_source,
                     "symbols": symbols,
                     "stackers": stackers,
                 },
@@ -747,6 +763,19 @@ def _trade_activity_replay_plot(
     )
 
     if not visible.empty:
+        separators_source = ColumnDataSource(_trade_rebalance_separator_frame(visible, visible_symbols))
+        separators_full_source = ColumnDataSource(activity)
+        plot.segment(
+            "bar_index",
+            "y0",
+            "bar_index",
+            "y1",
+            source=separators_source,
+            line_color=MARKET_BORDER,
+            line_alpha=0.22,
+            line_width=1,
+            name="trade_rebalance_separators",
+        )
         buys = visible[visible["side_normalized"].eq("buy")]
         sells = visible[visible["side_normalized"].eq("sell")]
         buy_source = ColumnDataSource(buys)
@@ -808,6 +837,8 @@ def _trade_activity_replay_plot(
                     "sell_source": sell_source,
                     "buy_full_source": buy_full_source,
                     "sell_full_source": sell_full_source,
+                    "separators_source": separators_source,
+                    "separators_full_source": separators_full_source,
                     "y_range": plot.y_range,
                     "plot": plot,
                     "symbols": symbols,
@@ -2081,6 +2112,29 @@ def _allocation_display_frame(
     return result
 
 
+def _allocation_hover_frame(display: pd.DataFrame, stackers: list[str]) -> pd.DataFrame:
+    """Return transparent stacked hit regions for allocation hover."""
+    rows = []
+    for _, row in display.iterrows():
+        bottom = 0.0
+        for stacker in stackers:
+            allocation = float(row.get(stacker, 0.0) or 0.0)
+            top = bottom + allocation
+            if allocation > 1e-12:
+                rows.append(
+                    {
+                        "date": row["date"],
+                        "bar_index": row["bar_index"],
+                        "asset": stacker,
+                        "allocation": allocation,
+                        "bottom": bottom,
+                        "top": top,
+                    }
+                )
+            bottom = top
+    return pd.DataFrame(rows, columns=["date", "bar_index", "asset", "allocation", "bottom", "top"])
+
+
 def _portfolio_asset_selector(symbols: list[str], initial_limit: int) -> Select:
     """Return the shared portfolio asset visibility control."""
     return Select(
@@ -2127,7 +2181,27 @@ for (const stacker of stackers) {{
   }}
 }}
 allocation_source.data = next;
+const hover = {{date: [], bar_index: [], asset: [], allocation: [], bottom: [], top: []}};
+for (let index = 0; index < rows; index++) {{
+  let bottom = 0;
+  for (const stacker of stackers) {{
+    const values = next[stacker] || [];
+    const allocation = values[index] || 0;
+    const top = bottom + allocation;
+    if (allocation > 1e-12) {{
+      hover.date.push(next.date[index]);
+      hover.bar_index.push(next.bar_index[index]);
+      hover.asset.push(stacker);
+      hover.allocation.push(allocation);
+      hover.bottom.push(bottom);
+      hover.top.push(top);
+    }}
+    bottom = top;
+  }}
+}}
+allocation_hover_source.data = hover;
 allocation_source.change.emit();
+allocation_hover_source.change.emit();
 """
 
 
@@ -2163,8 +2237,23 @@ for (const symbol of visible) {{
 }}
 y_range.factors = factors;
 plot.height = Math.max(280, Math.min(520, 120 + limit * 32));
+const separatorFull = separators_full_source.data;
+const separatorBars = new Set();
+const separatorRows = separatorFull.symbol ? separatorFull.symbol.length : 0;
+for (let index = 0; index < separatorRows; index++) {{
+  if (selected.has(String(separatorFull.symbol[index]))) {{
+    separatorBars.add(separatorFull.bar_index[index]);
+  }}
+}}
+const sortedBars = Array.from(separatorBars).sort((left, right) => left - right);
+separators_source.data = {{
+  bar_index: sortedBars,
+  y0: Array(sortedBars.length).fill(visible[visible.length - 1] || ""),
+  y1: Array(sortedBars.length).fill(visible[0] || ""),
+}};
 buy_source.change.emit();
 sell_source.change.emit();
+separators_source.change.emit();
 """
 
 
@@ -2175,6 +2264,21 @@ def _filter_trade_activity(activity: pd.DataFrame, symbols: list[str]) -> pd.Dat
     visible = activity[activity["symbol"].isin(symbols)].copy()
     visible["symbol"] = pd.Categorical(visible["symbol"], categories=symbols, ordered=True)
     return visible.sort_values(["symbol", "bar_index"])
+
+
+def _trade_rebalance_separator_frame(activity: pd.DataFrame, visible_symbols: list[str]) -> pd.DataFrame:
+    """Return vertical separators for dates where visible assets traded."""
+    if activity.empty or not visible_symbols:
+        return pd.DataFrame(columns=["bar_index", "y0", "y1"])
+    bars = sorted(activity["bar_index"].dropna().unique())
+    visible = list(reversed(visible_symbols))
+    return pd.DataFrame(
+        {
+            "bar_index": bars,
+            "y0": [visible[-1]] * len(bars),
+            "y1": [visible[0]] * len(bars),
+        }
+    )
 
 
 def _trade_activity_options(symbols: list[str]) -> list[tuple[str, str]]:

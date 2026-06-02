@@ -3,7 +3,7 @@
 import pandas as pd
 from bokeh.plotting import figure
 from bokeh.models import FixedTicker, GlyphRenderer, HoverTool, Legend, Span
-from bokeh.models.glyphs import MultiLine, Scatter, VBar
+from bokeh.models.glyphs import MultiLine, Scatter, Segment, VBar
 from bokeh.models.widgets import Select
 
 from tradelearn.report.charts import (
@@ -334,11 +334,37 @@ def test_allocation_hover_shows_asset_weight() -> None:
 
     plot = _find_plot(replay, "Allocation")
     hover_tools = [tool for tool in plot.tools if isinstance(tool, HoverTool)]
+    hover_renderer = next(
+        renderer
+        for renderer in plot.renderers
+        if isinstance(renderer, GlyphRenderer) and renderer.name == "allocation_hover_segments"
+    )
 
     assert hover_tools
+    assert hover_tools[0].renderers == [hover_renderer]
+    assert isinstance(hover_renderer.glyph, VBar)
     assert ("Date", "@date{%F %T}") in hover_tools[0].tooltips
-    assert ("Asset", "$name") in hover_tools[0].tooltips
-    assert ("Allocation", "@$name{0.0%}") in hover_tools[0].tooltips
+    assert ("Asset", "@asset") in hover_tools[0].tooltips
+    assert ("Allocation", "@allocation{0.0%}") in hover_tools[0].tooltips
+
+
+def test_trade_activity_draws_rebalance_separators() -> None:
+    """Trade activity should mark each rebalance/trade date with subtle separators."""
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_closed_trade_fills(),
+        equity=_series("equity"),
+    )
+
+    plot = _find_plot(replay, "Trade Activity by Asset")
+    separator = next(
+        renderer
+        for renderer in plot.renderers
+        if isinstance(renderer, GlyphRenderer) and renderer.name == "trade_rebalance_separators"
+    )
+
+    assert isinstance(separator.glyph, Segment)
+    assert separator.glyph.line_alpha <= 0.25
 
 
 def test_trade_activity_marker_size_uses_readable_notional_scale() -> None:
