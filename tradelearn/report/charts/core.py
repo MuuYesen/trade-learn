@@ -2358,9 +2358,7 @@ def _trade_activity_row_box_frame(visible_symbols: list[str], x_range) -> pd.Dat
 
 def _style_trade_activity_rows(plot) -> None:
     """Make asset rows easier to scan without overpowering trade markers."""
-    plot.ygrid.grid_line_color = "#d5dee7"
-    plot.ygrid.grid_line_alpha = 0.95
-    plot.ygrid.grid_line_width = 1
+    plot.ygrid.grid_line_alpha = 0.0
     plot.ygrid.band_fill_color = "#f4f7fa"
     plot.ygrid.band_fill_alpha = 0.28
 

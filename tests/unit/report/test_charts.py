@@ -407,8 +407,7 @@ def test_trade_activity_separates_asset_rows() -> None:
 
     assert isinstance(row_boxes.glyph, HBar)
     assert row_boxes.glyph.line_alpha >= 0.5
-    assert plot.ygrid[0].grid_line_alpha >= 0.9
-    assert plot.ygrid[0].grid_line_width >= 1
+    assert plot.ygrid[0].grid_line_alpha == 0.0
     assert plot.ygrid[0].band_fill_alpha > 0
 
 
