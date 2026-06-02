@@ -1026,7 +1026,7 @@ def monthly_heatmap(monthly: pd.DataFrame):
         fill_color=mapper,
         line_color="white",
     )
-    plot.text(
+    label_renderer = plot.text(
         "month",
         "year",
         text="label",
@@ -1038,6 +1038,7 @@ def monthly_heatmap(monthly: pd.DataFrame):
         text_font_style="bold",
         name="monthly_return_labels",
     )
+    label_renderer.level = "annotation"
     _make_static_chart(plot)
     _add_passive_hover(
         plot,
