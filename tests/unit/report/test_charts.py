@@ -2,7 +2,7 @@
 
 import pandas as pd
 from bokeh.plotting import figure
-from bokeh.models import GlyphRenderer, Legend
+from bokeh.models import FixedTicker, GlyphRenderer, HoverTool, Legend
 from bokeh.models.glyphs import MultiLine, Scatter, VBar
 from bokeh.models.widgets import Select
 
@@ -156,8 +156,10 @@ def test_portfolio_replay_uses_compact_above_legends() -> None:
     assert not [item for item in allocation.right if isinstance(item, Legend)]
     assert not [item for item in activity.right if isinstance(item, Legend)]
     assert all(legend.click_policy == "hide" for legend in allocation_legends + activity_legends)
-    assert all(legend.background_fill_alpha == 0.0 for legend in allocation_legends + activity_legends)
+    assert all(legend.background_fill_alpha >= 0.7 for legend in allocation_legends + activity_legends)
     assert all(legend.location == "top_left" for legend in allocation_legends + activity_legends)
+    assert all(legend.margin >= 6 for legend in allocation_legends + activity_legends)
+    assert allocation_legends[0].ncols == len(allocation_legends[0].items)
 
 
 def test_market_replay_keeps_single_asset_mapping_on_ohlc_layout() -> None:
@@ -255,6 +257,36 @@ def test_portfolio_replay_uses_sparse_numeric_y_ticks() -> None:
     for title in ["Equity", "Allocation", "Profit / Loss"]:
         plot = _find_plot(replay, title)
         assert plot.yaxis[0].ticker.desired_num_ticks <= 5
+
+    allocation = _find_plot(replay, "Allocation")
+    assert allocation.height >= 155
+    assert isinstance(allocation.yaxis[0].ticker, FixedTicker)
+    assert allocation.yaxis[0].ticker.ticks == [0.0, 0.25, 0.5, 0.75, 1.0]
+
+
+def test_trade_activity_has_date_hover_layer() -> None:
+    """Trade activity should expose date context while moving across the x-axis."""
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_closed_trade_fills(),
+        equity=_series("equity"),
+    )
+
+    activity = _find_plot(replay, "Trade Activity by Asset")
+    date_hover_renderer = next(
+        renderer
+        for renderer in activity.renderers
+        if isinstance(renderer, GlyphRenderer) and renderer.name == "trade_activity_date_hover"
+    )
+    hover_tools = [
+        tool
+        for tool in activity.tools
+        if isinstance(tool, HoverTool) and date_hover_renderer in list(tool.renderers)
+    ]
+
+    assert hover_tools
+    assert hover_tools[0].mode == "vline"
+    assert ("Date", "@date{%F}") in hover_tools[0].tooltips
 
 
 def test_trade_activity_marker_size_uses_readable_notional_scale() -> None:

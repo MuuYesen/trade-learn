@@ -14,6 +14,7 @@ from bokeh.models import (
     CrosshairTool,
     CustomJS,
     FactorRange,
+    FixedTicker,
     HoverTool,
     Legend,
     NumeralTickFormatter,
@@ -487,6 +488,7 @@ def _portfolio_market_replay(
         visible_symbols,
         asset_control,
         x_range,
+        base_frame,
     )
     plots.append(activity_plot)
 
@@ -620,7 +622,7 @@ def _allocation_replay_plot(
     ]
     display = _allocation_display_frame(allocation, symbols, visible_symbols)
     stackers = [column for column in display.columns if column not in {"date", "bar_index"}]
-    plot = _market_section("Allocation", height=120, x_range=x_range)
+    plot = _market_section("Allocation", height=160, x_range=x_range)
     source = ColumnDataSource(display)
     full_source = ColumnDataSource(allocation)
     colors = _allocation_stack_colors(stackers)
@@ -634,6 +636,7 @@ def _allocation_replay_plot(
     )
     plot.yaxis.axis_label = "Allocation"
     plot.yaxis.formatter = NumeralTickFormatter(format="0%")
+    plot.yaxis.ticker = FixedTicker(ticks=[0.0, 0.25, 0.5, 0.75, 1.0])
     plot.y_range.start = 0.0
     plot.y_range.end = max(1.0, float(display[stackers].sum(axis=1).max()) * 1.05)
     _add_line_hover(
@@ -724,6 +727,7 @@ def _trade_activity_replay_plot(
     visible_symbols: list[str],
     control: Select,
     x_range,
+    frame: pd.DataFrame | None = None,
 ):
     """Return a trade activity panel grouped by asset."""
     visible = _filter_trade_activity(activity, visible_symbols)
@@ -788,6 +792,7 @@ def _trade_activity_replay_plot(
                     ],
                 ),
             )
+        date_hover_source = _add_trade_activity_date_hover(plot, frame, visible_symbols)
         control.js_on_change(
             "value",
             CustomJS(
@@ -799,6 +804,7 @@ def _trade_activity_replay_plot(
                     "y_range": plot.y_range,
                     "plot": plot,
                     "symbols": symbols,
+                    "date_hover_source": date_hover_source,
                 },
                 code=_trade_activity_selector_js(),
             ),
@@ -806,6 +812,40 @@ def _trade_activity_replay_plot(
 
     plot.yaxis.axis_label = "Asset"
     return plot
+
+
+def _add_trade_activity_date_hover(
+    plot,
+    frame: pd.DataFrame | None,
+    visible_symbols: list[str],
+) -> ColumnDataSource | None:
+    """Add a passive x-axis date hover layer to the trade activity panel."""
+    if frame is None or frame.empty or not visible_symbols:
+        return None
+    hover_frame = frame[["date", "bar_index"]].copy()
+    hover_frame["symbol"] = list(reversed(visible_symbols))[0]
+    source = ColumnDataSource(hover_frame)
+    renderer = plot.line(
+        "bar_index",
+        "symbol",
+        source=source,
+        line_alpha=0.0,
+        line_width=8,
+        name="trade_activity_date_hover",
+    )
+    _add_passive_hover(
+        plot,
+        HoverTool(
+            renderers=[renderer],
+            formatters={"@date": "datetime"},
+            tooltips=[
+                ("Date", "@date{%F}"),
+                ("Bar", "@bar_index{0,0}"),
+            ],
+            mode="vline",
+        ),
+    )
+    return source
 
 
 def price_trades(market_data: pd.DataFrame, fills: pd.DataFrame | None = None):
@@ -2151,6 +2191,12 @@ for (const symbol of visible) {{
 }}
 y_range.factors = factors;
 plot.height = Math.max(280, Math.min(520, 120 + limit * 32));
+if (date_hover_source && date_hover_source.data && date_hover_source.data.bar_index) {{
+  const hoverRows = date_hover_source.data.bar_index.length;
+  const hoverSymbol = visible.length > 0 ? visible[0] : "";
+  date_hover_source.data.symbol = Array(hoverRows).fill(hoverSymbol);
+  date_hover_source.change.emit();
+}}
 buy_source.change.emit();
 sell_source.change.emit();
 """
@@ -2478,15 +2524,15 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
         legend.visible = True
         legend.location = "top_left"
         item_count = len(legend.items)
-        legend.ncols = min(item_count, 8 if compact else 4)
-        legend.border_line_width = 0
-        legend.border_line_alpha = 0.0
-        legend.border_line_color = None
+        legend.ncols = item_count
+        legend.border_line_width = 1
+        legend.border_line_alpha = 0.65
+        legend.border_line_color = "#d7e0e7"
         legend.background_fill_color = "white"
-        legend.background_fill_alpha = 0.0
-        legend.padding = 2 if compact else 3
-        legend.spacing = 4 if compact else 6
-        legend.margin = 0
+        legend.background_fill_alpha = 0.82
+        legend.padding = 5 if compact else 6
+        legend.spacing = 10 if compact else 12
+        legend.margin = 12
         if compact and large_glyphs:
             legend.glyph_width = 22
             legend.glyph_height = 16
@@ -2614,7 +2660,5 @@ def _add_close_hover(plot, renderers) -> None:
 
 
 def _add_passive_hover(plot, hover: HoverTool) -> None:
-    """Attach hover behavior without adding repeated hover buttons to the toolbar."""
+    """Attach hover behavior to a plot."""
     plot.add_tools(hover)
-    if hover in plot.toolbar.tools:
-        plot.toolbar.tools.remove(hover)
