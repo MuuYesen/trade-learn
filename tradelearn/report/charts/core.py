@@ -2450,7 +2450,13 @@ def _attach_portfolio_bar_index(
         .first()
         .to_dict()
     )
-    projected["symbol"] = projected.get("symbol", projected.get("data", "")).astype(str)
+    if "symbol" in projected:
+        symbols = projected["symbol"]
+    elif "data" in projected:
+        symbols = projected["data"]
+    else:
+        symbols = pd.Series("", index=projected.index)
+    projected["symbol"] = symbols.astype(str)
     projected["data"] = projected["symbol"]
     projected["normalized_price"] = [
         float(price) / float(first_close.get(symbol, np.nan)) * 100.0

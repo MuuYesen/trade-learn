@@ -194,6 +194,21 @@ def test_market_replay_reconstructs_allocation_from_fills_without_positions() ->
     assert "Trade Activity by Asset" in titles
 
 
+def test_portfolio_replay_handles_legacy_fills_without_symbol() -> None:
+    """Multi-asset replay should not crash on old single-asset fill schemas."""
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_fills(),
+        equity=_series("equity"),
+        positions=_portfolio_positions(),
+    )
+
+    titles = _collect_plot_titles(replay)
+
+    assert "Allocation" in titles
+    assert "Trade Activity by Asset" in titles
+
+
 def test_portfolio_replay_draws_trade_activity_by_asset() -> None:
     """Dense portfolio reports should summarize trade activity instead of holdings twice."""
     symbols = [f"AAA{index}" for index in range(10)]
