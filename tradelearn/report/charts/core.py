@@ -996,9 +996,7 @@ def monthly_heatmap(monthly: pd.DataFrame):
             data["year"].append(str(year))
             data["return"].append(value)
             data["label"].append("--" if pd.isna(value) else f"{float(value):+.1%}")
-            data["label_color"].append(
-                "#ffffff" if pd.notna(value) and abs(float(value)) >= 0.08 else "#344054"
-            )
+            data["label_color"].append("#243247")
     plot = figure(
         title="Monthly Returns Heatmap",
         x_range=[str(month) for month in months],
@@ -1009,7 +1007,7 @@ def monthly_heatmap(monthly: pd.DataFrame):
     )
     mapper = linear_cmap(
         "return",
-        palette=["#b91c1c", "#dc5a5a", "#efb1b1", "#e9eef3", "#bfe6c8", "#58b96a", "#198c2d"],
+        palette=["#d95a5a", "#e88989", "#f1baba", "#e9eef3", "#bee7c8", "#7acb86", "#3fa956"],
         low=-bound,
         high=bound,
         nan_color="#f1f4f7",
