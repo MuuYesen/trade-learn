@@ -89,7 +89,7 @@ def write_html_report(
     if _has_multi_asset_exposure(exposure):
         plots["Correlation Matrix"] = charts.correlation_matrix(correlation)
         plots["Exposure Chart"] = charts.exposure(exposure)
-        positions = reporter._get("positions", default=pd.DataFrame())
+        positions = reporter._positions_frame(reporter._get("positions", default=pd.DataFrame()))
         fills = reporter._get("fills", default=pd.DataFrame())
         plots["Holdings"] = charts.holdings(positions)
         plots["Long/Short Holdings"] = charts.long_short_holdings(positions)

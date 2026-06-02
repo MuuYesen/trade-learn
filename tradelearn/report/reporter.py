@@ -344,11 +344,12 @@ class Reporter:
         """Return a market replay chart when market data exists."""
         if self.market_data is None:
             return None
+        positions = self._positions_frame(self._get("positions", default=pd.DataFrame()))
         return charts.market_replay(
             self.market_data,
             self._get("fills", default=pd.DataFrame()),
             self._get("equity", default=pd.Series(dtype="float64")),
-            positions=self._get("positions", default=pd.DataFrame()),
+            positions=positions,
         )
 
     def price_trades_chart(self):
@@ -361,25 +362,31 @@ class Reporter:
 
     def holdings_chart(self):
         """Return a Bokeh holdings chart."""
-        return charts.holdings(self._get("positions", default=pd.DataFrame()))
+        return charts.holdings(self._positions_frame(self._get("positions", default=pd.DataFrame())))
 
     def long_short_holdings_chart(self):
         """Return a Bokeh long/short holdings chart."""
-        return charts.long_short_holdings(self._get("positions", default=pd.DataFrame()))
+        return charts.long_short_holdings(
+            self._positions_frame(self._get("positions", default=pd.DataFrame()))
+        )
 
     def gross_leverage_chart(self):
         """Return a Bokeh gross leverage chart."""
-        return charts.gross_leverage(self._get("positions", default=pd.DataFrame()))
+        return charts.gross_leverage(
+            self._positions_frame(self._get("positions", default=pd.DataFrame()))
+        )
 
     def position_concentration_chart(self):
         """Return a Bokeh position concentration chart."""
-        return charts.position_concentration(self._get("positions", default=pd.DataFrame()))
+        return charts.position_concentration(
+            self._positions_frame(self._get("positions", default=pd.DataFrame()))
+        )
 
     def turnover_chart(self):
         """Return a Bokeh turnover chart."""
         return charts.turnover(
             self._get("fills", default=pd.DataFrame()),
-            self._get("positions", default=pd.DataFrame()),
+            self._positions_frame(self._get("positions", default=pd.DataFrame())),
         )
 
     def daily_volume_chart(self):

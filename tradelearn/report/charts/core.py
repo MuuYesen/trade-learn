@@ -1797,7 +1797,12 @@ def _positions_wide(positions: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
     lowered = {str(column).lower(): column for column in frame.columns}
     date_col = lowered.get("date") or lowered.get("datetime") or lowered.get("timestamp")
-    symbol_col = lowered.get("symbol") or lowered.get("ticker") or lowered.get("asset")
+    symbol_col = (
+        lowered.get("symbol")
+        or lowered.get("ticker")
+        or lowered.get("asset")
+        or lowered.get("data")
+    )
     value_col = lowered.get("value") or lowered.get("market_value") or lowered.get("position_value")
     if date_col is not None and symbol_col is not None and value_col is not None:
         frame["__date"] = _normalize_dates(frame[date_col])

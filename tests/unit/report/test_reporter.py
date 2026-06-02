@@ -315,6 +315,31 @@ def test_reporter_exposure_accepts_engine_position_column_names() -> None:
     assert correlation.shape == (2, 2)
 
 
+def test_reporter_position_charts_accept_engine_position_column_names() -> None:
+    """Position charts should render engine datetime/data/value positions."""
+    positions = pd.DataFrame(
+        {
+            "datetime": pd.to_datetime(
+                ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
+                utc=True,
+            ),
+            "data": ["AAA", "BBB", "AAA", "BBB"],
+            "value": [80.0, -20.0, 50.0, 50.0],
+        }
+    )
+    reporter = Reporter({"returns": _returns(), "trades": pd.DataFrame(), "positions": positions})
+
+    holdings = reporter.holdings_chart()
+    long_short = reporter.long_short_holdings_chart()
+    gross = reporter.gross_leverage_chart()
+    concentration = reporter.position_concentration_chart()
+
+    assert max(_renderer_y_values(holdings)) == 2
+    assert max(_renderer_y_values(long_short)) == 2
+    assert max(_renderer_y_values(gross)) == pytest.approx(1.6666666667)
+    assert min(_renderer_y_values(concentration)) == pytest.approx(0.5)
+
+
 def test_market_data_from_datas_preserves_multi_asset_frames() -> None:
     """Report glue keeps every data feed for portfolio replay charts."""
     dates = pd.date_range("2024-01-01", periods=2, tz="UTC")
@@ -575,6 +600,16 @@ def _positions() -> pd.DataFrame:
             "value": [80.0, 20.0, 50.0, 50.0, 20.0, 80.0],
         }
     )
+
+
+def _renderer_y_values(plot) -> list[float]:
+    values: list[float] = []
+    for renderer in plot.renderers:
+        source = getattr(renderer, "data_source", None)
+        data = getattr(source, "data", None)
+        if data and "y" in data:
+            values.extend(float(value) for value in data["y"])
+    return values
 
 
 class _FactorAnalyzerStub:
