@@ -1033,8 +1033,9 @@ def monthly_heatmap(monthly: pd.DataFrame):
         source=source,
         text_align="center",
         text_baseline="middle",
-        text_color="label_color",
-        text_font_size="9pt",
+        text_color={"field": "label_color"},
+        text_font_size="10pt",
+        text_font_style="bold",
         name="monthly_return_labels",
     )
     _make_static_chart(plot)
