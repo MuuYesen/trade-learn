@@ -126,16 +126,19 @@ def _trades_frame(fills: pd.DataFrame) -> pd.DataFrame:
     if fills.empty:
         return pd.DataFrame(columns=columns)
 
-    position_size = 0.0
-    avg_price = 0.0
-    open_datetime = None
+    position_sizes: dict[Any, float] = {}
+    avg_prices: dict[Any, float] = {}
+    open_datetimes: dict[Any, Any] = {}
     rows: list[dict[str, Any]] = []
     for fill in fills.to_dict("records"):
+        fill_data = fill.get("data")
         signed_size = float(fill.get("size", 0.0))
         price = float(fill.get("price", 0.0))
         comm = float(fill.get("commission", 0.0))
         curr_dt = fill.get("datetime")
-        old_size = position_size
+        old_size = position_sizes.get(fill_data, 0.0)
+        avg_price = avg_prices.get(fill_data, 0.0)
+        open_datetime = open_datetimes.get(fill_data)
         new_size = old_size + signed_size
         if old_size == 0.0 and abs(new_size) > 1e-9:
             avg_price = price
@@ -143,7 +146,7 @@ def _trades_frame(fills: pd.DataFrame) -> pd.DataFrame:
             rows.append(
                 {
                     "datetime": curr_dt,
-                    "data": fill.get("data"),
+                    "data": fill_data,
                     "size": new_size,
                     "price": price,
                     "value": abs(new_size) * price,
@@ -161,7 +164,7 @@ def _trades_frame(fills: pd.DataFrame) -> pd.DataFrame:
             rows.append(
                 {
                     "datetime": curr_dt,
-                    "data": fill.get("data"),
+                    "data": fill_data,
                     "size": 0.0 if abs(new_size) < 1e-9 else new_size,
                     "price": price,
                     "value": abs(new_size) * price,
@@ -179,7 +182,9 @@ def _trades_frame(fills: pd.DataFrame) -> pd.DataFrame:
         elif old_size * signed_size > 0:
             total_abs = abs(old_size) + abs(signed_size)
             avg_price = (abs(old_size) * avg_price + abs(signed_size) * price) / total_abs
-        position_size = 0.0 if abs(new_size) < 1e-9 else new_size
+        position_sizes[fill_data] = 0.0 if abs(new_size) < 1e-9 else new_size
+        avg_prices[fill_data] = avg_price
+        open_datetimes[fill_data] = open_datetime
     return pd.DataFrame(rows, columns=columns)
 
 

@@ -76,28 +76,31 @@ def write_html_report(
     plots["Monthly Returns Heatmap"] = charts.monthly_heatmap(reporter.monthly_heatmap())
     plots["Monthly Returns Distribution"] = charts.monthly_returns_distribution(returns)
     plots["Monthly Returns Timeseries"] = charts.monthly_returns_timeseries(returns)
-    plots["Rolling Returns"] = charts.rolling_returns(returns)
-    plots["Rolling Sharpe"] = charts.rolling_sharpe(reporter.rolling_sharpe())
-    plots["Rolling Volatility"] = charts.rolling_volatility(returns)
+    plots["Rolling Return (126-Bar)"] = charts.rolling_returns(returns)
+    plots["Rolling Sharpe (126-Bar)"] = charts.rolling_sharpe(reporter.rolling_sharpe())
+    plots["Rolling Volatility (126-Bar)"] = charts.rolling_volatility(returns)
     plots["Return Quantiles"] = charts.return_quantiles(returns)
-    plots["Trade Distribution"] = charts.trade_distribution(reporter.trade_distribution())
+    plots["Closed Trade PnL Distribution"] = charts.trade_distribution(
+        reporter.trade_distribution()
+    )
     price_plot = reporter.price_trades_chart()
     if price_plot is not None:
         plots[_market_replay_title(reporter.market_data)] = price_plot
     if not rolling_beta.empty:
         plots["Rolling Beta"] = charts.rolling_beta(rolling_beta)
     if _has_multi_asset_exposure(exposure):
-        plots["Correlation Matrix"] = charts.correlation_matrix(correlation)
-        plots["Exposure Chart"] = charts.exposure(exposure)
+        plots["Position Weight Correlation"] = charts.correlation_matrix(correlation)
+        plots["Exposure Heatmap"] = charts.exposure(exposure)
         positions = reporter._positions_frame(reporter._get("positions", default=pd.DataFrame()))
         fills = reporter._get("fills", default=pd.DataFrame())
+        equity_values = reporter._get("equity", default=None)
         plots["Holdings"] = charts.holdings(positions)
         plots["Long/Short Holdings"] = charts.long_short_holdings(positions)
-        plots["Gross Leverage"] = charts.gross_leverage(positions)
+        plots["Gross Leverage"] = charts.gross_leverage(positions, equity=equity_values)
         plots["Position Concentration"] = charts.position_concentration(positions)
-        plots["Turnover"] = charts.turnover(fills, positions)
-        plots["Daily Volume"] = charts.daily_volume(fills)
-        plots["Transaction Time Histogram"] = charts.transaction_time_histogram(fills)
+        plots["Daily Turnover"] = charts.turnover(fills, positions, equity=equity_values)
+        plots["Daily Fill Volume"] = charts.daily_volume(fills)
+        plots["Fill Bar Time Histogram"] = charts.transaction_time_histogram(fills)
     if not factor_ic.empty:
         plots["Factor IC"] = charts.factor_ic(factor_ic)
         plots["Factor IC Histogram"] = charts.factor_ic_histogram(factor_ic)
@@ -289,17 +292,28 @@ def _summary_table(values: dict[str, Any]) -> str:
 
 def _summary_cards(values: dict[str, Any]) -> str:
     """Render summary values as responsive KPI cards, sorted by priority."""
-    # Define a priority order for the most important metrics to show first
+    # Keep the KPI grid readable by grouping metrics by how users scan a report:
+    # core performance, risk, trade quality, trade behavior, then account context.
     priority = [
-        "annual_return", "cumulative_return", "annual_volatility",
-        "sharpe_ratio", "calmar_ratio", "sortino_ratio",
-        "max_drawdown", "max_dd_duration", "avg_drawdown", "avg_dd_duration",
-        "win_rate", "profit_factor", "total_trades", "turnover",
-        "exposure_time", "final_value", "peak_value", "final_cash",
+        "cumulative_return", "annual_return", "final_value",
+        "max_drawdown", "sharpe_ratio", "calmar_ratio", "win_rate",
+        "annual_volatility", "sortino_ratio", "avg_drawdown",
+        "max_dd_duration", "avg_dd_duration", "exposure_time", "final_margin_used",
+        "total_trades", "profit_factor", "expectancy",
+        "avg_win", "avg_loss", "best_trade_pct", "worst_trade_pct",
+        "avg_trade_pct", "max_trade_duration", "avg_trade_duration",
+        "sqn", "kelly_criterion", "total_orders", "total_fills",
+        "start", "end", "duration", "bars",
+        "peak_value", "final_cash", "final_realized_pnl", "final_unrealized_pnl",
+        "turnover",
     ]
     
     # Filter and sort keys
-    keys = [k for k in values.keys() if str(k) != "strategy_name"]
+    keys = [
+        k
+        for k, value in values.items()
+        if str(k) != "strategy_name" and not _is_empty_metric_value(value)
+    ]
     
     def sort_key(k: str) -> int:
         try:
@@ -389,7 +403,7 @@ def _exposure_section(exposure: pd.DataFrame) -> str:
     if not _has_multi_asset_exposure(exposure):
         return ""
     symbols = ", ".join(escape(str(symbol)) for symbol in exposure.columns)
-    return f"<h2>Exposure Chart</h2><p>Symbols: {symbols}</p>"
+    return f"<h2>Exposure Heatmap</h2><p>Symbols: {symbols}</p>"
 
 
 def _correlation_section(correlation: pd.DataFrame) -> str:
@@ -536,7 +550,7 @@ def _metric_label(key: str) -> str:
 
 def _format_metric_value(key: str, value: Any) -> str:
     """Format KPI values compactly and professionally."""
-    if value is None or (isinstance(value, float) and pd.isna(value)):
+    if _is_empty_metric_value(value):
         return "-"
 
     if isinstance(value, pd.Timedelta):
@@ -557,10 +571,13 @@ def _format_metric_value(key: str, value: Any) -> str:
     # 2. Handle Percentage metrics (Return, Drawdown, Rate, Turnover)
     if isinstance(value, float):
         # Fix double-scaling: engine provides 25.0 for 25%, but :.2% expects 0.25
-        if lowered in {"return_pct", "win_rate_pct"}:
+        if lowered in {"return_pct", "win_rate_pct", "exposure_time"} or lowered.endswith("_pct"):
             return f"{value / 100.0:.2%}"
             
-        if any(token in lowered for token in ("return", "drawdown", "rate", "turnover")):
+        if any(
+            token in lowered
+            for token in ("return", "drawdown", "rate", "turnover", "volatility")
+        ):
             # If the value is already large (e.g. > 1.0), it might be pre-scaled (unlikely for QS metrics but safe to check)
             # Usually QuantStats returns decimal (0.05), but native return_pct returns 5.0
             return f"{value:.2%}"
@@ -579,3 +596,12 @@ def _format_metric_value(key: str, value: Any) -> str:
         return f"{value:.4f}"
         
     return str(value)
+
+
+def _is_empty_metric_value(value: Any) -> bool:
+    """Return whether a summary metric should be omitted from compact KPI cards."""
+    if value is None:
+        return True
+    if isinstance(value, float) and pd.isna(value):
+        return True
+    return False

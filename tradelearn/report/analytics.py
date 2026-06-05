@@ -24,9 +24,11 @@ def annual_returns(returns: pd.Series) -> pd.Series:
     return ((1.0 + returns.dropna()).resample("YE").prod() - 1.0).rename("annual_return")
 
 
-def rolling_returns(returns: pd.Series) -> pd.Series:
-    """Return cumulative rolling returns."""
-    return ((1.0 + returns.dropna()).cumprod() - 1.0).rename("rolling_returns")
+def rolling_returns(returns: pd.Series, window: int = 126) -> pd.Series:
+    """Return compounded returns over a trailing lookback window."""
+    return (
+        (1.0 + returns.dropna()).rolling(window, min_periods=window).apply(np.prod, raw=True) - 1.0
+    ).rename("rolling_return")
 
 
 def rolling_volatility(returns: pd.Series, window: int, periods: int) -> pd.Series:
@@ -209,7 +211,7 @@ def exposure_weights(positions: pd.DataFrame) -> pd.DataFrame:
         values="value",
         aggfunc="sum",
     ).sort_index()
-    exposure = exposure.apply(pd.to_numeric, errors="coerce").fillna(0.0)
+    exposure = exposure.apply(pd.to_numeric, errors="coerce").ffill().fillna(0.0)
     totals = exposure.abs().sum(axis=1)
     return exposure.div(totals.replace(0, np.nan), axis=0).fillna(0.0)
 

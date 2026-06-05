@@ -2,8 +2,8 @@
 
 import pandas as pd
 from bokeh.plotting import figure
-from bokeh.models import FixedTicker, GlyphRenderer, HoverTool, Legend, Span
-from bokeh.models.glyphs import HBar, MultiLine, Scatter, Segment, VBar
+from bokeh.models import BoxAnnotation, ColorBar, FixedTicker, GlyphRenderer, HoverTool, Legend, Spacer, Span
+from bokeh.models.glyphs import HBar, MultiLine, Rect, Scatter, Segment, VBar
 from bokeh.models.widgets import Select
 
 from tradelearn.report.charts import (
@@ -86,15 +86,40 @@ def test_report_charts_return_bokeh_figures() -> None:
     assert all(isinstance(plot, type(figure())) for plot in plots)
 
 
+def test_exposure_chart_renders_many_assets_as_heatmap() -> None:
+    """Exposure should stay readable for broad multi-asset reports."""
+    symbols = [
+        "AAPL", "ADBE", "AMD", "AMZN", "AVGO",
+        "COST", "CRM", "GOOGL", "META", "MSFT",
+        "NFLX", "NVDA", "ORCL", "QCOM", "TSLA",
+    ]
+    frame = pd.DataFrame(
+        {symbol: [0.0, 0.2] for symbol in symbols},
+        index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+    )
+
+    plot = exposure(frame)
+
+    rect_renderers = [
+        renderer
+        for renderer in plot.renderers
+        if isinstance(renderer, GlyphRenderer) and isinstance(renderer.glyph, Rect)
+    ]
+    assert plot.title.text == "Exposure Heatmap"
+    assert list(plot.y_range.factors) == list(reversed(symbols))
+    assert rect_renderers
+    assert any(isinstance(item, ColorBar) for item in plot.right)
+    assert any(isinstance(tool, HoverTool) for tool in plot.tools)
+
+
 def test_report_charts_use_report_title_style() -> None:
     """Bokeh titles should match the report visual system."""
-    plots = [
+    static_plots = [
         correlation_matrix(_correlation()),
         monthly_heatmap(_monthly_returns()),
-        market_replay(_market_data(), fills=_fills(), equity=_series("equity")),
     ]
 
-    for plot in plots:
+    for plot in static_plots:
         for item in _collect_plots(plot):
             if getattr(item.title, "text", None):
                 assert item.title.text_color == "#2f3b52"
@@ -103,7 +128,65 @@ def test_report_charts_use_report_title_style() -> None:
                 assert item.title.align == "left"
                 assert item.title.text_align == "left"
                 assert item.title.offset == 0
-                assert item.title.standoff == 42
+                assert item.title.standoff == 32
+
+    replay = market_replay(_market_data(), fills=_fills(), equity=_series("equity"))
+    for item in _collect_plots(replay):
+        if getattr(item.title, "text", None):
+            assert item.title.text_color == "#2f3b52"
+            assert item.title.text_font_size == "16px"
+            assert item.title.text_font_style == "bold"
+            assert item.title.align == "left"
+            assert item.title.text_align == "left"
+            assert item.title.offset == 0
+            assert item.title.standoff == 10
+
+
+def test_compact_support_charts_have_room_to_breathe() -> None:
+    """Two-column support charts should not look undersized inside report cards."""
+    plots = [
+        drawdown(_series("drawdown")),
+        rolling_returns(_series("returns")),
+        rolling_volatility(_series("returns")),
+        return_quantiles(_series("returns")),
+        rolling_sharpe(_series("rolling_sharpe")),
+        trade_distribution(_trade_distribution()),
+    ]
+
+    assert all(plot.height == 300 for plot in plots)
+
+
+def test_rolling_returns_uses_windowed_returns_not_cumulative_curve() -> None:
+    """Rolling returns should describe a lookback window instead of duplicating equity."""
+    returns = pd.Series(
+        [0.10, 0.10, -0.05, 0.20],
+        index=pd.date_range("2024-01-01", periods=4, tz="UTC"),
+    )
+
+    plot = rolling_returns(returns, window=3)
+    renderer = next(renderer for renderer in plot.renderers if isinstance(renderer, GlyphRenderer))
+
+    assert plot.title.text == "Rolling Return (3-Bar)"
+    assert list(renderer.data_source.data["rolling_return"]) == [
+        (1.10 * 1.10 * 0.95) - 1.0,
+        (1.10 * 0.95 * 1.20) - 1.0,
+    ]
+
+
+def test_support_chart_titles_describe_metric_units() -> None:
+    """Ambiguous support charts should name the metric they actually plot."""
+    assert trade_distribution(_trade_distribution()).title.text == "Closed Trade PnL Distribution"
+    assert trade_distribution(_trade_distribution()).xaxis[0].axis_label == "PnL"
+    assert turnover(_transactions(), _positions()).title.text == "Daily Turnover"
+    assert daily_volume(_transactions()).title.text == "Daily Fill Volume"
+    assert rolling_sharpe(_series("rolling_sharpe"), window=3).title.text == "Rolling Sharpe (3-Bar)"
+    assert rolling_volatility(_series("returns"), window=3).title.text == "Rolling Volatility (3-Bar)"
+
+
+def test_large_summary_charts_match_heatmap_height() -> None:
+    """Annual returns should balance the monthly heatmap in the two-column report row."""
+    assert annual_returns(_series("returns")).height == 380
+    assert monthly_heatmap(_monthly_returns()).height == 380
 
 
 def test_equity_curve_marks_top_drawdown_peak_and_valley() -> None:
@@ -121,10 +204,29 @@ def test_equity_curve_marks_top_drawdown_peak_and_valley() -> None:
     assert any(renderer.name == "drawdown_valley" for renderer in plot.renderers)
 
 
+def test_equity_curve_highlights_drawdown_period_with_left_legend() -> None:
+    """Equity curve highlights drawdown periods without placing the legend on the right."""
+    drawdowns = pd.DataFrame(
+        {
+            "peak": [pd.Timestamp("2024-01-01", tz="UTC")],
+            "valley": [pd.Timestamp("2024-01-03", tz="UTC")],
+        }
+    )
+
+    plot = equity_curve(_series("equity"), drawdowns=drawdowns)
+
+    assert any(
+        isinstance(annotation, BoxAnnotation) and annotation.name == "max_drawdown_period"
+        for annotation in plot.center
+    )
+    assert plot.legend[0].location == "top_left"
+
+
 def test_monthly_heatmap_uses_readable_neutral_color_and_hover() -> None:
     """Near-zero monthly returns should not look like blank white cells."""
     plot = monthly_heatmap(pd.DataFrame({1: [0.01], 2: [0.0], 3: [-0.02], 4: [pd.NA]}, index=[2024]))
 
+    assert plot.height == 380
     rect = plot.renderers[0]
     mapper = rect.glyph.fill_color["transform"]
     assert "#f7f7f7" not in mapper.palette
@@ -154,6 +256,119 @@ def test_support_charts_are_static_but_market_replay_keeps_toolbar() -> None:
     assert replay.toolbar.tools
 
 
+def test_position_charts_carry_forward_asset_positions() -> None:
+    """Position support charts should treat missing asset rows as unchanged positions."""
+    positions = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-01-01", "2024-01-02"], utc=True),
+            "symbol": ["AAA", "BBB"],
+            "value": [100.0, 50.0],
+        }
+    )
+
+    plot = holdings(positions)
+    source = plot.renderers[0].data_source
+
+    assert list(source.data["holdings"]) == [1, 2]
+
+
+def test_position_concentration_median_ignores_inactive_assets() -> None:
+    """Median concentration should describe active positions, not zero placeholders."""
+    positions = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                ["2024-01-01", "2024-01-01", "2024-01-01"],
+                utc=True,
+            ),
+            "symbol": ["AAA", "BBB", "CCC"],
+            "value": [60.0, 40.0, 0.0],
+        }
+    )
+
+    plot = position_concentration(positions)
+    median_line = next(
+        renderer for renderer in plot.renderers if getattr(renderer, "name", None) == "median"
+    )
+
+    assert list(median_line.data_source.data["median"]) == [0.5]
+
+
+def test_gross_leverage_and_turnover_use_account_equity() -> None:
+    """Exposure ratios should use account equity when it is available."""
+    positions = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-01-01"], utc=True),
+            "symbol": ["AAA"],
+            "value": [50.0],
+        }
+    )
+    equity = pd.Series([100.0], index=pd.to_datetime(["2024-01-01"], utc=True))
+    transactions = pd.DataFrame(
+        {
+            "datetime": pd.to_datetime(["2024-01-01"], utc=True),
+            "size": [2.0],
+            "price": [10.0],
+        }
+    )
+
+    leverage_plot = gross_leverage(positions, equity=equity)
+    turnover_plot = turnover(transactions, positions, equity=equity)
+
+    assert list(leverage_plot.renderers[0].data_source.data["gross_leverage"]) == [0.5]
+    assert list(turnover_plot.renderers[0].data_source.data["turnover"]) == [0.2]
+    assert turnover_plot.yaxis[0].formatter.format == "0.[00]%"
+
+
+def test_transaction_time_histogram_labels_bar_hours() -> None:
+    """Transaction-hour histograms should describe bar timestamp hours."""
+    plot = transaction_time_histogram(_transactions())
+
+    assert plot.title.text == "Fill Bar Time Histogram"
+    assert plot.xaxis[0].axis_label == "Bar Hour"
+    assert plot.yaxis[0].axis_label == "Transactions"
+
+
+def test_transaction_time_histogram_preserves_input_timezone_hours() -> None:
+    """Timezone-aware market data should be counted by its own local hour."""
+    transactions = pd.DataFrame(
+        {
+            "datetime": pd.date_range("2024-01-01 09:00", periods=2, freq="h", tz="Asia/Tokyo"),
+            "size": [1.0, 1.0],
+            "price": [10.0, 10.0],
+        }
+    )
+
+    plot = transaction_time_histogram(transactions)
+    data = plot.renderers[0].data_source.data
+    counts = dict(zip(data["hour"], data["count"], strict=True))
+
+    assert counts["9"] == 1
+    assert counts["10"] == 1
+    assert counts["0"] == 0
+
+
+def test_daily_volume_sums_absolute_trade_size() -> None:
+    """Buy and sell sizes on the same day should not cancel in volume charts."""
+    transactions = pd.DataFrame(
+        {
+            "datetime": pd.to_datetime(["2024-01-01 10:00", "2024-01-01 11:00"], utc=True),
+            "size": [100.0, -40.0],
+            "price": [10.0, 10.0],
+        }
+    )
+
+    plot = daily_volume(transactions)
+
+    assert list(plot.renderers[0].data_source.data["volume"]) == [140.0]
+
+
+def test_correlation_matrix_title_names_weight_correlation() -> None:
+    """The matrix is based on portfolio weights, not asset returns."""
+    plot = correlation_matrix(_correlation())
+
+    assert plot.title.text == "Position Weight Correlation"
+
+
 def test_market_replay_does_not_connect_trade_markers_with_multiline() -> None:
     """OHLC / Trades should not draw diagonal entry-exit trade connector lines."""
     replay = market_replay(_market_data(), fills=_fills(), equity=_series("equity"))
@@ -174,9 +389,44 @@ def test_market_replay_uses_portfolio_layout_for_multi_asset_inputs() -> None:
     titles = _collect_plot_titles(replay)
 
     assert "Allocation" in titles
-    assert "Trade Activity by Asset" in titles
+    assert "Trade Acitivity" in titles
     assert "Holdings / Trades Timeline" not in titles
     assert "OHLC / Trades" not in titles
+
+
+def test_portfolio_replay_uses_tight_x_padding_for_long_ranges() -> None:
+    """Long portfolio replays should not waste chart width on empty side padding."""
+    dates = pd.date_range("2024-01-01", periods=201, tz="UTC")
+    market_data = {
+        "AAA": pd.DataFrame(
+            {
+                "open": range(201),
+                "high": range(1, 202),
+                "low": range(201),
+                "close": range(1, 202),
+                "volume": [100.0] * 201,
+            },
+            index=dates,
+        ),
+        "BBB": pd.DataFrame(
+            {
+                "open": range(201),
+                "high": range(1, 202),
+                "low": range(201),
+                "close": range(1, 202),
+                "volume": [100.0] * 201,
+            },
+            index=dates,
+        )
+        * 1.5,
+    }
+    equity = pd.Series(range(1, 202), index=dates)
+
+    replay = market_replay(market_data, fills=_multi_asset_fills(), equity=equity)
+    equity_plot = _find_plot(replay, "Equity")
+
+    assert equity_plot.x_range.start == -1.0
+    assert equity_plot.x_range.end == 201.0
 
 
 def test_portfolio_replay_uses_compact_above_legends() -> None:
@@ -189,20 +439,37 @@ def test_portfolio_replay_uses_compact_above_legends() -> None:
     )
 
     allocation = _find_plot(replay, "Allocation")
-    activity = _find_plot(replay, "Trade Activity by Asset")
+    activity = _find_plot(replay, "Trade Acitivity")
+    equity = _find_plot(replay, "Equity")
 
     allocation_legends = [item for item in allocation.above if isinstance(item, Legend)]
     activity_legends = [item for item in activity.above if isinstance(item, Legend)]
+    equity_labels = [
+        getattr(item.label, "value", None)
+        for legend in equity.above
+        if isinstance(legend, Legend)
+        for item in legend.items
+    ]
     assert allocation_legends
     assert activity_legends
+    assert "Buy&Hold (Equal Weight)" in equity_labels
+    assert "Buy&Hold" not in equity_labels
     assert not [item for item in allocation.right if isinstance(item, Legend)]
     assert not [item for item in activity.right if isinstance(item, Legend)]
     assert all(legend.click_policy == "hide" for legend in allocation_legends + activity_legends)
     assert all(legend.background_fill_alpha >= 0.7 for legend in allocation_legends + activity_legends)
     assert all(legend.location == "top_left" for legend in allocation_legends + activity_legends)
-    assert all(legend.margin <= 4 for legend in allocation_legends + activity_legends)
+    assert all(legend.margin == 2 for legend in allocation_legends + activity_legends)
     assert all(legend.padding <= 3 for legend in allocation_legends + activity_legends)
     assert allocation_legends[0].ncols == len(allocation_legends[0].items)
+    allocation_gap = [item for item in allocation.above if isinstance(item, Spacer)]
+    activity_gap = [item for item in activity.above if isinstance(item, Spacer)]
+    assert allocation_gap and allocation_gap[0].height == 8
+    assert activity_gap and activity_gap[0].height == 8
+    assert allocation.above.index(allocation_gap[0]) < allocation.above.index(allocation_legends[0])
+    assert activity.above.index(activity_gap[0]) < activity.above.index(activity_legends[0])
+    assert allocation.height == 184
+    assert activity.height == 304
 
 
 def test_market_replay_keeps_single_asset_mapping_on_ohlc_layout() -> None:
@@ -219,7 +486,7 @@ def test_market_replay_keeps_single_asset_mapping_on_ohlc_layout() -> None:
     assert "OHLC / Trades" in titles
     assert "Allocation" not in titles
     assert "Holdings / Trades Timeline" not in titles
-    assert "Trade Activity by Asset" not in titles
+    assert "Trade Acitivity" not in titles
 
 
 def test_market_replay_reconstructs_allocation_from_fills_without_positions() -> None:
@@ -233,7 +500,7 @@ def test_market_replay_reconstructs_allocation_from_fills_without_positions() ->
     titles = _collect_plot_titles(replay)
 
     assert "Allocation" in titles
-    assert "Trade Activity by Asset" in titles
+    assert "Trade Acitivity" in titles
 
 
 def test_portfolio_replay_handles_legacy_fills_without_symbol() -> None:
@@ -248,7 +515,7 @@ def test_portfolio_replay_handles_legacy_fills_without_symbol() -> None:
     titles = _collect_plot_titles(replay)
 
     assert "Allocation" in titles
-    assert "Trade Activity by Asset" in titles
+    assert "Trade Acitivity" in titles
 
 
 def test_portfolio_replay_draws_trade_activity_by_asset() -> None:
@@ -260,7 +527,7 @@ def test_portfolio_replay_draws_trade_activity_by_asset() -> None:
         equity=_series("equity"),
     )
 
-    activity = _find_plot(replay, "Trade Activity by Asset")
+    activity = _find_plot(replay, "Trade Acitivity")
     trade_markers = [
         renderer
         for renderer in activity.renderers
@@ -281,7 +548,7 @@ def test_trade_activity_offsets_sides_without_doubling_asset_axis() -> None:
         equity=_series("equity"),
     )
 
-    activity = _find_plot(replay, "Trade Activity by Asset")
+    activity = _find_plot(replay, "Trade Acitivity")
     factors = list(activity.y_range.factors)
 
     assert factors == ["BBB", "AAA"]
@@ -300,8 +567,8 @@ def test_portfolio_replay_hides_internal_bar_index_axes() -> None:
     assert not _find_plot(replay, "Equity").xaxis[0].visible
     assert not _find_plot(replay, "Allocation").xaxis[0].visible
     assert not _find_plot(replay, "Profit / Loss").xaxis[0].visible
-    assert _find_plot(replay, "Trade Activity by Asset").xaxis[0].visible
-    assert _find_plot(replay, "Trade Activity by Asset").xaxis[0].major_label_overrides
+    assert _find_plot(replay, "Trade Acitivity").xaxis[0].visible
+    assert _find_plot(replay, "Trade Acitivity").xaxis[0].major_label_overrides
 
 
 def test_portfolio_replay_uses_sparse_numeric_y_ticks() -> None:
@@ -330,7 +597,7 @@ def test_trade_activity_uses_one_trade_hover() -> None:
         equity=_series("equity"),
     )
 
-    activity = _find_plot(replay, "Trade Activity by Asset")
+    activity = _find_plot(replay, "Trade Acitivity")
     assert not [
         renderer
         for renderer in activity.renderers
@@ -354,7 +621,7 @@ def test_portfolio_replay_syncs_crosshair_across_panels() -> None:
         equity=_series("equity"),
     )
 
-    for title in ["Equity", "Allocation", "Profit / Loss", "Trade Activity by Asset"]:
+    for title in ["Equity", "Allocation", "Profit / Loss", "Trade Acitivity"]:
         plot = _find_plot(replay, title)
         spans = [
             model
@@ -435,7 +702,7 @@ def test_trade_activity_draws_rebalance_separators() -> None:
         equity=_series("equity"),
     )
 
-    plot = _find_plot(replay, "Trade Activity by Asset")
+    plot = _find_plot(replay, "Trade Acitivity")
     separator = next(
         renderer
         for renderer in plot.renderers
@@ -454,7 +721,7 @@ def test_trade_activity_separates_asset_rows() -> None:
         equity=_series("equity"),
     )
 
-    plot = _find_plot(replay, "Trade Activity by Asset")
+    plot = _find_plot(replay, "Trade Acitivity")
 
     row_boxes = next(
         renderer

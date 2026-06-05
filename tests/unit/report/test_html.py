@@ -33,6 +33,12 @@ def test_reporter_html_writes_single_file_tear_sheet(tmp_path) -> None:
     """Reporter.html writes a shareable HTML tear sheet."""
     path = tmp_path / "report.html"
     stats = _stats()
+    stats.returns = pd.Series(
+        [0.001] * 130,
+        index=pd.date_range("2024-01-01", periods=130, tz="UTC"),
+        name="returns",
+    )
+    stats.equity = metrics.cum_returns(stats.returns, starting_value=100_000.0)
 
     result = Reporter(stats, periods=252).html(path)
 
@@ -49,11 +55,11 @@ def test_reporter_html_writes_single_file_tear_sheet(tmp_path) -> None:
     assert "Top 5 Drawdowns" in html
     assert "Monthly Returns Heatmap" in html
     assert "Monthly Returns Distribution" in html
-    assert "Rolling Returns" in html
-    assert "Rolling Volatility" in html
+    assert "Rolling Return (126-Bar)" in html
+    assert "Rolling Volatility (126-Bar)" in html
     assert "Return Quantiles" in html
-    assert "Trade Distribution" in html
-    assert "Rolling Sharpe" not in html
+    assert "Closed Trade PnL Distribution" in html
+    assert "Rolling Sharpe (126-Bar)" in html
     assert "TradeLearn" in html
     assert "Bokeh" in html
     assert "annual_return" in html
@@ -77,6 +83,108 @@ def test_reporter_html_labels_trade_rows_separately(tmp_path) -> None:
 
     html = path.read_text()
     assert "returns=5, closed trades=1, trade rows=3" in html
+
+
+def test_reporter_html_formats_summary_percentages_and_omits_empty_turnover(tmp_path) -> None:
+    """Summary KPIs should render percentage-like values consistently."""
+    path = tmp_path / "report.html"
+    stats = _stats()
+    stats.summary.update(
+        {
+            "exposure_pct": 63.7816,
+            "best_trade_pct": 27.3719,
+            "worst_trade_pct": -36.0902,
+            "avg_trade_pct": 0.9185,
+        }
+    )
+
+    Reporter(stats, periods=252).html(path)
+
+    html = path.read_text()
+    assert 'data-metric="annual_volatility"' in html
+    assert "Annual Volatility" in html
+    assert "43.33%" in html
+    assert 'data-metric="exposure_time"' in html
+    assert "63.78%" in html
+    assert "27.37%" in html
+    assert "-36.09%" in html
+    assert "0.92%" in html
+    assert 'data-metric="turnover"' not in html
+
+
+def test_reporter_html_orders_summary_metrics_by_report_reading_flow(tmp_path) -> None:
+    """Summary KPIs should move from performance to risk, trades, and context."""
+    path = tmp_path / "report.html"
+    stats = _stats()
+    stats.summary.update(
+        {
+            "exposure_pct": 63.7816,
+            "final_value": 837_992.13,
+            "final_margin_used": 167_965.95,
+            "avg_drawdown": 0.107,
+            "avg_dd_duration": pd.Timedelta(days=15, hours=5),
+            "expectancy": 918.48,
+            "best_trade_pct": 27.37,
+            "worst_trade_pct": -36.09,
+            "avg_trade_pct": 0.9185,
+            "max_trade_duration": pd.Timedelta(days=209),
+            "avg_trade_duration": pd.Timedelta(days=12),
+            "sqn": 4.8704,
+            "kelly_criterion": 0.2641,
+            "total_orders": 2296,
+            "total_fills": 2253,
+            "bars": 1508,
+            "start": pd.Timestamp("2020-01-02 18:30:00"),
+            "end": pd.Timestamp("2025-12-31 18:30:00"),
+            "duration": pd.Timedelta(days=2190),
+            "final_cash": 808.96,
+            "final_realized_pnl": 64_493.45,
+            "final_unrealized_pnl": 0.0,
+        }
+    )
+
+    Reporter(stats, periods=252).html(path)
+
+    html = path.read_text()
+    metric_order = [
+        "cumulative_return",
+        "annual_return",
+        "final_value",
+        "max_drawdown",
+        "sharpe_ratio",
+        "calmar_ratio",
+        "win_rate",
+        "annual_volatility",
+        "sortino_ratio",
+        "avg_drawdown",
+        "max_dd_duration",
+        "avg_dd_duration",
+        "exposure_time",
+        "final_margin_used",
+        "total_trades",
+        "profit_factor",
+        "expectancy",
+        "avg_win",
+        "avg_loss",
+        "best_trade_pct",
+        "worst_trade_pct",
+        "avg_trade_pct",
+        "max_trade_duration",
+        "avg_trade_duration",
+        "sqn",
+        "kelly_criterion",
+        "total_orders",
+        "total_fills",
+        "start",
+        "end",
+        "duration",
+        "bars",
+        "final_cash",
+        "final_realized_pnl",
+        "final_unrealized_pnl",
+    ]
+    positions = [html.index(f'data-metric="{metric}"') for metric in metric_order]
+    assert positions == sorted(positions)
 
 
 def test_reporter_html_omits_outer_chart_titles(tmp_path) -> None:
@@ -264,8 +372,11 @@ def test_reporter_html_adds_exposure_chart_for_multi_asset_positions(tmp_path) -
     ).html(path)
 
     html = path.read_text()
-    assert "Correlation Matrix" in html
-    assert "Exposure Chart" in html
+    assert "Position Weight Correlation" in html
+    assert "Exposure Heatmap" in html
+    assert "<h2>Correlation Matrix</h2>" not in html
+    assert "<h2>Position Weight Correlation</h2>" not in html
+    assert "<h2>Exposure Heatmap</h2>" not in html
     assert "Holdings" in html
     assert "Long/Short Holdings" in html
     assert "Gross Leverage" in html
@@ -320,7 +431,7 @@ def test_reporter_html_uses_portfolio_replay_for_multi_asset_market_data(tmp_pat
     assert "<h2>Portfolio Replay</h2>" not in html
     assert "Price / Trades" not in html
     assert "Allocation" in html
-    assert "Trade Activity by Asset" in html
+    assert "Trade Acitivity" in html
     assert "OHLC / Trades" not in html
 
 

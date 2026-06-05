@@ -240,6 +240,21 @@ def test_reporter_top_drawdowns_returns_largest_episodes() -> None:
     assert drawdowns.iloc[0]["recovery"] == pd.Timestamp("2024-01-04", tz="UTC")
 
 
+def test_reporter_summary_max_dd_duration_matches_top_drawdown_recovery_period() -> None:
+    """Summary max drawdown duration should use the same recovery-period units as top drawdowns."""
+    returns = pd.Series(
+        [0.10, -0.20, -0.10, 0.50, -0.05, -0.05, 0.12],
+        index=pd.date_range("2024-01-01", periods=7, tz="UTC"),
+        name="returns",
+    )
+    reporter = Reporter({"returns": returns, "trades": pd.DataFrame()})
+
+    summary = reporter.summary()
+    top_drawdown = reporter.top_drawdowns(limit=1).iloc[0]
+
+    assert summary["max_dd_duration"] == top_drawdown["duration"]
+
+
 def test_reporter_trade_distribution_bins_trade_pnl() -> None:
     """Reporter.trade_distribution returns histogram bins and summary stats."""
     reporter = Reporter({"returns": _returns(), "trades": _trades()})
@@ -609,6 +624,12 @@ def _renderer_y_values(plot) -> list[float]:
         data = getattr(source, "data", None)
         if data and "y" in data:
             values.extend(float(value) for value in data["y"])
+            continue
+        glyph = getattr(renderer, "glyph", None)
+        y_spec = getattr(glyph, "y", None)
+        field = y_spec if isinstance(y_spec, str) else getattr(y_spec, "field", None)
+        if data and field in data:
+            values.extend(float(value) for value in data[field])
     return values
 
 

@@ -154,9 +154,9 @@ class Reporter:
         """Return annual compounded returns."""
         return annual_returns(self._get("returns"))
 
-    def rolling_returns(self) -> pd.Series:
-        """Return cumulative rolling returns."""
-        return rolling_returns(self._get("returns"))
+    def rolling_returns(self, window: int = 126) -> pd.Series:
+        """Return trailing compounded rolling returns."""
+        return rolling_returns(self._get("returns"), window=window)
 
     def rolling_volatility(self, window: int = 126) -> pd.Series:
         """Return annualized rolling volatility."""
@@ -316,9 +316,9 @@ class Reporter:
         """Return a Bokeh monthly returns time series chart."""
         return charts.monthly_returns_timeseries(self._get("returns"))
 
-    def rolling_returns_chart(self):
+    def rolling_returns_chart(self, window: int = 126):
         """Return a Bokeh rolling returns chart."""
-        return charts.rolling_returns(self._get("returns"))
+        return charts.rolling_returns(self._get("returns"), window=window)
 
     def rolling_volatility_chart(self, window: int = 126):
         """Return a Bokeh rolling volatility chart."""
@@ -330,7 +330,7 @@ class Reporter:
 
     def rolling_sharpe_chart(self, window: int = 126):
         """Return a Bokeh rolling Sharpe chart."""
-        return charts.rolling_sharpe(self.rolling_sharpe(window=window))
+        return charts.rolling_sharpe(self.rolling_sharpe(window=window), window=window)
 
     def rolling_beta_chart(self, benchmark: pd.Series, window: int = 126):
         """Return a Bokeh rolling beta chart."""
@@ -373,7 +373,8 @@ class Reporter:
     def gross_leverage_chart(self):
         """Return a Bokeh gross leverage chart."""
         return charts.gross_leverage(
-            self._positions_frame(self._get("positions", default=pd.DataFrame()))
+            self._positions_frame(self._get("positions", default=pd.DataFrame())),
+            equity=self._get("equity", default=None),
         )
 
     def position_concentration_chart(self):
@@ -387,6 +388,7 @@ class Reporter:
         return charts.turnover(
             self._get("fills", default=pd.DataFrame()),
             self._positions_frame(self._get("positions", default=pd.DataFrame())),
+            equity=self._get("equity", default=None),
         )
 
     def daily_volume_chart(self):
@@ -632,17 +634,11 @@ class Reporter:
 
     @staticmethod
     def _max_drawdown_duration(returns: pd.Series) -> int:
-        """Return longest drawdown run length in periods."""
-        drawdown = metrics.drawdown_series(returns)
-        current = 0
-        longest = 0
-        for value in drawdown:
-            if value < 0:
-                current += 1
-                longest = max(longest, current)
-            else:
-                current = 0
-        return longest
+        """Return the recovery-period duration of the deepest drawdown episode."""
+        drawdowns = top_drawdowns(returns, limit=1)
+        if drawdowns.empty:
+            return 0
+        return int(drawdowns.iloc[0]["duration"])
 
 
 def _closed_trades(trades: pd.DataFrame) -> pd.DataFrame:

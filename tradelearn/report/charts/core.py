@@ -11,6 +11,8 @@ import pandas as pd
 from bokeh.events import MouseLeave, MouseMove
 from bokeh.layouts import column, gridplot
 from bokeh.models import (
+    BoxAnnotation,
+    ColorBar,
     ColumnDataSource,
     CrosshairTool,
     CustomJS,
@@ -18,8 +20,10 @@ from bokeh.models import (
     FixedTicker,
     HoverTool,
     Legend,
+    LinearColorMapper,
     NumeralTickFormatter,
     Range1d,
+    Spacer,
     Span,
 )
 from bokeh.models.widgets import Select
@@ -40,6 +44,12 @@ MARKET_TITLE = "#2f3b52"
 PORTFOLIO_OTHERS = "#a98578"
 PORTFOLIO_CASH = "#b8c0c7"
 PORTFOLIO_VISIBLE_ASSET_LIMIT = 8
+MARKET_LEGEND_MARGIN = 2
+MARKET_LEGEND_FRAME_GAP = 8
+MARKET_LEGEND_HEIGHT_COMPENSATION = 24
+MARKET_LEGEND_COMPENSATED_TAG = "market_legend_height_compensated"
+MARKET_LEGEND_FRAME_GAP_TAG = "market_legend_frame_gap"
+MARKET_REPLAY_TITLE_STANDOFF = 10
 
 
 def market_replay(
@@ -122,7 +132,7 @@ def market_replay(
                 line_width=1.1,
                 color=MARKET_MUTED,
                 line_dash="dashed",
-                legend_label="Buy&Hold",
+                legend_label="Buy&Hold (Equal Weight)",
             )
             peak = equity_frame["relative_equity"].idxmax()
             final = equity_frame.index[-1]
@@ -446,7 +456,7 @@ def _portfolio_market_replay(
     fills_frame = _attach_portfolio_bar_index(fills_frame, base_frame, asset_frame)
     trades_frame = _trade_segments(fills_frame, base_frame)
 
-    x_pad = max((len(base_frame) - 1) / 20, 1.0)
+    x_pad = max((len(base_frame) - 1) / 200, 1.0)
     x_range = Range1d(
         start=float(base_frame["bar_index"].iloc[0] - x_pad),
         end=float(base_frame["bar_index"].iloc[-1] + x_pad),
@@ -556,7 +566,7 @@ def _equity_replay_plot(equity: pd.Series, frame: pd.DataFrame, x_range):
         line_width=1.1,
         color=MARKET_MUTED,
         line_dash="dashed",
-        legend_label="Buy&Hold",
+        legend_label="Buy&Hold (Equal Weight)",
     )
     peak = equity_frame["relative_equity"].idxmax()
     final = equity_frame.index[-1]
@@ -763,7 +773,7 @@ def _trade_activity_replay_plot(
     """Return a trade activity panel grouped by asset."""
     visible = _filter_trade_activity(activity, visible_symbols)
     plot = _market_section(
-        "Trade Activity by Asset",
+        "Trade Acitivity",
         height=_trade_activity_height(len(visible_symbols)),
         x_range=x_range,
         y_range=FactorRange(factors=list(reversed(visible_symbols))),
@@ -927,7 +937,7 @@ def equity_curve(
     plot = figure(
         title="Equity Curve",
         x_axis_type="datetime",
-        height=260,
+        height=300,
         sizing_mode="stretch_width",
     )
     plot.line(frame["date"], frame["equity"], line_width=2, color="#1f77b4")
@@ -953,7 +963,7 @@ def drawdown(drawdown_series: pd.Series):
     plot = figure(
         title="Drawdown",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     plot.varea(frame["date"], y1=0, y2=frame["drawdown"], color="#d62728", alpha=0.35)
@@ -972,7 +982,7 @@ def annual_returns(returns: pd.Series):
     plot = figure(
         title="Annual Returns",
         x_range=list(frame["year"]),
-        height=220,
+        height=380,
         sizing_mode="stretch_width",
         toolbar_location=None,
     )
@@ -1002,7 +1012,7 @@ def monthly_heatmap(monthly: pd.DataFrame):
         title="Monthly Returns Heatmap",
         x_range=[str(month) for month in months],
         y_range=years,
-        height=240,
+        height=380,
         sizing_mode="stretch_width",
         toolbar_location=None,
     )
@@ -1055,7 +1065,7 @@ def monthly_returns_distribution(returns: pd.Series):
     monthly = ((1.0 + pd.Series(returns).dropna()).resample("ME").prod() - 1.0).dropna()
     plot = figure(
         title="Monthly Returns Distribution",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not monthly.empty:
@@ -1091,7 +1101,7 @@ def monthly_returns_timeseries(returns: pd.Series):
     plot = figure(
         title="Monthly Returns Timeseries",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not frame.empty:
@@ -1108,18 +1118,31 @@ def monthly_returns_timeseries(returns: pd.Series):
     return plot
 
 
-def rolling_returns(returns: pd.Series):
-    """Return a cumulative rolling returns chart."""
-    curve = (1.0 + pd.Series(returns).dropna()).cumprod() - 1.0
-    frame = _plot_frame(curve, "rolling_returns")
+def rolling_returns(returns: pd.Series, window: int = 126):
+    """Return a trailing compounded rolling return chart."""
+    values = (
+        (1.0 + pd.Series(returns).dropna())
+        .rolling(window, min_periods=window)
+        .apply(np.prod, raw=True)
+        - 1.0
+    )
+    frame = _plot_frame(values, "rolling_return").dropna()
     plot = figure(
-        title="Rolling Returns",
+        title=f"Rolling Return ({window}-Bar)",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not frame.empty:
-        plot.line(frame["date"], frame["rolling_returns"], line_width=2, color=MARKET_BLUE)
+        source = ColumnDataSource(frame)
+        plot.line(
+            "date",
+            "rolling_return",
+            source=source,
+            line_width=2,
+            color=MARKET_BLUE,
+            name="rolling_return",
+        )
     plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
     _make_static_chart(plot)
     return plot
@@ -1130,9 +1153,9 @@ def rolling_volatility(returns: pd.Series, window: int = 126, periods: int = 252
     values = pd.Series(returns).dropna().rolling(window, min_periods=2).std() * periods ** 0.5
     frame = _plot_frame(values, "rolling_volatility").dropna()
     plot = figure(
-        title="Rolling Volatility",
+        title=f"Rolling Volatility ({window}-Bar)",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not frame.empty:
@@ -1156,7 +1179,7 @@ def return_quantiles(returns: pd.Series):
     plot = figure(
         title="Return Quantiles",
         x_range=list(frame["quantile"]),
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
         toolbar_location=None,
     )
@@ -1173,9 +1196,17 @@ def holdings(positions: pd.DataFrame):
     values = wide.drop(columns=["cash"], errors="ignore")
     counts = values.ne(0).sum(axis=1) if not values.empty else pd.Series(dtype="float64")
     frame = _plot_frame(counts, "holdings")
-    plot = figure(title="Holdings", x_axis_type="datetime", height=220, sizing_mode="stretch_width")
+    plot = figure(title="Holdings", x_axis_type="datetime", height=300, sizing_mode="stretch_width")
     if not frame.empty:
-        plot.line(frame["date"], frame["holdings"], line_width=2, color=MARKET_BLUE)
+        source = ColumnDataSource(frame)
+        plot.line(
+            "date",
+            "holdings",
+            source=source,
+            line_width=2,
+            color=MARKET_BLUE,
+            name="holdings",
+        )
     _make_static_chart(plot)
     return plot
 
@@ -1191,7 +1222,7 @@ def long_short_holdings(positions: pd.DataFrame):
     plot = figure(
         title="Long/Short Holdings",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not frame.empty:
@@ -1207,22 +1238,34 @@ def long_short_holdings(positions: pd.DataFrame):
     return plot
 
 
-def gross_leverage(positions: pd.DataFrame):
+def gross_leverage(positions: pd.DataFrame, equity: pd.Series | None = None):
     """Return gross leverage computed from position values."""
     wide = _positions_wide(positions)
     assets = wide.drop(columns=["cash"], errors="ignore")
     gross = assets.abs().sum(axis=1)
-    equity = wide.sum(axis=1).replace(0, pd.NA)
-    leverage = (gross / equity.abs()).astype("float64").fillna(0.0)
+    if equity is not None and not pd.Series(equity).empty:
+        equity_base = _align_series_to_index(pd.Series(equity), gross.index)
+    else:
+        equity_base = wide.sum(axis=1)
+    equity_base = equity_base.abs().replace(0, pd.NA)
+    leverage = (gross / equity_base).astype("float64").fillna(0.0)
     frame = _plot_frame(leverage, "gross_leverage")
     plot = figure(
         title="Gross Leverage",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not frame.empty:
-        plot.line(frame["date"], frame["gross_leverage"], line_width=2, color="#8c564b")
+        source = ColumnDataSource(frame)
+        plot.line(
+            "date",
+            "gross_leverage",
+            source=source,
+            line_width=2,
+            color="#8c564b",
+            name="gross_leverage",
+        )
     _make_static_chart(plot)
     return plot
 
@@ -1233,10 +1276,11 @@ def position_concentration(positions: pd.DataFrame):
     assets = wide.drop(columns=["cash"], errors="ignore")
     totals = assets.abs().sum(axis=1).replace(0, pd.NA)
     weights = assets.abs().div(totals, axis=0).fillna(0.0)
+    active_weights = weights.where(weights > 0)
     frame = pd.DataFrame(
         {
             "max": weights.max(axis=1),
-            "median": weights.median(axis=1),
+            "median": active_weights.median(axis=1).fillna(0.0),
         }
     )
     frame = frame.reset_index().rename(columns={frame.index.name or "index": "date"})
@@ -1244,90 +1288,150 @@ def position_concentration(positions: pd.DataFrame):
     plot = figure(
         title="Position Concentration",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not frame.empty:
-        plot.line(frame["date"], frame["max"], line_width=2, color=MARKET_BLUE, legend_label="Max")
+        source = ColumnDataSource(frame)
         plot.line(
-            frame["date"],
-            frame["median"],
+            "date",
+            "max",
+            source=source,
+            line_width=2,
+            color=MARKET_BLUE,
+            legend_label="Max",
+            name="max",
+        )
+        plot.line(
+            "date",
+            "median",
+            source=source,
             line_width=2,
             color="#ff7f0e",
             legend_label="Median",
+            name="median",
         )
     plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
     _make_static_chart(plot)
     return plot
 
 
-def turnover(transactions: pd.DataFrame, positions: pd.DataFrame | None = None):
+def turnover(
+    transactions: pd.DataFrame,
+    positions: pd.DataFrame | None = None,
+    equity: pd.Series | None = None,
+):
     """Return daily turnover from transaction notional."""
     frame = _transactions_frame(transactions)
-    plot = figure(title="Turnover", x_axis_type="datetime", height=220, sizing_mode="stretch_width")
+    plot = figure(
+        title="Daily Turnover",
+        x_axis_type="datetime",
+        height=300,
+        sizing_mode="stretch_width",
+    )
     if frame.empty:
         _make_static_chart(plot)
         return plot
     daily = frame.groupby(frame["date"].dt.floor("D"))["notional"].sum()
-    if positions is not None and not positions.empty:
+    if equity is not None and not pd.Series(equity).empty:
+        equity_base = _align_series_to_index(pd.Series(equity), daily.index)
+        daily = daily / equity_base.abs().replace(0, pd.NA)
+    elif positions is not None and not positions.empty:
         wide = _positions_wide(positions)
         equity = wide.sum(axis=1).abs().replace(0, pd.NA)
         daily = daily / equity.reindex(daily.index, method="nearest").ffill()
     daily = daily.astype("float64").fillna(0.0)
     data = _plot_frame(daily, "turnover")
-    plot.line(data["date"], data["turnover"], line_width=2, color=MARKET_BLUE)
+    source = ColumnDataSource(data)
+    plot.line("date", "turnover", source=source, line_width=2, color=MARKET_BLUE, name="turnover")
+    plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
     _make_static_chart(plot)
     return plot
 
 
 def daily_volume(transactions: pd.DataFrame):
-    """Return daily traded share or contract volume."""
+    """Return daily filled share or contract volume."""
     frame = _transactions_frame(transactions)
     plot = figure(
-        title="Daily Volume",
+        title="Daily Fill Volume",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not frame.empty:
-        daily = frame.groupby(frame["date"].dt.floor("D"))["size"].sum().abs()
+        daily = frame.assign(abs_size=frame["size"].abs()).groupby(
+            frame["date"].dt.floor("D")
+        )["abs_size"].sum()
         data = _plot_frame(daily, "volume")
+        source = ColumnDataSource(data)
         plot.vbar(
-            data["date"],
+            "date",
             width=20 * 60 * 60 * 1000,
-            top=data["volume"],
+            top="volume",
+            source=source,
             color=MARKET_BLUE,
             alpha=0.70,
+            name="volume",
         )
     _make_static_chart(plot)
     return plot
 
 
+def _transaction_bar_hours(transactions: pd.DataFrame) -> pd.Series:
+    """Return hour-of-day values from raw transaction bar timestamps."""
+    frame = pd.DataFrame(transactions).copy()
+    if frame.empty:
+        return pd.Series(dtype="float64")
+    lowered = {str(column).lower(): column for column in frame.columns}
+    date_col = lowered.get("datetime") or lowered.get("date") or lowered.get("timestamp")
+    if date_col is None:
+        return pd.Series(dtype="float64")
+    values = frame[date_col]
+    if pd.api.types.is_numeric_dtype(values):
+        dates = pd.to_datetime(values, unit="s", errors="coerce", utc=True)
+        return dates.dt.hour
+    dates = pd.to_datetime(values, errors="coerce")
+    if isinstance(dates.dtype, pd.DatetimeTZDtype) or pd.api.types.is_datetime64_any_dtype(dates):
+        return dates.dt.hour
+
+    def local_hour(value: Any) -> float:
+        try:
+            if pd.isna(value):
+                return float("nan")
+            return float(pd.Timestamp(value).hour)
+        except (TypeError, ValueError):
+            return float("nan")
+
+    return values.map(local_hour)
+
+
 def transaction_time_histogram(transactions: pd.DataFrame):
-    """Return transaction count histogram by hour of day."""
-    frame = _transactions_frame(transactions)
+    """Return fill count histogram by bar timestamp hour of day."""
     plot = figure(
-        title="Transaction Time Histogram",
+        title="Fill Bar Time Histogram",
         x_range=[str(hour) for hour in range(24)],
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
         toolbar_location=None,
     )
-    if not frame.empty:
-        counts = frame["date"].dt.hour.value_counts().reindex(range(24), fill_value=0)
+    hours = _transaction_bar_hours(transactions).dropna().astype(int)
+    if not hours.empty:
+        counts = hours.value_counts().reindex(range(24), fill_value=0)
         data = pd.DataFrame({"hour": counts.index.astype(str), "count": counts.to_numpy()})
         plot.vbar("hour", 0.8, "count", source=ColumnDataSource(data), color=MARKET_BLUE)
+    plot.xaxis.axis_label = "Bar Hour"
+    plot.yaxis.axis_label = "Transactions"
     _make_static_chart(plot)
     return plot
 
 
-def rolling_sharpe(rolling: pd.Series):
+def rolling_sharpe(rolling: pd.Series, window: int = 126):
     """Return a rolling Sharpe figure."""
     frame = _plot_frame(rolling, "rolling_sharpe").dropna()
     plot = figure(
-        title="Rolling Sharpe",
+        title=f"Rolling Sharpe ({window}-Bar)",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not frame.empty:
@@ -1342,7 +1446,7 @@ def rolling_beta(rolling: pd.Series):
     plot = figure(
         title="Rolling Beta",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not frame.empty:
@@ -1353,7 +1457,11 @@ def rolling_beta(rolling: pd.Series):
 
 def trade_distribution(distribution: pd.DataFrame):
     """Return a trade PnL histogram figure."""
-    plot = figure(title="Trade Distribution", height=220, sizing_mode="stretch_width")
+    plot = figure(
+        title="Closed Trade PnL Distribution",
+        height=300,
+        sizing_mode="stretch_width",
+    )
     if distribution.empty:
         return plot
     plot.quad(
@@ -1371,33 +1479,66 @@ def trade_distribution(distribution: pd.DataFrame):
         plot.line([mean, mean], [0, distribution["count"].max()], color="#1f77b4", line_width=2)
     if pd.notna(median):
         plot.line([median, median], [0, distribution["count"].max()], color="#ff7f0e", line_width=2)
+    plot.xaxis.axis_label = "PnL"
+    plot.yaxis.axis_label = "Closed Trades"
     _make_static_chart(plot)
     return plot
 
 
 def exposure(exposure_frame: pd.DataFrame):
-    """Return a multi-asset exposure figure."""
-    frame = exposure_frame.reset_index().rename(
+    """Return a multi-asset exposure heatmap."""
+    frame = exposure_frame.apply(pd.to_numeric, errors="coerce").fillna(0.0).reset_index().rename(
         columns={exposure_frame.index.name or "index": "date"}
     )
     if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
         frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
+    symbols = [str(symbol) for symbol in exposure_frame.columns]
+    frame.columns = ["date", *symbols]
+    long = frame.melt(id_vars="date", var_name="symbol", value_name="weight")
+    width = _datetime_rect_width(frame["date"])
+    max_weight = max(float(long["weight"].max()), 0.01)
+    source = ColumnDataSource(long)
+    mapper = LinearColorMapper(
+        palette=["#f4f7fb", "#d7e8f5", "#94c5df", "#4d99c9", "#1f5f99"],
+        low=0.0,
+        high=max_weight,
+    )
     plot = figure(
-        title="Exposure Chart",
+        title="Exposure Heatmap",
         x_axis_type="datetime",
-        height=240,
+        y_range=list(reversed(symbols)),
+        height=max(260, min(440, 120 + len(symbols) * 18)),
         sizing_mode="stretch_width",
     )
-    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#8c564b", "#e377c2"]
-    for index, symbol in enumerate(exposure_frame.columns):
-        plot.line(
-            frame["date"],
-            frame[symbol],
-            line_width=2,
-            color=colors[index % len(colors)],
-            legend_label=str(symbol),
-        )
+    plot.rect(
+        x="date",
+        y="symbol",
+        width=width,
+        height=0.86,
+        source=source,
+        fill_color={"field": "weight", "transform": mapper},
+        line_color=None,
+    )
+    color_bar = ColorBar(
+        color_mapper=mapper,
+        width=8,
+        label_standoff=6,
+        formatter=NumeralTickFormatter(format="0%"),
+        title="Weight",
+    )
+    plot.add_layout(color_bar, "right")
+    plot.yaxis.axis_label = "Asset"
     _make_static_chart(plot)
+    plot.add_tools(
+        HoverTool(
+            tooltips=[
+                ("Date", "@date{%F}"),
+                ("Asset", "@symbol"),
+                ("Exposure", "@weight{0.00%}"),
+            ],
+            formatters={"@date": "datetime"},
+        )
+    )
     return plot
 
 
@@ -1411,10 +1552,10 @@ def correlation_matrix(correlation: pd.DataFrame):
             data["y"].append(str(row))
             data["correlation"].append(correlation.loc[row, symbol])
     plot = figure(
-        title="Correlation Matrix",
+        title="Position Weight Correlation",
         x_range=symbols,
         y_range=symbols,
-        height=260,
+        height=300,
         sizing_mode="stretch_width",
         toolbar_location=None,
     )
@@ -1472,7 +1613,7 @@ def factor_quantile_returns_bar(stats: pd.DataFrame):
     plot = figure(
         title="Factor Mean Return by Quantile",
         x_range=list(frame["quantile"]),
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
         toolbar_location=None,
     )
@@ -1494,7 +1635,7 @@ def factor_quantile_returns_violin(forward_returns: pd.DataFrame):
     plot = figure(
         title="Factor Quantile Returns Violin",
         x_range=(-0.5, max(0.5, len(quantiles) - 0.5)),
-        height=260,
+        height=300,
         sizing_mode="stretch_width",
         toolbar_location=None,
     )
@@ -1532,7 +1673,7 @@ def factor_quantile_spread(spread: pd.Series):
     plot = figure(
         title="Factor Quantile Spread",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not frame.empty:
@@ -1579,7 +1720,7 @@ def factor_ic(ic: pd.Series):
     plot = figure(
         title="Factor IC",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not frame.empty:
@@ -1598,7 +1739,7 @@ def factor_ic(ic: pd.Series):
 def factor_ic_histogram(ic: pd.Series):
     """Return an IC distribution histogram."""
     values = pd.Series(ic).dropna()
-    plot = figure(title="Factor IC Histogram", height=220, sizing_mode="stretch_width")
+    plot = figure(title="Factor IC Histogram", height=300, sizing_mode="stretch_width")
     if not values.empty:
         buckets = min(20, max(1, len(values)))
         counts = pd.cut(values, bins=buckets).value_counts(sort=False)
@@ -1628,7 +1769,7 @@ def factor_ic_histogram(ic: pd.Series):
 def factor_ic_qq(ic: pd.Series):
     """Return an IC normal QQ chart."""
     values = pd.Series(ic).dropna().sort_values().reset_index(drop=True)
-    plot = figure(title="Factor IC QQ", height=220, sizing_mode="stretch_width")
+    plot = figure(title="Factor IC QQ", height=300, sizing_mode="stretch_width")
     if not values.empty:
         dist = NormalDist()
         n = len(values)
@@ -1655,7 +1796,7 @@ def factor_rank_ic(rank_ic: pd.Series):
     plot = figure(
         title="Factor Rank IC",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not frame.empty:
@@ -1719,7 +1860,7 @@ def quantile_counts(counts: pd.DataFrame):
     plot = figure(
         title="Factor Quantile Counts",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#8c564b", "#e377c2"]
@@ -1742,7 +1883,7 @@ def factor_turnover(turnover: pd.Series, autocorrelation: pd.Series):
     plot = figure(
         title="Factor Turnover",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not turnover_frame.empty:
@@ -1771,7 +1912,7 @@ def factor_events_distribution(events: pd.DataFrame | pd.MultiIndex | pd.Series)
     plot = figure(
         title="Factor Events Distribution",
         x_axis_type="datetime",
-        height=220,
+        height=300,
         sizing_mode="stretch_width",
     )
     if not frame.empty:
@@ -1790,6 +1931,26 @@ def factor_events_distribution(events: pd.DataFrame | pd.MultiIndex | pd.Series)
 
 def _add_drawdown_markers(plot, equity: pd.Series, drawdowns: pd.DataFrame) -> None:
     """Add peak and valley markers for drawdown episodes."""
+    for _, row in drawdowns.iterrows():
+        if "peak" not in row or "valley" not in row:
+            continue
+        dates = _normalize_dates(pd.Series([row["peak"], row["valley"]])).dropna()
+        if len(dates) < 2:
+            continue
+        left, right = dates.iloc[0], dates.iloc[1]
+        if right < left:
+            left, right = right, left
+        plot.add_layout(
+            BoxAnnotation(
+                left=left,
+                right=right,
+                fill_color=MARKET_DOWN,
+                fill_alpha=0.08,
+                line_alpha=0.0,
+                level="underlay",
+                name="max_drawdown_period",
+            )
+        )
     for column, name, color, marker in [
         ("peak", "drawdown_peak", "#2ca02c", "triangle"),
         ("valley", "drawdown_valley", "#d62728", "inverted_triangle"),
@@ -1810,6 +1971,8 @@ def _add_drawdown_markers(plot, equity: pd.Series, drawdowns: pd.DataFrame) -> N
             legend_label=name.replace("_", " ").title(),
             name=name,
         )
+    if plot.legend:
+        plot.legend.location = "top_left"
 
 
 def _normalize_dates(values: pd.Series) -> pd.Series:
@@ -1843,7 +2006,7 @@ def _positions_wide(positions: pd.DataFrame) -> pd.DataFrame:
             values="__value",
             aggfunc="sum",
         )
-        return wide.sort_index().fillna(0.0)
+        return wide.sort_index().ffill().fillna(0.0)
     if date_col is not None:
         frame = frame.set_index(_normalize_dates(frame[date_col])).drop(columns=[date_col])
     if not isinstance(frame.index, pd.DatetimeIndex):
@@ -1934,6 +2097,20 @@ def _plot_frame(series: pd.Series, name: str) -> pd.DataFrame:
     return frame
 
 
+def _align_series_to_index(series: pd.Series, index: pd.Index) -> pd.Series:
+    """Return numeric series aligned to a datetime index with forward-filled values."""
+    values = pd.Series(series).copy()
+    if not isinstance(values.index, pd.DatetimeIndex):
+        values.index = _normalize_dates(pd.Series(values.index))
+    elif isinstance(values.index.dtype, pd.DatetimeTZDtype):
+        values.index = values.index.tz_convert("UTC").tz_localize(None)
+    target = pd.to_datetime(index, errors="coerce")
+    if isinstance(target.dtype, pd.DatetimeTZDtype):
+        target = target.tz_convert("UTC").tz_localize(None)
+    values = pd.to_numeric(values.sort_index(), errors="coerce")
+    return values.reindex(target, method="nearest").ffill()
+
+
 def _portfolio_asset_frame(market_data: Mapping[str, pd.DataFrame]) -> pd.DataFrame:
     """Return normalized long-form prices for a multi-asset replay."""
     rows = []
@@ -1996,7 +2173,7 @@ def _allocation_frame(positions: pd.DataFrame | None, frame: pd.DataFrame) -> pd
     exposure.index = pd.to_datetime(exposure.index, errors="coerce")
     if isinstance(exposure.index.dtype, pd.DatetimeTZDtype):
         exposure.index = exposure.index.tz_convert("UTC").tz_localize(None)
-    exposure = exposure.apply(pd.to_numeric, errors="coerce").fillna(0.0).clip(lower=0.0)
+    exposure = exposure.apply(pd.to_numeric, errors="coerce").ffill().fillna(0.0).clip(lower=0.0)
     totals = exposure.sum(axis=1)
     weights = exposure.div(totals.replace(0, np.nan), axis=0).fillna(0.0)
     dates = pd.to_datetime(frame["date"], errors="coerce")
@@ -2696,7 +2873,7 @@ def _style_market_section(plot) -> None:
     for axis in plot.yaxis:
         if hasattr(axis.ticker, "desired_num_ticks"):
             axis.ticker.desired_num_ticks = min(axis.ticker.desired_num_ticks, 5)
-    _style_plot_title(plot)
+    _style_plot_title(plot, standoff=MARKET_REPLAY_TITLE_STANDOFF)
     plot.toolbar.logo = None
     plot.add_tools(CrosshairTool(dimensions="both"))
     _hide_market_legend(plot)
@@ -2749,6 +2926,7 @@ def _hide_market_legend(plot) -> None:
 def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = False) -> None:
     if plot is None or not plot.legend:
         return
+    _add_legend_frame_gap(plot)
     for legend in list(plot.legend):
         legend.visible = True
         legend.location = "top_left"
@@ -2761,7 +2939,7 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
         legend.background_fill_alpha = 0.82
         legend.padding = 3
         legend.spacing = 8 if compact else 10
-        legend.margin = 2
+        legend.margin = MARKET_LEGEND_MARGIN
         if compact and large_glyphs:
             legend.glyph_width = 22
             legend.glyph_height = 16
@@ -2772,6 +2950,9 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
         legend.label_text_font_size = "8pt"
         legend.click_policy = "hide"
         _move_legend_outside(plot, legend)
+    if MARKET_LEGEND_COMPENSATED_TAG not in plot.tags:
+        plot.height += MARKET_LEGEND_HEIGHT_COMPENSATION
+        plot.tags.append(MARKET_LEGEND_COMPENSATED_TAG)
 
 
 def _move_legend_outside(plot, legend: Legend) -> None:
@@ -2779,6 +2960,28 @@ def _move_legend_outside(plot, legend: Legend) -> None:
     if legend in plot.above:
         return
     plot.add_layout(legend, "above")
+
+
+def _add_legend_frame_gap(plot) -> None:
+    """Place a transparent gap between the external legend and the plot frame."""
+    if MARKET_LEGEND_FRAME_GAP_TAG in plot.tags:
+        return
+    gap = Spacer(width=1, height=MARKET_LEGEND_FRAME_GAP, sizing_mode="fixed")
+    gap.tags.append(MARKET_LEGEND_FRAME_GAP_TAG)
+    plot.add_layout(gap, "above")
+    plot.tags.append(MARKET_LEGEND_FRAME_GAP_TAG)
+
+
+def _datetime_rect_width(dates: pd.Series) -> float:
+    """Return a Bokeh datetime rect width in milliseconds."""
+    clean = pd.to_datetime(pd.Series(dates), errors="coerce").dropna().sort_values()
+    if len(clean) < 2:
+        return 24 * 60 * 60 * 1000 * 0.9
+    diffs = clean.diff().dropna().dt.total_seconds() * 1000.0
+    diffs = diffs[diffs > 0]
+    if diffs.empty:
+        return 24 * 60 * 60 * 1000 * 0.9
+    return float(diffs.median() * 0.92)
 
 
 def _make_static_chart(plot) -> None:
@@ -2792,7 +2995,7 @@ def _make_static_chart(plot) -> None:
     plot.toolbar.active_inspect = None
 
 
-def _style_plot_title(plot) -> None:
+def _style_plot_title(plot, *, standoff: int = 32) -> None:
     """Apply the report title treatment to Bokeh figures."""
     plot.title.text_color = MARKET_TITLE
     plot.title.text_font_size = "16px"
@@ -2801,7 +3004,7 @@ def _style_plot_title(plot) -> None:
     plot.title.align = "left"
     plot.title.text_align = "left"
     plot.title.offset = 0
-    plot.title.standoff = 42
+    plot.title.standoff = standoff
 
 
 def _add_line_hover(plot, renderers, tooltips, *, vline: bool = True) -> None:
