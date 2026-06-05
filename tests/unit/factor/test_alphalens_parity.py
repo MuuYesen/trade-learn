@@ -15,7 +15,11 @@ def test_factor_analyzer_matches_alphalens_core_metrics() -> None:
 
     expected_rank_ic = alphalens_perf.factor_information_coefficient(alphalens_clean)["1D"]
     expected_rank_ic.name = "factor_information_coefficient"
-    pd.testing.assert_series_equal(analyzer.factor_information_coefficient(), expected_rank_ic, check_freq=False)
+    pd.testing.assert_series_equal(
+        analyzer.factor_information_coefficient(),
+        expected_rank_ic,
+        check_freq=False,
+    )
 
     expected_mean_returns, expected_std_error = alphalens_perf.mean_return_by_quantile(
         alphalens_clean,
@@ -39,7 +43,11 @@ def test_factor_analyzer_matches_alphalens_core_metrics() -> None:
     )
     expected_spread = expected_spread["1D"]
     expected_spread.name = "mean_returns_spread"
-    pd.testing.assert_series_equal(analyzer.compute_mean_returns_spread()[0], expected_spread, check_freq=False)
+    pd.testing.assert_series_equal(
+        analyzer.compute_mean_returns_spread()[0],
+        expected_spread,
+        check_freq=False,
+    )
     assert expected_spread_error["1D"].notna().all()
 
     expected_autocorrelation = alphalens_perf.factor_rank_autocorrelation(
@@ -171,7 +179,9 @@ def test_alpha101_clean_data_matches_alphalens_extended_metrics() -> None:
     alphalens_clean = _alphalens_clean_multi_period(clean)
 
     expected_ic = alphalens_perf.factor_information_coefficient(alphalens_clean)
-    actual_ic = analyzer.factor_information_coefficient().rename(columns={1: "1D", 5: "5D", 10: "10D"})
+    actual_ic = analyzer.factor_information_coefficient().rename(
+        columns={1: "1D", 5: "5D", 10: "10D"}
+    )
     actual_ic.columns.name = None
     pd.testing.assert_frame_equal(actual_ic, expected_ic, check_freq=False)
 
@@ -373,7 +383,7 @@ def _alpha101_clean_factor_data() -> tuple[pd.DataFrame, pd.DataFrame]:
             rows.append(
                 {
                     "date": date,
-                    "code": symbol,
+                    "symbol": symbol,
                     "open": open_,
                     "high": high,
                     "low": low,
@@ -383,9 +393,9 @@ def _alpha101_clean_factor_data() -> tuple[pd.DataFrame, pd.DataFrame]:
                 }
             )
     stock = pd.DataFrame(rows)
-    factors = alpha101(stock, names=["alpha010"]).rename(columns={"code": "symbol"})
+    factors = alpha101(stock, names=["alpha010"])
     factors = factors.set_index(["date", "symbol"]).rename(columns={"alpha010_101": "alpha010"})
-    prices = stock.pivot(index="date", columns="code", values="close")
+    prices = stock.pivot(index="date", columns="symbol", values="close")
     price_series = prices.stack().rename("close")
     price_series.index.names = ["date", "symbol"]
     clean = clean_factor_and_forward_returns(

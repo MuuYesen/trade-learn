@@ -6,14 +6,14 @@ import pandas as pd
 import pytest
 
 import tradelearn.research as research
-from tradelearn.research import ResearchRun, ResearchStep
+from tradelearn.research import ResearchResult, ResearchRun, ResearchStep
 from tradelearn.research.portfolio import (
+    Allocator,
     Constraint,
     Constraints,
     EqualWeight,
     Selector,
     TopK,
-    Allocator,
     Weighter,
     apply_constraints,
     equal_weight,
@@ -31,6 +31,7 @@ from tradelearn.research.preprocess import (
     label_by_quantile,
     rank,
 )
+from tradelearn.research.run import bind_research_result
 
 
 def test_research_run_records_preprocess_and_portfolio_function_params() -> None:
@@ -133,6 +134,25 @@ def test_topk_equal_weights_builds_multi_period_weight_panel() -> None:
         result = run.finish()
 
     assert [step.name for step in result.steps] == ["topk_equal_weights"]
+
+
+def test_research_weights_distinguishes_current_and_previous_weight_dates() -> None:
+    weights = pd.Series(
+        [1.0],
+        index=pd.MultiIndex.from_tuples(
+            [(pd.Timestamp("2024-01-01", tz="UTC"), "AAA")],
+            names=["timestamp", "symbol"],
+        ),
+        name="weight",
+    )
+
+    class Strategy:
+        data = type("Data", (), {"now": pd.Timestamp("2024-01-02", tz="UTC")})()
+
+    bound = bind_research_result(ResearchResult(name="weights", weights=weights), Strategy())
+
+    assert bound.weights[0].to_dict() == {"AAA": 1.0}
+    assert not bound.weights.has_current()
 
 
 def test_feature_set_can_be_nested_in_pipeline() -> None:

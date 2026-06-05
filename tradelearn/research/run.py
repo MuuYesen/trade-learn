@@ -131,6 +131,24 @@ class ResearchWeights:
     def to_dict(self) -> dict[str, float]:
         return {str(symbol): float(weight) for symbol, weight in self.items()}
 
+    def has_current(self) -> bool:
+        """Return whether raw weights contain an entry for the current bar date."""
+        timestamp = _strategy_timestamp(self._strategy)
+        weights = self.raw
+        if pd.isna(timestamp) or weights is None:
+            return False
+        if isinstance(weights, pd.Series):
+            values = (
+                weights.index.get_level_values(0)
+                if isinstance(weights.index, pd.MultiIndex) and weights.index.nlevels >= 2
+                else weights.index
+            )
+            return _has_weight_date(pd.Index(values), timestamp)
+        if isinstance(weights, pd.DataFrame):
+            values = weights["timestamp"] if "timestamp" in weights else weights.index
+            return _has_weight_date(pd.Index(values), timestamp)
+        return True
+
     def _slice_for_offset(self, offset: int) -> Any:
         weights = self.raw
         if weights is None:
@@ -419,6 +437,10 @@ def _same_date(value: Any, timestamp: pd.Timestamp) -> bool:
         return pd.Timestamp(value).date() == pd.Timestamp(timestamp).date()
     except Exception:
         return False
+
+
+def _has_weight_date(values: pd.Index, timestamp: pd.Timestamp) -> bool:
+    return any(_same_date(value, timestamp) for value in values.drop_duplicates())
 
 
 def _timestamp_sort_key(value: Any) -> pd.Timestamp:

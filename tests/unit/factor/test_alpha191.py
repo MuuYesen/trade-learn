@@ -10,9 +10,18 @@ import pytest
 from tradelearn.factor.alpha import alpha191
 
 _LEGACY_ALPHA191_PATH = (
-    Path(__file__).resolve().parents[3] / "reference" / "tradelearn_1x" / "query" / "alpha" / "alphas191.py"
+    Path(__file__).resolve().parents[3]
+    / "reference"
+    / "tradelearn_1x"
+    / "query"
+    / "alpha"
+    / "alphas191.py"
 )
-_legacy_spec = importlib.util.spec_from_file_location("legacy_alpha191", _LEGACY_ALPHA191_PATH)
+_legacy_spec = (
+    importlib.util.spec_from_file_location("legacy_alpha191", _LEGACY_ALPHA191_PATH)
+    if _LEGACY_ALPHA191_PATH.exists()
+    else None
+)
 if _legacy_spec is not None and _legacy_spec.loader is not None:
     _legacy_module = importlib.util.module_from_spec(_legacy_spec)
     _legacy_spec.loader.exec_module(_legacy_module)
@@ -218,8 +227,8 @@ def test_alpha191_exports_migrated_formulas_like_legacy_oracle() -> None:
     result = alpha191(stock_data, bench_data, names=names)
 
     pd.testing.assert_frame_equal(
-        result.sort_values(["date", "code"]).reset_index(drop=True),
-        expected.sort_values(["date", "code"]).reset_index(drop=True),
+        result.sort_values(["date", "symbol"]).reset_index(drop=True),
+        expected.sort_values(["date", "symbol"]).reset_index(drop=True),
         check_dtype=False,
     )
 
@@ -230,7 +239,7 @@ def test_alpha191_supports_reference_benchmark_formulas() -> None:
     bench_data = _bench_data()
     result = alpha191(stock_data, bench_data, names=["alpha075", "alpha181", "alpha182"])
 
-    pivoted = stock_data.pivot(index="date", columns="code")
+    pivoted = stock_data.pivot(index="date", columns="symbol")
     close = pivoted["close"]
     open_ = pivoted["open"]
     benchmark_down = _broadcast_test_series(
@@ -264,8 +273,8 @@ def test_alpha191_supports_reference_benchmark_formulas() -> None:
     )
 
     pd.testing.assert_frame_equal(
-        result.sort_values(["date", "code"]).reset_index(drop=True),
-        expected.sort_values(["date", "code"]).reset_index(drop=True),
+        result.sort_values(["date", "symbol"]).reset_index(drop=True),
+        expected.sort_values(["date", "symbol"]).reset_index(drop=True),
         check_dtype=False,
     )
 
@@ -332,7 +341,7 @@ def test_alpha191_documents_skipped_legacy_formulas() -> None:
 
     assert set(result.columns) == {
         "date",
-        "code",
+        "symbol",
         *(f"{name}_191" for name in formerly_skipped),
     }
 
@@ -343,12 +352,30 @@ def test_alpha191_rejects_unknown_formula_names() -> None:
         alpha191(_stock_data(), _bench_data(), names=["alpha999"])
 
 
+def test_alpha191_accepts_provider_bars_contract() -> None:
+    """Provider Bars can be passed directly to Alpha191 formulas."""
+    stock = _stock_data()
+    bars = (
+        stock.rename(columns={"date": "timestamp"})
+        .set_index(["timestamp", "symbol"])
+        [["open", "high", "low", "close", "volume"]]
+        .sort_index()
+    )
+
+    result = alpha191(bars, _bench_data(), names=["alpha001"])
+
+    assert set(result.columns) == {"date", "symbol", "alpha001_191"}
+    assert set(result["symbol"]) == {"AAA", "BBB", "CCC"}
+    assert result["alpha001_191"].notna().any()
+
+
 def _legacy_alpha191(
     stock_data: pd.DataFrame, bench_data: pd.DataFrame, names: list[str]
 ) -> pd.DataFrame:
-    pivoted = stock_data.pivot(index="date", columns="code")
+    legacy_data = stock_data.rename(columns={"symbol": "code"})
+    pivoted = legacy_data.pivot(index="date", columns="code")
     legacy = LegacyAlphas191(pivoted, bench_data)
-    result = pd.DataFrame({"date": [], "code": []})
+    result = pd.DataFrame({"date": [], "symbol": []})
     for name in names:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=FutureWarning)
@@ -357,11 +384,12 @@ def _legacy_alpha191(
         frame = frame.melt(
             id_vars="date",
             value_vars=frame.columns.drop("date"),
+            var_name="symbol",
             value_name=name,
         )
         frame.rename(columns={name: f"{name}_191"}, inplace=True)
-        result = pd.merge(result, frame, how="outer", on=["date", "code"])
-    for column in result.columns.difference(["date", "code"]):
+        result = pd.merge(result, frame, how="outer", on=["date", "symbol"])
+    for column in result.columns.difference(["date", "symbol"]):
         result[column] = pd.to_numeric(result[column], errors="coerce")
     return result
 
@@ -381,30 +409,31 @@ def _broadcast_test_series(series: pd.Series, template: pd.DataFrame) -> pd.Data
 
 
 def _long_alpha191(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    result = pd.DataFrame({"date": [], "code": []})
+    result = pd.DataFrame({"date": [], "symbol": []})
     for name, frame in frames.items():
         melted = frame.copy()
         melted["date"] = melted.index
         melted = melted.melt(
             id_vars="date",
             value_vars=melted.columns.drop("date"),
+            var_name="symbol",
             value_name=name,
         )
         melted.rename(columns={name: f"{name}_191"}, inplace=True)
-        result = pd.merge(result, melted, how="outer", on=["date", "code"])
+        result = pd.merge(result, melted, how="outer", on=["date", "symbol"])
     return result
 
 
 def _stock_data() -> pd.DataFrame:
     dates = pd.date_range("2024-01-01", periods=80)
     rows = []
-    for symbol_index, code in enumerate(["AAA", "BBB", "CCC"], start=1):
+    for symbol_index, symbol in enumerate(["AAA", "BBB", "CCC"], start=1):
         for day_index, date in enumerate(dates, start=1):
             base = 10.0 * symbol_index + day_index
             rows.append(
                 {
                     "date": date,
-                    "code": code,
+                    "symbol": symbol,
                     "open": base,
                     "high": base + 1.0,
                     "low": base - 1.0,

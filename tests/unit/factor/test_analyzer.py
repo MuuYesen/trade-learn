@@ -196,7 +196,7 @@ def test_factor_analyzer_multi_period_summary_prefixes_metrics() -> None:
     assert list(summary.index) == [1, 5]
     assert {
         "ic_mean",
-        "factor_information_coefficient_mean",
+        "rank_ic_mean",
         "mean_returns_spread_mean",
     }.issubset(summary.columns)
 
@@ -212,16 +212,28 @@ def test_factor_analyzer_summary_contains_stable_keys() -> None:
         "ic_mean",
         "ic_std",
         "ic_ir",
-        "factor_information_coefficient_mean",
+        "rank_ic_mean",
+        "rank_ic_std",
+        "rank_ic_ir",
         "mean_returns_spread_mean",
+        "mean_returns_spread_annualized",
         "mean_returns_spread_cumulative_return",
+        "monotonicity",
         "quantile_turnover_mean",
         "factor_rank_autocorrelation_mean",
+        "observations",
+        "ic_dates",
     }
     assert math.isclose(summary["ic_mean"], analyzer.ic().mean(), rel_tol=1e-12)
+    assert math.isclose(summary["rank_ic_mean"], analyzer.factor_information_coefficient().mean())
     assert math.isclose(
-        summary["factor_information_coefficient_mean"],
-        analyzer.factor_information_coefficient().mean(),
+        summary["rank_ic_std"],
+        analyzer.factor_information_coefficient().std(ddof=1),
+        rel_tol=1e-12,
+    )
+    assert math.isclose(
+        summary["rank_ic_ir"],
+        factor_metrics.ic_ir(analyzer.factor_information_coefficient(), periods=12),
         rel_tol=1e-12,
     )
     assert math.isclose(
@@ -229,6 +241,18 @@ def test_factor_analyzer_summary_contains_stable_keys() -> None:
         analyzer.compute_mean_returns_spread()[0].mean(),
         rel_tol=1e-12,
     )
+    assert math.isclose(
+        summary["mean_returns_spread_annualized"],
+        analyzer.compute_mean_returns_spread()[0].mean() * 12,
+        rel_tol=1e-12,
+    )
+    assert math.isclose(
+        summary["monotonicity"],
+        analyzer.monotonicity()["spearman_rho"],
+        rel_tol=1e-12,
+    )
+    assert summary["observations"] == len(factor)
+    assert summary["ic_dates"] == analyzer.factor_information_coefficient().count()
 
 
 def test_factor_analyzer_quantile_stats_summarizes_groups() -> None:

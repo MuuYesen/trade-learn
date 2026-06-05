@@ -139,6 +139,7 @@ def clean_factor_and_forward_returns(
 
     if quantiles <= 0:
         raise ValueError("quantiles must be a positive integer")
+    factors = _factor_frame(factors)
     factor_names = _factor_names(factor)
     if len(factor_names) > 1:
         frames = [
@@ -543,18 +544,43 @@ def _factor_column(factors: pd.DataFrame, factor: str) -> pd.Series:
     return pd.Series(factors[factor], index=factors.index, name=factor).sort_index()
 
 
+def _factor_frame(factors: pd.DataFrame) -> pd.DataFrame:
+    """Return factors indexed by the canonical ``(date, symbol)`` levels."""
+    if not isinstance(factors, pd.DataFrame):
+        raise TypeError("factors must be a pandas DataFrame indexed by (date, symbol)")
+    if isinstance(factors.index, pd.MultiIndex):
+        return factors.sort_index()
+    if "date" in factors and "symbol" in factors:
+        return factors.set_index(["date", "symbol"]).sort_index()
+    return factors
+
+
 def _price_series(prices: pd.Series | pd.DataFrame) -> pd.Series:
     """Return a close-price series from a price input."""
     if isinstance(prices, pd.Series):
-        return prices.rename("prices").sort_index()
+        return _canonical_price_index(prices.rename("prices")).sort_index()
     if not isinstance(prices, pd.DataFrame):
         raise TypeError("prices must be a pandas Series or DataFrame")
     if "close" in prices:
-        return pd.Series(prices["close"], index=prices.index, name="prices").sort_index()
+        return _canonical_price_index(
+            pd.Series(prices["close"], index=prices.index, name="prices")
+        ).sort_index()
     if len(prices.columns) == 1:
         column = prices.columns[0]
-        return pd.Series(prices[column], index=prices.index, name="prices").sort_index()
+        return _canonical_price_index(
+            pd.Series(prices[column], index=prices.index, name="prices")
+        ).sort_index()
     raise ValueError("prices DataFrame must contain a 'close' column or exactly one column")
+
+
+def _canonical_price_index(prices: pd.Series) -> pd.Series:
+    """Return prices with provider Bars index names aligned to factor metrics."""
+    if (
+        isinstance(prices.index, pd.MultiIndex)
+        and prices.index.names[:2] == ["timestamp", "symbol"]
+    ):
+        return prices.copy().set_axis(prices.index.set_names(["date", "symbol"]))
+    return prices
 
 
 def _group_series(factors: pd.DataFrame, groupby: str | pd.Series) -> pd.Series:

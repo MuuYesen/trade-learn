@@ -401,21 +401,35 @@ class FactorAnalyzer:
     def summary(self) -> dict[str, float]:
         """Return scalar factor diagnostics."""
         ic_values = self.ic()
-        information_coefficient_values = self.factor_information_coefficient()
+        rank_ic_values = self.factor_information_coefficient()
         autocorrelation_values = self.factor_rank_autocorrelation()
         mean_returns_spread_values = self.compute_mean_returns_spread()[0]
         quantile_turnover_values = self.quantile_turnover()
+        monotonicity_values = self.monotonicity()
+        aligned = pd.concat(
+            {"factor": self.factor, "returns": self._forward_returns()},
+            axis=1,
+        ).dropna()
+        rank_ic_mean = float(rank_ic_values.mean())
         return {
             "ic_mean": float(ic_values.mean()),
             "ic_std": float(ic_values.std(ddof=1)),
             "ic_ir": self.ic_ir(),
-            "factor_information_coefficient_mean": float(information_coefficient_values.mean()),
+            "rank_ic_mean": rank_ic_mean,
+            "rank_ic_std": float(rank_ic_values.std(ddof=1)),
+            "rank_ic_ir": factor_metrics.ic_ir(rank_ic_values, periods=self.periods),
             "mean_returns_spread_mean": float(mean_returns_spread_values.mean()),
+            "mean_returns_spread_annualized": float(
+                mean_returns_spread_values.mean() * self.periods
+            ),
             "mean_returns_spread_cumulative_return": float(
                 (1.0 + mean_returns_spread_values).prod() - 1.0
             ),
+            "monotonicity": float(monotonicity_values["spearman_rho"]),
             "quantile_turnover_mean": float(quantile_turnover_values.mean().mean()),
             "factor_rank_autocorrelation_mean": float(autocorrelation_values.mean()),
+            "observations": int(len(aligned)),
+            "ic_dates": int(rank_ic_values.count()),
         }
 
     def monotonicity(self) -> dict[str, float]:

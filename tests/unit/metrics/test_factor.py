@@ -7,6 +7,7 @@ import pytest
 
 from tradelearn.metrics.factor import (
     autocorrelation,
+    clean_factor_and_forward_returns,
     factor_returns,
     ic,
     ic_ir,
@@ -88,6 +89,34 @@ def test_factor_returns_computes_forward_returns_from_prices() -> None:
         index=pd.Index(pd.to_datetime(["2024-01-01", "2024-01-02"]), name="date"),
     )
     pd.testing.assert_frame_equal(result, expected)
+
+
+def test_clean_factor_accepts_alpha_long_form_with_bars_prices() -> None:
+    """Alpha long-form factors align with provider Bars close prices."""
+    dates = pd.date_range("2024-01-01", periods=3, tz="UTC")
+    index = pd.MultiIndex.from_product(
+        [dates, ["NASDAQ:AAPL", "NASDAQ:MSFT"]],
+        names=["timestamp", "symbol"],
+    )
+    prices = pd.Series([100.0, 100.0, 110.0, 90.0, 121.0, 81.0], index=index, name="close")
+    factors = pd.DataFrame(
+        {
+            "date": index.get_level_values("timestamp"),
+            "symbol": index.get_level_values("symbol"),
+            "alpha101_101": [1.0, 2.0, 2.0, 1.0, 3.0, 1.0],
+        }
+    )
+
+    clean = clean_factor_and_forward_returns(
+        factors,
+        factor="alpha101_101",
+        prices=prices,
+        periods=(1,),
+        quantiles=2,
+    )
+
+    assert clean.index.names == ["date", "symbol"]
+    assert clean["forward_return_1"].notna().any()
 
 
 def test_autocorrelation_and_turnover_track_rank_changes() -> None:

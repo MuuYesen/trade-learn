@@ -514,7 +514,7 @@ def test_reporter_summary_includes_factor_analyzer_metrics() -> None:
     summary = reporter.summary()
 
     assert summary["factor_ic_mean"] == 0.12
-    assert summary["factor_factor_information_coefficient_mean"] == 0.23
+    assert summary["factor_rank_ic_mean"] == 0.23
 
 
 def test_reporter_chart_facade_returns_bokeh_figures() -> None:
@@ -664,4 +664,4 @@ class _FactorAnalyzerStub:
 
     def summary(self) -> dict[str, float]:
         """Return scalar factor diagnostics for reporter tests."""
-        return {"ic_mean": 0.12, "factor_information_coefficient_mean": 0.23}
+        return {"ic_mean": 0.12, "rank_ic_mean": 0.23}

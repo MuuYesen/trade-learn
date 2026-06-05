@@ -12,24 +12,25 @@ _ALPHA101_NAMES = frozenset(f"alpha{index:03d}" for index in range(1, 102))
 
 
 def alpha101(stock_data: pd.DataFrame, names: Iterable[str] | None = None) -> pd.DataFrame:
-    """Return selected Alpha101 factors in reference-compatible long form."""
+    """Return selected Alpha101 factors in Tradelearn long form."""
     selected = list(names or sorted(_ALPHA101_NAMES))
     unknown = sorted(set(selected).difference(_ALPHA101_NAMES))
     if unknown:
         raise ValueError(f"unknown Alpha101 formulas: {unknown}")
 
     factors = Alpha101Factors(_pivot_stock_data(stock_data))
-    result = pd.DataFrame({"date": [], "code": []})
+    result = pd.DataFrame({"date": [], "symbol": []})
     for name in selected:
         frame = getattr(factors, name)().copy()
         frame["date"] = frame.index
         frame = frame.melt(
             id_vars="date",
             value_vars=frame.columns.drop("date"),
+            var_name="symbol",
             value_name=name,
         )
         frame.rename(columns={name: f"{name}_101"}, inplace=True)
-        result = pd.merge(result, frame, how="outer", on=["date", "code"])
+        result = pd.merge(result, frame, how="outer", on=["date", "symbol"])
     return result
 
 
@@ -37,7 +38,7 @@ class Alpha101Factors:
     """Compute the migrated subset of Alpha101 formulas on pivoted OHLCV data."""
 
     def __init__(self, data: pd.DataFrame) -> None:
-        """Create a factor calculator from ``data.pivot(index='date', columns='code')``."""
+        """Create a factor calculator from ``data.pivot(index='date', columns='symbol')``."""
         self.open = data["open"]
         self.high = data["high"]
         self.low = data["low"]
@@ -905,11 +906,23 @@ class Alpha101Factors:
 
 def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Return stock data pivoted to the Alpha101 formula layout."""
-    required = {"date", "code", "open", "high", "low", "close", "volume", "vwap"}
+    if isinstance(stock_data.index, pd.MultiIndex) and set(stock_data.index.names) >= {
+        "timestamp",
+        "symbol",
+    }:
+        stock_data = (
+            stock_data.reset_index()
+            .rename(columns={"timestamp": "date"})
+            .copy()
+        )
+    if "vwap" not in stock_data.columns:
+        stock_data = stock_data.copy()
+        stock_data["vwap"] = stock_data[["open", "high", "low", "close"]].mean(axis=1)
+    required = {"date", "symbol", "open", "high", "low", "close", "volume", "vwap"}
     missing = required.difference(stock_data.columns)
     if missing:
         raise ValueError(f"stock_data is missing required columns: {sorted(missing)}")
-    return stock_data.pivot(index="date", columns="code")
+    return stock_data.pivot(index="date", columns="symbol")
 
 
 def _returns(frame: pd.DataFrame) -> pd.DataFrame:
