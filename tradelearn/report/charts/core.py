@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from statistics import NormalDist
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -44,6 +45,7 @@ MARKET_TITLE = "#2f3b52"
 PORTFOLIO_OTHERS = "#a98578"
 PORTFOLIO_CASH = "#b8c0c7"
 PORTFOLIO_VISIBLE_ASSET_LIMIT = 8
+DEFAULT_REPORT_TIMEZONE = ZoneInfo("UTC")
 MARKET_LEGEND_MARGIN = 2
 MARKET_LEGEND_FRAME_GAP = 8
 MARKET_LEGEND_HEIGHT_COMPENSATION = 24
@@ -634,8 +636,13 @@ def _allocation_replay_plot(
     visible_symbols = [
         symbol for symbol in (visible_symbols or symbols[:PORTFOLIO_VISIBLE_ASSET_LIMIT]) if symbol in symbols
     ]
+    display_symbols = _symbol_display_map(symbols)
     display = _allocation_display_frame(allocation, symbols, visible_symbols)
     stackers = [column for column in display.columns if column not in {"date", "bar_index"}]
+    stacker_labels = [
+        display_symbols.get(stacker, stacker)
+        for stacker in stackers
+    ]
     plot = _market_section("Allocation", height=160, x_range=x_range)
     source = ColumnDataSource(display)
     full_source = ColumnDataSource(allocation)
@@ -646,13 +653,18 @@ def _allocation_replay_plot(
         color=colors,
         alpha=0.78,
         source=source,
-        legend_label=stackers,
+        legend_label=stacker_labels,
     )
     for renderer, stacker in zip(renderers, stackers):
         renderer.name = stacker
-    _sync_allocation_legend(plot, visible_symbols)
+    _sync_allocation_legend(plot, visible_symbols, display_symbols)
     hover_source = ColumnDataSource(
-        _allocation_hover_frame(display, stackers, top_count=len(visible_symbols))
+        _allocation_hover_frame(
+            display,
+            stackers,
+            top_count=len(visible_symbols),
+            display_symbols=display_symbols,
+        )
     )
     hover_renderer = plot.vbar(
         x="bar_index",
@@ -694,6 +706,7 @@ def _allocation_replay_plot(
                     "allocation_legend_items": list(plot.legend[0].items) if plot.legend else [],
                     "symbols": symbols,
                     "stackers": stackers,
+                    "display_symbols": [display_symbols[symbol] for symbol in symbols],
                 },
                 code=_allocation_selector_js(),
             ),
@@ -772,15 +785,17 @@ def _trade_activity_replay_plot(
 ):
     """Return a trade activity panel grouped by asset."""
     visible = _filter_trade_activity(activity, visible_symbols)
+    display_symbols = _symbol_display_map(symbols)
+    visible_assets = [display_symbols[symbol] for symbol in visible_symbols]
     plot = _market_section(
         "Trade Acitivity",
         height=_trade_activity_height(len(visible_symbols)),
         x_range=x_range,
-        y_range=FactorRange(factors=list(reversed(visible_symbols))),
+        y_range=FactorRange(factors=list(reversed(visible_assets))),
     )
-    row_boxes_source = ColumnDataSource(_trade_activity_row_box_frame(visible_symbols, x_range))
+    row_boxes_source = ColumnDataSource(_trade_activity_row_box_frame(visible_assets, x_range))
     plot.hbar(
-        y="symbol",
+        y="asset",
         height=1.0,
         left="left",
         right="right",
@@ -793,7 +808,7 @@ def _trade_activity_replay_plot(
     )
 
     if not visible.empty:
-        separators_source = ColumnDataSource(_trade_rebalance_separator_frame(visible, visible_symbols))
+        separators_source = ColumnDataSource(_trade_rebalance_separator_frame(visible, visible_assets))
         separators_full_source = ColumnDataSource(activity)
         plot.segment(
             "bar_index",
@@ -817,7 +832,7 @@ def _trade_activity_replay_plot(
             renderers.append(
                 plot.scatter(
                     "bar_index",
-                    dodge("symbol", 0.18, range=plot.y_range),
+                    dodge("asset", 0.18, range=plot.y_range),
                     source=buy_source,
                     marker="triangle",
                     size="marker_size",
@@ -832,7 +847,7 @@ def _trade_activity_replay_plot(
             renderers.append(
                 plot.scatter(
                     "bar_index",
-                    dodge("symbol", -0.18, range=plot.y_range),
+                    dodge("asset", -0.18, range=plot.y_range),
                     source=sell_source,
                     marker="inverted_triangle",
                     size="marker_size",
@@ -873,6 +888,7 @@ def _trade_activity_replay_plot(
                     "y_range": plot.y_range,
                     "plot": plot,
                     "symbols": symbols,
+                    "display_symbols": [display_symbols[symbol] for symbol in symbols],
                 },
                 code=_trade_activity_selector_js(),
             ),
@@ -1377,8 +1393,8 @@ def daily_volume(transactions: pd.DataFrame):
     return plot
 
 
-def _transaction_bar_hours(transactions: pd.DataFrame) -> pd.Series:
-    """Return hour-of-day values from raw transaction bar timestamps."""
+def _transaction_bar_hours(transactions: pd.DataFrame, timezone: str | ZoneInfo) -> pd.Series:
+    """Return market-local hour-of-day values from transaction bar timestamps."""
     frame = pd.DataFrame(transactions).copy()
     if frame.empty:
         return pd.Series(dtype="float64")
@@ -1386,27 +1402,28 @@ def _transaction_bar_hours(transactions: pd.DataFrame) -> pd.Series:
     date_col = lowered.get("datetime") or lowered.get("date") or lowered.get("timestamp")
     if date_col is None:
         return pd.Series(dtype="float64")
-    values = frame[date_col]
+    return _market_hours(frame[date_col], timezone)
+
+
+def _market_hours(values: pd.Series, timezone: str | ZoneInfo) -> pd.Series:
+    """Return hour values converted to the report market timezone."""
+    zone = _coerce_timezone(timezone)
     if pd.api.types.is_numeric_dtype(values):
         dates = pd.to_datetime(values, unit="s", errors="coerce", utc=True)
-        return dates.dt.hour
-    dates = pd.to_datetime(values, errors="coerce")
-    if isinstance(dates.dtype, pd.DatetimeTZDtype) or pd.api.types.is_datetime64_any_dtype(dates):
-        return dates.dt.hour
-
-    def local_hour(value: Any) -> float:
-        try:
-            if pd.isna(value):
-                return float("nan")
-            return float(pd.Timestamp(value).hour)
-        except (TypeError, ValueError):
-            return float("nan")
-
-    return values.map(local_hour)
+    else:
+        dates = pd.to_datetime(values, errors="coerce")
+        if not isinstance(dates.dtype, pd.DatetimeTZDtype):
+            dates = dates.dt.tz_localize("UTC")
+    return dates.dt.tz_convert(zone).dt.hour
 
 
-def transaction_time_histogram(transactions: pd.DataFrame):
-    """Return fill count histogram by bar timestamp hour of day."""
+def transaction_time_histogram(
+    transactions: pd.DataFrame,
+    *,
+    timezone: str | ZoneInfo = DEFAULT_REPORT_TIMEZONE,
+):
+    """Return fill count histogram by market-local bar timestamp hour of day."""
+    zone = _coerce_timezone(timezone)
     plot = figure(
         title="Fill Bar Time Histogram",
         x_range=[str(hour) for hour in range(24)],
@@ -1414,12 +1431,12 @@ def transaction_time_histogram(transactions: pd.DataFrame):
         sizing_mode="stretch_width",
         toolbar_location=None,
     )
-    hours = _transaction_bar_hours(transactions).dropna().astype(int)
+    hours = _transaction_bar_hours(transactions, zone).dropna().astype(int)
     if not hours.empty:
         counts = hours.value_counts().reindex(range(24), fill_value=0)
         data = pd.DataFrame({"hour": counts.index.astype(str), "count": counts.to_numpy()})
         plot.vbar("hour", 0.8, "count", source=ColumnDataSource(data), color=MARKET_BLUE)
-    plot.xaxis.axis_label = "Bar Hour"
+    plot.xaxis.axis_label = f"Market Hour ({_timezone_label(zone)})"
     plot.yaxis.axis_label = "Transactions"
     _make_static_chart(plot)
     return plot
@@ -1493,8 +1510,10 @@ def exposure(exposure_frame: pd.DataFrame):
     if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
         frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
     symbols = [str(symbol) for symbol in exposure_frame.columns]
+    display_symbols = _symbol_display_map(symbols)
     frame.columns = ["date", *symbols]
     long = frame.melt(id_vars="date", var_name="symbol", value_name="weight")
+    long["asset"] = long["symbol"].map(display_symbols)
     width = _datetime_rect_width(frame["date"])
     max_weight = max(float(long["weight"].max()), 0.01)
     source = ColumnDataSource(long)
@@ -1506,13 +1525,13 @@ def exposure(exposure_frame: pd.DataFrame):
     plot = figure(
         title="Exposure Heatmap",
         x_axis_type="datetime",
-        y_range=list(reversed(symbols)),
+        y_range=list(reversed([display_symbols[symbol] for symbol in symbols])),
         height=max(260, min(440, 120 + len(symbols) * 18)),
         sizing_mode="stretch_width",
     )
     plot.rect(
         x="date",
-        y="symbol",
+        y="asset",
         width=width,
         height=0.86,
         source=source,
@@ -1545,16 +1564,22 @@ def exposure(exposure_frame: pd.DataFrame):
 def correlation_matrix(correlation: pd.DataFrame):
     """Return a multi-asset correlation heatmap figure."""
     symbols = [str(symbol) for symbol in correlation.columns]
-    data = {"x": [], "y": [], "correlation": []}
+    display_symbols = _symbol_display_map(symbols)
+    ranges = [display_symbols[symbol] for symbol in symbols]
+    data = {"x": [], "y": [], "x_symbol": [], "y_symbol": [], "correlation": []}
     for row in correlation.index:
         for symbol in correlation.columns:
-            data["x"].append(str(symbol))
-            data["y"].append(str(row))
+            row_symbol = str(row)
+            column_symbol = str(symbol)
+            data["x"].append(display_symbols.get(column_symbol, column_symbol))
+            data["y"].append(display_symbols.get(row_symbol, row_symbol))
+            data["x_symbol"].append(column_symbol)
+            data["y_symbol"].append(row_symbol)
             data["correlation"].append(correlation.loc[row, symbol])
     plot = figure(
         title="Position Weight Correlation",
-        x_range=symbols,
-        y_range=symbols,
+        x_range=ranges,
+        y_range=ranges,
         height=300,
         sizing_mode="stretch_width",
         toolbar_location=None,
@@ -1573,6 +1598,16 @@ def correlation_matrix(correlation: pd.DataFrame):
         source=data,
         fill_color=mapper,
         line_color="white",
+    )
+    plot.xaxis.major_label_orientation = 0.8
+    plot.add_tools(
+        HoverTool(
+            tooltips=[
+                ("Asset X", "@x_symbol"),
+                ("Asset Y", "@y_symbol"),
+                ("Correlation", "@correlation{0.00}"),
+            ]
+        )
     )
     _make_static_chart(plot)
     return plot
@@ -1983,6 +2018,35 @@ def _normalize_dates(values: pd.Series) -> pd.Series:
     return dates
 
 
+def _symbol_display_map(symbols: list[str]) -> dict[str, str]:
+    """Return compact display labels while preserving uniqueness."""
+    compact = {symbol: symbol.split(":")[-1] for symbol in symbols}
+    counts = pd.Series(list(compact.values())).value_counts()
+    return {
+        symbol: label if counts[label] == 1 else symbol
+        for symbol, label in compact.items()
+    }
+
+
+def _coerce_timezone(timezone: str | ZoneInfo) -> ZoneInfo:
+    """Return a ZoneInfo instance for a report timezone value."""
+    if isinstance(timezone, ZoneInfo):
+        return timezone
+    return ZoneInfo(str(timezone))
+
+
+def _timezone_label(timezone: ZoneInfo) -> str:
+    """Return a compact axis label for a report timezone."""
+    key = getattr(timezone, "key", str(timezone))
+    labels = {
+        "America/New_York": "ET",
+        "Asia/Shanghai": "CST",
+        "Asia/Hong_Kong": "HKT",
+        "UTC": "UTC",
+    }
+    return labels.get(key, key)
+
+
 def _positions_wide(positions: pd.DataFrame) -> pd.DataFrame:
     """Return numeric date x symbol position values."""
     frame = pd.DataFrame(positions).copy()
@@ -2255,6 +2319,8 @@ def _trade_activity_frame(fills: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
     else:
         ordered = list(notional_by_symbol.index)
     symbols = ordered
+    display_symbols = _symbol_display_map(symbols)
+    activity["asset"] = activity["symbol"].map(display_symbols)
 
     activity["marker_size"] = _trade_activity_marker_sizes(activity["notional"])
     activity["y_factor"] = list(
@@ -2349,8 +2415,10 @@ def _allocation_hover_frame(
     stackers: list[str],
     *,
     top_count: int,
+    display_symbols: dict[str, str] | None = None,
 ) -> pd.DataFrame:
     """Return one hover row per date with a holdings summary."""
+    labels = display_symbols or {}
     rows = []
     for _, row in display.iterrows():
         holdings = [
@@ -2367,7 +2435,7 @@ def _allocation_hover_frame(
                 "invested": sum(value for name, value in holdings if name != "Others"),
                 "cash": float(row.get("Cash", 0.0) or 0.0),
                 "top_count": top_count,
-                "top_holdings": _format_allocation_holdings(top_holdings),
+                "top_holdings": _format_allocation_holdings(top_holdings, labels),
             }
         )
     return pd.DataFrame(
@@ -2376,18 +2444,29 @@ def _allocation_hover_frame(
     )
 
 
-def _format_allocation_holdings(holdings: list[tuple[str, float]]) -> str:
+def _format_allocation_holdings(
+    holdings: list[tuple[str, float]],
+    display_symbols: dict[str, str] | None = None,
+) -> str:
     """Return an HTML summary for allocation hover."""
     if not holdings:
         return "-"
-    return "<br>".join(f"{name}: {value:.1%}" for name, value in holdings)
+    labels = display_symbols or {}
+    return "<br>".join(f"{labels.get(name, name)}: {value:.1%}" for name, value in holdings)
 
 
-def _sync_allocation_legend(plot, visible_symbols: list[str]) -> None:
+def _sync_allocation_legend(
+    plot,
+    visible_symbols: list[str],
+    display_symbols: dict[str, str],
+) -> None:
     """Show selected allocation assets plus summary buckets in the legend."""
     if not plot.legend:
         return
-    selected = set(visible_symbols) | {"Others", "Cash"}
+    selected = {display_symbols.get(symbol, symbol) for symbol in visible_symbols} | {
+        "Others",
+        "Cash",
+    }
     for item in plot.legend[0].items:
         label = getattr(item.label, "value", None)
         item.visible = label in selected
@@ -2412,6 +2491,7 @@ def _allocation_selector_js() -> str:
     return f"""
 const limit = {_selector_limit_js()};
 const selected = new Set(symbols.slice(0, limit));
+const selectedLabels = new Set(display_symbols.slice(0, limit));
 const full = allocation_full_source.data;
 const next = {{}};
 for (const key of ["date", "bar_index"]) {{
@@ -2440,7 +2520,9 @@ for (const stacker of stackers) {{
 }}
 allocation_source.data = next;
 function formatHolding(name, value) {{
-  return `${{name}}: ${{(value * 100).toFixed(1)}}%`;
+  const symbolIndex = symbols.indexOf(name);
+  const label = symbolIndex >= 0 ? display_symbols[symbolIndex] : name;
+  return `${{label}}: ${{(value * 100).toFixed(1)}}%`;
 }}
 const hover = {{date: [], bar_index: [], invested: [], cash: [], top_count: [], top_holdings: []}};
 for (let index = 0; index < rows; index++) {{
@@ -2467,7 +2549,7 @@ for (let index = 0; index < rows; index++) {{
 allocation_hover_source.data = hover;
 for (const item of allocation_legend_items) {{
   const label = item.label && item.label.value;
-  item.visible = selected.has(label) || label === "Others" || label === "Cash";
+  item.visible = selectedLabels.has(label) || label === "Others" || label === "Cash";
 }}
 allocation_source.change.emit();
 allocation_hover_source.change.emit();
@@ -2501,15 +2583,16 @@ buy_source.data = filterData(buy_full_source.data);
 sell_source.data = filterData(sell_full_source.data);
 const factors = [];
 const visible = symbols.slice(0, limit).reverse();
-for (const symbol of visible) {{
-  factors.push(symbol);
+const visibleAssets = display_symbols.slice(0, limit).reverse();
+for (const asset of visibleAssets) {{
+  factors.push(asset);
 }}
 y_range.factors = factors;
 plot.height = Math.max(280, Math.min(520, 120 + limit * 32));
 row_boxes_source.data = {{
-  symbol: visible,
-  left: Array(visible.length).fill(plot.x_range.start),
-  right: Array(visible.length).fill(plot.x_range.end),
+  asset: visibleAssets,
+  left: Array(visibleAssets.length).fill(plot.x_range.start),
+  right: Array(visibleAssets.length).fill(plot.x_range.end),
 }};
 const separatorFull = separators_full_source.data;
 const separatorBars = new Set();
@@ -2522,8 +2605,8 @@ for (let index = 0; index < separatorRows; index++) {{
 const sortedBars = Array.from(separatorBars).sort((left, right) => left - right);
 separators_source.data = {{
   bar_index: sortedBars,
-  y0: Array(sortedBars.length).fill(visible[visible.length - 1] || ""),
-  y1: Array(sortedBars.length).fill(visible[0] || ""),
+  y0: Array(sortedBars.length).fill(visibleAssets[visibleAssets.length - 1] || ""),
+  y1: Array(sortedBars.length).fill(visibleAssets[0] || ""),
 }};
 buy_source.change.emit();
 sell_source.change.emit();
@@ -2538,6 +2621,11 @@ def _filter_trade_activity(activity: pd.DataFrame, symbols: list[str]) -> pd.Dat
         return pd.DataFrame()
     visible = activity[activity["symbol"].isin(symbols)].copy()
     visible["symbol"] = pd.Categorical(visible["symbol"], categories=symbols, ordered=True)
+    visible["asset"] = pd.Categorical(
+        visible["asset"],
+        categories=[_symbol_display_map(symbols)[symbol] for symbol in symbols],
+        ordered=True,
+    )
     return visible.sort_values(["symbol", "bar_index"])
 
 
@@ -2561,7 +2649,7 @@ def _trade_activity_row_box_frame(visible_symbols: list[str], x_range) -> pd.Dat
     visible = list(reversed(visible_symbols))
     return pd.DataFrame(
         {
-            "symbol": visible,
+            "asset": visible,
             "left": [x_range.start] * len(visible),
             "right": [x_range.end] * len(visible),
         }

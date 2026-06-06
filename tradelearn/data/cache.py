@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -154,7 +154,7 @@ class BarsCache:
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         if "written_at" in meta:
             return _coerce_timestamp(meta["written_at"])
-        return pd.Timestamp(datetime.fromtimestamp(data_path.stat().st_mtime, tz=UTC))
+        return pd.Timestamp(datetime.fromtimestamp(data_path.stat().st_mtime, tz=timezone.utc))
 
     def _raise_if_missing(self, data_path: Path, meta_path: Path) -> None:
         """Raise a data-layer error when a cache entry is incomplete."""
@@ -164,7 +164,7 @@ class BarsCache:
 
 def _coerce_timestamp(value: pd.Timestamp | datetime | str | None) -> pd.Timestamp:
     """Return a UTC-aware timestamp."""
-    timestamp = pd.Timestamp.now(tz=UTC) if value is None else pd.Timestamp(value)
+    timestamp = pd.Timestamp.now(tz=timezone.utc) if value is None else pd.Timestamp(value)
     if timestamp.tzinfo is None:
         return timestamp.tz_localize("UTC")
     return timestamp.tz_convert("UTC")

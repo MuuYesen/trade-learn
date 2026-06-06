@@ -324,12 +324,12 @@ def test_transaction_time_histogram_labels_bar_hours() -> None:
     plot = transaction_time_histogram(_transactions())
 
     assert plot.title.text == "Fill Bar Time Histogram"
-    assert plot.xaxis[0].axis_label == "Bar Hour"
+    assert plot.xaxis[0].axis_label == "Market Hour (UTC)"
     assert plot.yaxis[0].axis_label == "Transactions"
 
 
-def test_transaction_time_histogram_preserves_input_timezone_hours() -> None:
-    """Timezone-aware market data should be counted by its own local hour."""
+def test_transaction_time_histogram_converts_to_us_market_hours() -> None:
+    """Timezone-aware market data should be counted in US market time."""
     transactions = pd.DataFrame(
         {
             "datetime": pd.date_range("2024-01-01 09:00", periods=2, freq="h", tz="Asia/Tokyo"),
@@ -338,13 +338,13 @@ def test_transaction_time_histogram_preserves_input_timezone_hours() -> None:
         }
     )
 
-    plot = transaction_time_histogram(transactions)
+    plot = transaction_time_histogram(transactions, timezone="America/New_York")
     data = plot.renderers[0].data_source.data
     counts = dict(zip(data["hour"], data["count"], strict=True))
 
-    assert counts["9"] == 1
-    assert counts["10"] == 1
-    assert counts["0"] == 0
+    assert counts["19"] == 1
+    assert counts["20"] == 1
+    assert counts["9"] == 0
 
 
 def test_daily_volume_sums_absolute_trade_size() -> None:
@@ -367,6 +367,18 @@ def test_correlation_matrix_title_names_weight_correlation() -> None:
     plot = correlation_matrix(_correlation())
 
     assert plot.title.text == "Position Weight Correlation"
+
+
+def test_correlation_matrix_displays_compact_symbols() -> None:
+    """Exchange-prefixed TradeLearn symbols should not crowd report axes."""
+    symbols = ["NASDAQ:AAPL", "NASDAQ:MSFT"]
+    matrix = pd.DataFrame([[1.0, 0.2], [0.2, 1.0]], index=symbols, columns=symbols)
+
+    plot = correlation_matrix(matrix)
+    source = plot.renderers[0].data_source.data
+
+    assert list(plot.x_range.factors) == ["AAPL", "MSFT"]
+    assert "NASDAQ:AAPL" in set(source["x_symbol"])
 
 
 def test_market_replay_does_not_connect_trade_markers_with_multiline() -> None:
@@ -392,6 +404,41 @@ def test_market_replay_uses_portfolio_layout_for_multi_asset_inputs() -> None:
     assert "Trade Acitivity" in titles
     assert "Holdings / Trades Timeline" not in titles
     assert "OHLC / Trades" not in titles
+
+
+def test_trade_activity_displays_compact_symbols() -> None:
+    """Trade activity axes should stay compact for exchange-prefixed symbols."""
+    replay = market_replay(
+        {"NASDAQ:AAPL": _market_data(), "NASDAQ:MSFT": _market_data() * 1.5},
+        fills=_prefixed_multi_asset_fills(),
+        equity=_series("equity"),
+    )
+    activity = _find_plot(replay, "Trade Acitivity")
+    renderers = _collect_glyph_renderers(activity)
+    source = next(
+        renderer.data_source
+        for renderer in renderers
+        if "asset" in renderer.data_source.data and "symbol" in renderer.data_source.data
+    )
+
+    assert set(activity.y_range.factors) == {"AAPL", "MSFT"}
+    assert "NASDAQ:AAPL" in set(source.data["symbol"])
+    assert "AAPL" in set(source.data["asset"])
+
+
+def test_allocation_legend_displays_compact_symbols() -> None:
+    """Allocation legends should use report-friendly labels for prefixed symbols."""
+    replay = market_replay(
+        {"NASDAQ:AAPL": _market_data(), "NASDAQ:MSFT": _market_data() * 1.5},
+        fills=_prefixed_multi_asset_fills(),
+        equity=_series("equity"),
+    )
+    allocation = _find_plot(replay, "Allocation")
+    labels = [item.label.value for item in allocation.legend[0].items]
+
+    assert "AAPL" in labels
+    assert "MSFT" in labels
+    assert "NASDAQ:AAPL" not in labels
 
 
 def test_portfolio_replay_uses_tight_x_padding_for_long_ranges() -> None:
@@ -967,6 +1014,17 @@ def _multi_asset_fills() -> pd.DataFrame:
             "price": [10.6, 15.9, 11.0, 16.5],
         }
     )
+
+
+def _prefixed_multi_asset_fills() -> pd.DataFrame:
+    fills = _multi_asset_fills().copy()
+    fills["symbol"] = fills["symbol"].replace(
+        {
+            "AAA": "NASDAQ:AAPL",
+            "BBB": "NASDAQ:MSFT",
+        }
+    )
+    return fills
 
 
 def _closed_trade_fills() -> pd.DataFrame:

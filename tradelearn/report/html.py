@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime
 from html import escape
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from bokeh.embed import components
@@ -19,6 +20,12 @@ from tradelearn.report.sections import build_context, render_html_sections
 
 TEMPLATE_DIR = Path(__file__).with_name("templates")
 TEMPLATE_NAME = "tear_sheet.html"
+MARKET_TIMEZONES = {
+    "US": ZoneInfo("America/New_York"),
+    "CN": ZoneInfo("Asia/Shanghai"),
+    "HK": ZoneInfo("Asia/Hong_Kong"),
+    "CRYPTO": ZoneInfo("UTC"),
+}
 
 
 def write_html_report(
@@ -100,7 +107,10 @@ def write_html_report(
         plots["Position Concentration"] = charts.position_concentration(positions)
         plots["Daily Turnover"] = charts.turnover(fills, positions, equity=equity_values)
         plots["Daily Fill Volume"] = charts.daily_volume(fills)
-        plots["Fill Bar Time Histogram"] = charts.transaction_time_histogram(fills)
+        plots["Fill Bar Time Histogram"] = charts.transaction_time_histogram(
+            fills,
+            timezone=_market_timezone(reporter.market_data),
+        )
     if not factor_ic.empty:
         plots["Factor IC"] = charts.factor_ic(factor_ic)
         plots["Factor IC Histogram"] = charts.factor_ic_histogram(factor_ic)
@@ -488,6 +498,49 @@ def _market_replay_title(market_data: Any) -> str:
         if len(valid_feeds) > 1:
             return "Portfolio Replay"
     return "Price / Trades"
+
+
+def _market_timezone(market_data: Any) -> ZoneInfo:
+    """Infer the report timezone from market metadata or symbol prefixes."""
+    market = _market_attr(market_data)
+    if market in MARKET_TIMEZONES:
+        return MARKET_TIMEZONES[market]
+    symbols = _market_symbols(market_data)
+    if any(symbol.startswith(("NASDAQ:", "NYSE:", "AMEX:")) for symbol in symbols):
+        return MARKET_TIMEZONES["US"]
+    if any(symbol.startswith(("SH:", "SZ:", "SSE:", "SZSE:")) for symbol in symbols):
+        return MARKET_TIMEZONES["CN"]
+    if any(symbol.startswith(("HK:", "HKEX:")) for symbol in symbols):
+        return MARKET_TIMEZONES["HK"]
+    return ZoneInfo("UTC")
+
+
+def _market_attr(market_data: Any) -> str | None:
+    """Return a stable market attr when report market data carries one."""
+    if isinstance(market_data, dict):
+        markets = {
+            str(getattr(frame, "attrs", {}).get("market", "")).upper()
+            for frame in market_data.values()
+            if getattr(frame, "attrs", {}).get("market")
+        }
+        markets.discard("GLOBAL")
+        if len(markets) == 1:
+            return next(iter(markets))
+        return None
+    market = getattr(market_data, "attrs", {}).get("market") if market_data is not None else None
+    market = str(market).upper() if market else None
+    return None if market == "GLOBAL" else market
+
+
+def _market_symbols(market_data: Any) -> list[str]:
+    """Return symbols visible in report market data."""
+    if isinstance(market_data, dict):
+        return [str(symbol) for symbol in market_data.keys()]
+    if isinstance(market_data, pd.DataFrame) and isinstance(market_data.index, pd.MultiIndex):
+        names = list(market_data.index.names)
+        symbol_level = "symbol" if "symbol" in names else names[-1]
+        return [str(symbol) for symbol in market_data.index.get_level_values(symbol_level).unique()]
+    return []
 
 
 def _format_date(value: Any) -> str:

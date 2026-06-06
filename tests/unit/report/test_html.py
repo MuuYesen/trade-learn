@@ -8,6 +8,7 @@ import pandas as pd
 
 from tradelearn import metrics
 from tradelearn.report import Reporter, ReportSection
+from tradelearn.report.html import _market_timezone
 
 
 def test_html_template_exists() -> None:
@@ -27,6 +28,16 @@ def test_html_template_uses_modern_responsive_report_layout() -> None:
     assert "table-scroll" in text
     assert "grid-template-columns: repeat(auto-fit" in text
     assert "overflow-x: auto" in text
+
+
+def test_market_timezone_infers_us_from_symbol_prefix() -> None:
+    """Global provider data should still render US trade hours in ET."""
+    market_data = {
+        "NASDAQ:AAPL": pd.DataFrame({"close": [1.0]}),
+        "NYSE:CRM": pd.DataFrame({"close": [1.0]}),
+    }
+
+    assert _market_timezone(market_data).key == "America/New_York"
 
 
 def test_reporter_html_writes_single_file_tear_sheet(tmp_path) -> None:
