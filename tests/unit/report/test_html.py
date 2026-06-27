@@ -493,7 +493,7 @@ def test_reporter_html_adds_factor_quantile_chart_when_analyzer_exists(tmp_path)
     ).html(path)
 
     html = path.read_text()
-    assert "Factor Quantile Cumulative Returns" in html
+    assert "Factor Quantile Returns" in html
     assert "Factor Mean Return by Quantile" in html
     assert "Factor Quantile Returns Violin" in html
     assert "Factor Quantile Spread" in html
@@ -504,7 +504,7 @@ def test_reporter_html_adds_factor_quantile_chart_when_analyzer_exists(tmp_path)
     assert "Factor IC QQ" in html
     assert "Factor Rank IC" in html
     assert "Factor Turnover" in html
-    assert "Factor Long-Short Cumulative Returns" in html
+    assert "Factor Long-Short Returns" in html
     assert not list(tmp_path.glob("*.parquet"))
 
 

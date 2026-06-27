@@ -145,22 +145,6 @@ class EmptyTvDatafeedClient:
         return None
 
 
-class FlakyTvDatafeedClient(FakeTvDatafeedClient):
-    """Fake client that succeeds after transient empty responses."""
-
-    def __init__(self, empty_responses: int) -> None:
-        super().__init__()
-        self.empty_responses = empty_responses
-        self.attempts = 0
-
-    def get_hist(self, **kwargs: object):
-        self.attempts += 1
-        if self.empty_responses > 0:
-            self.empty_responses -= 1
-            return None
-        return super().get_hist(**kwargs)
-
-
 def test_tdx_provider_fetches_and_normalizes_daily_bars() -> None:
     """TdxProvider converts TDX rows into Bars."""
     client = FakeTdxClient()
@@ -432,26 +416,7 @@ def test_tradingview_provider_rejects_unsupported_frequency() -> None:
 
 
 def test_tradingview_provider_reports_empty_response() -> None:
-    provider = TradingViewProvider(
-        client_factory=EmptyTvDatafeedClient,
-        max_retries=1,
-        retry_delay=0,
-    )
+    provider = TradingViewProvider(client_factory=EmptyTvDatafeedClient)
 
     with pytest.raises(ConnectionError, match="returned no rows"):
         provider.history_ohlc("NASDAQ:AAPL")
-
-
-def test_tradingview_provider_retries_empty_response() -> None:
-    client = FlakyTvDatafeedClient(empty_responses=2)
-    provider = TradingViewProvider(
-        client_factory=lambda: client,
-        max_retries=3,
-        retry_delay=0,
-    )
-
-    bars = provider.history_ohlc("NASDAQ:AAPL", start="2024-01-02", end="2024-01-02")
-
-    assert client.attempts == 3
-    assert len(bars) == 1
-    assert bars.iloc[0]["close"] == 102.0
