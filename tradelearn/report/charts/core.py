@@ -1619,7 +1619,7 @@ def quantile_returns(returns: pd.DataFrame):
     if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
         frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
     plot = figure(
-        title="Factor Quantile Returns",
+        title="Factor Quantile Cumulative Returns",
         x_axis_type="datetime",
         height=240,
         sizing_mode="stretch_width",
@@ -1727,7 +1727,7 @@ def factor_long_short_returns(returns: pd.DataFrame):
     if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
         frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
     plot = figure(
-        title="Factor Long-Short Returns",
+        title="Factor Long-Short Cumulative Returns",
         x_axis_type="datetime",
         height=240,
         sizing_mode="stretch_width",
@@ -1852,34 +1852,52 @@ def factor_monthly_ic_heatmap(monthly_ic: pd.DataFrame):
     values = monthly_ic.dropna(axis=0, how="all").dropna(axis=1, how="all")
     months = [int(column) for column in values.columns]
     years = [str(year) for year in values.index]
-    data = {"month": [], "year": [], "ic": []}
+    data = {"month": [], "year": [], "ic": [], "label": [], "text_color": []}
+    max_abs = float(values.abs().max().max()) if not values.empty else 1.0
+    color_limit = max(max_abs, 1e-9)
     for year in values.index:
         for month in months:
+            ic_value = values.loc[year, month]
             data["month"].append(str(month))
             data["year"].append(str(year))
-            data["ic"].append(values.loc[year, month])
+            data["ic"].append(ic_value)
+            data["label"].append("" if pd.isna(ic_value) else f"{float(ic_value):+.2f}")
+            data["text_color"].append(
+                "#ffffff" if not pd.isna(ic_value) and abs(float(ic_value)) > color_limit * 0.55 else MARKET_TITLE
+            )
+    source = ColumnDataSource(data)
     plot = figure(
         title="Monthly IC Heatmap",
         x_range=[str(month) for month in months],
         y_range=years,
-        height=240,
+        height=320,
         sizing_mode="stretch_width",
         toolbar_location=None,
     )
     mapper = linear_cmap(
         "ic",
         palette=["#d65a5a", "#f7f7f7", "#2ca36c"],
-        low=-1.0,
-        high=1.0,
+        low=-color_limit,
+        high=color_limit,
     )
     plot.rect(
         "month",
         "year",
         width=0.95,
         height=0.95,
-        source=data,
+        source=source,
         fill_color=mapper,
         line_color="white",
+    )
+    plot.text(
+        "month",
+        "year",
+        text="label",
+        source=source,
+        text_align="center",
+        text_baseline="middle",
+        text_font_size="10px",
+        text_color="text_color",
     )
     _make_static_chart(plot)
     return plot

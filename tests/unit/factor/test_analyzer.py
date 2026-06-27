@@ -3,6 +3,7 @@
 import math
 
 import pandas as pd
+import pytest
 
 from tradelearn.factor import (
     FactorAnalyzer,
@@ -122,6 +123,8 @@ def test_factor_clean_data_accepts_factor_frame_and_prices() -> None:
     assert list(analyzer.summary().index) == [1, 2]
     assert list(analyzer.ic().columns) == [1, 2]
     assert isinstance(analyzer[1], FactorAnalyzer)
+    assert analyzer[1].forward_period == 1
+    assert analyzer[2].forward_period == 2
     expected = _series(
         [
             ("2024-01-01", "AAA", 0.10),
@@ -255,6 +258,91 @@ def test_factor_analyzer_summary_contains_stable_keys() -> None:
     assert summary["ic_dates"] == analyzer.factor_information_coefficient().count()
 
 
+def test_factor_analyzer_evaluate_pandas_matches_existing_metrics() -> None:
+    """evaluate(engine='pandas') exposes the existing factor diagnostics together."""
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, periods=12, quantiles=2)
+
+    result = analyzer.evaluate(engine="pandas")
+
+    assert result.engine == "pandas"
+    pd.testing.assert_series_equal(result.ic, analyzer.ic().rename("ic"))
+    pd.testing.assert_series_equal(
+        result.rank_ic,
+        analyzer.factor_information_coefficient().rename("rank_ic"),
+    )
+    pd.testing.assert_frame_equal(
+        result.mean_return_by_quantile,
+        analyzer.mean_return_by_quantile(),
+    )
+    pd.testing.assert_frame_equal(result.quantile_counts, analyzer.quantile_counts())
+    pd.testing.assert_series_equal(
+        result.mean_returns_spread,
+        analyzer.compute_mean_returns_spread()[0],
+    )
+    assert result.summary()["observations"] == len(factor)
+
+
+def test_factor_analyzer_evaluate_rejects_unknown_engine() -> None:
+    """evaluate validates engine selection explicitly."""
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
+
+    with pytest.raises(ValueError, match="engine"):
+        analyzer.evaluate(engine="unknown")
+
+
+def test_factor_analyzer_evaluate_rust_matches_pandas_backend() -> None:
+    """Rust factor analytics backend matches the pandas reference output."""
+    pytest.importorskip("tradelearn._rust")
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
+
+    try:
+        actual = analyzer.evaluate(engine="rust")
+    except RuntimeError as exc:
+        pytest.skip(str(exc))
+    expected = analyzer.evaluate(engine="pandas")
+
+    assert actual.engine == "rust"
+    pd.testing.assert_series_equal(actual.ic, expected.ic)
+    pd.testing.assert_series_equal(actual.rank_ic, expected.rank_ic)
+    pd.testing.assert_frame_equal(actual.mean_return_by_quantile, expected.mean_return_by_quantile)
+    pd.testing.assert_frame_equal(
+        actual.quantile_counts.astype("int64"),
+        expected.quantile_counts.astype("int64"),
+    )
+    pd.testing.assert_series_equal(actual.mean_returns_spread, expected.mean_returns_spread)
+
+
+def test_factor_analyzer_evaluate_rust_uses_clean_factor_quantiles() -> None:
+    """Rust evaluation honors canonical quantile labels from clean data."""
+    pytest.importorskip("tradelearn._rust")
+    index = pd.MultiIndex.from_product(
+        [pd.to_datetime(["2024-01-01"]), list("ABCDE")],
+        names=["date", "symbol"],
+    )
+    clean = pd.DataFrame(
+        {
+            "factor": [1.0, 1.0, 1.0, 1.0, 1.0],
+            "forward_return_5": [0.10, 0.20, 0.30, 0.40, 0.50],
+            "factor_quantile": [5, 4, 3, 2, 1],
+        },
+        index=index,
+    )
+    analyzer = FactorAnalyzer.from_clean_factor_data(clean, periods=(5,), quantiles=5)[5]
+
+    actual = analyzer.evaluate(engine="rust")
+    expected = analyzer.evaluate(engine="pandas")
+
+    pd.testing.assert_frame_equal(actual.mean_return_by_quantile, expected.mean_return_by_quantile)
+    pd.testing.assert_frame_equal(
+        actual.quantile_counts.astype("int64"),
+        expected.quantile_counts.astype("int64"),
+    )
+    pd.testing.assert_series_equal(actual.mean_returns_spread, expected.mean_returns_spread)
+
+
 def test_factor_analyzer_quantile_stats_summarizes_groups() -> None:
     """quantile_stats summarizes grouped forward returns for reports."""
     factor, forward = _factor_and_forward_returns()
@@ -332,6 +420,22 @@ def test_factor_analyzer_quantile_cumulative_returns_compounds_group_returns() -
     pd.testing.assert_frame_equal(cumulative, expected)
 
 
+def test_factor_analyzer_quantile_cumulative_returns_skips_overlapping_periods() -> None:
+    """quantile_cumulative_returns compounds non-overlapping forward returns."""
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(
+        factor,
+        forward_returns=forward,
+        forward_period=2,
+        quantiles=2,
+    )
+
+    cumulative = analyzer.quantile_cumulative_returns()
+    expected = (1.0 + analyzer.mean_return_by_quantile().iloc[::2]).cumprod() - 1.0
+
+    pd.testing.assert_frame_equal(cumulative, expected)
+
+
 def test_factor_analyzer_quantile_spread_returns_top_minus_bottom() -> None:
     """quantile_spread returns top-minus-bottom quantile returns."""
     factor, forward = _factor_and_forward_returns()
@@ -356,7 +460,7 @@ def test_factor_analyzer_long_short_returns_exposes_sides_and_spread() -> None:
 
     assert list(returns.columns) == ["long", "short", "spread"]
     pd.testing.assert_series_equal(returns["long"], quantile_returns[2], check_names=False)
-    pd.testing.assert_series_equal(returns["short"], quantile_returns[1], check_names=False)
+    pd.testing.assert_series_equal(returns["short"], -quantile_returns[1], check_names=False)
     pd.testing.assert_series_equal(
         returns["spread"],
         analyzer.compute_mean_returns_spread()[0],
@@ -373,6 +477,26 @@ def test_factor_analyzer_long_short_cumulative_returns_compounds_portfolios() ->
     expected = (1.0 + analyzer.long_short_returns()).cumprod() - 1.0
 
     pd.testing.assert_frame_equal(cumulative, expected)
+
+
+def test_factor_analyzer_summary_compounds_spread_non_overlapping_periods() -> None:
+    """summary cumulative spread uses non-overlapping forward returns."""
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(
+        factor,
+        forward_returns=forward,
+        forward_period=2,
+        quantiles=2,
+    )
+
+    spread = analyzer.compute_mean_returns_spread()[0]
+    expected = float((1.0 + spread.iloc[::2]).cumprod().iloc[-1] - 1.0)
+
+    assert math.isclose(
+        analyzer.summary()["mean_returns_spread_cumulative_return"],
+        expected,
+        rel_tol=1e-12,
+    )
 
 
 def test_factor_analyzer_requires_returns_or_prices_for_return_metrics() -> None:
@@ -477,13 +601,13 @@ def test_factor_analyzer_plot_includes_alphalens_style_sections() -> None:
     layout = analyzer.plot()
     titles = _collect_titles(layout)
 
-    assert "Mean Return by Quantile" in titles
-    assert "Quantile Returns Violin" in titles
-    assert "Quantile Spread" in titles
-    assert "Events Distribution" in titles
-    assert "IC Histogram" in titles
-    assert "IC QQ" in titles
-    assert "Quantile Counts" in titles
+    assert "Factor Mean Return by Quantile" in titles
+    assert "Factor Quantile Returns Violin" in titles
+    assert "Factor Quantile Spread" in titles
+    assert "Factor Events Distribution" in titles
+    assert "Factor IC Histogram" in titles
+    assert "Factor IC QQ" in titles
+    assert "Factor Quantile Counts" in titles
 
 
 def test_factor_analyzer_html_writes_file(tmp_path) -> None:
@@ -503,7 +627,7 @@ def test_factor_analyzer_html_writes_file(tmp_path) -> None:
     assert "Factor Summary" in content
     assert "Quantile Statistics" in content
     assert "Information Coefficient" in content
-    assert "Mean Return by Quantile" in content
+    assert "Factor Mean Return by Quantile" in content
     assert "IC Histogram" in content
 
 

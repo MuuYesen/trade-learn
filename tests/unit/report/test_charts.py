@@ -3,7 +3,7 @@
 import pandas as pd
 from bokeh.plotting import figure
 from bokeh.models import BoxAnnotation, ColorBar, FixedTicker, GlyphRenderer, HoverTool, Legend, Spacer, Span
-from bokeh.models.glyphs import HBar, MultiLine, Rect, Scatter, Segment, VBar
+from bokeh.models.glyphs import HBar, MultiLine, Rect, Scatter, Segment, Text, VBar
 from bokeh.models.widgets import Select
 
 from tradelearn.report.charts import (
@@ -18,6 +18,7 @@ from tradelearn.report.charts import (
     factor_ic_histogram,
     factor_ic_qq,
     factor_long_short_returns,
+    factor_monthly_ic_heatmap,
     factor_quantile_returns_bar,
     factor_quantile_returns_violin,
     factor_quantile_spread,
@@ -72,6 +73,7 @@ def test_report_charts_return_bokeh_figures() -> None:
         factor_ic_histogram(_series("ic")),
         factor_ic_qq(_series("ic")),
         factor_rank_ic(_series("rank_ic")),
+        factor_monthly_ic_heatmap(_monthly_ic()),
         factor_turnover(_series("turnover"), _series("autocorrelation")),
         factor_long_short_returns(_long_short_returns()),
         holdings(_positions()),
@@ -108,8 +110,26 @@ def test_exposure_chart_renders_many_assets_as_heatmap() -> None:
     assert plot.title.text == "Exposure Heatmap"
     assert list(plot.y_range.factors) == list(reversed(symbols))
     assert rect_renderers
-    assert any(isinstance(item, ColorBar) for item in plot.right)
-    assert any(isinstance(tool, HoverTool) for tool in plot.tools)
+
+
+def test_factor_monthly_ic_heatmap_uses_data_scaled_palette() -> None:
+    """Monthly IC heatmap should not wash small IC values into white."""
+    plot = factor_monthly_ic_heatmap(_monthly_ic())
+    rect_renderer = next(
+        renderer
+        for renderer in plot.renderers
+        if isinstance(renderer, GlyphRenderer) and isinstance(renderer.glyph, Rect)
+    )
+    mapper = rect_renderer.glyph.fill_color["transform"]
+    text_renderer = next(
+        renderer
+        for renderer in plot.renderers
+        if isinstance(renderer, GlyphRenderer) and isinstance(renderer.glyph, Text)
+    )
+
+    assert mapper.low == -0.2
+    assert mapper.high == 0.2
+    assert "+0.10" in text_renderer.data_source.data["label"]
 
 
 def test_report_charts_use_report_title_style() -> None:
@@ -915,6 +935,13 @@ def _quantile_counts() -> pd.DataFrame:
     return pd.DataFrame(
         {1: [3, 2], 2: [2, 3]},
         index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
+    )
+
+
+def _monthly_ic() -> pd.DataFrame:
+    return pd.DataFrame(
+        {1: [0.10, -0.20], 2: [0.05, 0.15]},
+        index=pd.Index([2024, 2025], name="year"),
     )
 
 

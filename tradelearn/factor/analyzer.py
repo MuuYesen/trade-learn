@@ -14,6 +14,34 @@ from tradelearn.utils.console import smart_tqdm as tqdm
 
 
 @dataclass(frozen=True)
+class FactorEvaluationResult:
+    """Core factor evaluation tables produced by a named backend."""
+
+    engine: str
+    ic: pd.Series
+    rank_ic: pd.Series
+    mean_return_by_quantile: pd.DataFrame
+    quantile_counts: pd.DataFrame
+    mean_returns_spread: pd.Series
+
+    def summary(self) -> dict[str, float]:
+        """Return scalar diagnostics from evaluation tables."""
+        means = self.mean_return_by_quantile.mean()
+        monotonicity = float("nan")
+        if len(means) >= 2:
+            ranks = pd.Series(range(1, len(means) + 1), index=means.index, dtype="float64")
+            monotonicity = float(means.rank().corr(ranks, method="spearman"))
+        return {
+            "ic_mean": float(self.ic.mean()),
+            "rank_ic_mean": float(self.rank_ic.mean()),
+            "mean_returns_spread_mean": float(self.mean_returns_spread.mean()),
+            "monotonicity": monotonicity,
+            "observations": int(self.quantile_counts.sum(axis=1).sum()),
+            "ic_dates": int(self.rank_ic.count()),
+        }
+
+
+@dataclass(frozen=True)
 class FactorAnalyzer:
     """Analyze cross-sectional factor values and forward returns."""
 
@@ -23,6 +51,7 @@ class FactorAnalyzer:
     groups: pd.Series | None = None
     factor_quantiles: pd.Series | None = None
     periods: int = 252
+    forward_period: int = 1
     quantiles: int = 5
 
     def __post_init__(self) -> None:
@@ -87,6 +116,7 @@ class FactorAnalyzer:
                 groups=groups,
                 factor_quantiles=factor_quantiles,
                 periods=annualization_periods,
+                forward_period=period,
                 quantiles=quantiles,
             )
             for period in selected
@@ -165,6 +195,49 @@ class FactorAnalyzer:
         """Return annualized IC information ratio."""
         return factor_metrics.ic_ir(self.ic(), periods=self.periods)
 
+    def evaluate(self, engine: str = "pandas") -> FactorEvaluationResult:
+        """Return core factor diagnostics from the selected compute engine."""
+        if engine == "pandas":
+            return self._evaluate_pandas()
+        if engine == "rust":
+            return self._evaluate_rust()
+        raise ValueError("engine must be 'pandas' or 'rust'")
+
+    def _evaluate_pandas(self) -> FactorEvaluationResult:
+        spread = self.compute_mean_returns_spread()[0]
+        return FactorEvaluationResult(
+            engine="pandas",
+            ic=pd.Series(self.ic()).rename("ic"),
+            rank_ic=pd.Series(self.factor_information_coefficient()).rename("rank_ic"),
+            mean_return_by_quantile=self.mean_return_by_quantile(),
+            quantile_counts=self.quantile_counts(),
+            mean_returns_spread=spread.rename("mean_returns_spread"),
+        )
+
+    def _evaluate_rust(self) -> FactorEvaluationResult:
+        aligned, quantile_labels = self._aligned_quantiles()
+        if aligned.empty:
+            empty_index = pd.DatetimeIndex([], name=self.factor.index.names[0])
+            empty_frame = pd.DataFrame(index=empty_index, columns=range(1, self.quantiles + 1))
+            return FactorEvaluationResult(
+                engine="rust",
+                ic=pd.Series(dtype="float64", index=empty_index, name="ic"),
+                rank_ic=pd.Series(dtype="float64", index=empty_index, name="rank_ic"),
+                mean_return_by_quantile=empty_frame.copy(),
+                quantile_counts=empty_frame.copy(),
+                mean_returns_spread=pd.Series(
+                    dtype="float64",
+                    index=empty_index,
+                    name="mean_returns_spread",
+                ),
+            )
+        return _rust_factor_evaluate(
+            aligned,
+            quantile_labels,
+            self.quantiles,
+            self.factor.index.names[0],
+        )
+
     def mean_information_coefficient(self, by_time: str | None = None) -> pd.Series | pd.DataFrame:
         """Return mean Spearman IC, optionally grouped by time rule."""
         values = self.factor_information_coefficient()
@@ -209,7 +282,7 @@ class FactorAnalyzer:
                 "mean": returns.mean(),
                 "std": returns.std(ddof=1),
                 "count": returns.count(),
-                "cumulative_return": (1.0 + returns).prod() - 1.0,
+                "cumulative_return": self._compound_forward_returns(returns).iloc[-1],
             }
         )
         result.index.name = "quantile"
@@ -245,7 +318,7 @@ class FactorAnalyzer:
 
     def quantile_cumulative_returns(self) -> pd.DataFrame:
         """Return compounded returns by factor quantile."""
-        return (1.0 + self.mean_return_by_quantile()).cumprod() - 1.0
+        return self._compound_forward_returns(self.mean_return_by_quantile())
 
     def compute_mean_returns_spread(
         self,
@@ -267,17 +340,19 @@ class FactorAnalyzer:
         returns = self.mean_return_by_quantile()
         bottom = returns.columns.min()
         top = returns.columns.max()
+        long = returns[top]
+        short = -returns[bottom]
         return pd.DataFrame(
             {
-                "long": returns[top],
-                "short": returns[bottom],
-                "spread": self.compute_mean_returns_spread()[0],
+                "long": long,
+                "short": short,
+                "spread": long + short,
             }
         )
 
     def long_short_cumulative_returns(self) -> pd.DataFrame:
         """Return compounded long, short, and spread factor returns."""
-        return (1.0 + self.long_short_returns()).cumprod() - 1.0
+        return self._compound_forward_returns(self.long_short_returns())
 
     def factor_returns(
         self,
@@ -423,7 +498,7 @@ class FactorAnalyzer:
                 mean_returns_spread_values.mean() * self.periods
             ),
             "mean_returns_spread_cumulative_return": float(
-                (1.0 + mean_returns_spread_values).prod() - 1.0
+                self._compound_forward_returns(mean_returns_spread_values).iloc[-1]
             ),
             "monotonicity": float(monotonicity_values["spearman_rho"]),
             "quantile_turnover_mean": float(quantile_turnover_values.mean().mean()),
@@ -449,6 +524,15 @@ class FactorAnalyzer:
         diffs = means.diff().dropna()
         is_monotone = bool((diffs > 0).all() or (diffs < 0).all())
         return {"spearman_rho": rho, "is_monotone": is_monotone}
+
+    def _compound_forward_returns(
+        self,
+        returns: pd.Series | pd.DataFrame,
+    ) -> pd.Series | pd.DataFrame:
+        """Compound non-overlapping forward returns."""
+        step = max(1, int(self.forward_period))
+        non_overlapping = returns.iloc[::step]
+        return (1.0 + non_overlapping).cumprod() - 1.0
 
     def plot(self):
         """Return a Bokeh grid of factor diagnostic charts."""
@@ -492,7 +576,10 @@ class FactorAnalyzer:
         t = self.quantile_turnover()
         ac = self.factor_rank_autocorrelation()
         if not t.empty or not ac.empty:
-            turnover_series = t.mean(axis=1).rename("turnover") if isinstance(t, pd.DataFrame) else t
+            if isinstance(t, pd.DataFrame):
+                turnover_series = t.mean(axis=1).rename("turnover")
+            else:
+                turnover_series = t
             items.append(charts.factor_turnover(turnover_series, ac))
         return bk_column(*items, sizing_mode="stretch_width") if items else None
 
@@ -899,8 +986,20 @@ def _render_factor_html(
       gap: 8px 40px;
       padding-bottom: 4px;
     }}
-    .meta-label {{ color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }}
-    .meta-value {{ color: var(--accent); font-size: 13px; font-weight: 600; white-space: nowrap; }}
+    .meta-label {{
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: 2px;
+    }}
+    .meta-value {{
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }}
     section {{
       margin: 0 0 32px;
       padding: 32px;
@@ -908,31 +1007,67 @@ def _render_factor_html(
       border-radius: 12px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }}
-    h1 {{ margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -0.025em; color: var(--ink); }}
-    h2 {{ margin: 0 0 20px; font-size: 18px; font-weight: 700; color: var(--accent); border-bottom: 2px solid var(--row-hover); padding-bottom: 12px; }}
+    h1 {{
+      margin: 0;
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      color: var(--ink);
+    }}
+    h2 {{
+      margin: 0 0 20px;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--accent);
+      border-bottom: 2px solid var(--row-hover);
+      padding-bottom: 12px;
+    }}
     p {{ margin: 0; color: var(--muted); font-size: 15px; }}
     .grid {{
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 380px;
+      grid-template-columns: minmax(0, 1fr) 360px;
       gap: 32px;
       align-items: start;
     }}
     aside {{ position: sticky; top: 32px; }}
+    aside section {{ overflow: hidden; padding: 28px; }}
     table {{ border-collapse: collapse; width: 100%; margin: 8px 0; min-width: 600px; }}
     th, td {{ padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--line); }}
-    th {{ background: var(--bg); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }}
+    th {{
+      background: var(--bg);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }}
     tr:hover {{ background: var(--row-hover); }}
     td {{ font-variant-numeric: tabular-nums; }}
     td:last-child, th:last-child {{ text-align: right; }}
-    .summary-table {{ min-width: 0; }}
-    .summary-table th {{ width: 55%; color: var(--accent); background: none; text-transform: none; font-size: 14px; letter-spacing: normal; padding-left: 0; }}
+    .summary-table {{ min-width: 0; table-layout: fixed; }}
+    .summary-table th {{
+      width: 70%;
+      color: var(--accent);
+      background: none;
+      text-transform: none;
+      font-size: 13px;
+      letter-spacing: normal;
+      padding-left: 0;
+      overflow-wrap: anywhere;
+    }}
+    .summary-table td {{ width: 30%; padding-right: 0; white-space: nowrap; }}
     .chart {{ overflow: hidden; }}
     .chart > div, .chart .bk-root, .chart .bk-root > div {{
       width: 100% !important;
       max-width: 100% !important;
     }}
     .full-width-tables {{ margin-top: 32px; }}
-    .scroll-container {{ overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; border: 1px solid var(--line); }}
+    .scroll-container {{
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+    }}
     @media (max-width: 1100px) {{
       .grid {{ grid-template-columns: 1fr; }}
       aside {{ position: static; }}
@@ -980,14 +1115,21 @@ def _render_factor_html(
     <div class="full-width-tables">
       <section>
         <h2>Quantile Statistics</h2>
-        <p style="margin-bottom: 16px; font-size: 13px;">Statistical summary of forward returns for each factor quantile. This table shows the performance distribution and risk metrics across groups.</p>
+        <p style="margin-bottom: 16px; font-size: 13px;">
+          Statistical summary of forward returns for each factor quantile.
+          This table shows the performance distribution and risk metrics across groups.
+        </p>
         <div class="scroll-container">
           {_frame_table(quantile_stats)}
         </div>
       </section>
       <section>
         <h2>Quantile Counts</h2>
-        <p style="margin-bottom: 16px; font-size: 13px;">The number of assets assigned to each quantile at each point in time. This helps verify data density and ensure balanced quantile allocation across the sample period.</p>
+        <p style="margin-bottom: 16px; font-size: 13px;">
+          The number of assets assigned to each quantile at each point in time.
+          This helps verify data density and ensure balanced quantile allocation across the sample
+          period.
+        </p>
         <div class="scroll-container">
           {_frame_table(quantile_counts.tail(10))}
         </div>
@@ -1095,6 +1237,66 @@ def _factor_weights(
         return values / values.abs().sum()
 
     return factor.groupby(level=0, group_keys=False).apply(_to_weights)
+
+
+def _rust_factor_evaluate(
+    aligned: pd.DataFrame,
+    quantile_labels: pd.Series,
+    quantiles: int,
+    date_name: str | None,
+) -> FactorEvaluationResult:
+    """Evaluate factor tables through the Rust factor analytics backend."""
+    try:
+        from tradelearn._rust import factor_evaluate
+    except (ImportError, AttributeError) as exc:
+        raise RuntimeError("Rust factor evaluation backend is unavailable") from exc
+
+    date_index = pd.Index(aligned.index.get_level_values(0))
+    unique_dates = pd.Index(date_index.unique(), name=date_name)
+    date_codes = unique_dates.get_indexer(date_index).astype("int64")
+    (
+        rust_dates,
+        ic_values,
+        rank_ic_values,
+        quantile_returns_flat,
+        quantile_counts_flat,
+        spread_values,
+    ) = factor_evaluate(
+        date_codes.tolist(),
+        aligned["factor"].astype(float).to_list(),
+        aligned["returns"].astype(float).to_list(),
+        quantile_labels.astype(int).to_list(),
+        int(quantiles),
+    )
+    result_index = pd.Index(unique_dates.take(rust_dates), name=date_name)
+    columns = pd.RangeIndex(1, int(quantiles) + 1)
+    mean_return_by_quantile = pd.DataFrame(
+        _reshape_flat(quantile_returns_flat, len(result_index), int(quantiles)),
+        index=result_index,
+        columns=columns,
+    )
+    quantile_counts = pd.DataFrame(
+        _reshape_flat(quantile_counts_flat, len(result_index), int(quantiles)),
+        index=result_index,
+        columns=columns,
+    )
+    return FactorEvaluationResult(
+        engine="rust",
+        ic=pd.Series(ic_values, index=result_index, name="ic"),
+        rank_ic=pd.Series(rank_ic_values, index=result_index, name="rank_ic"),
+        mean_return_by_quantile=mean_return_by_quantile,
+        quantile_counts=quantile_counts,
+        mean_returns_spread=pd.Series(
+            spread_values,
+            index=result_index,
+            name="mean_returns_spread",
+        ),
+    )
+
+
+def _reshape_flat(values: list[float] | list[int], rows: int, columns: int) -> list[list[float]]:
+    """Convert Rust row-major flat output into a 2-D Python list."""
+    return [list(values[i * columns : (i + 1) * columns]) for i in range(rows)]
 
 
 def _common_start_returns(

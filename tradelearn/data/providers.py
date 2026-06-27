@@ -9,6 +9,7 @@ from typing import Any, Protocol
 import logging
 import os
 import sys
+import time
 from contextlib import contextmanager
 
 import pandas as pd
@@ -249,11 +250,15 @@ class TradingViewProvider:
         password: str | None = None,
         n_bars: int = 5000,
         client_factory: Callable[[], object] | None = None,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
     ) -> None:
         self.username = username
         self.password = password
         self.n_bars = int(n_bars)
         self._client_factory = client_factory
+        self.max_retries = max(1, int(max_retries))
+        self.retry_delay = max(0.0, float(retry_delay))
         # Quiet the verbose tvDatafeed logger
         logging.getLogger("tvDatafeed").setLevel(logging.ERROR)
 
@@ -308,14 +313,34 @@ class TradingViewProvider:
             end,
             freq,
         )
-        client = self._make_client()
-        rows = client.get_hist(
-            symbol=tv_symbol,
-            exchange=exchange_name,
-            interval=self._interval_value(freq),
-            n_bars=self.n_bars,
-        )
+        rows = None
+        last_error: Exception | None = None
+        for attempt in range(1, self.max_retries + 1):
+            client = self._make_client()
+            try:
+                rows = client.get_hist(
+                    symbol=tv_symbol,
+                    exchange=exchange_name,
+                    interval=self._interval_value(freq),
+                    n_bars=self.n_bars,
+                )
+            except Exception as exc:
+                last_error = exc
+                rows = None
+            if rows is not None and len(rows) > 0:
+                break
+            if attempt < self.max_retries:
+                LOGGER.warning(
+                    "TradingView history_ohlc retrying symbol=%s attempt=%s/%s",
+                    symbol,
+                    attempt + 1,
+                    self.max_retries,
+                )
+                if self.retry_delay > 0:
+                    time.sleep(self.retry_delay)
         if rows is None or len(rows) == 0:
+            if last_error is not None:
+                raise ConnectionError(f"TradingView returned no rows for {symbol}") from last_error
             raise ConnectionError(f"TradingView returned no rows for {symbol}")
         raw = _normalize_tradingview_columns(pd.DataFrame(rows), exchange_name, tv_symbol)
         raw = _filter_dates(raw, start=start, end=end)

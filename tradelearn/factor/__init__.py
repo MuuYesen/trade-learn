@@ -6,6 +6,7 @@ from tradelearn.factor.alpha import (
 )
 from tradelearn.factor.analyzer import (
     FactorAnalyzer,
+    FactorEvaluationResult,
     MultiFactorAnalyzer,
     MultiPeriodFactorAnalyzer,
 )
@@ -14,6 +15,7 @@ from tradelearn.metrics.factor import clean_factor_and_forward_returns
 
 __all__ = [
     "FactorAnalyzer",
+    "FactorEvaluationResult",
     "MultiFactorAnalyzer",
     "MultiPeriodFactorAnalyzer",
     "FactorRiskModel",
