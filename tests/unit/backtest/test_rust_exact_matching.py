@@ -12,8 +12,7 @@ from tradelearn.backtest.data import DataContainer, RollingBarBuffer
 from tradelearn.backtest.engine import _build_bar_advancers, _build_data_advance_plan
 from tradelearn.backtest.lines import LineSeries
 from tradelearn.backtest.models import Order, Stats
-from tradelearn.backtest.strategy import Strategy as CoreStrategy
-from tradelearn.core import Fill, OrderRequest
+from tradelearn.core.broker_contracts import Fill, OrderRequest
 from tradelearn.engine import Cerebro, DataFeed, Strategy
 from tradelearn.lite.backtest import Backtest
 from tradelearn.lite.data import LiteDataProxy
@@ -626,7 +625,7 @@ def test_backtest_engine_calls_strategy_setup_once() -> None:
 
 
 def test_broker_submit_paths_preserve_submitted_and_accepted_notifications() -> None:
-    class Owner(CoreStrategy):
+    class Owner(Strategy):
         def __init__(self) -> None:
             super().__init__()
             self.statuses = []
@@ -908,7 +907,7 @@ def test_bar_advance_plan_skips_empty_strategy_line_root() -> None:
 
 def test_strategy_pre_next_runs_static_bar_advance_plan() -> None:
     calls: list[int] = []
-    strategy = CoreStrategy()
+    strategy = Strategy()
     strategy._set_bar_advancers((calls.append,))
 
     strategy._pre_next(7)

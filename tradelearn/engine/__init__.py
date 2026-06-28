@@ -12,6 +12,14 @@ from tradelearn.engine.cerebro import Cerebro, OptReturn
 from tradelearn.engine.grid import GridSearchResult, grid_search
 from tradelearn.engine.indicators import Indicator
 from tradelearn.engine.observers import Observer
+from tradelearn.core.costs import (
+    BarRangeSlippage,
+    CNAStockCommission,
+    FixedCommission,
+    FixedSlippage,
+    PercentCommission,
+    PercentSlippage,
+)
 from tradelearn.engine.signal import (
     SIGNAL_LONG,
     SIGNAL_LONG_ANY,
@@ -62,14 +70,17 @@ def date2num(dt):
 az = analyzers
 obs = observers
 CommissionInfo = CommInfoBase
-pta = importlib.import_module("tradelearn.indicators.pta")
-tdx = importlib.import_module("tradelearn.indicators.tdx")
-tv = importlib.import_module("tradelearn.indicators.tv")
 
 
 def __getattr__(name: str) -> Any:
+    if name == "pta":
+        return importlib.import_module("tradelearn.indicators.pta")
     if name == "talib":
         return importlib.import_module("tradelearn.indicators.talib")
+    if name == "tdx":
+        return importlib.import_module("tradelearn.indicators.tdx")
+    if name == "tv":
+        return importlib.import_module("tradelearn.indicators.tv")
     raise AttributeError(f"module 'tradelearn.engine' has no attribute {name!r}")
 
 __all__ = [
@@ -101,6 +112,12 @@ __all__ = [
     "Observer",
     "obs",
     "CommissionInfo",
+    "BarRangeSlippage",
+    "CNAStockCommission",
+    "FixedCommission",
+    "FixedSlippage",
+    "PercentCommission",
+    "PercentSlippage",
     "pta",
     "talib",
     "tdx",

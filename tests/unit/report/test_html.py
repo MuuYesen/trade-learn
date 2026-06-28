@@ -359,7 +359,7 @@ def test_reporter_html_expands_research_parameters_in_experiment_section(tmp_pat
     assert stats["config"]["research"]["select_top"]["k"] == 10
 
 
-def test_reporter_html_adds_exposure_chart_for_multi_asset_positions(tmp_path) -> None:
+def test_reporter_html_adds_position_charts_for_multi_asset_positions(tmp_path) -> None:
     """Reporter.html adds the multi-asset exposure section when positions contain symbols."""
     path = tmp_path / "multi-asset-report.html"
 
@@ -383,11 +383,7 @@ def test_reporter_html_adds_exposure_chart_for_multi_asset_positions(tmp_path) -
     ).html(path)
 
     html = path.read_text()
-    assert "Position Weight Correlation" in html
-    assert "Exposure Heatmap" in html
     assert "<h2>Correlation Matrix</h2>" not in html
-    assert "<h2>Position Weight Correlation</h2>" not in html
-    assert "<h2>Exposure Heatmap</h2>" not in html
     assert "Holdings" in html
     assert "Long/Short Holdings" in html
     assert "Gross Leverage" in html

@@ -78,8 +78,25 @@ impl BacktestEngine {
         mult: f64,
         margin: f64,
         smart_matching: bool,
+        cn_a_stock_commission: bool,
+        cn_commission_rate: f64,
+        cn_min_commission: f64,
+        cn_stamp_tax_rate: f64,
+        cn_transfer_fee_rate: f64,
     ) -> Self {
         let total_bars = timestamps.len();
+        let commission = if cn_a_stock_commission {
+            CommissionModel::CNAStock(CNAStockCommission {
+                commission_rate: cn_commission_rate,
+                min_commission: cn_min_commission,
+                stamp_tax_rate: cn_stamp_tax_rate,
+                transfer_fee_rate: cn_transfer_fee_rate,
+            })
+        } else {
+            CommissionModel::Percent(PercentCommission {
+                ratio: commission_ratio,
+            })
+        };
         Self {
             timestamps,
             opens,
@@ -100,9 +117,7 @@ impl BacktestEngine {
                 slip_limit,
                 slip_out,
                 slippage: SlippageModel::Fixed(FixedSlippage { amount: 0.0 }),
-                commission: CommissionModel::Percent(PercentCommission {
-                    ratio: commission_ratio,
-                }),
+                commission,
                 mult,
                 margin,
             },

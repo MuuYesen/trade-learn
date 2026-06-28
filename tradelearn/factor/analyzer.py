@@ -23,10 +23,13 @@ class FactorAnalyzer:
     groups: pd.Series | None = None
     factor_quantiles: pd.Series | None = None
     periods: int = 252
+    return_period: int = 1
     quantiles: int = 5
 
     def __post_init__(self) -> None:
         """Promote single-index data to MultiIndex to support single-asset analysis."""
+        if self.return_period <= 0:
+            raise ValueError("return_period must be a positive integer")
         for attr in ("factor", "forward_returns", "prices", "groups", "factor_quantiles"):
             val = getattr(self, attr)
             if val is not None and not isinstance(val.index, pd.MultiIndex):
@@ -87,6 +90,7 @@ class FactorAnalyzer:
                 groups=groups,
                 factor_quantiles=factor_quantiles,
                 periods=annualization_periods,
+                return_period=period,
                 quantiles=quantiles,
             )
             for period in selected
@@ -204,12 +208,13 @@ class FactorAnalyzer:
     def quantile_stats(self) -> pd.DataFrame:
         """Return summary statistics by factor quantile."""
         returns = self.mean_return_by_quantile()
+        cumulative_returns = self._non_overlapping_returns(returns)
         result = pd.DataFrame(
             {
                 "mean": returns.mean(),
                 "std": returns.std(ddof=1),
                 "count": returns.count(),
-                "cumulative_return": (1.0 + returns).prod() - 1.0,
+                "cumulative_return": (1.0 + cumulative_returns).prod() - 1.0,
             }
         )
         result.index.name = "quantile"
@@ -245,7 +250,8 @@ class FactorAnalyzer:
 
     def quantile_cumulative_returns(self) -> pd.DataFrame:
         """Return compounded returns by factor quantile."""
-        return (1.0 + self.mean_return_by_quantile()).cumprod() - 1.0
+        returns = self._non_overlapping_returns(self.mean_return_by_quantile())
+        return (1.0 + returns).cumprod() - 1.0
 
     def compute_mean_returns_spread(
         self,
@@ -277,7 +283,8 @@ class FactorAnalyzer:
 
     def long_short_cumulative_returns(self) -> pd.DataFrame:
         """Return compounded long, short, and spread factor returns."""
-        return (1.0 + self.long_short_returns()).cumprod() - 1.0
+        returns = self._non_overlapping_returns(self.long_short_returns())
+        return (1.0 + returns).cumprod() - 1.0
 
     def factor_returns(
         self,
@@ -423,7 +430,7 @@ class FactorAnalyzer:
                 mean_returns_spread_values.mean() * self.periods
             ),
             "mean_returns_spread_cumulative_return": float(
-                (1.0 + mean_returns_spread_values).prod() - 1.0
+                (1.0 + self._non_overlapping_returns(mean_returns_spread_values)).prod() - 1.0
             ),
             "monotonicity": float(monotonicity_values["spearman_rho"]),
             "quantile_turnover_mean": float(quantile_turnover_values.mean().mean()),
@@ -569,6 +576,13 @@ class FactorAnalyzer:
 
         quantiles = aligned["factor"].groupby(level=0, group_keys=False).apply(_assign_quantiles)
         return aligned, quantiles
+
+    def _non_overlapping_returns(self, returns: pd.Series | pd.DataFrame) -> pd.Series | pd.DataFrame:
+        """Sample forward returns on non-overlapping horizons before compounding."""
+        values = returns.dropna(how="all") if isinstance(returns, pd.DataFrame) else returns.dropna()
+        if self.return_period == 1 or values.empty:
+            return values
+        return values.sort_index().iloc[:: self.return_period]
 
 
 @dataclass(frozen=True)

@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from tradelearn.core import ContractError
+from tradelearn.core.errors import ContractError
 from tradelearn.data import (
     BarsCache,
     CacheExpiredError,

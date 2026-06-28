@@ -5,7 +5,7 @@ import dataclasses
 import pandas as pd
 import pytest
 
-from tradelearn.core import (
+from tradelearn.core.broker_contracts import (
     AccountSnapshot,
     Fill,
     OrderAck,

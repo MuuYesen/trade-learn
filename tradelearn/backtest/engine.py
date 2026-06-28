@@ -330,6 +330,16 @@ def _resolve_close_by_data(
         datas = list(getattr(cerebro, "datas", []) or [])
     for data_index, data in enumerate(datas):
         name = str(getattr(data, "_name", None) or f"data{data_index}")
+        data_frame = getattr(data, "_frame", None)
+        if (
+            isinstance(data_frame, pd.DataFrame)
+            and "close" in data_frame.columns
+            and isinstance(data_frame.index, pd.DatetimeIndex)
+        ):
+            aligned = data_frame["close"].reindex(index).ffill()
+            if aligned.notna().any():
+                closes[name] = aligned.to_numpy(dtype=float, copy=False)
+                continue
         close_arr = getattr(data, "_close", None)
         if close_arr is None:
             continue
@@ -1032,6 +1042,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
             volumes = np.array(data.volume._values, dtype=np.float64)
 
         RustBacktestEngine = _load_rust_backtest_engine()
+        commission_model = runtime_config.commission_model
+        cn_a_stock_commission = type(commission_model).__name__ == "CNAStockCommission"
         rust_engine = RustBacktestEngine(
             timestamps,
             opens,
@@ -1052,6 +1064,11 @@ def run_backtest(cerebro: Any) -> list[Any]:
             float(cerebro.broker._mult),
             1.0,
             runtime_config.match_mode == "smart",
+            cn_a_stock_commission,
+            float(getattr(commission_model, "commission_rate", 0.00025)),
+            float(getattr(commission_model, "min_commission", 5.0)),
+            float(getattr(commission_model, "stamp_tax_rate", 0.001)),
+            float(getattr(commission_model, "transfer_fee_rate", 0.00002)),
         )
         cerebro.broker.bind_engine(rust_engine)
         if hasattr(cerebro.broker, "bind_datas"):

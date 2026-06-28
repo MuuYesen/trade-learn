@@ -5,7 +5,7 @@ import pandas as pd
 from tradelearn.backtest.broker import RustBroker
 from tradelearn.backtest.engine import _build_equity_from_fills
 from tradelearn.backtest.models import Order
-from tradelearn.backtest.strategy import Strategy
+from tradelearn.engine import Strategy
 
 
 class DummyData:

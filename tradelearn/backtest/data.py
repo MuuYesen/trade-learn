@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from tradelearn.core import StreamBar
+from tradelearn.core.contracts import StreamBar
 
 
 class SharedBarBuffer:

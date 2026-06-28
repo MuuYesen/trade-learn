@@ -6,7 +6,8 @@ from pathlib import Path
 import pandas as pd
 
 import tradelearn.research.portfolio as pf
-from tradelearn.core import BrokerEvent, StreamBar
+from tradelearn.core.broker_events import BrokerEvent
+from tradelearn.core.contracts import StreamBar
 from tradelearn.engine import Cerebro, Strategy, grid_search
 from tradelearn.engine.analyzer import Analyzer
 from tradelearn.engine.analyzers import MLflowAnalyzer

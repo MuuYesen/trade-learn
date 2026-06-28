@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from tradelearn.backtest.broker import RustBroker
-from tradelearn.core import BrokerEvent, BrokerEventPump
+from tradelearn.core.broker_events import BrokerEvent, BrokerEventPump
 
 
 def test_broker_event_pump_dispatches_polled_proxy_events() -> None:

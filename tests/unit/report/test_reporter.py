@@ -95,6 +95,46 @@ def test_reporter_summary_accepts_mapping_stats_and_existing_summary() -> None:
     assert "information_ratio" not in summary
 
 
+def test_reporter_uses_equal_weight_market_data_as_default_benchmark() -> None:
+    """Reports use equal-weight buy-and-hold when no benchmark is supplied."""
+    dates = pd.date_range("2024-01-01", periods=3, tz="UTC")
+    market_data = {
+        "AAA": pd.DataFrame({"close": [100.0, 110.0, 121.0]}, index=dates),
+        "BBB": pd.DataFrame({"close": [50.0, 45.0, 49.5]}, index=dates),
+    }
+    reporter = Reporter(_stats(), periods=252, market_data=market_data)
+
+    benchmark = reporter.default_benchmark()
+
+    expected = pd.Series([0.0, 0.0, 0.1], index=dates, name="Equal Weight")
+    pd.testing.assert_series_equal(benchmark, expected, check_freq=False)
+
+
+def test_reporter_exposure_normalizes_mixed_timezone_position_dates() -> None:
+    """Position exposure should tolerate mixed tz-aware and tz-naive timestamps."""
+    positions = pd.DataFrame(
+        {
+            "date": [
+                pd.Timestamp("2024-01-01"),
+                pd.Timestamp("2024-01-01", tz="UTC"),
+                pd.Timestamp("2024-01-02"),
+            ],
+            "symbol": ["AAA", "BBB", "AAA"],
+            "value": [60.0, 40.0, 100.0],
+        }
+    )
+    reporter = Reporter({"returns": _returns(), "trades": _trades(), "positions": positions})
+
+    exposure = reporter.exposure()
+
+    assert list(exposure.index) == [
+        pd.Timestamp("2024-01-01", tz="UTC"),
+        pd.Timestamp("2024-01-02", tz="UTC"),
+    ]
+    assert exposure.loc[pd.Timestamp("2024-01-01", tz="UTC"), "AAA"] == pytest.approx(0.6)
+    assert exposure.loc[pd.Timestamp("2024-01-01", tz="UTC"), "BBB"] == pytest.approx(0.4)
+
+
 def test_reporter_summary_counts_closed_trades_when_available() -> None:
     """Reporter summary uses the same closed-trade count as the backtest engine."""
     stats = _stats()
@@ -551,8 +591,6 @@ def test_reporter_chart_facade_returns_bokeh_figures() -> None:
         reporter.rolling_sharpe_chart(window=3),
         reporter.rolling_beta_chart(benchmark, window=3),
         reporter.trade_distribution_chart(bins=2),
-        reporter.exposure_chart(),
-        reporter.correlation_matrix_chart(),
         reporter.factor_quantile_returns_chart(),
         reporter.factor_long_short_returns_chart(),
         reporter.factor_ic_chart(),

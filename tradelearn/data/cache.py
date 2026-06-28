@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from tradelearn.core import DataError
+from tradelearn.core.errors import DataError
 from tradelearn.data.bars import bars_fingerprint
 
 

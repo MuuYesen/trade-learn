@@ -255,6 +255,45 @@ def test_factor_analyzer_summary_contains_stable_keys() -> None:
     assert summary["ic_dates"] == analyzer.factor_information_coefficient().count()
 
 
+def test_factor_analyzer_spread_cumulative_return_uses_non_overlapping_periods() -> None:
+    """summary compounds spread returns on non-overlapping forward-return windows."""
+    rows = []
+    factor_values = []
+    forward_values = []
+    for i, spread in enumerate([0.10, 0.20, 0.30, 0.40, 0.50]):
+        date = f"2024-01-0{i + 1}"
+        rows.extend([(date, "LOW"), (date, "HIGH")])
+        factor_values.extend([1.0, 2.0])
+        forward_values.extend([0.0, spread])
+    index = pd.MultiIndex.from_tuples(
+        [(pd.Timestamp(date), symbol) for date, symbol in rows],
+        names=["date", "symbol"],
+    )
+    factor = pd.Series(factor_values, index=index)
+    forward = pd.Series(forward_values, index=index)
+    analyzer = FactorAnalyzer(
+        factor,
+        forward_returns=forward,
+        quantiles=2,
+        return_period=2,
+    )
+
+    summary = analyzer.summary()
+
+    expected = (1.10 * 1.30 * 1.50) - 1.0
+    full_overlapping = (1.10 * 1.20 * 1.30 * 1.40 * 1.50) - 1.0
+    assert math.isclose(
+        summary["mean_returns_spread_cumulative_return"],
+        expected,
+        rel_tol=1e-12,
+    )
+    assert not math.isclose(
+        summary["mean_returns_spread_cumulative_return"],
+        full_overlapping,
+        rel_tol=1e-12,
+    )
+
+
 def test_factor_analyzer_quantile_stats_summarizes_groups() -> None:
     """quantile_stats summarizes grouped forward returns for reports."""
     factor, forward = _factor_and_forward_returns()

@@ -16,7 +16,7 @@ from tradelearn.backtest.models import Stats, SummaryDict
 from tradelearn.backtest._optimize import expand_grid
 from tradelearn.backtest.reporting import reporter_from_stats
 from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
-from tradelearn.core import get_logger
+from tradelearn.core.logging import get_logger
 from tradelearn.utils.console import smart_tqdm as tqdm, smart_print
 
 from .strategy import Strategy

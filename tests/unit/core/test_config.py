@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from tradelearn.core import ConfigurationError
 from tradelearn.core.config import TradelearnConfig, load_config
+from tradelearn.core.errors import ConfigurationError
 
 
 def test_load_config_merges_user_project_and_environment(tmp_path, monkeypatch) -> None:

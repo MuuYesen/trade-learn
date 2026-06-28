@@ -219,7 +219,7 @@ class DataFeed(Protocol):
 每个契约对应一个 `validate_xxx` 函数，**只在模块边界做一次校验**，模块内部输出不再验证（信任自家代码）：
 
 ```python
-from tradelearn.core import validate_bars
+from tradelearn.core.contracts import validate_bars
 
 bars = validate_bars(df)   # 校验 MultiIndex、必填列、tz-awareness，违反即抛错
 ```

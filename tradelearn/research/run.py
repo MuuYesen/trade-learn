@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-from tradelearn.core import get_logger
+from tradelearn.core.logging import get_logger
 
 LOGGER = get_logger("research")
 

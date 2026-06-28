@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from tradelearn.backtest.targets import TargetWeightSnapshot, build_target_weight_intents
@@ -106,3 +108,23 @@ def test_target_weight_intents_skip_tiny_or_zero_qty_orders() -> None:
     )
 
     assert intents == []
+
+
+def test_target_weight_intents_skip_nan_price_snapshots() -> None:
+    data = {"AAA": object(), "BBB": object()}
+    snapshots = {
+        "AAA": TargetWeightSnapshot(price=math.nan, size=10.0),
+        "BBB": TargetWeightSnapshot(price=10.0, size=0.0),
+    }
+
+    intents = build_target_weight_intents(
+        {"AAA": 0.5, "BBB": 0.5},
+        data_by_symbol=data,
+        snapshots=snapshots,
+        equity=1000.0,
+        close_missing=True,
+    )
+
+    assert [(intent.symbol, intent.side, intent.qty) for intent in intents] == [
+        ("BBB", "buy", 50.0)
+    ]

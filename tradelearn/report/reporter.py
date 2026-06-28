@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 import tradelearn.metrics as metrics
-from tradelearn.core import get_logger
+from tradelearn.core.logging import get_logger
 from tradelearn.report import charts
 from tradelearn.report.analytics import (
     active_return,
@@ -340,7 +340,7 @@ class Reporter:
         """Return a Bokeh trade distribution chart."""
         return charts.trade_distribution(self.trade_distribution(bins=bins))
 
-    def market_replay_chart(self):
+    def market_replay_chart(self, benchmark: pd.Series | None = None):
         """Return a market replay chart when market data exists."""
         if self.market_data is None:
             return None
@@ -350,15 +350,12 @@ class Reporter:
             self._get("fills", default=pd.DataFrame()),
             self._get("equity", default=pd.Series(dtype="float64")),
             positions=positions,
+            benchmark=benchmark if benchmark is not None else self.default_benchmark(),
         )
 
-    def price_trades_chart(self):
+    def price_trades_chart(self, benchmark: pd.Series | None = None):
         """Return the market replay chart; kept as an internal compatibility alias."""
-        return self.market_replay_chart()
-
-    def exposure_chart(self):
-        """Return a Bokeh exposure chart."""
-        return charts.exposure(self.exposure())
+        return self.market_replay_chart(benchmark=benchmark)
 
     def holdings_chart(self):
         """Return a Bokeh holdings chart."""
@@ -398,10 +395,6 @@ class Reporter:
     def transaction_time_histogram_chart(self):
         """Return a Bokeh transaction time histogram."""
         return charts.transaction_time_histogram(self._get("fills", default=pd.DataFrame()))
-
-    def correlation_matrix_chart(self):
-        """Return a Bokeh correlation matrix chart."""
-        return charts.correlation_matrix(self.correlation_matrix())
 
     def factor_quantile_returns_chart(self):
         """Return a Bokeh factor quantile returns chart."""
@@ -517,6 +510,42 @@ class Reporter:
             return self.stats.get(name, default)
         return default
 
+    def default_benchmark(self) -> pd.Series | None:
+        """Return equal-weight buy-and-hold returns from report market data."""
+        if self.market_data is None:
+            return None
+        if isinstance(self.market_data, Mapping):
+            prices = []
+            for frame in self.market_data.values():
+                close = self._close_series(frame)
+                if close is not None and not close.empty:
+                    prices.append(close / close.iloc[0])
+            if not prices:
+                return None
+            base = pd.concat(prices, axis=1).sort_index().ffill().mean(axis=1)
+        else:
+            close = self._close_series(self.market_data)
+            if close is None or close.empty:
+                return None
+            base = close / close.iloc[0]
+        returns = base.pct_change().fillna(0.0).rename("Equal Weight")
+        returns.index.name = getattr(base.index, "name", None)
+        return returns
+
+    @staticmethod
+    def _close_series(frame: Any) -> pd.Series | None:
+        """Return a normalized close series from a market data frame."""
+        data = pd.DataFrame(frame).copy()
+        if data.empty or "close" not in data:
+            return None
+        close = pd.to_numeric(data["close"], errors="coerce")
+        index = pd.to_datetime(data.index, errors="coerce")
+        close.index = index
+        close = close.dropna().sort_index()
+        close = close[close.index.notna()]
+        close = close[close.ne(0)]
+        return close if not close.empty else None
+
     @staticmethod
     def _market_data_copy(market_data: Any | None) -> Any | None:
         """Copy a single market frame or a symbol-to-frame mapping."""
@@ -568,11 +597,13 @@ class Reporter:
             return pd.DataFrame()
         frame = pd.DataFrame(positions).copy()
         if {"date", "symbol", "value"}.issubset(frame.columns):
-            return frame
+            return Reporter._normalize_position_dates(frame)
         if {"datetime", "symbol", "value"}.issubset(frame.columns):
-            return frame.rename(columns={"datetime": "date"})
+            return Reporter._normalize_position_dates(frame.rename(columns={"datetime": "date"}))
         if {"datetime", "data", "value"}.issubset(frame.columns):
-            return frame.rename(columns={"datetime": "date", "data": "symbol"})
+            return Reporter._normalize_position_dates(
+                frame.rename(columns={"datetime": "date", "data": "symbol"})
+            )
         if frame.empty:
             return pd.DataFrame()
         original_index_name = frame.index.name
@@ -592,7 +623,16 @@ class Reporter:
             var_name="symbol",
             value_name="_position_value",
         )
-        return result.rename(columns={"_position_value": "value"})
+        return Reporter._normalize_position_dates(result.rename(columns={"_position_value": "value"}))
+
+    @staticmethod
+    def _normalize_position_dates(frame: pd.DataFrame) -> pd.DataFrame:
+        """Return position rows with UTC-normalized dates."""
+        if "date" not in frame:
+            return frame
+        result = frame.copy()
+        result["date"] = pd.to_datetime(result["date"], errors="coerce", utc=True)
+        return result.dropna(subset=["date"])
 
     @staticmethod
     def _fills_from_transactions(transactions: pd.DataFrame | None) -> pd.DataFrame:

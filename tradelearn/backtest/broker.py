@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from tradelearn.backtest.models import ExecutedInfo, Order, Position, Trade, _notify_order
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
-from tradelearn.core import BrokerEventPump
+from tradelearn.core.broker_events import BrokerEventPump
 
 if TYPE_CHECKING:
     from tradelearn.backtest.strategy import Strategy

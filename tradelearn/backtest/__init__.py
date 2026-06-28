@@ -1,47 +1,7 @@
-from tradelearn.backtest.event_runner import (
-    EventRunner,
-    EventSnapshot,
-    HistoricalDriver,
-    LiveDriver,
-    PaperDriver,
-)
-from tradelearn.backtest.models import (
-    BarRangeSlippage,
-    BarSnapshot,
-    CNAStockCommission,
-    CommissionModel,
-    ExecutedInfo,
-    FixedCommission,
-    FixedSlippage,
-    Order,
-    PercentCommission,
-    PercentSlippage,
-    Position,
-    SlippageModel,
-    Stats,
-    TieredCommission,
-    Trade,
-)
+"""Internal backtesting implementation package.
 
-__all__ = [
-    "BarRangeSlippage",
-    "BarSnapshot",
-    "CNAStockCommission",
-    "CommissionModel",
-    "ExecutedInfo",
-    "EventRunner",
-    "EventSnapshot",
-    "HistoricalDriver",
-    "FixedCommission",
-    "FixedSlippage",
-    "Order",
-    "PercentCommission",
-    "PercentSlippage",
-    "Position",
-    "LiveDriver",
-    "PaperDriver",
-    "SlippageModel",
-    "Stats",
-    "TieredCommission",
-    "Trade",
-]
+User-facing APIs are exposed through ``tradelearn.engine`` and
+``tradelearn.lite``.
+"""
+
+__all__: list[str] = []

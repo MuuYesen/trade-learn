@@ -3,10 +3,13 @@
 import importlib
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from tradelearn.factor.alpha import alpha101
+
+alpha101_module = importlib.import_module("tradelearn.factor.alpha.alpha101")
 
 _LEGACY_ALPHA101_PATH = (
     Path(__file__).resolve().parents[3]
@@ -182,6 +185,62 @@ def test_alpha101_accepts_provider_bars_contract() -> None:
     assert set(result.columns) == {"date", "symbol", "alpha101_101"}
     assert set(result["symbol"]) == {"AAA", "BBB", "CCC"}
     assert result["alpha101_101"].notna().any()
+
+
+def test_ts_rank_does_not_call_scipy_rankdata_for_each_window(monkeypatch) -> None:
+    """Rolling time-series rank avoids the slow scipy per-window callback path."""
+    frame = pd.DataFrame(
+        {
+            "AAA": [1.0, 3.0, 2.0, np.nan, 4.0, 4.0],
+            "BBB": [5.0, 4.0, 4.0, 2.0, 1.0, 3.0],
+        },
+        index=pd.date_range("2024-01-01", periods=6),
+    )
+
+    def fail_rankdata(*args, **kwargs):
+        raise AssertionError("rankdata should not be called by _ts_rank")
+
+    monkeypatch.setattr(alpha101_module, "rankdata", fail_rankdata)
+
+    result = alpha101_module._ts_rank(frame, 3)
+
+    expected = pd.DataFrame(
+        {
+            "AAA": [np.nan, np.nan, 2.0, np.nan, np.nan, np.nan],
+            "BBB": [np.nan, np.nan, 1.0, 1.0, 1.0, 3.0],
+        },
+        index=frame.index,
+    )
+    pd.testing.assert_frame_equal(result, expected)
+
+
+def test_decay_linear_does_not_call_pandas_rolling_apply(monkeypatch) -> None:
+    """Linear decay avoids pandas rolling.apply Python callback overhead."""
+    frame = pd.DataFrame(
+        {
+            "AAA": [1.0, 2.0, 3.0, 4.0],
+            "BBB": [2.0, np.nan, 6.0, 8.0],
+        },
+        index=pd.date_range("2024-01-01", periods=4),
+    )
+
+    from pandas.core.window.rolling import Rolling
+
+    def fail_apply(self, *args, **kwargs):
+        raise AssertionError("rolling.apply should not be called by _decay_linear")
+
+    monkeypatch.setattr(Rolling, "apply", fail_apply)
+
+    result = alpha101_module._decay_linear(frame, 3)
+
+    expected = pd.DataFrame(
+        {
+            "AAA": [np.nan, np.nan, (1.0 + 4.0 + 9.0) / 6.0, (2.0 + 6.0 + 12.0) / 6.0],
+            "BBB": [np.nan, np.nan, np.nan, np.nan],
+        },
+        index=frame.index,
+    )
+    pd.testing.assert_frame_equal(result, expected)
 
 
 def _legacy_alpha101(data: pd.DataFrame, names: list[str]) -> pd.DataFrame:

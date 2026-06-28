@@ -22,7 +22,7 @@ flowchart TB
 
     runtime[共享回测 Runtime<br/>tradelearn.backtest<br/>Stats / Broker / Runner Glue]
 
-    core[中性契约<br/>tradelearn.core<br/>Bars / StreamBar / Broker Protocol]
+    core[内部中性契约<br/>tradelearn.core<br/>Bars / StreamBar / Broker Protocol]
 
     subgraph rust[Rust 高频内核]
         runner[Bar Runner<br/>Single-Symbol / Multi-Data Clock]
@@ -67,7 +67,7 @@ flowchart TB
     `lite` 并非 `engine` 的子集，而是另一种工作流。两者必须共享同一套底层 Runtime 和 `Stats` 结果集，确保同一策略在两套语法下结果完全一致。
 
     ### 3. 生产语义导向 (Production-Ready)
-    所有的回测逻辑必须能够无缝映射到生产环境。RustBroker 仅用于回测，实盘适配器通过 `core` 定义的中性协议进行热插拔，确保回测与实盘“同一套逻辑”。
+    所有的回测逻辑必须能够无缝映射到生产环境。RustBroker 仅用于回测，实盘适配器通过内部 `core` 定义的中性协议进行热插拔，确保回测与实盘“同一套逻辑”。
 
 ---
 
@@ -81,5 +81,6 @@ flowchart TB
 
 ## 相关阅读
 - [快速开始](../quickstart.md)：3 分钟跑通第一个策略。
+- [API 边界](api-boundary.md)：公开 facade 与内部实现层的划分。
 - [Runtime 与 Runner](runtime.md)：了解 Rust 是如何调度计算任务的。
 - [契约与边界](../internals/contracts.md)：深入 Bar、Order、Fill 的字段定义。

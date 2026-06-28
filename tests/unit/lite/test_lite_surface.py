@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
 import logging
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
-import tradelearn.lite as tl
 import tradelearn.engine as bt
+import tradelearn.lite as tl
 from tradelearn.lite import Backtest, Strategy
 from tradelearn.lite.backtest import _can_skip_normalize_data
 from tradelearn.research import ResearchResult
@@ -647,6 +647,58 @@ def test_lite_research_result_weights_current_bar_slice_records_result() -> None
         ("AAA", 9.0),
         ("BBB", 19.0),
     ]
+
+
+def test_lite_stats_equity_aligns_short_multi_asset_feeds() -> None:
+    full_dates = pd.date_range("2026-01-01", periods=5)
+    data = {
+        "AAA": pd.DataFrame(
+            {
+                "open": [100.0] * 5,
+                "high": [100.0] * 5,
+                "low": [100.0] * 5,
+                "close": [100.0] * 5,
+                "volume": [1000.0] * 5,
+            },
+            index=full_dates,
+        ),
+        "BBB": pd.DataFrame(
+            {
+                "open": [100.0, 80.0, 70.0, 90.0],
+                "high": [100.0, 80.0, 70.0, 90.0],
+                "low": [100.0, 80.0, 70.0, 90.0],
+                "close": [100.0, 80.0, 70.0, 90.0],
+                "volume": [1000.0] * 4,
+            },
+            index=full_dates[1:],
+        ),
+    }
+    weights = pd.Series(
+        [1.0],
+        index=pd.MultiIndex.from_tuples(
+            [(full_dates[1], "BBB")],
+            names=["timestamp", "symbol"],
+        ),
+        name="weight",
+    )
+    research = ResearchResult(name="short-feed-weights", weights=weights)
+
+    class LiteStrategy(Strategy):
+        def init(self) -> None:
+            self.start_on_bar(0)
+
+        def next(self) -> None:
+            if self.research_result.weights.has_current():
+                self.target_weights(self.research_result.weights[0], close_missing=True)
+
+    stats = Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=False).run(
+        research_result=research
+    )
+
+    assert stats.equity.nunique() > 1
+    assert stats.equity.loc[full_dates[3]] == 900.0
+    assert stats.summary["max_drawdown"] > 0.0
+    assert stats.summary["volatility"] > 0.0
 
 
 def test_lite_research_result_weights_current_bar_requires_time_panel() -> None:

@@ -4,10 +4,10 @@ from collections import OrderedDict
 from typing import Any
 
 from tradelearn.backtest.feed import is_panel_ohlcv_frame, panel_symbol_level
-from tradelearn.backtest.models import FixedCommission, FixedSlippage
 from tradelearn.backtest.reporting import reporter_from_results
 from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
-from tradelearn.core import get_logger
+from tradelearn.core.logging import get_logger
+from tradelearn.core.costs import FixedCommission, FixedSlippage
 from tradelearn.engine.analyzer import AnalyzerCollection
 from tradelearn.engine.base import TimeFrame
 from tradelearn.engine.datafeed import DataFeed
@@ -483,7 +483,7 @@ class Cerebro:
 
     def _run_event_mode(self) -> list[Strategy]:
         from tradelearn.backtest.event_runner import EventRunner, LiveDriver, PaperDriver
-        from tradelearn.core import BrokerEventPump
+        from tradelearn.core.broker_events import BrokerEventPump
 
         self._prepare_strategy_context()
         strategy_cls, args, kwargs = self.strats[0]

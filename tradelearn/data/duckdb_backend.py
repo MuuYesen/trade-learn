@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-from tradelearn.core import validate_bars
+from tradelearn.core.contracts import validate_bars
 from tradelearn.data.bars import REQUIRED_COLUMNS
 
 

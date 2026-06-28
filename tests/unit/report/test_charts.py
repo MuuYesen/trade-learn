@@ -2,17 +2,15 @@
 
 import pandas as pd
 from bokeh.plotting import figure
-from bokeh.models import BoxAnnotation, ColorBar, FixedTicker, GlyphRenderer, HoverTool, Legend, Spacer, Span
-from bokeh.models.glyphs import HBar, MultiLine, Rect, Scatter, Segment, VBar
+from bokeh.models import BoxAnnotation, FixedTicker, GlyphRenderer, HoverTool, Legend, Spacer, Span
+from bokeh.models.glyphs import HBar, MultiLine, Scatter, Segment, VBar
 from bokeh.models.widgets import Select
 
 from tradelearn.report.charts import (
     annual_returns,
-    correlation_matrix,
     daily_volume,
     drawdown,
     equity_curve,
-    exposure,
     factor_events_distribution,
     factor_ic,
     factor_ic_histogram,
@@ -59,8 +57,6 @@ def test_report_charts_return_bokeh_figures() -> None:
         return_quantiles(_series("returns")),
         rolling_sharpe(_series("rolling_sharpe")),
         trade_distribution(_trade_distribution()),
-        exposure(_exposure()),
-        correlation_matrix(_correlation()),
         quantile_returns(_quantile_returns()),
         factor_quantile_returns_bar(_quantile_stats()),
         factor_quantile_returns_violin(_quantile_forward_returns()),
@@ -86,36 +82,9 @@ def test_report_charts_return_bokeh_figures() -> None:
     assert all(isinstance(plot, type(figure())) for plot in plots)
 
 
-def test_exposure_chart_renders_many_assets_as_heatmap() -> None:
-    """Exposure should stay readable for broad multi-asset reports."""
-    symbols = [
-        "AAPL", "ADBE", "AMD", "AMZN", "AVGO",
-        "COST", "CRM", "GOOGL", "META", "MSFT",
-        "NFLX", "NVDA", "ORCL", "QCOM", "TSLA",
-    ]
-    frame = pd.DataFrame(
-        {symbol: [0.0, 0.2] for symbol in symbols},
-        index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
-    )
-
-    plot = exposure(frame)
-
-    rect_renderers = [
-        renderer
-        for renderer in plot.renderers
-        if isinstance(renderer, GlyphRenderer) and isinstance(renderer.glyph, Rect)
-    ]
-    assert plot.title.text == "Exposure Heatmap"
-    assert list(plot.y_range.factors) == list(reversed(symbols))
-    assert rect_renderers
-    assert any(isinstance(item, ColorBar) for item in plot.right)
-    assert any(isinstance(tool, HoverTool) for tool in plot.tools)
-
-
 def test_report_charts_use_report_title_style() -> None:
     """Bokeh titles should match the report visual system."""
     static_plots = [
-        correlation_matrix(_correlation()),
         monthly_heatmap(_monthly_returns()),
     ]
 
@@ -360,25 +329,6 @@ def test_daily_volume_sums_absolute_trade_size() -> None:
     plot = daily_volume(transactions)
 
     assert list(plot.renderers[0].data_source.data["volume"]) == [140.0]
-
-
-def test_correlation_matrix_title_names_weight_correlation() -> None:
-    """The matrix is based on portfolio weights, not asset returns."""
-    plot = correlation_matrix(_correlation())
-
-    assert plot.title.text == "Position Weight Correlation"
-
-
-def test_correlation_matrix_displays_compact_symbols() -> None:
-    """Exchange-prefixed TradeLearn symbols should not crowd report axes."""
-    symbols = ["NASDAQ:AAPL", "NASDAQ:MSFT"]
-    matrix = pd.DataFrame([[1.0, 0.2], [0.2, 1.0]], index=symbols, columns=symbols)
-
-    plot = correlation_matrix(matrix)
-    source = plot.renderers[0].data_source.data
-
-    assert list(plot.x_range.factors) == ["AAPL", "MSFT"]
-    assert "NASDAQ:AAPL" in set(source["x_symbol"])
 
 
 def test_market_replay_does_not_connect_trade_markers_with_multiline() -> None:
@@ -660,6 +610,42 @@ def test_trade_activity_uses_one_trade_hover() -> None:
     assert ("Date", "@date{%F %T}") in hover_tools[0].tooltips
 
 
+def test_portfolio_replay_draws_named_benchmark_on_equity_panel() -> None:
+    """Portfolio replay equity should show the explicit benchmark curve."""
+    benchmark = pd.Series(
+        [0.0, 0.02, -0.01],
+        index=pd.date_range("2024-01-01", periods=3, tz="UTC"),
+        name="HS300",
+    )
+
+    replay = market_replay(
+        {"AAA": _market_data(), "BBB": _market_data() * 1.5},
+        fills=_multi_asset_fills(),
+        equity=_series("equity"),
+        benchmark=benchmark,
+    )
+    equity = _find_plot(replay, "Equity")
+    labels = [
+        getattr(item.label, "value", None)
+        for legend in equity.above
+        if isinstance(legend, Legend)
+        for item in legend.items
+    ]
+    benchmark_renderer = next(
+        renderer
+        for renderer in equity.renderers
+        if isinstance(renderer, GlyphRenderer)
+        and "benchmark_equity" in renderer.data_source.data
+    )
+
+    assert "HS300" in labels
+    assert list(benchmark_renderer.data_source.data["benchmark_equity"]) == [
+        1.0,
+        1.02,
+        1.0098,
+    ]
+
+
 def test_portfolio_replay_syncs_crosshair_across_panels() -> None:
     """Portfolio panels should share a vertical crosshair for date comparison."""
     replay = market_replay(
@@ -884,17 +870,6 @@ def _trade_distribution() -> pd.DataFrame:
     result.attrs["mean"] = 0.2
     result.attrs["median"] = 0.3
     return result
-
-
-def _exposure() -> pd.DataFrame:
-    return pd.DataFrame(
-        {"AAA": [0.6, 0.4], "BBB": [0.4, 0.6]},
-        index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
-    )
-
-
-def _correlation() -> pd.DataFrame:
-    return pd.DataFrame({"AAA": [1.0, -1.0], "BBB": [-1.0, 1.0]}, index=["AAA", "BBB"])
 
 
 def _quantile_returns() -> pd.DataFrame:

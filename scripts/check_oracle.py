@@ -15,7 +15,7 @@ from scripts.build_golden import (  # noqa: E402
     provider_statuses,
     validate_reference,
 )
-from tradelearn.core import GoldenDataError  # noqa: E402
+from tradelearn.core.errors import GoldenDataError  # noqa: E402
 
 
 def main() -> int:

@@ -34,7 +34,7 @@ trade-learn 2.0 的主能力是事件驱动回测；paper / live 的边界已经
 `BrokerEventPump` 用来把外部 broker 的轮询结果标准化成框架事件。
 
 ```python
-from tradelearn.core import BrokerEvent, BrokerEventPump
+from tradelearn.core.broker_events import BrokerEvent, BrokerEventPump
 
 
 def poller():

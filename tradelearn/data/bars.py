@@ -8,7 +8,8 @@ from typing import Literal
 
 import pandas as pd
 
-from tradelearn.core import ContractError, validate_bars
+from tradelearn.core.contracts import validate_bars
+from tradelearn.core.errors import ContractError
 
 Market = Literal["CN", "US", "HK", "CRYPTO"]
 Frequency = Literal["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]

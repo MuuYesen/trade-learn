@@ -137,9 +137,18 @@ pub struct PercentCommission {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CNAStockCommission {
+    pub commission_rate: f64,
+    pub min_commission: f64,
+    pub stamp_tax_rate: f64,
+    pub transfer_fee_rate: f64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CommissionModel {
     Fixed(FixedCommission),
     Percent(PercentCommission),
+    CNAStock(CNAStockCommission),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

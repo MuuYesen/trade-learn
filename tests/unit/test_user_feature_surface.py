@@ -66,8 +66,9 @@ def test_engine_plot_and_html_use_reporter_after_run(tmp_path: Path) -> None:
     assert not strategy.stats.positions.empty
     assert len(charts) == 1
     assert result == path
-    assert "Summary Stats" in path.read_text()
-    assert "Portfolio Replay" in path.read_text()
+    html = path.read_text()
+    assert "TRADELEARN BACKTEST REPORT" in html
+    assert "Summary Stats" in html
     assert hasattr(cerebro, "report")
     assert not hasattr(cerebro, "html")
 
@@ -98,8 +99,9 @@ def test_lite_plot_and_html_use_shared_reporter_after_run(tmp_path: Path) -> Non
     assert stats["total_trades"] >= 0
     assert len(charts) == 1
     assert result == path
-    assert "Summary Stats" in path.read_text()
-    assert "Price / Trades" in path.read_text()
+    html = path.read_text()
+    assert "TRADELEARN BACKTEST REPORT" in html
+    assert "Summary Stats" in html
     assert hasattr(backtest, "report")
     assert not hasattr(backtest, "html")
 
@@ -160,6 +162,7 @@ def test_oco_multitimeframe_multiasset_model_scorer_and_metrics_surfaces() -> No
 
 def test_user_facades_hide_internal_helper_functions() -> None:
     import tradelearn.backtest as backtest
+    import tradelearn.core as core
     import tradelearn.data as data
     import tradelearn.factor as factor
     import tradelearn.factor.alpha as alpha
@@ -170,19 +173,6 @@ def test_user_facades_hide_internal_helper_functions() -> None:
         "normalize_bars",
         "resolve_tdx_symbol",
         "resample_frame",
-    }
-    backtest_hidden = {
-        "_notify_order",
-        "run_backtest",
-        "BatchIndicatorCache",
-        "DelayedLine",
-        "IndicatorCache",
-        "IndicatorLine",
-        "LineSeries",
-        "Lines",
-        "RollingBarBuffer",
-        "RollingIndicatorCache",
-        "SharedBarBuffer",
     }
     factor_hidden = {
         "ALPHA101_SKIPPED",
@@ -199,8 +189,11 @@ def test_user_facades_hide_internal_helper_functions() -> None:
 
     assert all(not hasattr(data, name) for name in data_hidden)
     assert data_hidden.isdisjoint(data.__all__)
-    assert all(not hasattr(backtest, name) for name in backtest_hidden)
-    assert backtest_hidden.isdisjoint(backtest.__all__)
+    assert backtest.__all__ == []
+    assert core.__all__ == []
+    assert not hasattr(core, "OrderRequest")
+    assert not hasattr(core, "BrokerEvent")
+    assert not hasattr(core, "get_logger")
     assert all(not hasattr(factor, name) for name in factor_hidden)
     assert factor_hidden.isdisjoint(factor.__all__)
     assert all(not hasattr(alpha, name) for name in factor_hidden)

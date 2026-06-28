@@ -39,6 +39,7 @@ dependencies = [
     "tqdm",
     "typer",
     "pyyaml",
+    "numba>=0.65.1",
 ]
 
 [project.urls]

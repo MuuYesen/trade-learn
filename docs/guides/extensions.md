@@ -235,7 +235,7 @@ Reporter.from_returns(returns).report("returns_report.html")
 实盘 broker 不复用 RustBroker 状态机。外部适配器实现 `core` 的中性协议，并通过 `BrokerEventPump` 把成交、撤单、拒单回流给策略。
 
 ```python
-from tradelearn.core import AccountSnapshot, OrderAck, OrderRequest
+from tradelearn.core.broker_contracts import AccountSnapshot, OrderAck, OrderRequest
 
 
 class MyLiveBroker:

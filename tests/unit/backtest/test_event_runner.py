@@ -3,18 +3,15 @@ from __future__ import annotations
 import pandas as pd
 
 import tradelearn.backtest as backtest
-from tradelearn.backtest import HistoricalDriver as PublicHistoricalDriver
-from tradelearn.backtest import LiveDriver as PublicLiveDriver
-from tradelearn.backtest import PaperDriver as PublicPaperDriver
 from tradelearn.backtest.event_runner import (
     EventRunner,
     HistoricalDriver,
     LiveDriver,
     PaperDriver,
 )
-from tradelearn.backtest.strategy import Strategy
-from tradelearn.core import BrokerEvent, BrokerEventPump, StreamBar
-from tradelearn.engine import Cerebro
+from tradelearn.core.broker_events import BrokerEvent, BrokerEventPump
+from tradelearn.core.contracts import StreamBar
+from tradelearn.engine import Cerebro, Strategy
 
 
 def test_event_runner_drives_single_live_bar_and_broker_events() -> None:
@@ -55,12 +52,16 @@ def test_event_runner_drives_single_live_bar_and_broker_events() -> None:
 
 
 def test_backtest_namespace_exposes_event_runner_drivers() -> None:
+    assert backtest.__all__ == []
+    assert not hasattr(backtest, "HistoricalDriver")
+    assert not hasattr(backtest, "PaperDriver")
+    assert not hasattr(backtest, "LiveDriver")
     assert not hasattr(backtest, "BatchIndicatorCache")
     assert not hasattr(backtest, "RollingIndicatorCache")
     assert not hasattr(backtest, "RollingBarBuffer")
-    assert PublicHistoricalDriver is HistoricalDriver
-    assert PublicPaperDriver is PaperDriver
-    assert PublicLiveDriver is LiveDriver
+    assert HistoricalDriver.__name__ == "HistoricalDriver"
+    assert PaperDriver.__name__ == "PaperDriver"
+    assert LiveDriver.__name__ == "LiveDriver"
 
 
 def test_cerebro_accepts_backtest_paper_live_modes() -> None:

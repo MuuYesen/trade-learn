@@ -2,11 +2,9 @@
 
 from tradelearn.report.charts.core import (
     annual_returns,
-    correlation_matrix,
     daily_volume,
     drawdown,
     equity_curve,
-    exposure,
     factor_events_distribution,
     factor_ic,
     factor_ic_histogram,
@@ -41,10 +39,8 @@ from tradelearn.report.charts.core import (
 
 __all__ = [
     "annual_returns",
-    "correlation_matrix",
     "drawdown",
     "equity_curve",
-    "exposure",
     "daily_volume",
     "factor_events_distribution",
     "factor_ic_histogram",

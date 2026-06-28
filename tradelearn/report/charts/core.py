@@ -13,7 +13,6 @@ from bokeh.events import MouseLeave, MouseMove
 from bokeh.layouts import column, gridplot
 from bokeh.models import (
     BoxAnnotation,
-    ColorBar,
     ColumnDataSource,
     CrosshairTool,
     CustomJS,
@@ -21,7 +20,6 @@ from bokeh.models import (
     FixedTicker,
     HoverTool,
     Legend,
-    LinearColorMapper,
     NumeralTickFormatter,
     Range1d,
     Spacer,
@@ -59,12 +57,19 @@ def market_replay(
     fills: pd.DataFrame | None = None,
     equity: pd.Series | None = None,
     positions: pd.DataFrame | None = None,
+    benchmark: pd.Series | None = None,
 ):
     """Return a market replay grid with equity, P/L, OHLC, trades, and volume."""
     if isinstance(market_data, Mapping):
         valid_feeds = {key: value for key, value in market_data.items() if not value.empty}
         if len(valid_feeds) > 1:
-            portfolio = _portfolio_market_replay(valid_feeds, fills, equity, positions)
+            portfolio = _portfolio_market_replay(
+                valid_feeds,
+                fills,
+                equity,
+                positions,
+                benchmark,
+            )
             if portfolio is not None:
                 return portfolio
         market_data = next(iter(market_data.values()), pd.DataFrame())
@@ -136,6 +141,7 @@ def market_replay(
                 line_dash="dashed",
                 legend_label="Buy&Hold (Equal Weight)",
             )
+            _add_replay_benchmark_line(equity_plot, benchmark, equity_frame)
             peak = equity_frame["relative_equity"].idxmax()
             final = equity_frame.index[-1]
             dd = equity_frame["drawdown"]
@@ -444,6 +450,7 @@ def _portfolio_market_replay(
     fills: pd.DataFrame | None,
     equity: pd.Series | None,
     positions: pd.DataFrame | None,
+    benchmark: pd.Series | None,
 ):
     """Return a portfolio-first replay grid for multi-asset reports."""
     asset_frame = _portfolio_asset_frame(market_data)
@@ -467,7 +474,7 @@ def _portfolio_market_replay(
     plots = []
 
     if equity is not None and not equity.empty:
-        equity_plot = _equity_replay_plot(equity, base_frame, x_range)
+        equity_plot = _equity_replay_plot(equity, base_frame, x_range, benchmark=benchmark)
         if equity_plot is not None:
             plots.append(equity_plot)
     else:
@@ -530,7 +537,12 @@ def _portfolio_market_replay(
     )
 
 
-def _equity_replay_plot(equity: pd.Series, frame: pd.DataFrame, x_range):
+def _equity_replay_plot(
+    equity: pd.Series,
+    frame: pd.DataFrame,
+    x_range,
+    benchmark: pd.Series | None = None,
+):
     """Return the replay equity panel."""
     equity_plot = _market_section("Equity", height=150, x_range=x_range)
     equity_frame = _equity_replay_frame(equity, frame)
@@ -570,6 +582,7 @@ def _equity_replay_plot(equity: pd.Series, frame: pd.DataFrame, x_range):
         line_dash="dashed",
         legend_label="Buy&Hold (Equal Weight)",
     )
+    _add_replay_benchmark_line(equity_plot, benchmark, equity_frame)
     peak = equity_frame["relative_equity"].idxmax()
     final = equity_frame.index[-1]
     max_dd = equity_frame["drawdown"].idxmin()
@@ -605,6 +618,48 @@ def _equity_replay_plot(equity: pd.Series, frame: pd.DataFrame, x_range):
         [("Date", "@date{%F %T}"), ("Equity", "@relative_equity{0,0.[00]%}")],
     )
     return equity_plot
+
+
+def _add_replay_benchmark_line(plot, benchmark: pd.Series | None, frame: pd.DataFrame):
+    """Add a normalized benchmark return curve to a replay equity panel."""
+    if benchmark is None or frame.empty:
+        return None
+    values = pd.Series(benchmark).copy()
+    if values.empty:
+        return None
+    benchmark_equity = (1.0 + pd.to_numeric(values, errors="coerce")).cumprod()
+    aligned = _align_series_to_index(benchmark_equity, frame["date"])
+    aligned = pd.to_numeric(aligned, errors="coerce")
+    first_valid = aligned.dropna()
+    if first_valid.empty:
+        return None
+    aligned = aligned / float(first_valid.iloc[0])
+    benchmark_frame = pd.DataFrame(
+        {
+            "date": frame["date"].to_numpy(),
+            "bar_index": frame["bar_index"].to_numpy(),
+            "benchmark_equity": aligned.to_numpy(dtype=float),
+        }
+    ).dropna(subset=["bar_index", "benchmark_equity"])
+    if benchmark_frame.empty:
+        return None
+    source = ColumnDataSource(benchmark_frame)
+    label = str(values.name or "Benchmark")
+    line = plot.line(
+        "bar_index",
+        "benchmark_equity",
+        source=source,
+        line_width=1.5,
+        color="#ff7f0e",
+        line_dash="dotdash",
+        legend_label=label,
+    )
+    _add_line_hover(
+        plot,
+        [line],
+        [("Date", "@date{%F %T}"), (label, "@benchmark_equity{0,0.[00]%}")],
+    )
+    return line
 
 
 def _allocation_replay_plot(
@@ -965,7 +1020,7 @@ def equity_curve(
             benchmark_frame["benchmark"],
             line_width=2,
             color="#ff7f0e",
-            legend_label="Benchmark",
+            legend_label=str(pd.Series(benchmark).name or "Benchmark"),
         )
     if drawdowns is not None and not drawdowns.empty:
         _add_drawdown_markers(plot, equity, drawdowns)
@@ -1498,117 +1553,6 @@ def trade_distribution(distribution: pd.DataFrame):
         plot.line([median, median], [0, distribution["count"].max()], color="#ff7f0e", line_width=2)
     plot.xaxis.axis_label = "PnL"
     plot.yaxis.axis_label = "Closed Trades"
-    _make_static_chart(plot)
-    return plot
-
-
-def exposure(exposure_frame: pd.DataFrame):
-    """Return a multi-asset exposure heatmap."""
-    frame = exposure_frame.apply(pd.to_numeric, errors="coerce").fillna(0.0).reset_index().rename(
-        columns={exposure_frame.index.name or "index": "date"}
-    )
-    if isinstance(frame["date"].dtype, pd.DatetimeTZDtype):
-        frame["date"] = frame["date"].dt.tz_convert("UTC").dt.tz_localize(None)
-    symbols = [str(symbol) for symbol in exposure_frame.columns]
-    display_symbols = _symbol_display_map(symbols)
-    frame.columns = ["date", *symbols]
-    long = frame.melt(id_vars="date", var_name="symbol", value_name="weight")
-    long["asset"] = long["symbol"].map(display_symbols)
-    width = _datetime_rect_width(frame["date"])
-    max_weight = max(float(long["weight"].max()), 0.01)
-    source = ColumnDataSource(long)
-    mapper = LinearColorMapper(
-        palette=["#f4f7fb", "#d7e8f5", "#94c5df", "#4d99c9", "#1f5f99"],
-        low=0.0,
-        high=max_weight,
-    )
-    plot = figure(
-        title="Exposure Heatmap",
-        x_axis_type="datetime",
-        y_range=list(reversed([display_symbols[symbol] for symbol in symbols])),
-        height=max(260, min(440, 120 + len(symbols) * 18)),
-        sizing_mode="stretch_width",
-    )
-    plot.rect(
-        x="date",
-        y="asset",
-        width=width,
-        height=0.86,
-        source=source,
-        fill_color={"field": "weight", "transform": mapper},
-        line_color=None,
-    )
-    color_bar = ColorBar(
-        color_mapper=mapper,
-        width=8,
-        label_standoff=6,
-        formatter=NumeralTickFormatter(format="0%"),
-        title="Weight",
-    )
-    plot.add_layout(color_bar, "right")
-    plot.yaxis.axis_label = "Asset"
-    _make_static_chart(plot)
-    plot.add_tools(
-        HoverTool(
-            tooltips=[
-                ("Date", "@date{%F}"),
-                ("Asset", "@symbol"),
-                ("Exposure", "@weight{0.00%}"),
-            ],
-            formatters={"@date": "datetime"},
-        )
-    )
-    return plot
-
-
-def correlation_matrix(correlation: pd.DataFrame):
-    """Return a multi-asset correlation heatmap figure."""
-    symbols = [str(symbol) for symbol in correlation.columns]
-    display_symbols = _symbol_display_map(symbols)
-    ranges = [display_symbols[symbol] for symbol in symbols]
-    data = {"x": [], "y": [], "x_symbol": [], "y_symbol": [], "correlation": []}
-    for row in correlation.index:
-        for symbol in correlation.columns:
-            row_symbol = str(row)
-            column_symbol = str(symbol)
-            data["x"].append(display_symbols.get(column_symbol, column_symbol))
-            data["y"].append(display_symbols.get(row_symbol, row_symbol))
-            data["x_symbol"].append(column_symbol)
-            data["y_symbol"].append(row_symbol)
-            data["correlation"].append(correlation.loc[row, symbol])
-    plot = figure(
-        title="Position Weight Correlation",
-        x_range=ranges,
-        y_range=ranges,
-        height=300,
-        sizing_mode="stretch_width",
-        toolbar_location=None,
-    )
-    mapper = linear_cmap(
-        "correlation",
-        palette=["#d62728", "#f7f7f7", "#1f77b4"],
-        low=-1.0,
-        high=1.0,
-    )
-    plot.rect(
-        "x",
-        "y",
-        width=0.95,
-        height=0.95,
-        source=data,
-        fill_color=mapper,
-        line_color="white",
-    )
-    plot.xaxis.major_label_orientation = 0.8
-    plot.add_tools(
-        HoverTool(
-            tooltips=[
-                ("Asset X", "@x_symbol"),
-                ("Asset Y", "@y_symbol"),
-                ("Correlation", "@correlation{0.00}"),
-            ]
-        )
-    )
     _make_static_chart(plot)
     return plot
 
@@ -2397,17 +2341,20 @@ def _allocation_display_frame(
     visible_symbols: list[str],
 ) -> pd.DataFrame:
     """Return allocation data with hidden assets collapsed into Others."""
-    result = allocation[["date", "bar_index"]].copy()
     selected = set(visible_symbols)
+    columns = {
+        "date": allocation["date"],
+        "bar_index": allocation["bar_index"],
+    }
     for symbol in symbols:
         if symbol in allocation:
-            result[symbol] = allocation[symbol] if symbol in selected else 0.0
+            columns[symbol] = allocation[symbol] if symbol in selected else 0.0
         else:
-            result[symbol] = 0.0
+            columns[symbol] = 0.0
     hidden = [symbol for symbol in symbols if symbol not in selected and symbol in allocation]
-    result["Others"] = allocation[hidden].sum(axis=1) if hidden else 0.0
-    result["Cash"] = allocation["Cash"] if "Cash" in allocation else 0.0
-    return result
+    columns["Others"] = allocation[hidden].sum(axis=1) if hidden else 0.0
+    columns["Cash"] = allocation["Cash"] if "Cash" in allocation else 0.0
+    return pd.DataFrame(columns, index=allocation.index)
 
 
 def _allocation_hover_frame(

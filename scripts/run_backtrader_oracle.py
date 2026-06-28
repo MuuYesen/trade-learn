@@ -16,7 +16,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from tradelearn.core import GoldenDataError  # noqa: E402
+from tradelearn.core.errors import GoldenDataError  # noqa: E402
 
 SUPPORTED_BACKTRADER_STRATEGIES = (
     "sma_cross",

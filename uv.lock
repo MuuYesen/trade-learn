@@ -3919,7 +3919,8 @@ name = "numba"
 version = "0.65.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "llvmlite", marker = "python_full_version >= '3.11'" },
+    { name = "llvmlite" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f6/c5/db2ac3685833d626c0dcae6bd2330cd68433e1fd248d15f70998160d3ad7/numba-0.65.1.tar.gz", hash = "sha256:19357146c32fe9ed25059ab915e8465fb13951cf6b0aace3826b76886373ab23", size = 2765600 }
@@ -6758,6 +6759,7 @@ source = { editable = "." }
 dependencies = [
     { name = "bokeh" },
     { name = "causal-learn" },
+    { name = "numba" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "opentdx", marker = "python_full_version >= '3.12'" },
@@ -6843,6 +6845,7 @@ requires-dist = [
     { name = "mkdocstrings-python", marker = "extra == 'docs'" },
     { name = "mlflow", marker = "extra == 'all'" },
     { name = "mlflow", marker = "extra == 'mlflow'" },
+    { name = "numba", specifier = ">=0.65.1" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "opentdx", marker = "python_full_version >= '3.12'" },
     { name = "optuna", marker = "extra == 'all'" },

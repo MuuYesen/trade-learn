@@ -6,7 +6,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from tradelearn.core import BrokerEvent
+from tradelearn.core.broker_events import BrokerEvent
 from tradelearn.report.artifacts import market_data_from_strategy, write_artifact_bundle
 from tradelearn.report.mlflow import build_run_metrics, build_run_params
 

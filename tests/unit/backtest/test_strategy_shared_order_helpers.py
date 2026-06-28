@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from tradelearn.backtest.models import Order, Position
-from tradelearn.backtest.strategy import Strategy
+from tradelearn.engine import Strategy
 
 
 class DummyData:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from tradelearn.backtest.broker import RustBroker
 from tradelearn.backtest.models import Order
-from tradelearn.backtest.strategy import Strategy
+from tradelearn.engine import Strategy
 
 
 class DummyData:

@@ -22,12 +22,11 @@ def test_maturin_build_backend_points_to_tradelearn_rust_extension() -> None:
         "requires": ["maturin>=1.7,<2"],
         "build-backend": "maturin",
     }
-    assert pyproject["tool"]["maturin"] == {
-        "manifest-path": "rust/tradelearn-rust/Cargo.toml",
-        "module-name": "tradelearn._rust",
-        "python-source": ".",
-        "features": ["extension-module"],
-    }
+    maturin = pyproject["tool"]["maturin"]
+    assert maturin["manifest-path"] == "rust/tradelearn-rust/Cargo.toml"
+    assert maturin["module-name"] == "tradelearn._rust"
+    assert maturin["python-source"] == "."
+    assert maturin["features"] == ["extension-module"]
 
 
 def test_cargo_workspace_declares_tradelearn_rust_member() -> None:

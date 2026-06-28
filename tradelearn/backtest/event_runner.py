@@ -8,7 +8,8 @@ import pandas as pd
 
 from tradelearn.backtest.data import RollingBarBuffer
 from tradelearn.backtest.lines import LineSeries
-from tradelearn.core import BrokerEvent, BrokerEventPump, StreamBar
+from tradelearn.core.broker_events import BrokerEvent, BrokerEventPump
+from tradelearn.core.contracts import StreamBar
 
 
 @dataclass(frozen=True)

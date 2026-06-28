@@ -1,55 +1,9 @@
-"""Stage 0 core contracts and foundation helpers."""
+"""Internal contracts and foundation helpers.
 
-from tradelearn.core.broker_contracts import (
-    AccountSnapshot,
-    Fill,
-    OrderAck,
-    OrderRequest,
-    OrderStatusUpdate,
-    PositionSnapshot,
-)
-from tradelearn.core.broker_events import BrokerEvent, BrokerEventPump
-from tradelearn.core.config import TradelearnConfig, load_config
-from tradelearn.core.contracts import Broker, Experiment, StreamBar, validate_bars, validate_returns
-from tradelearn.core.errors import (
-    ConfigurationError,
-    ContractError,
-    DataError,
-    GoldenDataError,
-    TradelearnError,
-)
-from tradelearn.core.logging import configure_logging, get_logger
-from tradelearn.core.progress import iter_progress, progress
-from tradelearn.core.seed import get_seed, set_global_seed
-from tradelearn.core.time import ensure_utc, utc_now
+User-facing APIs are exposed through facade modules such as
+``tradelearn.engine``, ``tradelearn.lite``, ``tradelearn.data``,
+``tradelearn.factor``, ``tradelearn.metrics``, ``tradelearn.research``,
+``tradelearn.report``, and ``tradelearn.live``.
+"""
 
-__all__ = [
-    "Broker",
-    "BrokerEvent",
-    "BrokerEventPump",
-    "AccountSnapshot",
-    "ConfigurationError",
-    "ContractError",
-    "DataError",
-    "Fill",
-    "Experiment",
-    "GoldenDataError",
-    "OrderAck",
-    "OrderRequest",
-    "OrderStatusUpdate",
-    "PositionSnapshot",
-    "StreamBar",
-    "TradelearnError",
-    "TradelearnConfig",
-    "configure_logging",
-    "ensure_utc",
-    "get_logger",
-    "get_seed",
-    "iter_progress",
-    "load_config",
-    "progress",
-    "set_global_seed",
-    "utc_now",
-    "validate_bars",
-    "validate_returns",
-]
+__all__: list[str] = []

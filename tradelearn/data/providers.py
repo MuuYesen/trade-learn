@@ -14,7 +14,7 @@ from contextlib import contextmanager
 import pandas as pd
 from tradelearn.utils.console import smart_tqdm as tqdm
 
-from tradelearn.core import get_logger
+from tradelearn.core.logging import get_logger
 from tradelearn.data.bars import Frequency, normalize_bars
 
 LOGGER = get_logger("data.providers")

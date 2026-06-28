@@ -38,7 +38,11 @@ def write_html_report(
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     returns = pd.Series(reporter._get("returns")).copy()
-    benchmark_returns = None if benchmark is None else pd.Series(benchmark).copy()
+    benchmark_returns = (
+        reporter.default_benchmark()
+        if benchmark is None and hasattr(reporter, "default_benchmark")
+        else pd.Series(benchmark).copy()
+    )
     trades = pd.DataFrame(reporter._get("trades", default=pd.DataFrame())).copy()
     rolling_beta = (
         pd.Series(dtype="float64", name="rolling_beta")
@@ -46,7 +50,6 @@ def write_html_report(
         else reporter.rolling_beta(benchmark_returns)
     )
     exposure = reporter.exposure()
-    correlation = reporter.correlation_matrix()
     factor_ic = reporter.factor_ic()
     factor_rank_ic = reporter.factor_rank_ic()
     factor_turnover = reporter.factor_turnover()
@@ -90,14 +93,14 @@ def write_html_report(
     plots["Closed Trade PnL Distribution"] = charts.trade_distribution(
         reporter.trade_distribution()
     )
-    price_plot = reporter.price_trades_chart()
+    price_plot = reporter.price_trades_chart(
+        benchmark=None if benchmark is None else benchmark_returns
+    )
     if price_plot is not None:
         plots[_market_replay_title(reporter.market_data)] = price_plot
     if not rolling_beta.empty:
         plots["Rolling Beta"] = charts.rolling_beta(rolling_beta)
     if _has_multi_asset_exposure(exposure):
-        plots["Position Weight Correlation"] = charts.correlation_matrix(correlation)
-        plots["Exposure Heatmap"] = charts.exposure(exposure)
         positions = reporter._positions_frame(reporter._get("positions", default=pd.DataFrame()))
         fills = reporter._get("fills", default=pd.DataFrame())
         equity_values = reporter._get("equity", default=None)
@@ -107,10 +110,6 @@ def write_html_report(
         plots["Position Concentration"] = charts.position_concentration(positions)
         plots["Daily Turnover"] = charts.turnover(fills, positions, equity=equity_values)
         plots["Daily Fill Volume"] = charts.daily_volume(fills)
-        plots["Fill Bar Time Histogram"] = charts.transaction_time_histogram(
-            fills,
-            timezone=_market_timezone(reporter.market_data),
-        )
     if not factor_ic.empty:
         plots["Factor IC"] = charts.factor_ic(factor_ic)
         plots["Factor IC Histogram"] = charts.factor_ic_histogram(factor_ic)
@@ -161,8 +160,6 @@ def write_html_report(
             drawdowns=top_drawdowns,
             benchmark=benchmark_returns,
             benchmark_metrics=_benchmark_metrics(summary, benchmark_returns),
-            correlation=correlation,
-            exposure=exposure,
             factor_ic=factor_ic,
             factor_rank_ic=factor_rank_ic,
             factor_turnover=factor_turnover,
@@ -227,8 +224,6 @@ def _render_html(
     drawdowns: pd.DataFrame,
     benchmark: pd.Series | None,
     benchmark_metrics: dict[str, Any],
-    correlation: pd.DataFrame,
-    exposure: pd.DataFrame,
     factor_ic: pd.Series,
     factor_rank_ic: pd.Series,
     factor_turnover: pd.Series,
@@ -248,9 +243,7 @@ def _render_html(
         bokeh_resources=bokeh_resources,
         charts=charts,
         config_table=_summary_table(display_config),
-        correlation_section=_correlation_section(correlation),
         drawdowns_table=_frame_table(drawdowns),
-        exposure_section=_exposure_section(exposure),
         factor_ic_section=_factor_ic_section(factor_ic),
         factor_rank_ic_section=_factor_rank_ic_section(factor_rank_ic),
         factor_turnover_section=_factor_turnover_section(
@@ -406,22 +399,6 @@ def _metadata(
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "version": _package_version(),
     }
-
-
-def _exposure_section(exposure: pd.DataFrame) -> str:
-    """Return the optional exposure section heading."""
-    if not _has_multi_asset_exposure(exposure):
-        return ""
-    symbols = ", ".join(escape(str(symbol)) for symbol in exposure.columns)
-    return f"<h2>Exposure Heatmap</h2><p>Symbols: {symbols}</p>"
-
-
-def _correlation_section(correlation: pd.DataFrame) -> str:
-    """Return the optional correlation matrix section heading."""
-    if correlation.empty or len(correlation.columns) <= 1:
-        return ""
-    symbols = ", ".join(escape(str(symbol)) for symbol in correlation.columns)
-    return f"<h2>Correlation Matrix</h2><p>Symbols: {symbols}</p>"
 
 
 def _benchmark_metrics(summary: dict[str, Any], benchmark: pd.Series | None) -> dict[str, Any]:

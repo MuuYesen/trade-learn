@@ -7,6 +7,7 @@ submit those intents.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -93,17 +94,22 @@ def build_target_weight_intents(
         snapshot = snapshots[symbol]
         price = float(snapshot.price)
         mult = float(snapshot.mult)
+        size = float(snapshot.size)
+        if not math.isfinite(price) or not math.isfinite(mult) or not math.isfinite(size):
+            continue
         if price <= 0 or mult <= 0:
             continue
-        current_value = float(snapshot.size) * price * mult
+        current_value = size * price * mult
         current_weight = current_value / float(equity) if equity else 0.0
         target_value = float(target_weight) * float(equity)
         delta_value = target_value - current_value
+        if not math.isfinite(delta_value):
+            continue
         if abs(delta_value) < 1e-12:
             continue
-        if abs(float(target_weight)) < 1e-12 and abs(float(snapshot.size)) > 0:
-            qty = abs(float(snapshot.size))
-            side = "sell" if float(snapshot.size) > 0 else "buy"
+        if abs(float(target_weight)) < 1e-12 and abs(size) > 0:
+            qty = abs(size)
+            side = "sell" if size > 0 else "buy"
         else:
             qty = int(abs(delta_value) / (price * mult))
             if not qty:

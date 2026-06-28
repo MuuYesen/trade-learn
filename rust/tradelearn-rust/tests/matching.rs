@@ -1,7 +1,7 @@
 use _rust::core::{
-    match_order, match_order_smart, BarEvent, CommissionModel, ExecutionOptions, FixedCommission,
-    FixedSlippage, OrderEvent, OrderSide, OrderType, PercentCommission, PercentSlippage,
-    SlippageModel,
+    match_order, match_order_smart, BarEvent, CNAStockCommission, CommissionModel,
+    ExecutionOptions, FixedCommission, FixedSlippage, OrderEvent, OrderSide, OrderType,
+    PercentCommission, PercentSlippage, SlippageModel,
 };
 
 fn assert_close(actual: f64, expected: f64) {
@@ -140,6 +140,29 @@ fn commission_models_are_applied_to_fill_events() {
 
     assert_eq!(fixed_fill.commission, 5.0);
     assert_eq!(percent_fill.commission, 1.0);
+}
+
+#[test]
+fn cn_a_stock_commission_applies_minimum_transfer_and_sell_stamp_tax() {
+    let mut buy = order(OrderType::Market, OrderSide::Buy);
+    buy.size = 100.0;
+    let mut sell = order(OrderType::Market, OrderSide::Sell);
+    sell.size = 100.0;
+    let options = ExecutionOptions {
+        commission: CommissionModel::CNAStock(CNAStockCommission {
+            commission_rate: 0.00025,
+            min_commission: 5.0,
+            stamp_tax_rate: 0.001,
+            transfer_fee_rate: 0.00002,
+        }),
+        ..options()
+    };
+
+    let buy_fill = match_order(&buy, &bar(), &options).expect("buy fills");
+    let sell_fill = match_order(&sell, &bar(), &options).expect("sell fills");
+
+    assert_eq!(buy_fill.commission, 5.02);
+    assert_eq!(sell_fill.commission, 6.02);
 }
 
 #[test]

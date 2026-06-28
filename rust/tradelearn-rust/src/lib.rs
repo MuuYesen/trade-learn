@@ -122,7 +122,7 @@ pub(crate) struct RustBacktestEngine {
 #[pymethods]
 impl RustBacktestEngine {
     #[new]
-    #[pyo3(signature = (timestamps, opens, highs, lows, closes, volumes, cash, commission_ratio, trade_on_close, cheat_on_close, cheat_on_open, slip_perc, slip_fixed, slip_match, slip_limit, slip_out, mult=1.0, margin=1.0, smart_matching=false))]
+    #[pyo3(signature = (timestamps, opens, highs, lows, closes, volumes, cash, commission_ratio, trade_on_close, cheat_on_close, cheat_on_open, slip_perc, slip_fixed, slip_match, slip_limit, slip_out, mult=1.0, margin=1.0, smart_matching=false, cn_a_stock_commission=false, cn_commission_rate=0.00025, cn_min_commission=5.0, cn_stamp_tax_rate=0.001, cn_transfer_fee_rate=0.00002))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         timestamps: Vec<i64>,
@@ -144,6 +144,11 @@ impl RustBacktestEngine {
         mult: f64,
         margin: f64,
         smart_matching: bool,
+        cn_a_stock_commission: bool,
+        cn_commission_rate: f64,
+        cn_min_commission: f64,
+        cn_stamp_tax_rate: f64,
+        cn_transfer_fee_rate: f64,
     ) -> Self {
         Self {
             inner: BacktestEngine::new(
@@ -166,6 +171,11 @@ impl RustBacktestEngine {
                 mult,
                 margin,
                 smart_matching,
+                cn_a_stock_commission,
+                cn_commission_rate,
+                cn_min_commission,
+                cn_stamp_tax_rate,
+                cn_transfer_fee_rate,
             ),
         }
     }

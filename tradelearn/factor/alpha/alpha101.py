@@ -8,6 +8,11 @@ import numpy as np
 import pandas as pd
 from scipy.stats import rankdata
 
+try:
+    from numba import njit
+except ImportError:  # pragma: no cover - exercised only in environments without numba
+    njit = None
+
 _ALPHA101_NAMES = frozenset(f"alpha{index:03d}" for index in range(1, 102))
 
 
@@ -992,9 +997,35 @@ def _neutralize(frame: pd.DataFrame) -> pd.DataFrame:
 
 def _decay_linear(frame: pd.DataFrame, period: int) -> pd.DataFrame:
     """Return rolling linearly weighted moving averages."""
-    weights = np.arange(1, period + 1)
-    sum_weights = np.sum(weights)
-    return frame.rolling(period).apply(lambda values: np.sum(weights * values) / sum_weights)
+    values = frame.to_numpy(dtype=float, copy=False)
+    decayed = _decay_linear_2d(values, period)
+    return pd.DataFrame(decayed, index=frame.index, columns=frame.columns)
+
+
+def _decay_linear_2d(values: np.ndarray, period: int) -> np.ndarray:
+    """Return linearly weighted rolling means for each column."""
+    if njit is not None:
+        return _decay_linear_2d_numba(values, period)
+    return _decay_linear_2d_numpy(values, period)
+
+
+def _decay_linear_2d_numpy(values: np.ndarray, period: int) -> np.ndarray:
+    rows, cols = values.shape
+    result = np.full((rows, cols), np.nan, dtype=float)
+    sum_weights = period * (period + 1) / 2.0
+    for col in range(cols):
+        for row in range(period - 1, rows):
+            total = 0.0
+            valid = True
+            for offset in range(period):
+                value = values[row - period + 1 + offset, col]
+                if np.isnan(value):
+                    valid = False
+                    break
+                total += (offset + 1) * value
+            if valid:
+                result[row, col] = total / sum_weights
+    return result
 
 
 def _rolling_rank(values: np.ndarray) -> float:
@@ -1014,7 +1045,84 @@ def _ts_argmin(frame: pd.DataFrame, window: int) -> pd.DataFrame:
 
 def _ts_rank(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling rank of the latest value."""
-    return frame.rolling(window).apply(_rolling_rank)
+    values = frame.to_numpy(dtype=float, copy=False)
+    ranked = _rolling_rank_last_2d(values, window)
+    return pd.DataFrame(ranked, index=frame.index, columns=frame.columns)
+
+
+def _rolling_rank_last_2d(values: np.ndarray, window: int) -> np.ndarray:
+    """Return rolling min-rank of each column's latest window value."""
+    if njit is not None:
+        return _rolling_rank_last_2d_numba(values, window)
+    return _rolling_rank_last_2d_numpy(values, window)
+
+
+def _rolling_rank_last_2d_numpy(values: np.ndarray, window: int) -> np.ndarray:
+    rows, cols = values.shape
+    result = np.full((rows, cols), np.nan, dtype=float)
+    for col in range(cols):
+        for row in range(window - 1, rows):
+            latest = values[row, col]
+            rank = 1.0
+            valid = True
+            for offset in range(window):
+                value = values[row - window + 1 + offset, col]
+                if np.isnan(value):
+                    valid = False
+                    break
+                if value < latest:
+                    rank += 1.0
+            if valid:
+                result[row, col] = rank
+    return result
+
+
+if njit is not None:
+
+    @njit(cache=True)
+    def _decay_linear_2d_numba(values: np.ndarray, period: int) -> np.ndarray:
+        rows, cols = values.shape
+        result = np.empty((rows, cols), dtype=np.float64)
+        result[:, :] = np.nan
+        sum_weights = period * (period + 1) / 2.0
+        for col in range(cols):
+            for row in range(period - 1, rows):
+                total = 0.0
+                valid = True
+                for offset in range(period):
+                    value = values[row - period + 1 + offset, col]
+                    if np.isnan(value):
+                        valid = False
+                        break
+                    total += (offset + 1) * value
+                if valid:
+                    result[row, col] = total / sum_weights
+        return result
+
+    @njit(cache=True)
+    def _rolling_rank_last_2d_numba(values: np.ndarray, window: int) -> np.ndarray:
+        rows, cols = values.shape
+        result = np.empty((rows, cols), dtype=np.float64)
+        result[:, :] = np.nan
+        for col in range(cols):
+            for row in range(window - 1, rows):
+                latest = values[row, col]
+                rank = 1.0
+                valid = True
+                for offset in range(window):
+                    value = values[row - window + 1 + offset, col]
+                    if np.isnan(value):
+                        valid = False
+                        break
+                    if value < latest:
+                        rank += 1.0
+                if valid:
+                    result[row, col] = rank
+        return result
+
+else:
+    _decay_linear_2d_numba = _decay_linear_2d_numpy
+    _rolling_rank_last_2d_numba = _rolling_rank_last_2d_numpy
 
 
 def _ts_min(frame: pd.DataFrame, window: int) -> pd.DataFrame:

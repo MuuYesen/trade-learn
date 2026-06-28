@@ -41,6 +41,7 @@
 
 ### 1. 策略开发 (Strategy Development)
 *   **[模式对比](guides/strategy.md)**：Lite 与 Engine 模式的代码实现对比。
+*   **[API 边界](concepts/api-boundary.md)**：公开 facade 与内部实现层的划分。
 *   **[Lite 入门](guides/lite.md)**：最简单的策略书写方式。
 *   **[Engine 指南](guides/engine.md)**：Backtrader 风格的高级策略控制。
 *   **[指标生态](guides/indicators.md)**：支持 TDX、TradingView、TA-Lib 等口径。

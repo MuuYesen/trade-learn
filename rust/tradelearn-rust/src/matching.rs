@@ -68,6 +68,7 @@ pub fn match_order_at_price(
         commission: round_precision(calculate_commission(
             fill_price,
             size,
+            order.side,
             options.commission,
             options.mult,
         )),
@@ -107,6 +108,7 @@ pub(crate) fn fill_from_raw_price(
         commission: round_precision(calculate_commission(
             fill_price,
             size,
+            order.side,
             options.commission,
             options.mult,
         )),
@@ -263,10 +265,27 @@ fn smart_segment_rank(segment_idx: usize, start: f64, end: f64, price: f64) -> f
     segment_idx as f64 + ratio
 }
 
-fn calculate_commission(price: f64, size: f64, commission: CommissionModel, mult: f64) -> f64 {
+fn calculate_commission(
+    price: f64,
+    size: f64,
+    side: OrderSide,
+    commission: CommissionModel,
+    mult: f64,
+) -> f64 {
     match commission {
         CommissionModel::Fixed(model) => model.amount,
         CommissionModel::Percent(model) => price * size.abs() * model.ratio * mult,
+        CommissionModel::CNAStock(model) => {
+            let notional = price * size.abs() * mult;
+            let commission = (notional * model.commission_rate).max(model.min_commission);
+            let transfer_fee = notional * model.transfer_fee_rate;
+            let stamp_tax = if side == OrderSide::Sell {
+                notional * model.stamp_tax_rate
+            } else {
+                0.0
+            };
+            commission + transfer_fee + stamp_tax
+        }
     }
 }
 
