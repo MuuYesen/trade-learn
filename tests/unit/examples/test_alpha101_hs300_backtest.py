@@ -37,8 +37,8 @@ def test_hs300_backtest_uses_repo_relative_paths_and_hs300_names() -> None:
     assert "HS300_BENCHMARK_PATH = (" in source
     assert "\"raw\"" in source
     assert "\"index_daily_000300_20150101_20260601.csv\"" in source
-    assert "alpha101-hs300-top5" in source
-    assert "alpha101_hs300_top5_backtest_report.html" in source
+    assert "alpha101-hs300-top20" in source
+    assert "alpha101_hs300_top20_backtest_report.html" in source
     assert "alpha101_us_tech" not in source
 
 
@@ -54,7 +54,7 @@ def test_hs300_backtest_separates_factor_count_from_stock_count() -> None:
     source = _source()
 
     assert "TOP_N_FACTORS = 5" in source
-    assert "TOP_N_STOCKS = 5" in source
+    assert "TOP_N_STOCKS = 20" in source
     assert "MIN_AUX_COVERAGE = 0.90" in source
     assert "ENFORCE_TRADE_CONSTRAINTS = True" in source
     assert "tradestatus" in source
@@ -137,11 +137,9 @@ def test_compute_alpha101_factors_uses_matching_cache(tmp_path, monkeypatch) -> 
             "alpha001_101": [0.1, 0.2],
         }
     )
-    cache_path = tmp_path / "factors.pkl"
-    pd.to_pickle(
-        {"cache_key": module.factor_cache_key(bars), "factors": expected},
-        cache_path,
-    )
+    cache_path = tmp_path / "factors.parquet"
+    expected.to_parquet(cache_path)
+    module.write_cache_meta(cache_path, module.factor_cache_key(bars))
 
     def fail_alpha101(_bars):
         raise AssertionError("alpha101 should not run when cache is valid")
@@ -153,19 +151,65 @@ def test_compute_alpha101_factors_uses_matching_cache(tmp_path, monkeypatch) -> 
     pd.testing.assert_frame_equal(result, expected)
 
 
-def test_preprocessed_factor_table_cache_reads_csv_without_json(tmp_path, monkeypatch) -> None:
+def test_compute_alpha101_factors_can_force_cache_update(tmp_path, monkeypatch) -> None:
     module = _load_module()
-    cache_path = tmp_path / "preprocessed_factor_table.csv"
-    cached = pd.DataFrame(
+    bars = pd.DataFrame(
         {
             "date": pd.to_datetime(["2020-01-02", "2020-01-02"]),
             "symbol": ["AAA", "BBB"],
+            "open": [1.0, 2.0],
+            "high": [2.0, 3.0],
+            "low": [0.5, 1.5],
+            "close": [1.5, 2.5],
+            "volume": [100.0, 200.0],
+            "vwap": [1.4, 2.4],
+        }
+    )
+    stale = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-01-02"]),
+            "symbol": ["AAA"],
+            "alpha001_101": [99.0],
+        }
+    )
+    fresh = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-01-02"]),
+            "symbol": ["AAA"],
+            "alpha001_101": [1.0],
+        }
+    )
+    cache_path = tmp_path / "factors.parquet"
+    stale.to_parquet(cache_path)
+    module.write_cache_meta(cache_path, module.factor_cache_key(bars))
+
+    monkeypatch.setattr(module, "alpha101", lambda _bars: fresh)
+
+    result = module.compute_alpha101_factors(bars, cache_path, update_cache=True)
+    from_disk = pd.read_parquet(cache_path)
+
+    pd.testing.assert_frame_equal(result, fresh)
+    pd.testing.assert_frame_equal(from_disk, fresh)
+
+
+def test_preprocessed_factor_table_cache_reads_parquet_with_matching_meta(tmp_path, monkeypatch) -> None:
+    module = _load_module()
+    cache_path = tmp_path / "preprocessed_factor_table.parquet"
+    cached = pd.DataFrame(
+        {
             "alpha001_101": [0.1, 0.2],
             "ind_code": ["A", "B"],
             "cir_a": [10.0, 20.0],
-        }
+        },
+        index=pd.MultiIndex.from_tuples(
+            [
+                (pd.Timestamp("2020-01-02"), "AAA"),
+                (pd.Timestamp("2020-01-02"), "BBB"),
+            ],
+            names=["date", "symbol"],
+        ),
     )
-    cached.to_csv(cache_path, index=False)
+    cached.to_parquet(cache_path)
     module.write_cache_meta(
         cache_path,
         module.preprocessed_factor_table_cache_meta(
@@ -179,7 +223,7 @@ def test_preprocessed_factor_table_cache_reads_csv_without_json(tmp_path, monkey
     )
 
     def fail_preprocess(*_args, **_kwargs):
-        raise AssertionError("preprocess should not run when CSV cache is usable")
+        raise AssertionError("preprocess should not run when parquet cache is usable")
 
     monkeypatch.setattr(module, "preprocess_factor_table", fail_preprocess)
 
@@ -190,14 +234,13 @@ def test_preprocessed_factor_table_cache_reads_csv_without_json(tmp_path, monkey
         cache_path=cache_path,
     )
 
-    expected = cached.set_index(["date", "symbol"]).sort_index()
-    pd.testing.assert_frame_equal(result, expected)
-    assert not list(tmp_path.glob("*.json"))
+    pd.testing.assert_frame_equal(result, cached)
+    assert module.cache_meta_path(cache_path).exists()
 
 
-def test_preprocessed_factor_table_cache_writes_csv(tmp_path) -> None:
+def test_preprocessed_factor_table_cache_writes_parquet(tmp_path) -> None:
     module = _load_module()
-    cache_path = tmp_path / "preprocessed_factor_table.csv"
+    cache_path = tmp_path / "preprocessed_factor_table.parquet"
     factors = pd.DataFrame(
         {
             "date": pd.to_datetime(["2020-01-02", "2020-01-02"]),
@@ -229,9 +272,7 @@ def test_preprocessed_factor_table_cache_writes_csv(tmp_path) -> None:
 
     assert cache_path.exists()
     assert module.cache_meta_path(cache_path).exists()
-    from_disk = pd.read_csv(cache_path, parse_dates=["date"]).set_index(
-        ["date", "symbol"]
-    )
+    from_disk = pd.read_parquet(cache_path)
     pd.testing.assert_frame_equal(result, from_disk)
 
 
@@ -240,15 +281,17 @@ def test_preprocessed_factor_table_cache_rebuilds_when_meta_mismatches(
     monkeypatch,
 ) -> None:
     module = _load_module()
-    cache_path = tmp_path / "preprocessed_factor_table.csv"
+    cache_path = tmp_path / "preprocessed_factor_table.parquet"
     stale = pd.DataFrame(
         {
-            "date": pd.to_datetime(["2020-01-02"]),
-            "symbol": ["AAA"],
             "alpha001_101": [99.0],
-        }
+        },
+        index=pd.MultiIndex.from_tuples(
+            [(pd.Timestamp("2020-01-02"), "AAA")],
+            names=["date", "symbol"],
+        ),
     )
-    stale.to_csv(cache_path, index=False)
+    stale.to_parquet(cache_path)
     module.write_cache_meta(cache_path, {"version": -1})
 
     factors = pd.DataFrame(
@@ -286,13 +329,13 @@ def test_preprocessed_factor_table_cache_rebuilds_when_meta_mismatches(
     ] is False
 
 
-def test_factor_selection_cache_reads_ranking_and_selected_csv(
+def test_factor_selection_cache_reads_ranking_and_selected_parquet(
     tmp_path,
     monkeypatch,
 ) -> None:
     module = _load_module()
-    ranking_path = tmp_path / "ranking.csv"
-    selected_path = tmp_path / "selected.csv"
+    ranking_path = tmp_path / "ranking.parquet"
+    selected_path = tmp_path / "selected.parquet"
     ranking = pd.DataFrame(
         {
             "factor": ["alpha040", "alpha082"],
@@ -302,8 +345,8 @@ def test_factor_selection_cache_reads_ranking_and_selected_csv(
         }
     )
     selected = ranking.head(1).copy()
-    ranking.to_csv(ranking_path, index=False)
-    selected.to_csv(selected_path, index=False)
+    ranking.to_parquet(ranking_path)
+    selected.to_parquet(selected_path)
     meta = module.factor_selection_cache_meta(
         factor_table=pd.DataFrame(),
         prices=pd.Series(dtype="float64"),
@@ -331,19 +374,13 @@ def test_factor_selection_cache_reads_ranking_and_selected_csv(
     assert clean is None
 
 
-def test_factor_selection_cache_writes_ranking_and_selected_csv(
+def test_factor_selection_cache_writes_ranking_and_selected_parquet(
     tmp_path,
     monkeypatch,
 ) -> None:
     module = _load_module()
-    ranking_path = tmp_path / "ranking.csv"
-    selected_path = tmp_path / "selected.csv"
-    clean = pd.DataFrame(
-        {
-            "factor_name": ["alpha040_101"],
-            "period": [5],
-        }
-    )
+    ranking_path = tmp_path / "ranking.parquet"
+    selected_path = tmp_path / "selected.parquet"
     ranking = pd.DataFrame(
         {
             "factor": ["alpha040"],
@@ -353,12 +390,7 @@ def test_factor_selection_cache_writes_ranking_and_selected_csv(
         }
     )
 
-    monkeypatch.setattr(
-        module,
-        "clean_factor_and_forward_returns",
-        lambda *_args, **_kwargs: clean,
-    )
-    monkeypatch.setattr(module, "rank_factors", lambda _clean: ranking)
+    monkeypatch.setattr(module, "rank_factors_fast", lambda *_args, **_kwargs: ranking)
 
     result_ranking, result_selected, result_clean = module.load_or_build_factor_selection(
         factor_table=pd.DataFrame(
@@ -386,7 +418,7 @@ def test_factor_selection_cache_writes_ranking_and_selected_csv(
     assert module.cache_meta_path(selected_path).exists()
     pd.testing.assert_frame_equal(result_ranking, ranking)
     pd.testing.assert_frame_equal(result_selected, ranking.head(module.TOP_N_FACTORS))
-    pd.testing.assert_frame_equal(result_clean, clean)
+    assert result_clean is None
 
 
 def test_factor_selection_cache_rebuilds_when_meta_mismatches(
@@ -394,8 +426,8 @@ def test_factor_selection_cache_rebuilds_when_meta_mismatches(
     monkeypatch,
 ) -> None:
     module = _load_module()
-    ranking_path = tmp_path / "ranking.csv"
-    selected_path = tmp_path / "selected.csv"
+    ranking_path = tmp_path / "ranking.parquet"
+    selected_path = tmp_path / "selected.parquet"
     stale = pd.DataFrame(
         {
             "factor": ["alpha001"],
@@ -404,12 +436,11 @@ def test_factor_selection_cache_rebuilds_when_meta_mismatches(
             "score": [1.0],
         }
     )
-    stale.to_csv(ranking_path, index=False)
-    stale.to_csv(selected_path, index=False)
+    stale.to_parquet(ranking_path)
+    stale.to_parquet(selected_path)
     module.write_cache_meta(ranking_path, {"version": -1})
     module.write_cache_meta(selected_path, {"version": -1})
 
-    clean = pd.DataFrame({"factor_name": ["alpha040_101"]})
     fresh = pd.DataFrame(
         {
             "factor": ["alpha040"],
@@ -418,8 +449,7 @@ def test_factor_selection_cache_rebuilds_when_meta_mismatches(
             "score": [7.0],
         }
     )
-    monkeypatch.setattr(module, "clean_factor_and_forward_returns", lambda *_a, **_k: clean)
-    monkeypatch.setattr(module, "rank_factors", lambda _clean: fresh)
+    monkeypatch.setattr(module, "rank_factors_fast", lambda *_a, **_k: fresh)
 
     ranking, selected, _ = module.load_or_build_factor_selection(
         factor_table=pd.DataFrame(
@@ -473,11 +503,13 @@ def test_semiannual_periods_use_prior_observable_training_cutoff() -> None:
     assert periods[0] == {
         "period_start": pd.Timestamp("2025-01-01"),
         "period_end": pd.Timestamp("2025-06-30"),
+        "training_start": pd.Timestamp("2020-01-01"),
         "training_end": pd.Timestamp("2024-12-30"),
     }
     assert periods[1] == {
         "period_start": pd.Timestamp("2025-07-01"),
         "period_end": pd.Timestamp("2025-07-02"),
+        "training_start": pd.Timestamp("2020-07-01"),
         "training_end": pd.Timestamp("2025-06-27"),
     }
 
@@ -496,6 +528,7 @@ def test_walk_forward_weights_use_period_specific_selected_factors() -> None:
         {
             "period_start": pd.to_datetime(["2025-01-01", "2025-07-01"]),
             "period_end": pd.to_datetime(["2025-06-30", "2025-12-31"]),
+            "training_start": pd.to_datetime(["2020-01-01", "2020-07-01"]),
             "training_end": pd.to_datetime(["2024-12-31", "2025-06-24"]),
             "column": ["alpha001_101", "alpha002_101"],
             "direction": [1, 1],
@@ -513,32 +546,59 @@ def test_walk_forward_weights_use_period_specific_selected_factors() -> None:
     assert weights.loc[(pd.Timestamp("2025-07-01"), "AAA")] == 1.0
 
 
+def test_factor_score_prefers_stronger_top_long_portfolio() -> None:
+    module = _load_module()
+    ranking = pd.DataFrame(
+        {
+            "rank_ic_mean": [0.03, 0.03],
+            "rank_ic_ir": [1.0, 1.0],
+            "q5_q1_annualized": [0.10, 0.10],
+            "monotonicity": [0.8, 0.8],
+            "turnover": [0.3, 0.3],
+            "portfolio_annualized_return": [-0.20, 0.20],
+            "portfolio_sharpe": [-1.0, 1.0],
+            "portfolio_max_drawdown": [-0.40, -0.05],
+            "portfolio_turnover": [0.5, 0.5],
+        },
+        index=["weak", "strong"],
+    )
+
+    scores = module.factor_score(ranking)
+
+    assert scores.loc["strong"] > scores.loc["weak"]
+
+
 def test_hs300_backtest_selects_factors_before_backtest_period() -> None:
     source = _source()
 
+    assert "UPDATE_FACTOR_CACHE =" in source
+    assert "UPDATE_PREPROCESSED_FACTOR_TABLE_CACHE =" in source
+    assert "UPDATE_FACTOR_SELECTION_CACHE =" in source
+    assert "update_cache=UPDATE_FACTOR_CACHE" in source
+    assert "update_cache=UPDATE_PREPROCESSED_FACTOR_TABLE_CACHE" in source
+    assert "update_cache=UPDATE_FACTOR_SELECTION_CACHE" in source
     assert "START = \"2015-01-01\"" in source
     assert "END = \"2026-06-01\"" in source
-    assert "FACTOR_SELECTION_END = \"2024-12-31\"" in source
-    assert "BACKTEST_START = \"2025-01-01\"" in source
-    assert "training_factor_table = factor_table[" in source
-    assert "training_prices = prices[" in source
-    assert "tradable_index = bars.set_index([\"date\", \"symbol\"]).index" in source
-    assert (
-        "factor_table = factor_table.loc[factor_table.index.intersection(tradable_index)]"
-        in source
-    )
+    assert "FACTOR_SELECTION_END = \"2019-12-31\"" in source
+    assert "BACKTEST_START = \"2020-01-01\"" in source
+    assert "WALK_FORWARD_TRAINING_YEARS = 5" in source
+    assert "training_factor_table = filter_dates(factor_table, end=FACTOR_SELECTION_END)" in source
+    assert "training_prices = filter_dates(prices, end=FACTOR_SELECTION_END)" in source
+    assert "DATE_SYMBOL_COLUMNS = [\"date\", \"symbol\"]" in source
+    assert "tradable_index = bars.set_index(DATE_SYMBOL_COLUMNS).sort_index().index" in source
+    assert "factor_table = factor_table.loc[factor_table.index.intersection(tradable_index)]" in source
     assert "factor_table = attach_factor_metadata(factor_table, bars)" in source
+    assert "factor_table = filter_tradable_factor_rows(factor_table)" in source
     assert "factor_table = preprocess_factor_table(" in source
-    assert "clean_for_ranking = clean_factor_and_forward_returns(" in source
-    assert "ranking = rank_factors(clean_for_ranking)" in source
+    assert "ranking = rank_factors_fast(" in source
+    assert "training_prices = filter_dates(" in source
+    assert "start=str(training_start.date())" in source
+    assert "end=str(training_end.date())" in source
+    assert "if clean_for_ranking is None:" in source
     assert "report_representative_factor(clean_for_ranking, selected)" in source
-    assert "backtest_factors = factor_table[" in source
-    assert "backtest_factors = backtest_factors.reset_index()" in source
-    assert "backtest_bars = backtest_bars[" in source
-    assert (
-        "backtest_bars.index.get_level_values(\"date\") >= pd.Timestamp(BACKTEST_START)"
-        in source
-    )
+    assert "backtest_factors = filter_dates(factor_table, start=BACKTEST_START)" in source
+    assert "backtest_factors = filter_tradable_factor_rows(backtest_factors).reset_index()" in source
+    assert "bars.set_index(DATE_SYMBOL_COLUMNS).sort_index()[backtest_columns]" in source
 
 
 def test_hs300_backtest_documents_next_open_execution() -> None:
@@ -554,12 +614,10 @@ def test_hs300_backtest_uses_direct_summary_schema_for_ranking() -> None:
     assert "def get_summary_row_for_period(" not in source
     assert "def get_ic_dates(" not in source
     assert "def infer_ic_dates_from_factor_clean(" not in source
-    assert (
-        'ranking = analyzer.summary().reset_index().query("period == @FORWARD_PERIOD").copy()'
-        in source
-    )
+    assert "def rank_factors_fast(" in source
+    assert 'prices.groupby(level="symbol").shift(-FORWARD_PERIOD) / prices - 1.0' in source
     assert 'ranking["rank_ic_mean"]' in source
-    assert 'ranking["quantile_turnover_mean"]' in source
+    assert '"portfolio_annualized_return": portfolio_annualized' in source
 
 
 def test_preprocess_factor_table_winsorizes_by_date_without_touching_other_dates() -> None:
@@ -599,6 +657,27 @@ def test_preprocess_factor_table_winsorizes_by_date_without_touching_other_dates
     assert processed.loc[(second_date, "BBB"), "alpha001_101"] == -42.0
     assert processed.loc[(second_date, "CCC"), "alpha001_101"] == 5.0
     assert processed["alpha002_101"].tolist() == factor_table["alpha002_101"].tolist()
+
+
+def test_filter_tradable_factor_rows_excludes_frozen_rows() -> None:
+    module = _load_module()
+    factor_table = pd.DataFrame(
+        {
+            "alpha001_101": [1.0, 2.0],
+            "tradestatus": [1, 0],
+        },
+        index=pd.MultiIndex.from_tuples(
+            [
+                (pd.Timestamp("2020-01-02"), "AAA"),
+                (pd.Timestamp("2020-01-02"), "BBB"),
+            ],
+            names=["date", "symbol"],
+        ),
+    )
+
+    filtered = module.filter_tradable_factor_rows(factor_table)
+
+    assert filtered.index.get_level_values("symbol").tolist() == ["AAA"]
 
 
 def test_preprocess_factor_table_fills_missing_factors_by_industry_then_date() -> None:

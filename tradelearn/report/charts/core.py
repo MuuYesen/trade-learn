@@ -519,7 +519,7 @@ def _portfolio_market_replay(
     _sync_replay_crosshair(plots)
     _style_trade_activity_rows(activity_plot)
     _style_market_legend(equity_plot, compact=True)
-    _style_market_legend(allocation_plot, compact=True)
+    _hide_market_legend(allocation_plot)
     _style_market_legend(pl_plot)
     _style_market_legend(activity_plot, compact=True, large_glyphs=True)
 
@@ -712,7 +712,6 @@ def _allocation_replay_plot(
     )
     for renderer, stacker in zip(renderers, stackers):
         renderer.name = stacker
-    _sync_allocation_legend(plot, visible_symbols, display_symbols)
     hover_source = ColumnDataSource(
         _allocation_hover_frame(
             display,
@@ -758,7 +757,6 @@ def _allocation_replay_plot(
                     "allocation_source": source,
                     "allocation_full_source": full_source,
                     "allocation_hover_source": hover_source,
-                    "allocation_legend_items": list(plot.legend[0].items) if plot.legend else [],
                     "symbols": symbols,
                     "stackers": stackers,
                     "display_symbols": [display_symbols[symbol] for symbol in symbols],
@@ -1024,6 +1022,7 @@ def equity_curve(
         )
     if drawdowns is not None and not drawdowns.empty:
         _add_drawdown_markers(plot, equity, drawdowns)
+    _style_equity_curve_legend(plot)
     _make_static_chart(plot)
     return plot
 
@@ -1947,11 +1946,28 @@ def _add_drawdown_markers(plot, equity: pd.Series, drawdowns: pd.DataFrame) -> N
             marker=marker,
             size=9,
             color=color,
-            legend_label=name.replace("_", " ").title(),
+            legend_label="Peak" if column == "peak" else "Valley",
             name=name,
         )
     if plot.legend:
         plot.legend.location = "top_left"
+
+
+def _style_equity_curve_legend(plot) -> None:
+    """Use a compact in-chart legend for the overview equity curve."""
+    if not plot.legend:
+        return
+    for legend in plot.legend:
+        legend.location = "top_left"
+        legend.label_text_font_size = "9px"
+        legend.label_text_color = "#33424f"
+        legend.glyph_width = 12
+        legend.glyph_height = 8
+        legend.padding = 2
+        legend.spacing = 4
+        legend.margin = 2
+        legend.border_line_alpha = 0.25
+        legend.background_fill_alpha = 0.58
 
 
 def _normalize_dates(values: pd.Series) -> pd.Series:
@@ -2012,7 +2028,7 @@ def _positions_wide(positions: pd.DataFrame) -> pd.DataFrame:
             index="__date",
             columns=symbol_col,
             values="__value",
-            aggfunc="sum",
+            aggfunc="last",
         )
         return wide.sort_index().ffill().fillna(0.0)
     if date_col is not None:
@@ -2402,23 +2418,6 @@ def _format_allocation_holdings(
     return "<br>".join(f"{labels.get(name, name)}: {value:.1%}" for name, value in holdings)
 
 
-def _sync_allocation_legend(
-    plot,
-    visible_symbols: list[str],
-    display_symbols: dict[str, str],
-) -> None:
-    """Show selected allocation assets plus summary buckets in the legend."""
-    if not plot.legend:
-        return
-    selected = {display_symbols.get(symbol, symbol) for symbol in visible_symbols} | {
-        "Others",
-        "Cash",
-    }
-    for item in plot.legend[0].items:
-        label = getattr(item.label, "value", None)
-        item.visible = label in selected
-
-
 def _portfolio_asset_selector(symbols: list[str], initial_limit: int) -> Select:
     """Return the shared portfolio asset visibility control."""
     return Select(
@@ -2494,10 +2493,6 @@ for (let index = 0; index < rows; index++) {{
   hover.top_holdings.push(topHoldings.length ? topHoldings.map((item) => formatHolding(item[0], item[1])).join("<br>") : "-");
 }}
 allocation_hover_source.data = hover;
-for (const item of allocation_legend_items) {{
-  const label = item.label && item.label.value;
-  item.visible = selectedLabels.has(label) || label === "Others" || label === "Cash";
-}}
 allocation_source.change.emit();
 allocation_hover_source.change.emit();
 """
@@ -2535,7 +2530,7 @@ for (const asset of visibleAssets) {{
   factors.push(asset);
 }}
 y_range.factors = factors;
-plot.height = Math.max(280, Math.min(520, 120 + limit * 32));
+plot.height = Math.max(280, Math.min(3200, 160 + limit * 18));
 row_boxes_source.data = {{
   asset: visibleAssets,
   left: Array(visibleAssets.length).fill(plot.x_range.start),
@@ -2622,7 +2617,7 @@ def _trade_activity_options(symbols: list[str]) -> list[tuple[str, str]]:
 
 def _trade_activity_height(symbol_count: int) -> int:
     """Return a bounded panel height for visible trade activity rows."""
-    return max(280, min(520, 120 + symbol_count * 32))
+    return max(280, min(3200, 160 + symbol_count * 18))
 
 
 def _market_frame(market_data: pd.DataFrame) -> pd.DataFrame:
@@ -2966,7 +2961,9 @@ def _style_market_legend(plot, *, compact: bool = False, large_glyphs: bool = Fa
         legend.visible = True
         legend.location = "top_left"
         item_count = len(legend.items)
+        legend.orientation = "vertical"
         legend.ncols = item_count
+        legend.nrows = "auto"
         legend.border_line_width = 1
         legend.border_line_alpha = 0.65
         legend.border_line_color = "#d7e0e7"

@@ -161,10 +161,83 @@ def test_step9_uses_precomputed_lookup_maps_instead_of_large_dataframe_queries()
 
     assert "sb_by_code =" in source
     assert "skd_by_key =" in source
+    assert "skd_by_code =" in source
     assert "namechange_by_code =" in source
     assert "suspend_keys =" in source
     assert "skd_by_key.get((code, date_str))" in source
     assert "skd.query(f\"code == '{code}' and date == '{date_str}'\")" not in source
+
+
+def test_step9_keeps_non_tradable_valuation_rows_for_missing_bars():
+    pipeline = _load_pipeline_module()
+    code = "600001.SH"
+    history = pd.DataFrame(
+        {
+            "date": ["2020-01-02"],
+            "code": [code],
+            "open": [9.8],
+            "high": [10.5],
+            "low": [9.7],
+            "close": [10.0],
+            "preclose": [9.9],
+            "volume": [10000.0],
+            "amount": [100000.0],
+            "tradestatus": [1],
+            "pctChg": [1.0],
+        }
+    )
+
+    row = pipeline._frozen_valuation_row(code, "2020-01-03", {code: history})
+
+    assert row is not None
+    frozen = row.iloc[0]
+    assert frozen["date"] == "2020-01-03"
+    assert frozen["open"] == 10.0
+    assert frozen["high"] == 10.0
+    assert frozen["low"] == 10.0
+    assert frozen["close"] == 10.0
+    assert frozen["volume"] == 0.0
+    assert frozen["amount"] == 0.0
+    assert frozen["tradestatus"] == 0
+
+
+def test_step9_missing_bar_is_valued_but_not_tradable():
+    pipeline = _load_pipeline_module()
+    code = "600001.SH"
+    date = pd.Timestamp("2020-01-03")
+    history = pd.DataFrame(
+        {
+            "date": ["2020-01-02"],
+            "code": [code],
+            "open": [10.0],
+            "high": [10.0],
+            "low": [10.0],
+            "close": [10.0],
+            "volume": [10000.0],
+            "amount": [100000.0],
+            "tradestatus": [1],
+        }
+    )
+    args = (
+        {code},
+        date,
+        "2020-01-03",
+        {code: {"list_date": "20190101", "delist_date": ""}},
+        {},
+        {code: history},
+        {},
+        set(),
+    )
+
+    date_str, valid_set, result = pipeline._filter_single_date(args)
+
+    assert date_str == "2020-01-03"
+    assert valid_set == set()
+    assert len(result) == 1
+    assert result.iloc[0]["code"] == code
+    assert result.iloc[0]["close"] == 10.0
+    assert result.iloc[0]["volume"] == 0.0
+    assert result.iloc[0]["tradestatus"] == 0
 
 
 def test_pipeline_outputs_drop_csv_index_columns():
@@ -172,6 +245,12 @@ def test_pipeline_outputs_drop_csv_index_columns():
 
     assert "raw_data = raw_data.loc[:, ~raw_data.columns.astype(str).str.startswith('Unnamed:')]" in source
     assert "index=False" in source
+
+
+def test_step10_uses_close_as_vwap_for_zero_volume_valuation_rows():
+    source = PIPELINE_PATH.read_text(encoding="utf-8")
+
+    assert "calculated_vwap.where(volume > 0, s_data['close'].astype(float))" in source
 
 
 def test_pipeline_uses_2015_to_20260601_window_and_paths():

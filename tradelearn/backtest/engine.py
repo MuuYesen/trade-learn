@@ -661,10 +661,52 @@ def _summary_trade_metrics(trades: pd.DataFrame) -> dict[str, float]:
 
 
 def _summary_exposure_pct(positions: pd.DataFrame) -> float:
-    if positions is None or positions.empty or "size" not in positions.columns:
+    if positions is None or positions.empty:
         return 0.0
-    exposed_rows = (positions["size"].abs() > 1e-9).sum()
-    return float(exposed_rows) / len(positions) * 100.0
+    frame = pd.DataFrame(positions).copy()
+    lowered = {str(column).lower(): column for column in frame.columns}
+    date_col = lowered.get("date") or lowered.get("datetime") or lowered.get("timestamp")
+    symbol_col = (
+        lowered.get("symbol")
+        or lowered.get("ticker")
+        or lowered.get("asset")
+        or lowered.get("data")
+    )
+    size_col = lowered.get("size") or lowered.get("qty") or lowered.get("quantity")
+    value_col = lowered.get("value") or lowered.get("market_value") or lowered.get("position_value")
+    exposure_col = size_col or value_col
+    if date_col is None or exposure_col is None:
+        return 0.0
+
+    dates = pd.to_datetime(frame[date_col], errors="coerce", utc=True)
+    frame = frame.loc[dates.notna()].copy()
+    if frame.empty:
+        return 0.0
+    frame["__sort_datetime"] = dates.loc[frame.index]
+    frame["__date"] = frame["__sort_datetime"].dt.floor("D")
+    frame["__exposure"] = pd.to_numeric(frame[exposure_col], errors="coerce").fillna(0.0)
+
+    if symbol_col is None:
+        daily = frame.sort_values("__sort_datetime").groupby("__date")["__exposure"].last()
+        exposed_days = daily.abs() > 1e-9
+        return float(exposed_days.sum()) / len(daily) * 100.0 if len(daily) else 0.0
+
+    daily_wide = (
+        frame.sort_values("__sort_datetime")
+        .pivot_table(
+            index="__date",
+            columns=symbol_col,
+            values="__exposure",
+            aggfunc="last",
+        )
+        .sort_index()
+        .ffill()
+        .fillna(0.0)
+    )
+    if daily_wide.empty:
+        return 0.0
+    exposed_days = daily_wide.abs().sum(axis=1) > 1e-9
+    return float(exposed_days.sum()) / len(daily_wide) * 100.0
 
 
 def _summary_drawdown_stats(equity: pd.Series) -> dict[str, Any]:

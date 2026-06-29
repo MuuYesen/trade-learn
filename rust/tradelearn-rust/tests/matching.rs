@@ -23,6 +23,13 @@ fn bar() -> BarEvent {
     }
 }
 
+fn non_tradable_bar() -> BarEvent {
+    BarEvent {
+        volume: 0.0,
+        ..bar()
+    }
+}
+
 fn order(order_type: OrderType, side: OrderSide) -> OrderEvent {
     OrderEvent {
         order_id: 7,
@@ -79,6 +86,17 @@ fn market_orders_fill_at_open_or_close_with_side_aware_slippage() {
     assert_close(sell_fill.price, 9.75);
     assert_close(close_buy.price, 12.1);
     assert_close(close_sell.price, 9.9);
+}
+
+#[test]
+fn orders_do_not_fill_on_zero_volume_bars() {
+    let buy = order(OrderType::Market, OrderSide::Buy);
+    let mut limit_sell = order(OrderType::Limit, OrderSide::Sell);
+    limit_sell.limit_price = Some(11.0);
+
+    assert!(match_order(&buy, &non_tradable_bar(), &options()).is_none());
+    assert!(match_order_smart(&buy, &non_tradable_bar(), &options()).is_none());
+    assert!(match_order(&limit_sell, &non_tradable_bar(), &options()).is_none());
 }
 
 #[test]

@@ -40,7 +40,12 @@ from tradelearn.report.charts import (
     transaction_time_histogram,
     turnover,
 )
-from tradelearn.report.charts.core import _trade_activity_frame
+from tradelearn.report.charts.core import (
+    _positions_wide,
+    _trade_activity_frame,
+    _trade_activity_height,
+    _trade_activity_selector_js,
+)
 
 
 def test_report_charts_return_bokeh_figures() -> None:
@@ -174,7 +179,7 @@ def test_equity_curve_marks_top_drawdown_peak_and_valley() -> None:
 
 
 def test_equity_curve_highlights_drawdown_period_with_left_legend() -> None:
-    """Equity curve highlights drawdown periods without placing the legend on the right."""
+    """Equity curve highlights drawdown periods with a compact in-chart legend."""
     drawdowns = pd.DataFrame(
         {
             "peak": [pd.Timestamp("2024-01-01", tz="UTC")],
@@ -189,6 +194,9 @@ def test_equity_curve_highlights_drawdown_period_with_left_legend() -> None:
         for annotation in plot.center
     )
     assert plot.legend[0].location == "top_left"
+    assert plot.legend[0].label_text_font_size == "9px"
+    assert plot.legend[0].glyph_width == 12
+    assert [item.label.value for item in plot.legend[0].items] == ["Peak", "Valley"]
 
 
 def test_monthly_heatmap_uses_readable_neutral_color_and_hover() -> None:
@@ -239,6 +247,25 @@ def test_position_charts_carry_forward_asset_positions() -> None:
     source = plot.renderers[0].data_source
 
     assert list(source.data["holdings"]) == [1, 2]
+
+
+def test_positions_wide_uses_latest_intraday_position_state() -> None:
+    """Repeated same-day position rows are state updates and must not be summed."""
+    positions = pd.DataFrame(
+        {
+            "datetime": pd.to_datetime(
+                ["2024-01-01 09:30", "2024-01-01 09:30", "2024-01-01 09:30"],
+                utc=True,
+            ),
+            "data": ["AAA", "AAA", "BBB"],
+            "value": [100.0, 40.0, 60.0],
+        }
+    )
+
+    wide = _positions_wide(positions)
+
+    assert wide.loc[pd.Timestamp("2024-01-01 09:30"), "AAA"] == 40.0
+    assert wide.loc[pd.Timestamp("2024-01-01 09:30"), "BBB"] == 60.0
 
 
 def test_position_concentration_median_ignores_inactive_assets() -> None:
@@ -439,7 +466,6 @@ def test_portfolio_replay_uses_compact_above_legends() -> None:
     activity = _find_plot(replay, "Trade Acitivity")
     equity = _find_plot(replay, "Equity")
 
-    allocation_legends = [item for item in allocation.above if isinstance(item, Legend)]
     activity_legends = [item for item in activity.above if isinstance(item, Legend)]
     equity_labels = [
         getattr(item.label, "value", None)
@@ -447,26 +473,33 @@ def test_portfolio_replay_uses_compact_above_legends() -> None:
         if isinstance(legend, Legend)
         for item in legend.items
     ]
-    assert allocation_legends
+    assert not [item for item in allocation.above if isinstance(item, Legend)]
     assert activity_legends
     assert "Buy&Hold (Equal Weight)" in equity_labels
     assert "Buy&Hold" not in equity_labels
     assert not [item for item in allocation.right if isinstance(item, Legend)]
     assert not [item for item in activity.right if isinstance(item, Legend)]
-    assert all(legend.click_policy == "hide" for legend in allocation_legends + activity_legends)
-    assert all(legend.background_fill_alpha >= 0.7 for legend in allocation_legends + activity_legends)
-    assert all(legend.location == "top_left" for legend in allocation_legends + activity_legends)
-    assert all(legend.margin == 2 for legend in allocation_legends + activity_legends)
-    assert all(legend.padding <= 3 for legend in allocation_legends + activity_legends)
-    assert allocation_legends[0].ncols == len(allocation_legends[0].items)
-    allocation_gap = [item for item in allocation.above if isinstance(item, Spacer)]
-    activity_gap = [item for item in activity.above if isinstance(item, Spacer)]
-    assert allocation_gap and allocation_gap[0].height == 8
-    assert activity_gap and activity_gap[0].height == 8
-    assert allocation.above.index(allocation_gap[0]) < allocation.above.index(allocation_legends[0])
-    assert activity.above.index(activity_gap[0]) < activity.above.index(activity_legends[0])
-    assert allocation.height == 184
-    assert activity.height == 304
+    assert all(legend.click_policy == "hide" for legend in activity_legends)
+    assert all(legend.background_fill_alpha >= 0.7 for legend in activity_legends)
+    assert all(legend.location == "top_left" for legend in activity_legends)
+    assert all(legend.margin == 2 for legend in activity_legends)
+    assert all(legend.padding <= 3 for legend in activity_legends)
+
+
+def test_allocation_replay_omits_dense_legend() -> None:
+    """Allocation uses hover details instead of a large legend that crushes the chart."""
+    symbols = [f"AAA{index}" for index in range(20)]
+    replay = market_replay(
+        {symbol: _market_data() * (index + 1) for index, symbol in enumerate(symbols)},
+        fills=_many_asset_fills(symbols),
+        equity=_series("equity"),
+        positions=_many_asset_positions(symbols),
+    )
+
+    allocation = _find_plot(replay, "Allocation")
+
+    assert not [item for item in allocation.above if isinstance(item, Legend)]
+    assert not [item for item in allocation.right if isinstance(item, Legend)]
 
 
 def test_market_replay_keeps_single_asset_mapping_on_ohlc_layout() -> None:
@@ -708,8 +741,8 @@ def test_allocation_hover_shows_holdings_summary() -> None:
     assert set(hover_renderer.data_source.data["top_count"]) == {8}
 
 
-def test_allocation_legend_matches_selected_assets() -> None:
-    """Allocation legend should only show selected assets plus summary buckets."""
+def test_allocation_hides_legend_and_keeps_hover_details() -> None:
+    """Allocation details should come from hover instead of a dense legend."""
     symbols = [f"AAA{index}" for index in range(10)]
     replay = market_replay(
         {symbol: _market_data() * (index + 1) for index, symbol in enumerate(symbols)},
@@ -718,13 +751,11 @@ def test_allocation_legend_matches_selected_assets() -> None:
     )
 
     plot = _find_plot(replay, "Allocation")
-    legend = next(item for item in plot.above if isinstance(item, Legend))
-    visible_labels = [item.label.value for item in legend.items if item.visible]
-    hidden_labels = [item.label.value for item in legend.items if not item.visible]
+    hover_renderer = next(renderer for renderer in plot.renderers if renderer.name == "allocation_hover_segments")
 
-    assert len([label for label in visible_labels if label not in {"Others", "Cash"}]) == 8
-    assert visible_labels[-2:] == ["Others", "Cash"]
-    assert len(hidden_labels) == 2
+    assert not [item for item in plot.above if isinstance(item, Legend)]
+    assert "AAA9" in hover_renderer.data_source.data["top_holdings"][0]
+    assert "Cash" not in hover_renderer.data_source.data["top_holdings"][0]
 
 
 def test_trade_activity_draws_rebalance_separators() -> None:
@@ -832,6 +863,14 @@ def test_portfolio_replay_trade_activity_has_visibility_selector() -> None:
     assert selector.value == "8"
     assert ("15", "Top 15 by Notional") in selector.options
     assert ("all", "All Assets") in selector.options
+
+
+def test_trade_activity_height_expands_for_large_asset_sets() -> None:
+    """All-assets trade activity views need enough vertical room for asset labels."""
+    assert _trade_activity_height(8) < _trade_activity_height(80)
+    assert _trade_activity_height(80) > 520
+    assert "limit * 18" in _trade_activity_selector_js()
+    assert "Math.min(520" not in _trade_activity_selector_js()
 
 
 def test_portfolio_replay_asset_selector_prepares_allocation_others() -> None:
@@ -977,6 +1016,15 @@ def _portfolio_positions() -> pd.DataFrame:
             "value": [60.0, 40.0, 25.0, 75.0, 50.0, 50.0],
         }
     )
+
+
+def _many_asset_positions(symbols: list[str]) -> pd.DataFrame:
+    rows = []
+    dates = pd.date_range("2024-01-01", periods=3, tz="UTC")
+    for date in dates:
+        for symbol in symbols:
+            rows.append({"date": date, "symbol": symbol, "value": 100.0})
+    return pd.DataFrame(rows)
 
 
 def _multi_asset_fills() -> pd.DataFrame:

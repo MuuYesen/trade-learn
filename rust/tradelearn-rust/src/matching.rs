@@ -1,11 +1,23 @@
 use crate::types::*;
 
+fn is_tradable_bar(bar: &BarEvent) -> bool {
+    bar.volume > 0.0
+        && bar.open.is_finite()
+        && bar.high.is_finite()
+        && bar.low.is_finite()
+        && bar.close.is_finite()
+}
+
 pub fn match_order_at_price(
     order: &OrderEvent,
     price: f64,
     bar: &BarEvent,
     options: &ExecutionOptions,
 ) -> Option<FillEvent> {
+    if !is_tradable_bar(bar) || !price.is_finite() {
+        return None;
+    }
+
     let fill_price = match order.order_type {
         OrderType::Market => Some(price),
         OrderType::Limit => {
@@ -122,6 +134,10 @@ pub fn match_order(
     bar: &BarEvent,
     options: &ExecutionOptions,
 ) -> Option<FillEvent> {
+    if !is_tradable_bar(bar) {
+        return None;
+    }
+
     let execution_price = if options.trade_on_close {
         bar.close
     } else {
@@ -178,6 +194,10 @@ pub(crate) fn smart_match_price(
     bar: &BarEvent,
     options: &ExecutionOptions,
 ) -> Option<(f64, f64)> {
+    if !is_tradable_bar(bar) {
+        return None;
+    }
+
     if options.trade_on_close {
         if order.order_type == OrderType::Market {
             return Some((3.0, bar.close));
