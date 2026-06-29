@@ -49,6 +49,7 @@ MARKET_LEGEND_FRAME_GAP = 8
 MARKET_LEGEND_HEIGHT_COMPENSATION = 24
 MARKET_LEGEND_COMPENSATED_TAG = "market_legend_height_compensated"
 MARKET_LEGEND_FRAME_GAP_TAG = "market_legend_frame_gap"
+ALLOCATION_LEGEND_VISIBLE_LIMIT = 15
 MARKET_REPLAY_TITLE_STANDOFF = 10
 
 
@@ -519,7 +520,7 @@ def _portfolio_market_replay(
     _sync_replay_crosshair(plots)
     _style_trade_activity_rows(activity_plot)
     _style_market_legend(equity_plot, compact=True)
-    _hide_market_legend(allocation_plot)
+    _style_market_legend(allocation_plot, compact=True)
     _style_market_legend(pl_plot)
     _style_market_legend(activity_plot, compact=True, large_glyphs=True)
 
@@ -712,6 +713,7 @@ def _allocation_replay_plot(
     )
     for renderer, stacker in zip(renderers, stackers):
         renderer.name = stacker
+    _sync_allocation_legend(plot, visible_symbols, display_symbols)
     hover_source = ColumnDataSource(
         _allocation_hover_frame(
             display,
@@ -757,6 +759,8 @@ def _allocation_replay_plot(
                     "allocation_source": source,
                     "allocation_full_source": full_source,
                     "allocation_hover_source": hover_source,
+                    "allocation_legend": plot.legend[0] if plot.legend else None,
+                    "allocation_legend_items": list(plot.legend[0].items) if plot.legend else [],
                     "symbols": symbols,
                     "stackers": stackers,
                     "display_symbols": [display_symbols[symbol] for symbol in symbols],
@@ -2418,6 +2422,25 @@ def _format_allocation_holdings(
     return "<br>".join(f"{labels.get(name, name)}: {value:.1%}" for name, value in holdings)
 
 
+def _sync_allocation_legend(
+    plot,
+    visible_symbols: list[str],
+    display_symbols: dict[str, str],
+) -> None:
+    """Show allocation legend for small selections and hide it for all-assets views."""
+    if not plot.legend:
+        return
+    show_legend = len(visible_symbols) <= ALLOCATION_LEGEND_VISIBLE_LIMIT
+    plot.legend[0].visible = show_legend
+    selected = {display_symbols.get(symbol, symbol) for symbol in visible_symbols} | {
+        "Others",
+        "Cash",
+    }
+    for item in plot.legend[0].items:
+        label = getattr(item.label, "value", None)
+        item.visible = show_legend and label in selected
+
+
 def _portfolio_asset_selector(symbols: list[str], initial_limit: int) -> Select:
     """Return the shared portfolio asset visibility control."""
     return Select(
@@ -2493,6 +2516,14 @@ for (let index = 0; index < rows; index++) {{
   hover.top_holdings.push(topHoldings.length ? topHoldings.map((item) => formatHolding(item[0], item[1])).join("<br>") : "-");
 }}
 allocation_hover_source.data = hover;
+const showLegend = cb_obj.value !== "all" && limit <= 15;
+if (allocation_legend != null) {{
+  allocation_legend.visible = showLegend;
+}}
+for (const item of allocation_legend_items) {{
+  const label = item.label && item.label.value;
+  item.visible = showLegend && (selectedLabels.has(label) || label === "Others" || label === "Cash");
+}}
 allocation_source.change.emit();
 allocation_hover_source.change.emit();
 """

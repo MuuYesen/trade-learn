@@ -41,6 +41,7 @@ from tradelearn.report.charts import (
     turnover,
 )
 from tradelearn.report.charts.core import (
+    _allocation_selector_js,
     _positions_wide,
     _trade_activity_frame,
     _trade_activity_height,
@@ -466,6 +467,7 @@ def test_portfolio_replay_uses_compact_above_legends() -> None:
     activity = _find_plot(replay, "Trade Acitivity")
     equity = _find_plot(replay, "Equity")
 
+    allocation_legends = [item for item in allocation.above if isinstance(item, Legend)]
     activity_legends = [item for item in activity.above if isinstance(item, Legend)]
     equity_labels = [
         getattr(item.label, "value", None)
@@ -473,21 +475,21 @@ def test_portfolio_replay_uses_compact_above_legends() -> None:
         if isinstance(legend, Legend)
         for item in legend.items
     ]
-    assert not [item for item in allocation.above if isinstance(item, Legend)]
+    assert allocation_legends
     assert activity_legends
     assert "Buy&Hold (Equal Weight)" in equity_labels
     assert "Buy&Hold" not in equity_labels
     assert not [item for item in allocation.right if isinstance(item, Legend)]
     assert not [item for item in activity.right if isinstance(item, Legend)]
-    assert all(legend.click_policy == "hide" for legend in activity_legends)
-    assert all(legend.background_fill_alpha >= 0.7 for legend in activity_legends)
-    assert all(legend.location == "top_left" for legend in activity_legends)
-    assert all(legend.margin == 2 for legend in activity_legends)
-    assert all(legend.padding <= 3 for legend in activity_legends)
+    assert all(legend.click_policy == "hide" for legend in allocation_legends + activity_legends)
+    assert all(legend.background_fill_alpha >= 0.7 for legend in allocation_legends + activity_legends)
+    assert all(legend.location == "top_left" for legend in allocation_legends + activity_legends)
+    assert all(legend.margin == 2 for legend in allocation_legends + activity_legends)
+    assert all(legend.padding <= 3 for legend in allocation_legends + activity_legends)
 
 
-def test_allocation_replay_omits_dense_legend() -> None:
-    """Allocation uses hover details instead of a large legend that crushes the chart."""
+def test_allocation_replay_shows_small_selection_legend_and_hides_all_assets() -> None:
+    """Allocation shows Top8/Top15 legends and hides the legend for All Assets."""
     symbols = [f"AAA{index}" for index in range(20)]
     replay = market_replay(
         {symbol: _market_data() * (index + 1) for index, symbol in enumerate(symbols)},
@@ -497,9 +499,14 @@ def test_allocation_replay_omits_dense_legend() -> None:
     )
 
     allocation = _find_plot(replay, "Allocation")
+    legend = next(item for item in allocation.above if isinstance(item, Legend))
+    visible_labels = [item.label.value for item in legend.items if item.visible]
 
-    assert not [item for item in allocation.above if isinstance(item, Legend)]
     assert not [item for item in allocation.right if isinstance(item, Legend)]
+    assert legend.visible is True
+    assert len([label for label in visible_labels if label not in {"Others", "Cash"}]) == 8
+    assert 'cb_obj.value !== "all"' in _allocation_selector_js()
+    assert "allocation_legend.visible = showLegend" in _allocation_selector_js()
 
 
 def test_market_replay_keeps_single_asset_mapping_on_ohlc_layout() -> None:
@@ -741,8 +748,8 @@ def test_allocation_hover_shows_holdings_summary() -> None:
     assert set(hover_renderer.data_source.data["top_count"]) == {8}
 
 
-def test_allocation_hides_legend_and_keeps_hover_details() -> None:
-    """Allocation details should come from hover instead of a dense legend."""
+def test_allocation_legend_matches_selected_assets_and_keeps_hover_details() -> None:
+    """Allocation legend covers small selections while hover keeps detailed weights."""
     symbols = [f"AAA{index}" for index in range(10)]
     replay = market_replay(
         {symbol: _market_data() * (index + 1) for index, symbol in enumerate(symbols)},
@@ -751,9 +758,12 @@ def test_allocation_hides_legend_and_keeps_hover_details() -> None:
     )
 
     plot = _find_plot(replay, "Allocation")
+    legend = next(item for item in plot.above if isinstance(item, Legend))
     hover_renderer = next(renderer for renderer in plot.renderers if renderer.name == "allocation_hover_segments")
+    visible_labels = [item.label.value for item in legend.items if item.visible]
 
-    assert not [item for item in plot.above if isinstance(item, Legend)]
+    assert len([label for label in visible_labels if label not in {"Others", "Cash"}]) == 8
+    assert visible_labels[-2:] == ["Others", "Cash"]
     assert "AAA9" in hover_renderer.data_source.data["top_holdings"][0]
     assert "Cash" not in hover_renderer.data_source.data["top_holdings"][0]
 
