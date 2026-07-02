@@ -49,6 +49,8 @@ jobs:
         include:
           - os: ubuntu-latest
             cibw-archs: auto64
+          - os: ubuntu-latest
+            cibw-archs: aarch64
           - os: macos-14
             cibw-archs: arm64
           - os: windows-latest
@@ -56,6 +58,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: docker/setup-qemu-action@v3
+        if: matrix.os == 'ubuntu-latest' && matrix.cibw-archs == 'aarch64'
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
