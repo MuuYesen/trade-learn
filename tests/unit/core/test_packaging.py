@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
+    import tomli as tomllib
+
 ROOT = Path(__file__).resolve().parents[3]
 PYPROJECT = ROOT / "pyproject.toml"
 RELEASE_WORKFLOW = ROOT / ".github/workflows/release.yml"
@@ -18,6 +23,33 @@ def test_cibuildwheel_config_targets_supported_python_and_platforms() -> None:
     assert "[tool.cibuildwheel.linux]" in pyproject
     assert "[tool.cibuildwheel.macos]" in pyproject
     assert "[tool.cibuildwheel.windows]" in pyproject
+
+
+def test_optional_backends_are_not_required_for_core_install() -> None:
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+    dependencies = pyproject["project"]["dependencies"]
+    extras = pyproject["project"]["optional-dependencies"]
+
+    optional_runtime_prefixes = (
+        "opentdx",
+        "tradingview-datafeed",
+        "TA-Lib",
+        "pynesys-pynecore",
+        "causal-learn",
+        "numba",
+    )
+
+    assert not any(
+        dep.startswith(prefix)
+        for dep in dependencies
+        for prefix in optional_runtime_prefixes
+    )
+    assert any(dep.startswith("opentdx") for dep in extras["tdx"])
+    assert any(dep.startswith("tradingview-datafeed") for dep in extras["tv"])
+    assert any(dep.startswith("pynesys-pynecore") for dep in extras["tv"])
+    assert any(dep.startswith("TA-Lib") for dep in extras["talib"])
+    assert any(dep.startswith("causal-learn") for dep in extras["ml"])
+    assert any(dep.startswith("numba") for dep in extras["research"])
 
 
 def test_cibuildwheel_smoke_test_imports_rust_extension() -> None:

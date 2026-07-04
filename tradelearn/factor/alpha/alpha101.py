@@ -24,19 +24,9 @@ def alpha101(stock_data: pd.DataFrame, names: Iterable[str] | None = None) -> pd
         raise ValueError(f"unknown Alpha101 formulas: {unknown}")
 
     factors = Alpha101Factors(_pivot_stock_data(stock_data))
-    result = pd.DataFrame({"date": [], "symbol": []})
-    for name in selected:
-        frame = getattr(factors, name)().copy()
-        frame["date"] = frame.index
-        frame = frame.melt(
-            id_vars="date",
-            value_vars=frame.columns.drop("date"),
-            var_name="symbol",
-            value_name=name,
-        )
-        frame.rename(columns={name: f"{name}_101"}, inplace=True)
-        result = pd.merge(result, frame, how="outer", on=["date", "symbol"])
-    return result
+    return _factor_frames_to_long(
+        {f"{name}_101": getattr(factors, name)() for name in selected}
+    )
 
 
 class Alpha101Factors:
@@ -930,9 +920,29 @@ def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     return stock_data.pivot(index="date", columns="symbol")
 
 
+def _factor_frames_to_long(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Return long-form factor values without repeated pairwise merges."""
+    if not frames:
+        return pd.DataFrame({"date": [], "symbol": []})
+    first = next(iter(frames.values()))
+    index = pd.MultiIndex.from_product(
+        [first.index, first.columns],
+        names=["date", "symbol"],
+    )
+    columns = {
+        name: pd.Series(
+            frame.to_numpy(copy=False).ravel(),
+            index=index,
+        )
+        for name, frame in frames.items()
+    }
+    result = pd.concat(columns, axis=1)
+    return result.reset_index()
+
+
 def _returns(frame: pd.DataFrame) -> pd.DataFrame:
     """Return one-period simple returns."""
-    return frame.rolling(2).apply(lambda values: values.iloc[-1] / values.iloc[0]) - 1
+    return frame.pct_change(fill_method=None)
 
 
 def _stddev(frame: pd.DataFrame, window: int) -> pd.DataFrame:
@@ -947,7 +957,7 @@ def _ts_sum(frame: pd.DataFrame, window: int) -> pd.DataFrame:
 
 def _product(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling product."""
-    return frame.rolling(window).apply(np.prod)
+    return frame.rolling(window).apply(np.prod, raw=True)
 
 
 def _log(frame: pd.DataFrame) -> pd.DataFrame:
@@ -1035,12 +1045,12 @@ def _rolling_rank(values: np.ndarray) -> float:
 
 def _ts_argmax(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return the one-based position of the rolling maximum."""
-    return frame.rolling(window).apply(np.argmax) + 1
+    return frame.rolling(window).apply(np.argmax, raw=True) + 1
 
 
 def _ts_argmin(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return the one-based position of the rolling minimum."""
-    return frame.rolling(window).apply(np.argmin) + 1
+    return frame.rolling(window).apply(np.argmin, raw=True) + 1
 
 
 def _ts_rank(frame: pd.DataFrame, window: int) -> pd.DataFrame:

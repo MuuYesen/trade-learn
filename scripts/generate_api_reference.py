@@ -26,7 +26,7 @@ API_REFERENCE_MODULES: tuple[ApiReferenceModule, ...] = (
         "Lite",
         "tradelearn.lite",
         "Lightweight Tradelearn 1.x style API.",
-        ("Backtest", "Strategy", "talib", "pta", "tdx", "tv"),
+        ("Backtest", "Strategy", "TargetOrderConstraints"),
     ),
     ApiReferenceModule(
         "Engine",
@@ -43,8 +43,8 @@ API_REFERENCE_MODULES: tuple[ApiReferenceModule, ...] = (
     ApiReferenceModule(
         "Indicators",
         "tradelearn.indicators",
-        "Technical indicator facade for pandas-ta-classic, TA-Lib, TDX, and TradingView styles.",
-        ("sma", "ema", "rsi", "macd", "pta", "talib", "tdx", "tv"),
+        "Technical indicator facade for core indicators and optional pandas-ta-classic, TA-Lib, TDX, and TradingView styles.",
+        ("sma", "ema", "rsi", "macd", "adx", "atr", "bbands", "vwap"),
     ),
     ApiReferenceModule(
         "Metrics",
@@ -598,6 +598,7 @@ def render_lite_api_guide() -> str:
             {
                 "weights": "ticker 到目标权重的映射,或 pandas Series。",
                 "close_missing": "是否把未出现在 weights 中的已知 ticker 调整为 0。",
+                "constraints": "可选交易约束,例如 A 股买入整手、卖出整手、可卖数量限制。",
             },
             returns="`list[Order]`。",
         ),
@@ -701,9 +702,11 @@ def render_lite_api_guide() -> str:
 def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE_MODULES) -> str:
     """Render the readable API reference index page."""
     parts = [
-        "# Overview",
+        "# API 参考",
         "",
         "本页由 `scripts/generate_api_reference.py` 自动生成。",
+        "",
+        "## 先看这里",
         "",
         "把这里当作 Tradelearn 的 API 地图：",
         "- **Guide**：侧重“怎么用”，提供场景化示例和逻辑说明。",
@@ -717,7 +720,7 @@ def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE
         "| 编写 Backtrader 风格高级策略 | [Engine API 签名](../guides/engine-api.md) |",
         "| 理解两种入口的设计差异 | [策略编写指南](../guides/strategy.md) |",
         "",
-        "## 公开模块矩阵",
+        "## 公开模块",
         "",
         "| 模块 | 用途 | 常用入口 | 完整 Reference |",
         "|---|---|---|---|",
@@ -732,6 +735,16 @@ def render_api_reference(modules: tuple[ApiReferenceModule, ...] = API_REFERENCE
             f"{entries} | "
             f"[{module.title}](reference/{slug}.md) |"
         )
+    parts.extend(["", "## 按模块列出公开符号", ""])
+    for module in modules:
+        slug = _module_slug(module)
+        entries = _public_symbols_text(module, limit=40)
+        parts.extend([
+            f"### [`{module.import_path}`](reference/{slug}.md)",
+            "",
+            entries or "_无公开符号_",
+            "",
+        ])
     return "\n".join(parts).rstrip() + "\n"
 
 

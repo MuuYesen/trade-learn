@@ -20,6 +20,7 @@ from tradelearn.core.costs import (
     PercentCommission,
     PercentSlippage,
 )
+from tradelearn.backtest.targets import TargetOrderConstraints
 from tradelearn.engine.signal import (
     SIGNAL_LONG,
     SIGNAL_LONG_ANY,
@@ -118,10 +119,7 @@ __all__ = [
     "FixedSlippage",
     "PercentCommission",
     "PercentSlippage",
-    "pta",
-    "talib",
-    "tdx",
-    "tv",
+    "TargetOrderConstraints",
     "Signal",
     "SignalStrategy",
     "SIGNAL_NONE",

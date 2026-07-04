@@ -7,7 +7,15 @@ from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[3]
-EXAMPLES = ROOT / "zoo" / "outputs" / "examples"
+EXAMPLES = (
+    ROOT
+    / "zoo"
+    / "wechat_docs"
+    / "articles"
+    / "alpha101-us-tech"
+    / "outputs"
+    / "examples"
+)
 EXAMPLE = EXAMPLES / "alpha101_us_tech_lite_backtest.py"
 
 

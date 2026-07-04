@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from tradelearn.backtest.models import Order, Position
 from tradelearn.engine import Strategy
 
@@ -38,6 +40,23 @@ def test_strategy_submit_order_is_shared_core_order_entrypoint() -> None:
 
     assert submitted[2:6] == (Order.Sell, 4.0, 9.5, Order.Limit)
     assert strategy._pending_size[data] == -4.0
+
+
+def test_strategy_submit_order_rolls_back_pending_size_when_broker_rejects() -> None:
+    data = object()
+
+    class RejectingBroker(RecordingBroker):
+        def _submit(self, owner, data, side, size, price, exectype, **kwargs):
+            raise RuntimeError("rejected")
+
+    strategy = Strategy()
+    strategy.data = data
+    strategy.broker = RejectingBroker()
+
+    with pytest.raises(RuntimeError, match="rejected"):
+        strategy.buy(size=5)
+
+    assert strategy._pending_size.get(data, 0.0) == 0.0
 
 
 def test_strategy_position_uses_broker_before_fallback_state() -> None:

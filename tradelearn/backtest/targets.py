@@ -37,6 +37,15 @@ class TargetOrderIntent:
     data: Any | None = None
 
 
+@dataclass(frozen=True)
+class TargetOrderConstraints:
+    """Optional trading constraints applied while building target-weight intents."""
+
+    buy_lot_size: int = 1
+    sell_lot_size: int = 1
+    max_sell_qty_by_symbol: Mapping[str, float] | None = None
+
+
 def coerce_target_weights(weights: Mapping[str, float] | pd.Series) -> dict[str, float]:
     """Return plain ``str -> float`` target weights."""
 
@@ -75,9 +84,11 @@ def build_target_weight_intents(
     equity: float,
     close_missing: bool = True,
     unknown_label: str = "symbol(s)",
+    constraints: TargetOrderConstraints | None = None,
 ) -> list[TargetOrderIntent]:
     """Build sell-first order intents for target portfolio weights."""
 
+    constraints = constraints or TargetOrderConstraints()
     known_symbols = set(data_by_symbol)
     requested, _cash_weight = validate_target_weights(
         weights,
@@ -115,6 +126,15 @@ def build_target_weight_intents(
             if not qty:
                 continue
             side = "buy" if delta_value > 0 else "sell"
+        qty = _apply_order_constraints(
+            symbol,
+            side,
+            qty,
+            constraints,
+            close_position=abs(float(target_weight)) < 1e-12,
+        )
+        if not qty:
+            continue
         intents.append(
             TargetOrderIntent(
                 symbol=symbol,
@@ -129,3 +149,33 @@ def build_target_weight_intents(
 
     intents.sort(key=lambda intent: (intent.delta_weight, intent.symbol))
     return intents
+
+
+def _apply_order_constraints(
+    symbol: str,
+    side: str,
+    qty: float,
+    constraints: TargetOrderConstraints,
+    *,
+    close_position: bool = False,
+) -> float:
+    if side == "buy":
+        if close_position:
+            return float(int(qty))
+        return float(_round_down_lot(qty, constraints.buy_lot_size))
+    max_sell_qty = None
+    if constraints.max_sell_qty_by_symbol:
+        max_sell_qty = constraints.max_sell_qty_by_symbol.get(str(symbol))
+    if max_sell_qty is not None:
+        qty = min(float(qty), max(float(max_sell_qty), 0.0))
+    lot_size = int(constraints.sell_lot_size or 1)
+    if lot_size > 1 and not close_position:
+        qty = _round_down_lot(qty, lot_size)
+    return float(qty)
+
+
+def _round_down_lot(qty: float, lot_size: int) -> float:
+    lot_size = int(lot_size or 1)
+    if lot_size <= 1:
+        return float(int(qty))
+    return float(int(qty // lot_size) * lot_size)

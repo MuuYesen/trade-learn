@@ -7,6 +7,7 @@ import pytest
 
 from tradelearn.core.broker_contracts import (
     AccountSnapshot,
+    Broker,
     Fill,
     OrderAck,
     OrderRequest,
@@ -54,3 +55,8 @@ def test_core_broker_contracts_are_broker_neutral_data_shells() -> None:
 
     with pytest.raises(dataclasses.FrozenInstanceError):
         req.qty = 3.0  # type: ignore[misc]
+
+
+def test_broker_protocol_exposes_batch_order_status_lookup() -> None:
+    assert hasattr(Broker, "order_status")
+    assert hasattr(Broker, "order_statuses")

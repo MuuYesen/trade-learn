@@ -6,7 +6,11 @@ from collections.abc import Iterable
 
 import numpy as np
 import pandas as pd
-from scipy.stats import rankdata
+
+try:
+    from numba import njit
+except ImportError:  # pragma: no cover - exercised only in environments without numba
+    njit = None
 
 _ALPHA191_NAMES = frozenset(f"alpha{index:03d}" for index in range(1, 192))
 
@@ -23,19 +27,9 @@ def alpha191(
         raise ValueError(f"unknown Alpha191 formulas: {unknown}")
 
     factors = Alpha191Factors(_pivot_stock_data(stock_data), bench_data)
-    result = pd.DataFrame({"date": [], "symbol": []})
-    for name in selected:
-        frame = getattr(factors, name)().copy()
-        frame["date"] = frame.index
-        frame = frame.melt(
-            id_vars="date",
-            value_vars=frame.columns.drop("date"),
-            var_name="symbol",
-            value_name=name,
-        )
-        frame.rename(columns={name: f"{name}_191"}, inplace=True)
-        result = pd.merge(result, frame, how="outer", on=["date", "symbol"])
-    return result
+    return _factor_frames_to_long(
+        {f"{name}_191": getattr(factors, name)() for name in selected}
+    )
 
 
 class Alpha191Factors:
@@ -1798,9 +1792,29 @@ def _pivot_stock_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     return stock_data.pivot(index="date", columns="symbol")
 
 
+def _factor_frames_to_long(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Return long-form factor values without repeated pairwise merges."""
+    if not frames:
+        return pd.DataFrame({"date": [], "symbol": []})
+    first = next(iter(frames.values()))
+    index = pd.MultiIndex.from_product(
+        [first.index, first.columns],
+        names=["date", "symbol"],
+    )
+    columns = {
+        name: pd.Series(
+            frame.to_numpy(copy=False).ravel(),
+            index=index,
+        )
+        for name, frame in frames.items()
+    }
+    result = pd.concat(columns, axis=1)
+    return result.reset_index()
+
+
 def _returns(frame: pd.DataFrame) -> pd.DataFrame:
     """Return one-period simple returns."""
-    return frame.rolling(2).apply(lambda values: values.iloc[-1] / values.iloc[0]) - 1
+    return frame.pct_change(fill_method=None)
 
 
 def _rank(frame: pd.DataFrame) -> pd.DataFrame:
@@ -1837,12 +1851,12 @@ def _ts_sum(frame: pd.DataFrame, window: int) -> pd.DataFrame:
 
 def _prod(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling product."""
-    return frame.rolling(window).apply(lambda values: np.prod(values))
+    return frame.rolling(window).apply(np.prod, raw=True)
 
 
 def _count(cond: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling count of true values."""
-    return cond.rolling(window).apply(lambda values: values.sum())
+    return cond.rolling(window).sum()
 
 
 def _broadcast_series(series: pd.Series, template: pd.DataFrame) -> pd.DataFrame:
@@ -1882,7 +1896,9 @@ def _sequence(size: int) -> np.ndarray:
 def _regbeta(frame: pd.DataFrame, x_values: np.ndarray) -> pd.DataFrame:
     """Return rolling linear-regression slope against ``x_values``."""
     window = len(x_values)
-    return frame.rolling(window).apply(lambda values: np.polyfit(x_values, values, 1)[0])
+    values = frame.to_numpy(dtype=float, copy=False)
+    slopes = _rolling_regression_slope_2d(values, np.asarray(x_values, dtype=float))
+    return pd.DataFrame(slopes, index=frame.index, columns=frame.columns)
 
 
 def _rolling_beta(frame: pd.DataFrame, benchmark: pd.Series, window: int) -> pd.DataFrame:
@@ -1895,21 +1911,25 @@ def _rolling_beta(frame: pd.DataFrame, benchmark: pd.Series, window: int) -> pd.
 
 def _decay_linear(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling linear weighted average."""
-    weights = np.arange(1, window + 1)
-    weight_sum = np.sum(weights)
-    return frame.rolling(window).apply(lambda values: np.sum(weights * values) / weight_sum)
+    weights = np.arange(1, window + 1, dtype=float)
+    values = frame.to_numpy(dtype=float, copy=False)
+    result = _rolling_weighted_mean_2d(values, weights)
+    return pd.DataFrame(result, index=frame.index, columns=frame.columns)
 
 
 def _wma(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return legacy exponentially decayed weighted moving average."""
-    weights = np.power(0.9, np.arange(window - 1, -1, -1))
-    weight_sum = np.sum(weights)
-    return frame.rolling(window).apply(lambda values: np.sum(weights * values) / weight_sum)
+    weights = np.power(0.9, np.arange(window - 1, -1, -1, dtype=float))
+    values = frame.to_numpy(dtype=float, copy=False)
+    result = _rolling_weighted_mean_2d(values, weights)
+    return pd.DataFrame(result, index=frame.index, columns=frame.columns)
 
 
 def _ts_rank(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling rank of the latest value."""
-    return frame.rolling(window).apply(lambda values: rankdata(values)[-1])
+    values = frame.to_numpy(dtype=float, copy=False)
+    ranked = _rolling_average_rank_last_2d(values, window)
+    return pd.DataFrame(ranked, index=frame.index, columns=frame.columns)
 
 
 def _ts_max(frame: pd.DataFrame, window: int) -> pd.DataFrame:
@@ -1934,12 +1954,18 @@ def _row_min(frame: pd.DataFrame) -> pd.Series:
 
 def _lowday(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return days since the rolling minimum, matching legacy Lowday."""
-    return frame.rolling(window).apply(lambda values: len(values) - values.argmin())
+    return frame.rolling(window).apply(
+        lambda values: len(values) - values.argmin(),
+        raw=True,
+    )
 
 
 def _highday(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return days since the rolling maximum, matching legacy Highday."""
-    return frame.rolling(window).apply(lambda values: len(values) - values.argmax())
+    return frame.rolling(window).apply(
+        lambda values: len(values) - values.argmax(),
+        raw=True,
+    )
 
 
 def _elementwise_max(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
@@ -1950,6 +1976,186 @@ def _elementwise_max(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
 def _elementwise_min(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
     """Return element-wise minimum."""
     return np.minimum(left, right)
+
+
+def _rolling_average_rank_last_2d(values: np.ndarray, window: int) -> np.ndarray:
+    """Return scipy rankdata default-rank of each column's latest window value."""
+    if njit is not None:
+        return _rolling_average_rank_last_2d_numba(values, window)
+    return _rolling_average_rank_last_2d_numpy(values, window)
+
+
+def _rolling_average_rank_last_2d_numpy(values: np.ndarray, window: int) -> np.ndarray:
+    rows, cols = values.shape
+    result = np.full((rows, cols), np.nan, dtype=float)
+    for col in range(cols):
+        for row in range(window - 1, rows):
+            latest = values[row, col]
+            less = 0
+            equal = 0
+            valid = True
+            for offset in range(window):
+                value = values[row - window + 1 + offset, col]
+                if np.isnan(value):
+                    valid = False
+                    break
+                if value < latest:
+                    less += 1
+                elif value == latest:
+                    equal += 1
+            if valid:
+                result[row, col] = 1.0 + less + (equal - 1) / 2.0
+    return result
+
+
+def _rolling_weighted_mean_2d(values: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    """Return rolling weighted means for each column."""
+    if njit is not None:
+        return _rolling_weighted_mean_2d_numba(values, weights)
+    return _rolling_weighted_mean_2d_numpy(values, weights)
+
+
+def _rolling_weighted_mean_2d_numpy(values: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    rows, cols = values.shape
+    window = len(weights)
+    result = np.full((rows, cols), np.nan, dtype=float)
+    weight_sum = float(np.sum(weights))
+    for col in range(cols):
+        for row in range(window - 1, rows):
+            total = 0.0
+            valid = True
+            for offset in range(window):
+                value = values[row - window + 1 + offset, col]
+                if np.isnan(value):
+                    valid = False
+                    break
+                total += weights[offset] * value
+            if valid:
+                result[row, col] = total / weight_sum
+    return result
+
+
+def _rolling_regression_slope_2d(values: np.ndarray, x_values: np.ndarray) -> np.ndarray:
+    """Return rolling OLS slopes against fixed x-values for each column."""
+    if njit is not None:
+        return _rolling_regression_slope_2d_numba(values, x_values)
+    return _rolling_regression_slope_2d_numpy(values, x_values)
+
+
+def _rolling_regression_slope_2d_numpy(values: np.ndarray, x_values: np.ndarray) -> np.ndarray:
+    rows, cols = values.shape
+    window = len(x_values)
+    result = np.full((rows, cols), np.nan, dtype=float)
+    x_mean = float(np.mean(x_values))
+    x_denom = float(np.sum((x_values - x_mean) ** 2))
+    for col in range(cols):
+        for row in range(window - 1, rows):
+            y_sum = 0.0
+            valid = True
+            for offset in range(window):
+                value = values[row - window + 1 + offset, col]
+                if np.isnan(value):
+                    valid = False
+                    break
+                y_sum += value
+            if not valid or x_denom == 0.0:
+                continue
+            y_mean = y_sum / window
+            numerator = 0.0
+            for offset in range(window):
+                value = values[row - window + 1 + offset, col]
+                numerator += (x_values[offset] - x_mean) * (value - y_mean)
+            result[row, col] = numerator / x_denom
+    return result
+
+
+if njit is not None:
+
+    @njit(cache=True)
+    def _rolling_average_rank_last_2d_numba(values: np.ndarray, window: int) -> np.ndarray:
+        rows, cols = values.shape
+        result = np.empty((rows, cols), dtype=np.float64)
+        result[:, :] = np.nan
+        for col in range(cols):
+            for row in range(window - 1, rows):
+                latest = values[row, col]
+                less = 0
+                equal = 0
+                valid = True
+                for offset in range(window):
+                    value = values[row - window + 1 + offset, col]
+                    if np.isnan(value):
+                        valid = False
+                        break
+                    if value < latest:
+                        less += 1
+                    elif value == latest:
+                        equal += 1
+                if valid:
+                    result[row, col] = 1.0 + less + (equal - 1) / 2.0
+        return result
+
+    @njit(cache=True)
+    def _rolling_weighted_mean_2d_numba(values: np.ndarray, weights: np.ndarray) -> np.ndarray:
+        rows, cols = values.shape
+        window = len(weights)
+        result = np.empty((rows, cols), dtype=np.float64)
+        result[:, :] = np.nan
+        weight_sum = 0.0
+        for offset in range(window):
+            weight_sum += weights[offset]
+        for col in range(cols):
+            for row in range(window - 1, rows):
+                total = 0.0
+                valid = True
+                for offset in range(window):
+                    value = values[row - window + 1 + offset, col]
+                    if np.isnan(value):
+                        valid = False
+                        break
+                    total += weights[offset] * value
+                if valid:
+                    result[row, col] = total / weight_sum
+        return result
+
+    @njit(cache=True)
+    def _rolling_regression_slope_2d_numba(values: np.ndarray, x_values: np.ndarray) -> np.ndarray:
+        rows, cols = values.shape
+        window = len(x_values)
+        result = np.empty((rows, cols), dtype=np.float64)
+        result[:, :] = np.nan
+        x_sum = 0.0
+        for offset in range(window):
+            x_sum += x_values[offset]
+        x_mean = x_sum / window
+        x_denom = 0.0
+        for offset in range(window):
+            diff = x_values[offset] - x_mean
+            x_denom += diff * diff
+        for col in range(cols):
+            for row in range(window - 1, rows):
+                y_sum = 0.0
+                valid = True
+                for offset in range(window):
+                    value = values[row - window + 1 + offset, col]
+                    if np.isnan(value):
+                        valid = False
+                        break
+                    y_sum += value
+                if not valid or x_denom == 0.0:
+                    continue
+                y_mean = y_sum / window
+                numerator = 0.0
+                for offset in range(window):
+                    value = values[row - window + 1 + offset, col]
+                    numerator += (x_values[offset] - x_mean) * (value - y_mean)
+                result[row, col] = numerator / x_denom
+        return result
+
+else:
+    _rolling_average_rank_last_2d_numba = _rolling_average_rank_last_2d_numpy
+    _rolling_weighted_mean_2d_numba = _rolling_weighted_mean_2d_numpy
+    _rolling_regression_slope_2d_numba = _rolling_regression_slope_2d_numpy
 
 
 def _directional_range_parts(

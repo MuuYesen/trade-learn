@@ -4,13 +4,20 @@ import os
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 
 PIPELINE_PATH = (
     Path(__file__).resolve().parents[2]
     / "zoo"
+    / "backtest"
     / "tushare_sw_hs300"
     / "hs300_pipeline_tushare_sw.py"
+)
+
+pytestmark = pytest.mark.skipif(
+    not PIPELINE_PATH.exists(),
+    reason="ignored HS300 pipeline example is not present",
 )
 
 
@@ -58,8 +65,8 @@ def test_base_dir_is_script_relative():
     source = PIPELINE_PATH.read_text(encoding="utf-8")
 
     assert "SCRIPT_DIR" in source
-    assert "DATA_DIR   = os.path.join(SCRIPT_DIR, 'data')" in source
-    assert "BASE_DIR   = os.path.join(DATA_DIR, f'hs300_{PERIOD_TAG}')" in source
+    assert 'DATA_DIR = os.path.join(SCRIPT_DIR, "data")' in source
+    assert 'BASE_DIR = os.path.join(DATA_DIR, f"hs300_{PERIOD_TAG}")' in source
 
 
 def test_skip_can_be_overridden_for_specific_step(monkeypatch, tmp_path):
@@ -90,7 +97,7 @@ def test_csi_audit_can_be_enabled_by_environment(monkeypatch):
 def test_share_capital_fields_are_requested_and_merged():
     source = PIPELINE_PATH.read_text(encoding="utf-8")
 
-    assert "fields = 'trade_date,total_share,float_share,free_share'" in source
+    assert 'fields="trade_date,total_share,float_share,free_share"' in source
     assert "total_share" in source
     assert "free_share" in source
     assert "total_mv_calc" in source
@@ -137,17 +144,17 @@ def test_pipeline_keeps_excluded_refactors_out():
 def test_sw_component_fetch_validates_history_fields_and_falls_back_to_all_members():
     source = PIPELINE_PATH.read_text(encoding="utf-8")
 
-    assert "required_history_cols = {'con_code', 'in_date', 'out_date'}" in source
+    assert 'required_history_cols = {"con_code", "in_date", "out_date"}' in source
     assert "_has_history_component_fields(res)" in source
-    assert "for is_new in ['Y', 'N']" in source
+    assert 'for is_new in ["Y", "N"]' in source
     assert "pro.index_member_all(l1_code=raw_code, is_new=is_new)" in source
-    assert "res['con_code'] = res['ts_code']" in source
+    assert 'res["con_code"] = res["ts_code"]' in source
 
 
 def test_low_risk_pipeline_optimizations_are_present():
     source = PIPELINE_PATH.read_text(encoding="utf-8")
 
-    assert "sort_values('date')" in source
+    assert 'sort_values("date")' in source
     assert "force_step7b" in source
     assert "min_industry_coverage = 100" in source
     assert "all_data_parts = []" in source
@@ -243,28 +250,233 @@ def test_step9_missing_bar_is_valued_but_not_tradable():
 def test_pipeline_outputs_drop_csv_index_columns():
     source = PIPELINE_PATH.read_text(encoding="utf-8")
 
-    assert "raw_data = raw_data.loc[:, ~raw_data.columns.astype(str).str.startswith('Unnamed:')]" in source
+    assert (
+        'raw_data = raw_data.loc[:, ~raw_data.columns.astype(str).str.startswith("Unnamed:")]'
+        in source
+    )
     assert "index=False" in source
 
 
 def test_step10_uses_close_as_vwap_for_zero_volume_valuation_rows():
     source = PIPELINE_PATH.read_text(encoding="utf-8")
 
-    assert "calculated_vwap.where(volume > 0, s_data['close'].astype(float))" in source
+    assert 'calculated_vwap.where(volume > 0, s_data["close"].astype(float))' in source
 
 
-def test_pipeline_uses_2015_to_20260601_window_and_paths():
+def test_pipeline_uses_dynamic_end_date_window_and_paths():
     source = PIPELINE_PATH.read_text(encoding="utf-8")
 
-    assert "BEGIN_DATE = '2015-01-01'" in source
-    assert "END_DATE_STR = '2026-06-01'" in source
-    assert "PERIOD_TAG = '20150101_20260601'" in source
-    assert "DATA_DIR   = os.path.join(SCRIPT_DIR, 'data')" in source
-    assert "BASE_DIR   = os.path.join(DATA_DIR, f'hs300_{PERIOD_TAG}')" in source
-    assert "RAW_DIR    = os.path.join(BASE_DIR, 'raw')" in source
-    assert "PATH_FINAL       = os.path.join(BASE_DIR, f'000300SH_{PERIOD_TAG}.csv')" in source
-    assert "PATH_RAW_FILTER  = os.path.join(BASE_DIR, f'000300SH_raw_{PERIOD_TAG}.csv')" in source
+    assert 'BEGIN_DATE = os.environ.get("HS300_BEGIN_DATE", "2015-01-01")' in source
+    assert "END_DATE_STR = os.environ.get(" in source
+    assert '"HS300_END_DATE"' in source
+    assert 'pd.Timestamp.now(tz="Asia/Tokyo").strftime("%Y-%m-%d")' in source
+    assert "PERIOD_TAG = (" in source
+    assert 'DATA_DIR = os.path.join(SCRIPT_DIR, "data")' in source
+    assert 'BASE_DIR = os.path.join(DATA_DIR, f"hs300_{PERIOD_TAG}")' in source
+    assert 'RAW_DIR = os.path.join(BASE_DIR, "raw")' in source
+    assert 'PATH_FINAL = os.path.join(BASE_DIR, f"000300SH_{PERIOD_TAG}.csv")' in source
+    assert 'PATH_RAW_FILTER = os.path.join(BASE_DIR, f"000300SH_raw_{PERIOD_TAG}.csv")' in source
     assert "2012_2024" not in source
+
+
+def test_pipeline_daily_mode_paths_are_separate_from_full_period_paths():
+    source = PIPELINE_PATH.read_text(encoding="utf-8")
+
+    assert 'PIPELINE_MODE = os.environ.get("HS300_PIPELINE_MODE", "daily")' in source
+    assert 'DAILY_DIR = os.path.join(DATA_DIR, "hs300_daily")' in source
+    assert 'PATH_DAILY_FINAL = os.path.join(DAILY_DIR, f"000300SH_{DAILY_TAG}.csv")' in source
+    assert "def main_daily()" in source
+    assert "def main_full()" in source
+
+
+def test_latest_full_data_path_ignores_daily_directory(tmp_path):
+    pipeline = _load_pipeline_module()
+    old_dir = tmp_path / "hs300_20220101_20240331"
+    new_dir = tmp_path / "hs300_20220101_20240430"
+    daily_dir = tmp_path / "hs300_daily"
+    old_dir.mkdir()
+    new_dir.mkdir()
+    daily_dir.mkdir()
+    old_file = old_dir / "000300SH_20220101_20240331.csv"
+    new_file = new_dir / "000300SH_20220101_20240430.csv"
+    daily_file = daily_dir / "000300SH_20240501.csv"
+    old_file.write_text("date,code\n", encoding="utf-8")
+    new_file.write_text("date,code\n", encoding="utf-8")
+    daily_file.write_text("date,code\n", encoding="utf-8")
+
+    assert pipeline._latest_full_data_path(str(tmp_path)) == str(new_file)
+
+
+def test_load_full_plus_daily_dataset_appends_daily_files_and_deduplicates(tmp_path):
+    pipeline = _load_pipeline_module()
+    full_dir = tmp_path / "hs300_20220101_20240331"
+    daily_dir = tmp_path / "hs300_daily"
+    full_dir.mkdir()
+    daily_dir.mkdir()
+    full_file = full_dir / "000300SH_20220101_20240331.csv"
+    full_file.write_text("date,code,close\n2024-03-31,AAA,1\n", encoding="utf-8")
+    (daily_dir / "000300SH_20240401.csv").write_text(
+        "date,code,close\n2024-04-01,AAA,2\n",
+        encoding="utf-8",
+    )
+    (daily_dir / "000300SH_20240402.csv").write_text(
+        "date,code,close\n2024-04-01,AAA,20\n2024-04-02,AAA,3\n",
+        encoding="utf-8",
+    )
+
+    result = pipeline._load_full_plus_daily_dataset(str(tmp_path))
+
+    assert result["date"].tolist() == ["2024-03-31", "2024-04-01", "2024-04-02"]
+    assert result["close"].tolist() == [1, 20, 3]
+
+
+def test_latest_available_trade_date_falls_back_to_previous_open_day_without_daily_data():
+    pipeline = _load_pipeline_module()
+
+    class FakePro:
+        def trade_cal(self, **_kwargs):
+            return pd.DataFrame(
+                {
+                    "cal_date": ["20240401", "20240402"],
+                    "is_open": [1, 1],
+                }
+            )
+
+        def daily(self, trade_date, **_kwargs):
+            if trade_date == "20240402":
+                return pd.DataFrame()
+            return pd.DataFrame({"ts_code": ["000001.SZ"], "trade_date": [trade_date]})
+
+    assert pipeline._latest_available_trade_date(
+        FakePro(),
+        "2024-04-02",
+    ) == pd.Timestamp("2024-04-01")
+
+
+def test_build_daily_final_dataset_overwrites_traded_rows_and_freezes_missing(monkeypatch):
+    pipeline = _load_pipeline_module()
+    monkeypatch.setattr(pipeline.time, "sleep", lambda *_args, **_kwargs: None)
+
+    class FakePro:
+        def daily(self, **_kwargs):
+            return pd.DataFrame(
+                {
+                    "ts_code": ["AAA.SZ"],
+                    "trade_date": ["20240401"],
+                    "open": [2.0],
+                    "high": [2.1],
+                    "low": [1.9],
+                    "close": [2.0],
+                    "pre_close": [1.0],
+                    "change": [1.0],
+                    "pct_chg": [100.0],
+                    "vol": [3.0],
+                    "amount": [4.0],
+                }
+            )
+
+        def daily_basic(self, **_kwargs):
+            return pd.DataFrame(
+                {
+                    "ts_code": ["AAA.SZ"],
+                    "trade_date": ["20240401"],
+                    "total_share": [100.0],
+                    "float_share": [80.0],
+                    "free_share": [60.0],
+                    "turnover_rate": [1.5],
+                    "pe_ttm": [10.0],
+                    "ps_ttm": [2.0],
+                    "pb": [1.0],
+                }
+            )
+
+        def suspend_d(self, **_kwargs):
+            return pd.DataFrame()
+
+        def stk_limit(self, **_kwargs):
+            return pd.DataFrame(
+                {
+                    "trade_date": ["20240401"],
+                    "ts_code": ["AAA.SZ"],
+                    "up_limit": [2.2],
+                    "down_limit": [1.8],
+                }
+            )
+
+        def index_daily(self, **_kwargs):
+            return pd.DataFrame(
+                {
+                    "ts_code": ["000300.SH"],
+                    "trade_date": ["20240401"],
+                    "open": [10.0],
+                    "high": [11.0],
+                    "low": [9.0],
+                    "close": [10.5],
+                    "pre_close": [10.0],
+                    "change": [0.5],
+                    "pct_chg": [5.0],
+                    "vol": [1000.0],
+                    "amount": [2000.0],
+                }
+            )
+
+    base_data = pd.DataFrame(
+        {
+            "date": ["2024-03-31", "2024-03-31"],
+            "code": ["AAA.SZ", "BBB.SZ"],
+            "open": [1.0, 5.0],
+            "high": [1.0, 5.0],
+            "low": [1.0, 5.0],
+            "close": [1.0, 5.0],
+            "preclose": [1.0, 5.0],
+            "qfq_open": [1.0, 5.0],
+            "qfq_high": [1.0, 5.0],
+            "qfq_low": [1.0, 5.0],
+            "qfq_close": [1.0, 5.0],
+            "qfq_preclose": [1.0, 5.0],
+            "volume": [100.0, 500.0],
+            "amount": [1000.0, 5000.0],
+            "tradestatus": [1, 1],
+            "cir_a_num": [10.0, 50.0],
+            "cir_a": [10.0, 250.0],
+            "total_share": [10.0, 50.0],
+            "total_mv_calc": [10.0, 250.0],
+            "free_share": [10.0, 50.0],
+            "free_mv_calc": [10.0, 250.0],
+            "turn": [1.0, 1.0],
+            "peTTM": [1.0, 1.0],
+            "psTTM": [1.0, 1.0],
+            "pbMRQ": [1.0, 1.0],
+            "up_limit": [1.1, 5.5],
+            "down_limit": [0.9, 4.5],
+            "index_code": ["000300.SH", "000300.SH"],
+            "index_open": [8.0, 8.0],
+            "index_high": [8.0, 8.0],
+            "index_low": [8.0, 8.0],
+            "index_close": [8.0, 8.0],
+            "index_preclose": [8.0, 8.0],
+            "index_change": [0.0, 0.0],
+            "index_pctChg": [0.0, 0.0],
+            "index_volume": [1.0, 1.0],
+            "index_amount": [1.0, 1.0],
+        }
+    )
+
+    result = pipeline._build_daily_final_dataset(
+        base_data,
+        FakePro(),
+        pd.Timestamp("2024-04-01"),
+    ).set_index("code")
+
+    assert result.loc["AAA.SZ", "close"] == 2.0
+    assert result.loc["AAA.SZ", "volume"] == 300.0
+    assert result.loc["AAA.SZ", "cir_a"] == 160.0
+    assert result.loc["AAA.SZ", "tradestatus"] == 1
+    assert result.loc["BBB.SZ", "close"] == 5.0
+    assert result.loc["BBB.SZ", "volume"] == 0.0
+    assert result.loc["BBB.SZ", "tradestatus"] == 0
+    assert result.loc["AAA.SZ", "index_close"] == 10.5
+    assert result.loc["BBB.SZ", "index_close"] == 10.5
 
 
 def test_step2_csi_audit_is_optional_diagnostic():
@@ -373,6 +585,7 @@ def test_current_components_can_fall_back_to_latest_tushare_snapshot():
 
 def test_csi_current_component_fetch_rejects_future_snapshot(monkeypatch):
     pipeline = _load_pipeline_module()
+    monkeypatch.setattr(pipeline, "END_DATE", pd.Timestamp("2026-06-01"))
 
     class Response:
         content = b"excel-bytes"
@@ -435,3 +648,86 @@ def test_csi_attachment_errors_are_written_to_csv(monkeypatch, tmp_path):
 
     written = pd.read_csv(tmp_path / "errors.csv")
     assert written.to_dict("records") == errors
+
+
+def test_daily_increment_fetches_market_data_by_trade_date_once() -> None:
+    pipeline = _load_pipeline_module()
+
+    class FakeTushare:
+        def __init__(self):
+            self.calls = []
+
+        def daily(self, **kwargs):
+            self.calls.append(("daily", kwargs))
+            return pd.DataFrame(
+                {
+                    "ts_code": ["600001.SH", "000001.SZ", "999999.SH"],
+                    "trade_date": ["20260630", "20260630", "20260630"],
+                    "open": [1.0, 2.0, 9.0],
+                    "high": [1.1, 2.1, 9.1],
+                    "low": [0.9, 1.9, 8.9],
+                    "close": [1.0, 2.0, 9.0],
+                    "pre_close": [0.9, 1.9, 8.9],
+                    "change": [0.1, 0.1, 0.1],
+                    "pct_chg": [1.0, 1.0, 1.0],
+                    "vol": [10.0, 20.0, 90.0],
+                    "amount": [100.0, 200.0, 900.0],
+                }
+            )
+
+        def daily_basic(self, **kwargs):
+            self.calls.append(("daily_basic", kwargs))
+            return pd.DataFrame(
+                {
+                    "ts_code": ["600001.SH", "000001.SZ", "999999.SH"],
+                    "trade_date": ["20260630", "20260630", "20260630"],
+                    "total_share": [1000.0, 2000.0, 9000.0],
+                    "float_share": [800.0, 1600.0, 8000.0],
+                    "free_share": [700.0, 1500.0, 7000.0],
+                    "turnover_rate": [1.0, 2.0, 9.0],
+                    "pe_ttm": [10.0, 20.0, 90.0],
+                    "ps_ttm": [1.0, 2.0, 9.0],
+                    "pb": [1.0, 2.0, 9.0],
+                }
+            )
+
+        def suspend_d(self, **kwargs):
+            self.calls.append(("suspend_d", kwargs))
+            return pd.DataFrame(
+                {
+                    "ts_code": ["000001.SZ"],
+                    "trade_date": ["20260630"],
+                    "suspend_timing": ["全天"],
+                    "suspend_type": ["S"],
+                }
+            )
+
+        def stk_limit(self, **kwargs):
+            self.calls.append(("stk_limit", kwargs))
+            return pd.DataFrame(
+                {
+                    "trade_date": ["20260630", "20260630", "20260630"],
+                    "ts_code": ["600001.SH", "000001.SZ", "999999.SH"],
+                    "pre_close": [0.9, 1.9, 8.9],
+                    "up_limit": [1.1, 2.1, 9.1],
+                    "down_limit": [0.8, 1.8, 8.8],
+                }
+            )
+
+    pro = FakeTushare()
+    codes = ["600001.SH", "000001.SZ"]
+
+    daily, basic, suspend, limit_data = pipeline._fetch_one_day_market_data(
+        pro, codes, pd.Timestamp("2026-06-30")
+    )
+
+    assert [name for name, _ in pro.calls] == ["daily", "daily_basic", "suspend_d", "stk_limit"]
+    for _, kwargs in pro.calls:
+        assert kwargs["trade_date"] == "20260630"
+        assert "ts_code" not in kwargs
+        assert "start_date" not in kwargs
+        assert "end_date" not in kwargs
+    assert daily["ts_code"].tolist() == codes
+    assert basic["ts_code"].tolist() == codes
+    assert suspend["ts_code"].tolist() == ["000001.SZ"]
+    assert limit_data["ts_code"].tolist() == codes

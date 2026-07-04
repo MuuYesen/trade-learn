@@ -30,13 +30,19 @@ def test_hs300_backtest_uses_repo_relative_paths_and_hs300_names() -> None:
 
     assert "D:/Program_Files" not in source
     assert "SCRIPT_DIR" in source
-    assert "LOCAL_DATA_PATH = (" in source
-    assert "\"data\"" in source
-    assert "\"hs300_20150101_20260601\"" in source
-    assert "\"000300SH_20150101_20260601.csv\"" in source
+    assert 'LOCAL_DATA_PATH = DATA_DIR / f"hs300_{PERIOD_TAG}"' in source
+    assert '"data"' in source
+    assert 'DATA_DIR = SCRIPT_DIR / "data"' in source
+    assert "PERIOD_TAG =" in source
+    assert 'f"hs300_{PERIOD_TAG}"' in source
+    assert 'f"000300SH_{PERIOD_TAG}.csv"' in source
     assert "HS300_BENCHMARK_PATH = (" in source
-    assert "\"raw\"" in source
-    assert "\"index_daily_000300_20150101_20260601.csv\"" in source
+    assert '"raw"' in source
+    assert 'f"index_daily_000300_{PERIOD_TAG}.csv"' in source
+    assert 'START = "2015-01-01"' in source
+    assert 'END = "2026-06-01"' in source
+    assert "resolve_local_data_path" not in source
+    assert "latest_period_tag" not in source
     assert "alpha101-hs300-top20" in source
     assert "alpha101_hs300_top20_backtest_report.html" in source
     assert "alpha101_us_tech" not in source
@@ -192,7 +198,9 @@ def test_compute_alpha101_factors_can_force_cache_update(tmp_path, monkeypatch) 
     pd.testing.assert_frame_equal(from_disk, fresh)
 
 
-def test_preprocessed_factor_table_cache_reads_parquet_with_matching_meta(tmp_path, monkeypatch) -> None:
+def test_preprocessed_factor_table_cache_reads_parquet_with_matching_meta(
+    tmp_path, monkeypatch
+) -> None:
     module = _load_module()
     cache_path = tmp_path / "preprocessed_factor_table.parquet"
     cached = pd.DataFrame(
@@ -324,9 +332,12 @@ def test_preprocessed_factor_table_cache_rebuilds_when_meta_mismatches(
     )
 
     assert rebuilt.iloc[0]["alpha001_101"] == 1.0
-    assert json.loads(module.cache_meta_path(cache_path).read_text(encoding="utf-8"))[
-        "enable_neutralize"
-    ] is False
+    assert (
+        json.loads(module.cache_meta_path(cache_path).read_text(encoding="utf-8"))[
+            "enable_neutralize"
+        ]
+        is False
+    )
 
 
 def test_factor_selection_cache_reads_ranking_and_selected_parquet(
@@ -356,10 +367,10 @@ def test_factor_selection_cache_reads_ranking_and_selected_parquet(
     module.write_cache_meta(ranking_path, meta)
     module.write_cache_meta(selected_path, meta)
 
-    def fail_clean(*_args, **_kwargs):
-        raise AssertionError("clean_factor_and_forward_returns should not run")
+    def fail_rank(*_args, **_kwargs):
+        raise AssertionError("rank_factors_fast should not run")
 
-    monkeypatch.setattr(module, "clean_factor_and_forward_returns", fail_clean)
+    monkeypatch.setattr(module, "rank_factors_fast", fail_rank)
 
     result_ranking, result_selected, clean = module.load_or_build_factor_selection(
         factor_table=pd.DataFrame(),
@@ -546,6 +557,78 @@ def test_walk_forward_weights_use_period_specific_selected_factors() -> None:
     assert weights.loc[(pd.Timestamp("2025-07-01"), "AAA")] == 1.0
 
 
+def test_save_live_weights_writes_latest_signal_date_csv(tmp_path) -> None:
+    module = _load_module()
+    weights = pd.Series(
+        [0.4, 0.6, 1.0],
+        index=pd.MultiIndex.from_tuples(
+            [
+                (pd.Timestamp("2025-01-02"), "AAA"),
+                (pd.Timestamp("2025-01-02"), "BBB"),
+                (pd.Timestamp("2025-01-07"), "CCC"),
+            ],
+            names=["date", "symbol"],
+        ),
+        name="weight",
+    )
+    output_path = tmp_path / "live_weights.csv"
+
+    signal_date, latest = module.save_live_weights(weights, output_path)
+    saved = pd.read_csv(output_path, parse_dates=["date"])
+
+    assert signal_date == pd.Timestamp("2025-01-07")
+    assert latest.index.get_level_values("symbol").tolist() == ["CCC"]
+    assert saved.to_dict("records") == [
+        {
+            "date": pd.Timestamp("2025-01-07"),
+            "symbol": "CCC",
+            "weight": 1.0,
+        }
+    ]
+
+
+def test_save_live_weights_normalizes_timestamp_index_to_date_column(tmp_path) -> None:
+    module = _load_module()
+    weights = pd.Series(
+        [1.0],
+        index=pd.MultiIndex.from_tuples(
+            [(pd.Timestamp("2025-01-07"), "CCC")],
+            names=["timestamp", "symbol"],
+        ),
+        name="weight",
+    )
+    output_path = tmp_path / "live_weights.csv"
+
+    module.save_live_weights(weights, output_path)
+    saved = pd.read_csv(output_path, parse_dates=["date"])
+
+    assert saved.columns.tolist() == ["date", "symbol", "weight"]
+    assert saved.loc[0, "date"] == pd.Timestamp("2025-01-07")
+    assert saved.loc[0, "symbol"] == "CCC"
+    assert saved.loc[0, "weight"] == 1.0
+
+
+def test_latest_weight_slice_uses_latest_date_not_after_target_date() -> None:
+    module = _load_module()
+    weights = pd.Series(
+        [0.4, 0.6, 1.0],
+        index=pd.MultiIndex.from_tuples(
+            [
+                (pd.Timestamp("2025-01-02"), "AAA"),
+                (pd.Timestamp("2025-01-02"), "BBB"),
+                (pd.Timestamp("2025-01-07"), "CCC"),
+            ],
+            names=["date", "symbol"],
+        ),
+        name="weight",
+    )
+
+    signal_date, latest = module.latest_weight_slice(weights, target_date="2025-01-05")
+
+    assert signal_date == pd.Timestamp("2025-01-02")
+    assert latest.index.get_level_values("symbol").tolist() == ["AAA", "BBB"]
+
+
 def test_factor_score_prefers_stronger_top_long_portfolio() -> None:
     module = _load_module()
     ranking = pd.DataFrame(
@@ -577,16 +660,20 @@ def test_hs300_backtest_selects_factors_before_backtest_period() -> None:
     assert "update_cache=UPDATE_FACTOR_CACHE" in source
     assert "update_cache=UPDATE_PREPROCESSED_FACTOR_TABLE_CACHE" in source
     assert "update_cache=UPDATE_FACTOR_SELECTION_CACHE" in source
-    assert "START = \"2015-01-01\"" in source
-    assert "END = \"2026-06-01\"" in source
-    assert "FACTOR_SELECTION_END = \"2019-12-31\"" in source
-    assert "BACKTEST_START = \"2020-01-01\"" in source
+    assert 'START = "2015-01-01"' in source
+    assert 'END = "2026-06-01"' in source
+    assert "HS300_BEGIN_DATE" not in source
+    assert "HS300_END_DATE" not in source
+    assert 'FACTOR_SELECTION_END = "2019-12-31"' in source
+    assert 'BACKTEST_START = "2020-01-01"' in source
     assert "WALK_FORWARD_TRAINING_YEARS = 5" in source
     assert "training_factor_table = filter_dates(factor_table, end=FACTOR_SELECTION_END)" in source
     assert "training_prices = filter_dates(prices, end=FACTOR_SELECTION_END)" in source
-    assert "DATE_SYMBOL_COLUMNS = [\"date\", \"symbol\"]" in source
+    assert 'DATE_SYMBOL_COLUMNS = ["date", "symbol"]' in source
     assert "tradable_index = bars.set_index(DATE_SYMBOL_COLUMNS).sort_index().index" in source
-    assert "factor_table = factor_table.loc[factor_table.index.intersection(tradable_index)]" in source
+    assert (
+        "factor_table = factor_table.loc[factor_table.index.intersection(tradable_index)]" in source
+    )
     assert "factor_table = attach_factor_metadata(factor_table, bars)" in source
     assert "factor_table = filter_tradable_factor_rows(factor_table)" in source
     assert "factor_table = preprocess_factor_table(" in source
@@ -596,8 +683,10 @@ def test_hs300_backtest_selects_factors_before_backtest_period() -> None:
     assert "end=str(training_end.date())" in source
     assert "if clean_for_ranking is None:" in source
     assert "report_representative_factor(clean_for_ranking, selected)" in source
-    assert "backtest_factors = filter_dates(factor_table, start=BACKTEST_START)" in source
-    assert "backtest_factors = filter_tradable_factor_rows(backtest_factors).reset_index()" in source
+    assert "backtest_factors = filter_dates(factor_table, start=start)" in source
+    assert (
+        "backtest_factors = filter_tradable_factor_rows(backtest_factors).reset_index()" in source
+    )
     assert "bars.set_index(DATE_SYMBOL_COLUMNS).sort_index()[backtest_columns]" in source
 
 
@@ -799,11 +888,7 @@ def test_preprocess_factor_table_neutralizes_integer_factors_without_dtype_warni
         )
 
     assert processed["alpha001_101"].dtype == "float64"
-    assert not [
-        warning
-        for warning in caught
-        if "incompatible dtype" in str(warning.message)
-    ]
+    assert not [warning for warning in caught if "incompatible dtype" in str(warning.message)]
 
 
 def test_load_local_ohlcv_drops_blank_codes(tmp_path, monkeypatch) -> None:

@@ -5,29 +5,91 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import pytest
+
 import tradelearn.engine as bt
 from tradelearn.research import ResearchResult
 
 ROOT = Path(__file__).resolve().parents[3]
-STRATEGY = ROOT / "zoo" / "tushare_sw_hs300" / "hs300_alpha101_strategy.py"
-BACKTEST = ROOT / "zoo" / "tushare_sw_hs300" / "alpha101_hs300_backtest.py"
-LIVE = ROOT / "zoo" / "tushare_sw_hs300" / "alpha101_hs300_live.py"
+STRATEGY = ROOT / "zoo" / "backtest" / "tushare_sw_hs300" / "hs300_alpha101_strategy.py"
+COMMON_STRATEGY = (
+    ROOT
+    / "zoo"
+    / "deploy"
+    / "strategy"
+    / "alpha101-hs300-index-enhance-common"
+    / "hs300_alpha101_strategy.py"
+)
+COMMON_LOG_STRATEGY = (
+    ROOT
+    / "zoo"
+    / "deploy"
+    / "strategy"
+    / "alpha101-hs300-index-enhance-common"
+    / "trade_log_strategy.py"
+)
+LIVE_STRATEGY = (
+    ROOT
+    / "zoo"
+    / "deploy"
+    / "strategy"
+    / "alpha101-hs300-index-enhance-v1.0-qmt-stock-1d"
+    / "hs300_alpha101_strategy.py"
+)
+LIVE_LOG_STRATEGY = (
+    ROOT
+    / "zoo"
+    / "deploy"
+    / "strategy"
+    / "alpha101-hs300-index-enhance-v1.0-qmt-stock-1d"
+    / "trade_log_strategy.py"
+)
+BACKTEST = ROOT / "zoo" / "backtest" / "tushare_sw_hs300" / "alpha101_hs300_backtest.py"
+LIVE = (
+    ROOT
+    / "zoo"
+    / "deploy"
+    / "strategy"
+    / "alpha101-hs300-index-enhance-v1.0-qmt-stock-1d"
+    / "alpha101_hs300_live.py"
+)
+
+pytestmark = pytest.mark.skipif(
+    not STRATEGY.exists(),
+    reason="ignored HS300 strategy example is not present",
+)
 
 
 def _load_strategy_module():
-    spec = importlib.util.spec_from_file_location("hs300_alpha101_strategy", STRATEGY)
+    sys.path.insert(0, str(COMMON_STRATEGY.parent))
+    spec = importlib.util.spec_from_file_location(
+        "hs300_alpha101_strategy", COMMON_STRATEGY
+    )
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    try:
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        try:
+            sys.path.remove(str(COMMON_STRATEGY.parent))
+        except ValueError:
+            pass
 
 
 def test_hs300_strategy_classes_live_in_strategy_file() -> None:
     module = _load_strategy_module()
 
     assert module.HS300RebalanceEngineStrategy.__name__ == "HS300RebalanceEngineStrategy"
+    assert module.HS300RebalanceEngineStrategy.__mro__[1].__name__ == "TradeLogStrategy"
+    assert COMMON_STRATEGY.exists()
+    assert COMMON_LOG_STRATEGY.exists()
+    assert not LIVE_STRATEGY.exists()
+    assert not LIVE_LOG_STRATEGY.exists()
+    assert "class HS300RebalanceEngineStrategy" in COMMON_STRATEGY.read_text(encoding="utf-8")
+    assert "class TradeLogStrategy" in COMMON_LOG_STRATEGY.read_text(encoding="utf-8")
 
 
 def test_hs300_runners_import_strategy_classes_instead_of_defining_them() -> None:
@@ -43,16 +105,14 @@ def test_hs300_runners_import_strategy_classes_instead_of_defining_them() -> Non
     assert "bt.Cerebro" in backtest_source
     assert "BACKTEST_BUY_LOT_SIZE = 100" in backtest_source
     assert "buy_lot_size=BACKTEST_BUY_LOT_SIZE" in backtest_source
-    assert (
-        "from hs300_alpha101_strategy import HS300RebalanceEngineStrategy"
-        in live_source
-    )
+    assert "from hs300_alpha101_strategy import" in live_source
     assert "class HS300RebalanceEngineStrategy" not in live_source
-    assert "buy_lot_size=100" in live_source
+    assert "buy_lot_size=BUY_LOT_SIZE" in live_source
+    assert "order_submit_workers" not in live_source
 
 
 def test_engine_strategy_uses_explicit_buy_sell_orders() -> None:
-    source = STRATEGY.read_text(encoding="utf-8")
+    source = COMMON_STRATEGY.read_text(encoding="utf-8")
     engine_source = source.split("class HS300RebalanceEngineStrategy", 1)[1]
 
     assert "has_current()" in engine_source
@@ -61,6 +121,7 @@ def test_engine_strategy_uses_explicit_buy_sell_orders() -> None:
     assert "as_weight_dict()" not in engine_source
     assert "self.buy(" in engine_source
     assert "self.sell(" in engine_source
+    assert "record_order_send(" in engine_source
     assert "self.buy_lot_size" in engine_source
     assert "enforce_trade_constraints" in engine_source
     assert "can_trade(" in engine_source
@@ -79,6 +140,10 @@ def test_engine_strategy_uses_explicit_buy_sell_orders() -> None:
     assert "current_positions" not in engine_source
     assert "getposition(" in engine_source
     assert "rebalance_plan" not in engine_source
+    assert "order_submit_workers" not in engine_source
+    assert "ThreadPoolExecutor" not in engine_source
+    assert "sell_lot_size" in engine_source
+    assert "SELL_ODD_LOT_SKIPPED" in engine_source
 
 
 def test_engine_strategy_skips_buy_at_up_limit_when_constraints_enabled() -> None:
@@ -118,3 +183,32 @@ def test_engine_strategy_skips_buy_at_up_limit_when_constraints_enabled() -> Non
     [strategy] = cerebro.run()
 
     assert strategy.orders == []
+
+
+def test_qmt_position_snapshot_reads_proxy_position_fields() -> None:
+    qmt_path = (
+        ROOT
+        / "zoo"
+        / "deploy"
+        / "qmt"
+        / "qmt_live_adapter"
+        / "qmt.py"
+    )
+    spec = importlib.util.spec_from_file_location("deploy_qmt", qmt_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    position = module._position_snapshot(
+        {
+            "stock_code": "600000.SH",
+            "volume": 1200,
+            "avg_price": 8.88,
+        }
+    )
+
+    assert position.symbol == "600000.SH"
+    assert position.qty == 1200
+    assert position.avg_price == 8.88

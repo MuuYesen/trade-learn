@@ -531,6 +531,7 @@ class Strategy(CoreStrategy):
         weights: Mapping[str, float] | pd.Series,
         *,
         close_missing: bool = True,
+        constraints: Any | None = None,
     ) -> list[Any]:
         """Move the portfolio toward the requested ticker weights.
 
@@ -555,6 +556,7 @@ class Strategy(CoreStrategy):
             equity=equity,
             close_missing=close_missing,
             unknown_label="ticker(s)",
+            constraints=constraints,
         )
         orders: list[Any] = []
         for intent in intents:

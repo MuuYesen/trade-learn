@@ -1,0 +1,11 @@
+.git
+.pytest_cache
+.ruff_cache
+**/__pycache__
+**/*.pyc
+**/.DS_Store
+zoo/tushare_sw_hs300/bk
+zoo/tushare_sw_hs300/data
+zoo/tushare_sw_hs300/docs/assets
+zoo/tushare_sw_hs300/logs
+zoo/tushare_sw_hs300/res

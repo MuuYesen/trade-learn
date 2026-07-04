@@ -98,6 +98,8 @@ panel = self.history_panel(20)
 
 Lite 的 `position()` 是方法，Engine 的 `position` 是 Backtrader 风格属性。
 
+A 股实盘或仿真需要整手买入、可卖数量限制时，可以通过 facade 创建约束对象再传给 `target_weights`：`tl.TargetOrderConstraints(buy_lot_size=100, sell_lot_size=100, max_sell_qty_by_symbol=...)`。
+
 ## 指标写法
 
 内置指标口径在 Lite 和 Engine 中保持一致：
@@ -183,4 +185,3 @@ weights = pf.Allocator(
 ```
 
 Research 组件遵循 sklearn-like 心智：需要训练集状态的组件实现 `fit()` / `transform()` / `fit_transform()`；只做无状态排序或权重计算的组件可以保留为轻量类或函数。
-

@@ -5,17 +5,15 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
+from tradelearn.backtest.targets import TargetOrderConstraints
+
 from .backtest import Backtest
 from .strategy import Strategy
 
 __all__ = [
     "Backtest",
     "Strategy",
-    "ta",
-    "pta",
-    "talib",
-    "tdx",
-    "tv",
+    "TargetOrderConstraints",
 ]
 
 

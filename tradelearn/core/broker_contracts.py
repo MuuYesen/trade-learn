@@ -7,8 +7,9 @@ between broker-specific runtime models and these contracts at the boundary.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal, Protocol, runtime_checkable
 
 import pandas as pd
 
@@ -18,6 +19,7 @@ TimeInForce = Literal["day", "gtc", "ioc"]
 
 __all__ = [
     "AccountSnapshot",
+    "Broker",
     "Fill",
     "OrderAck",
     "OrderRequest",
@@ -91,3 +93,37 @@ class OrderStatusUpdate:
     status_str: str
     ts: pd.Timestamp
     replay: bool = False
+
+
+@runtime_checkable
+class Broker(Protocol):
+    """Broker-neutral adapter contract for paper and live execution."""
+
+    def place(self, req: OrderRequest) -> OrderAck: ...
+
+    def cancel(self, broker_oid: str) -> None: ...
+
+    def modify(self, broker_oid: str, **kwargs: Any) -> None: ...
+
+    def positions(self) -> list[PositionSnapshot]: ...
+
+    def account(self) -> AccountSnapshot: ...
+
+    def order_status(self, broker_oid: str) -> OrderStatusUpdate: ...
+
+    def order_statuses(
+        self,
+        broker_oids: Iterable[str],
+    ) -> dict[str, OrderStatusUpdate]: ...
+
+    def on_fill(self, cb: Callable[[Fill], None]) -> None: ...
+
+    def on_cancel(self, cb: Callable[[Any], None]) -> None: ...
+
+    def on_reject(self, cb: Callable[[Any, str], None]) -> None: ...
+
+    def connect(self) -> None: ...
+
+    def disconnect(self) -> None: ...
+
+    def is_connected(self) -> bool: ...

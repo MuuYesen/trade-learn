@@ -27,19 +27,13 @@ dependencies = [
     "pandas",
     "scipy",
     "scikit-learn",
-    "opentdx; python_version >= '3.12'",
     "pyarrow",
     "pandas-ta-classic",
-    "tradingview-datafeed",
-    "TA-Lib",
-    "pynesys-pynecore; python_version >= '3.11'",
     "xlsxwriter",
     "bokeh",
-    "causal-learn",
     "tqdm",
     "typer",
     "pyyaml",
-    "numba>=0.65.1",
 ]
 
 [project.urls]
@@ -61,6 +55,31 @@ lab = [
 mlflow = [
     "mlflow",
 ]
+tdx = [
+    "opentdx; python_version >= '3.12'",
+]
+tv = [
+    "tradingview-datafeed",
+    "pynesys-pynecore; python_version >= '3.11'",
+]
+talib = [
+    "TA-Lib",
+]
+ml = [
+    "causal-learn",
+]
+research = [
+    "numba>=0.65.1",
+]
+duckdb = [
+    "duckdb",
+]
+indicators = [
+    "opentdx; python_version >= '3.12'",
+    "tradingview-datafeed",
+    "TA-Lib",
+    "pynesys-pynecore; python_version >= '3.11'",
+]
 all = [
     "jupyterlab",
     "jupyterlab-git",
@@ -72,6 +91,12 @@ all = [
     "Riskfolio-Lib",
     "optuna",
     "duckdb",
+    "opentdx; python_version >= '3.12'",
+    "tradingview-datafeed",
+    "TA-Lib",
+    "pynesys-pynecore; python_version >= '3.11'",
+    "causal-learn",
+    "numba>=0.65.1",
 ]
 dev = [
     "pytest",

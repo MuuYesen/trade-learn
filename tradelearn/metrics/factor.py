@@ -142,14 +142,25 @@ def clean_factor_and_forward_returns(
     factors = _factor_frame(factors)
     factor_names = _factor_names(factor)
     if len(factor_names) > 1:
+        price_values = _price_series(prices)
+        _validate_multiindex(price_values)
+        if any(period <= 0 for period in periods):
+            raise ValueError("periods must contain positive integers")
+        forward_returns = {
+            f"forward_return_{period}": _forward_returns_from_prices(
+                price_values,
+                periods=period,
+            )
+            for period in periods
+        }
+        group = _group_series(factors, groupby) if groupby is not None else None
         frames = [
-            _clean_single_factor_and_forward_returns(
+            _clean_single_factor_from_forward_returns(
                 factors,
                 factor=name,
-                prices=prices,
-                periods=periods,
+                forward_returns=forward_returns,
                 quantiles=quantiles,
-                groupby=groupby,
+                group=group,
                 nan_policy=nan_policy,
             ).assign(factor_name=name)
             for name in factor_names
@@ -184,14 +195,43 @@ def _clean_single_factor_and_forward_returns(
     if any(period <= 0 for period in periods):
         raise ValueError("periods must contain positive integers")
 
+    forward_returns = {
+        f"forward_return_{period}": _forward_returns_from_prices(
+            price_values,
+            periods=period,
+        )
+        for period in periods
+    }
+    group = _group_series(factors, groupby) if groupby is not None else None
+    return _clean_single_factor_from_forward_returns(
+        factors,
+        factor=factor,
+        forward_returns=forward_returns,
+        quantiles=quantiles,
+        group=group,
+        nan_policy=nan_policy,
+    )
+
+
+def _clean_single_factor_from_forward_returns(
+    factors: pd.DataFrame,
+    *,
+    factor: str,
+    forward_returns: dict[str, pd.Series],
+    quantiles: int,
+    group: pd.Series | None,
+    nan_policy: NanPolicy,
+) -> pd.DataFrame:
+    """Return clean factor data using precomputed forward returns."""
+    factor_values = _factor_column(factors, factor)
+    _validate_multiindex(factor_values)
     frame = factor_values.rename("factor").to_frame()
-    for period in periods:
-        forward = _forward_returns_from_prices(price_values, periods=period)
-        frame[f"forward_return_{period}"] = forward
+    for column, forward in forward_returns.items():
+        frame[column] = forward
     frame = apply_nan_policy(frame, nan_policy)
     frame["factor_quantile"] = _factor_quantiles(frame["factor"], quantiles)
-    if groupby is not None:
-        frame = _attach_group(frame, _group_series(factors, groupby))
+    if group is not None:
+        frame = _attach_group(frame, group)
     return frame.dropna(subset=["factor_quantile"]).astype({"factor_quantile": "int64"})
 
 
@@ -608,7 +648,11 @@ def _factor_quantiles(factor: pd.Series, quantiles: int) -> pd.Series:
             return pd.Series(index=frame.index, dtype="float64")
         return labels.astype(float) + 1
 
-    result = factor.groupby(level=0, group_keys=False).apply(_assign)
+    pieces = [_assign(frame) for _, frame in factor.groupby(level=0, sort=False)]
+    if not pieces:
+        result = pd.Series(index=factor.index[:0], dtype="float64")
+    else:
+        result = pd.concat(pieces).sort_index()
     result.name = "factor_quantile"
     return result
 

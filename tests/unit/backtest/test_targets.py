@@ -4,7 +4,11 @@ import math
 
 import pytest
 
-from tradelearn.backtest.targets import TargetWeightSnapshot, build_target_weight_intents
+from tradelearn.backtest.targets import (
+    TargetOrderConstraints,
+    TargetWeightSnapshot,
+    build_target_weight_intents,
+)
 
 
 def test_target_weight_intents_validate_cash_and_unknown_label() -> None:
@@ -127,4 +131,65 @@ def test_target_weight_intents_skip_nan_price_snapshots() -> None:
 
     assert [(intent.symbol, intent.side, intent.qty) for intent in intents] == [
         ("BBB", "buy", 50.0)
+    ]
+
+
+def test_target_weight_intents_apply_buy_lot_size_constraint() -> None:
+    data = {"AAA": object()}
+    snapshots = {"AAA": TargetWeightSnapshot(price=10.0, size=0.0)}
+
+    intents = build_target_weight_intents(
+        {"AAA": 0.55},
+        data_by_symbol=data,
+        snapshots=snapshots,
+        equity=10_000.0,
+        close_missing=False,
+        constraints=TargetOrderConstraints(buy_lot_size=100),
+    )
+
+    assert [(intent.symbol, intent.side, intent.qty) for intent in intents] == [
+        ("AAA", "buy", 500.0)
+    ]
+
+
+def test_target_weight_intents_apply_sell_lot_and_available_position_constraints() -> None:
+    data = {"AAA": object(), "BBB": object()}
+    snapshots = {
+        "AAA": TargetWeightSnapshot(price=10.0, size=260.0),
+        "BBB": TargetWeightSnapshot(price=10.0, size=260.0),
+    }
+
+    intents = build_target_weight_intents(
+        {"AAA": 0.10, "BBB": 0.0},
+        data_by_symbol=data,
+        snapshots=snapshots,
+        equity=10_000.0,
+        close_missing=False,
+        constraints=TargetOrderConstraints(
+            sell_lot_size=100,
+            max_sell_qty_by_symbol={"AAA": 180.0, "BBB": 180.0},
+        ),
+    )
+
+    assert [(intent.symbol, intent.side, intent.qty) for intent in intents] == [
+        ("BBB", "sell", 180.0),
+        ("AAA", "sell", 100.0),
+    ]
+
+
+def test_target_weight_intents_do_not_lot_round_buy_to_close_short_position() -> None:
+    data = {"AAA": object()}
+    snapshots = {"AAA": TargetWeightSnapshot(price=10.0, size=-50.0)}
+
+    intents = build_target_weight_intents(
+        {"AAA": 0.0},
+        data_by_symbol=data,
+        snapshots=snapshots,
+        equity=10_000.0,
+        close_missing=False,
+        constraints=TargetOrderConstraints(buy_lot_size=100),
+    )
+
+    assert [(intent.symbol, intent.side, intent.qty) for intent in intents] == [
+        ("AAA", "buy", 50.0)
     ]

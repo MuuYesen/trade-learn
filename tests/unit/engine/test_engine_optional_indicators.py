@@ -22,7 +22,7 @@ def test_engine_import_does_not_require_pynecore() -> None:
         import tradelearn.engine as bt
 
         assert bt.Cerebro is not None
-        assert "tv" in bt.__all__
-        """
+        assert "tv" not in bt.__all__
+    """
     )
     subprocess.run([sys.executable, "-c", code], check=True)

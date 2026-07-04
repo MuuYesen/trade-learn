@@ -4,12 +4,20 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import importlib.util
 
 import tradelearn as tl
 import tradelearn.engine as bt
 import tradelearn.lite as lite
 from tradelearn.lite import Backtest
 from tradelearn.lite import Strategy as LiteStrategy
+
+
+HAS_PYNECORE = importlib.util.find_spec("pynecore") is not None
+requires_pynecore = pytest.mark.skipif(
+    not HAS_PYNECORE,
+    reason="TradingView indicator backend requires trade-learn[tv]",
+)
 
 
 def _bars() -> pd.DataFrame:
@@ -25,6 +33,7 @@ def _bars() -> pd.DataFrame:
     )
 
 
+@requires_pynecore
 def test_engine_uses_vendor_indicator_namespaces_directly() -> None:
     seen: dict[str, float] = {}
 
@@ -53,6 +62,7 @@ def test_engine_uses_vendor_indicator_namespaces_directly() -> None:
     assert "macd" in seen
 
 
+@requires_pynecore
 def test_lite_uses_vendor_indicator_namespaces_directly() -> None:
     seen: dict[str, float] = {}
 
@@ -87,23 +97,26 @@ def test_engine_no_longer_exports_short_ind_alias() -> None:
 def test_root_and_engine_share_vendor_indicator_namespaces() -> None:
     assert tl.pta is bt.pta
     assert tl.tdx is bt.tdx
-    assert tl.tv is bt.tv
+    if HAS_PYNECORE:
+        assert tl.tv is bt.tv
     assert hasattr(tl.pta, "__path__")
-    assert "pta" in tl.__all__
-    assert "talib" in tl.__all__
-    assert "tdx" in tl.__all__
-    assert "tv" in tl.__all__
-    assert "pta" in tl.ta.__all__
-    assert "tv" in tl.ta.__all__
-    assert "pta" in bt.__all__
-    assert "talib" in bt.__all__
-    assert "tdx" in bt.__all__
-    assert "tv" in bt.__all__
+    assert "pta" not in tl.__all__
+    assert "talib" not in tl.__all__
+    assert "tdx" not in tl.__all__
+    assert "tv" not in tl.__all__
+    assert "pta" not in tl.ta.__all__
+    assert "tv" not in tl.ta.__all__
+    assert "pta" not in bt.__all__
+    assert "talib" not in bt.__all__
+    assert "tdx" not in bt.__all__
+    assert "tv" not in bt.__all__
 
 
 def test_vendor_indicator_namespaces_keep_init_files_as_facades() -> None:
     assert tl.pta.SMA._func.__module__ == "tradelearn.indicators.pta.pandas_ta_adapter"
     assert tl.tdx.MA._func.__module__ == "tradelearn.indicators.tdx.mytt_adapter"
+    if not HAS_PYNECORE:
+        pytest.skip("TradingView indicator backend requires trade-learn[tv]")
     assert tl.tv.SMA._func.__module__ == "tradelearn.indicators.tv.pynecore_adapter"
 
 
@@ -120,9 +133,10 @@ def test_vendor_indicator_namespaces_are_case_compatible() -> None:
     pd.testing.assert_series_equal(tl.tdx.RSI(close, N=2), tl.tdx.rsi(close, n=2))
     pd.testing.assert_frame_equal(tl.tdx.MACD(close), tl.tdx.macd(close))
 
-    assert tl.tv.SMA is tl.tv.sma
-    assert tl.tv.RSI is tl.tv.rsi
-    assert tl.tv.MACD is tl.tv.macd
+    if HAS_PYNECORE:
+        assert tl.tv.SMA is tl.tv.sma
+        assert tl.tv.RSI is tl.tv.rsi
+        assert tl.tv.MACD is tl.tv.macd
 
 
 def test_real_talib_namespace_is_not_pandas_ta_fallback() -> None:
@@ -154,12 +168,13 @@ def test_lite_and_engine_share_vendor_indicator_namespaces() -> None:
     assert lite.ta is tl.ta
     assert lite.pta is bt.pta
     assert lite.tdx is bt.tdx
-    assert lite.tv is bt.tv
-    assert "ta" in lite.__all__
-    assert "pta" in lite.__all__
-    assert "talib" in lite.__all__
-    assert "tdx" in lite.__all__
-    assert "tv" in lite.__all__
+    if HAS_PYNECORE:
+        assert lite.tv is bt.tv
+    assert "ta" not in lite.__all__
+    assert "pta" not in lite.__all__
+    assert "talib" not in lite.__all__
+    assert "tdx" not in lite.__all__
+    assert "tv" not in lite.__all__
 
 
 def test_lite_no_longer_exports_chain_ta_accessors() -> None:

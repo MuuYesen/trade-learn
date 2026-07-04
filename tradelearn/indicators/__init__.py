@@ -26,11 +26,7 @@ __all__ = [
     "ema",
     "macd",
     "rsi",
-    "pta",
-    "talib",
     "sma",
-    "tdx",
-    "tv",
     "vwap",
 ]
 

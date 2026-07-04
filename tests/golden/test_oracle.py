@@ -7,7 +7,11 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pandas as pd
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
+    import tomli as tomllib
 
 from scripts import build_golden
 
@@ -53,10 +57,13 @@ def test_check_oracle_cli_prints_oracle_group_hint_when_provider_missing() -> No
 def test_pyproject_has_oracle_dependency_group() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     dependencies = pyproject["project"]["dependencies"]
+    extras = pyproject["project"]["optional-dependencies"]
     oracle = pyproject["dependency-groups"]["oracle"]
 
-    assert any(dep.startswith("opentdx") for dep in dependencies)
-    assert any(dep.startswith("tradingview-datafeed") for dep in dependencies)
+    assert not any(dep.startswith("opentdx") for dep in dependencies)
+    assert not any(dep.startswith("tradingview-datafeed") for dep in dependencies)
+    assert any(dep.startswith("opentdx") for dep in extras["tdx"])
+    assert any(dep.startswith("tradingview-datafeed") for dep in extras["tv"])
     assert not any(dep.startswith(RETIRED_PROVIDER_NAMES[0]) for dep in dependencies)
     assert not any(dep.startswith("yfinance") for dep in oracle)
     assert any(dep.startswith("opentdx") for dep in oracle)

@@ -566,15 +566,7 @@ class FactorAnalyzer:
             quantiles = aligned["factor_quantile"].astype(int)
             return aligned[["factor", "returns"]], quantiles
 
-        def _assign_quantiles(frame: pd.Series) -> pd.Series:
-            labels = pd.qcut(
-                frame.rank(method="first"),
-                q=min(self.quantiles, len(frame)),
-                labels=False,
-            )
-            return labels.astype(int) + 1
-
-        quantiles = aligned["factor"].groupby(level=0, group_keys=False).apply(_assign_quantiles)
+        quantiles = _rank_qcut_quantiles(aligned["factor"], self.quantiles)
         return aligned, quantiles
 
     def _non_overlapping_returns(self, returns: pd.Series | pd.DataFrame) -> pd.Series | pd.DataFrame:
@@ -1065,6 +1057,23 @@ def _clean_periods(clean: pd.DataFrame, periods: tuple[int, ...] | None) -> tupl
     return selected
 
 
+def _rank_qcut_quantiles(factor: pd.Series, quantiles: int) -> pd.Series:
+    """Return per-date qcut labels on first-ranked factor values."""
+    pieces = []
+    for _, frame in factor.groupby(level=0, sort=False):
+        labels = pd.qcut(
+            frame.rank(method="first"),
+            q=min(quantiles, len(frame)),
+            labels=False,
+        )
+        pieces.append(labels.astype(int) + 1)
+    if not pieces:
+        result = pd.Series(index=factor.index[:0], dtype="int64")
+    else:
+        result = pd.concat(pieces).sort_index()
+    return result
+
+
 def _period_metric_frame(
     values: dict[int, pd.Series | pd.DataFrame],
 ) -> pd.DataFrame:
@@ -1089,26 +1098,25 @@ def _factor_weights(
     equal_weight: bool = False,
 ) -> pd.Series:
     """Return Alphalens-style per-date factor portfolio weights."""
+    values = pd.Series(factor, dtype="float64").copy()
+    date_level = 0
 
-    def _to_weights(group: pd.Series) -> pd.Series:
-        values = group.copy()
-        if equal_weight:
-            if demeaned:
-                values = values - values.median()
-            values[values < 0] = -1.0
-            values[values > 0] = 1.0
-            if demeaned:
-                negative = values < 0
-                positive = values > 0
-                if negative.any():
-                    values[negative] /= negative.sum()
-                if positive.any():
-                    values[positive] /= positive.sum()
-        elif demeaned:
-            values = values - values.mean()
-        return values / values.abs().sum()
+    if equal_weight:
+        if demeaned:
+            values = values - values.groupby(level=date_level, sort=False).transform("median")
+        values = values.mask(values < 0, -1.0).mask(values > 0, 1.0)
+        if demeaned:
+            negative = values < 0
+            positive = values > 0
+            negative_count = negative.groupby(level=date_level, sort=False).transform("sum")
+            positive_count = positive.groupby(level=date_level, sort=False).transform("sum")
+            values = values.mask(negative, values / negative_count)
+            values = values.mask(positive, values / positive_count)
+    elif demeaned:
+        values = values - values.groupby(level=date_level, sort=False).transform("mean")
 
-    return factor.groupby(level=0, group_keys=False).apply(_to_weights)
+    gross = values.abs().groupby(level=date_level, sort=False).transform("sum")
+    return values / gross
 
 
 def _common_start_returns(

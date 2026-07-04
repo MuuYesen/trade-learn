@@ -21,24 +21,23 @@ def fill_missing(
     """Fill missing values for selected columns."""
     frame, restore = _as_frame(data)
     target_columns = _columns(frame, columns)
+    result = frame.copy()
+    if method == "zero":
+        result[target_columns] = result[target_columns].fillna(0.0)
+        return restore(result)
+    if method == "constant":
+        result[target_columns] = result[target_columns].fillna(value)
+        return restore(result)
+    if method not in {"median", "mean"}:
+        raise ValueError(f"Unsupported fill method: {method}")
 
-    def transform(group: pd.DataFrame) -> pd.DataFrame:
-        group = group.copy()
-        for column in target_columns:
-            if method == "median":
-                fill_value = group[column].median()
-            elif method == "mean":
-                fill_value = group[column].mean()
-            elif method == "zero":
-                fill_value = 0.0
-            elif method == "constant":
-                fill_value = value
-            else:
-                raise ValueError(f"Unsupported fill method: {method}")
-            group[column] = group[column].fillna(fill_value)
-        return group
-
-    return restore(_apply_by(frame, by, transform))
+    if by is None:
+        fill_values = getattr(result[target_columns], method)()
+    else:
+        keys = _group_keys(result, by)
+        fill_values = result.groupby(keys, sort=False, dropna=False)[target_columns].transform(method)
+    result[target_columns] = result[target_columns].fillna(fill_values)
+    return restore(result)
 
 
 @tracked(category="preprocess")
@@ -95,18 +94,23 @@ def rank(
 ) -> pd.DataFrame | pd.Series:
     """Rank selected columns, optionally by date/symbol group."""
     frame, restore = _as_frame(data)
-
-    def transform(group: pd.DataFrame) -> pd.DataFrame:
-        group = group.copy()
-        for column in _columns(group, columns):
-            group[column] = group[column].rank(
-                pct=pct,
-                ascending=ascending,
-                method=method,
-            )
-        return group
-
-    return restore(_apply_by(frame, by, transform))
+    target_columns = _columns(frame, columns)
+    result = frame.copy()
+    if by is None:
+        ranked = result[target_columns].rank(
+            pct=pct,
+            ascending=ascending,
+            method=method,
+        )
+    else:
+        keys = _group_keys(result, by)
+        ranked = result.groupby(keys, sort=False, dropna=False)[target_columns].rank(
+            pct=pct,
+            ascending=ascending,
+            method=method,
+        )
+    result[target_columns] = ranked
+    return restore(result)
 
 
 @tracked(category="preprocess")
@@ -518,16 +522,18 @@ def _winsorize_impl(
 ) -> pd.DataFrame | pd.Series:
     frame, restore = _as_frame(data)
     lower_q, upper_q = limits
-
-    def transform(group: pd.DataFrame) -> pd.DataFrame:
-        group = group.copy()
-        for column in _columns(group, columns):
-            lower = group[column].quantile(lower_q)
-            upper = group[column].quantile(upper_q)
-            group[column] = group[column].clip(lower=lower, upper=upper)
-        return group
-
-    return restore(_apply_by(frame, by, transform))
+    target_columns = _columns(frame, columns)
+    result = frame.copy()
+    if by is None:
+        lower = result[target_columns].quantile(lower_q)
+        upper = result[target_columns].quantile(upper_q)
+    else:
+        keys = _group_keys(result, by)
+        grouped = result.groupby(keys, sort=False, dropna=False)[target_columns]
+        lower = grouped.transform(lambda values: values.quantile(lower_q))
+        upper = grouped.transform(lambda values: values.quantile(upper_q))
+    result[target_columns] = result[target_columns].clip(lower=lower, upper=upper, axis=1)
+    return restore(result)
 
 
 def _mad_bounds(

@@ -14,6 +14,8 @@ trade-learn 2.0 的主能力是事件驱动回测；paper / live 的边界已经
 
 因此，为了加快回测而优化 RustBroker，不会自动改变实盘 broker；但策略层必须只依赖共同的“意图 + 事件”语义。
 
+`tradelearn.live` 不作为稳定用户 facade。具体 QMT / IB / CTP 适配器建议在私有扩展或部署目录中维护，用户策略只依赖 `tradelearn.engine` / `tradelearn.lite` 的公开策略 API。
+
 ## 中性订单协议
 
 实盘适配器应该接收 `OrderRequest`，返回 `OrderAck`，并通过事件回流 `Fill`、撤单、拒单和状态。
@@ -28,6 +30,8 @@ trade-learn 2.0 的主能力是事件驱动回测；paper / live 的边界已经
 | `OrderStatusUpdate` | `broker_oid`, `status_str`, `ts`, `replay` | 订单状态更新 |
 
 这些类型只描述跨运行时共同语义，不携带 Backtrader bracket 字段，也不携带某个券商私有状态机。
+
+实盘适配器应同时支持单笔 `order_status(...)` 和批量 `order_statuses(...)`。执行器需要等待委托反馈时，优先批量查询，减少 QMT / REST proxy 的请求次数和下单后确认延迟。
 
 ## BrokerEventPump
 

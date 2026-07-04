@@ -185,13 +185,14 @@ Strategy.target_percent(self, ticker: 'str', target: 'float')
 按一组 ticker 权重调整目标组合。`cash` 可作为保留键表达现金权重。
 
 ```python
-Strategy.target_weights(self, weights: 'Mapping[str, float] | pd.Series', *, close_missing: 'bool' = True) -> 'list[Any]'
+Strategy.target_weights(self, weights: 'Mapping[str, float] | pd.Series', *, close_missing: 'bool' = True, constraints: 'Any | None' = None) -> 'list[Any]'
 ```
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `weights` | `Mapping[str, float] \| pd.Series` | `required` | ticker 到目标权重的映射,或 pandas Series。 |
 | `close_missing` | `bool` | `True` | 是否把未出现在 weights 中的已知 ticker 调整为 0。 |
+| `constraints` | `Any \| None` | `None` | 可选交易约束,例如 A 股买入整手、卖出整手、可卖数量限制。 |
 
 返回: `list[Order]`。
 
@@ -269,7 +270,7 @@ Strategy.record(self, name: 'str' = None, plot: 'bool' = True, overlay: 'bool' =
 | `Strategy.order_target_value` | method | `(self, *, ticker: 'str' = None, target: 'float' = 0.0, price: 'float | None' = None, **kwargs: 'Any')` |  |
 | `Strategy.order_target_percent` | method | `(self, *, ticker: 'str' = None, target: 'float' = 0.0, **kwargs: 'Any')` |  |
 | `Strategy.target_percent` | method | `(self, ticker: 'str', target: 'float')` | Move one ticker toward a target portfolio weight. |
-| `Strategy.target_weights` | method | `(self, weights: 'Mapping[str, float] | pd.Series', *, close_missing: 'bool' = True) -> 'list[Any]'` | Move the portfolio toward the requested ticker weights. |
+| `Strategy.target_weights` | method | `(self, weights: 'Mapping[str, float] | pd.Series', *, close_missing: 'bool' = True, constraints: 'Any | None' = None) -> 'list[Any]'` | Move the portfolio toward the requested ticker weights. |
 | `Strategy.target_equal` | method | `(self, tickers: 'Sequence[str]', *, weight: 'float' = 1.0, close_missing: 'bool' = True) -> 'list[Any]'` | Assign an equal combined target weight to the selected tickers. |
 | `Strategy.close_all` | method | `(self) -> 'list[Any]'` | Close all known Lite data-feed positions. |
 | `Strategy.buy_bracket` | method | `(self, *, ticker: 'str' = None, size: 'float' = 1.0, limit: 'float' = None, stop: 'float' = None, sl: 'float' = None, tp: 'float' = None, tag: 'object' = None) -> 'list[Any]'` |  |

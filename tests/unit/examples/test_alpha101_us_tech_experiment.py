@@ -4,7 +4,16 @@ import importlib.util
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-EXAMPLE = ROOT / "zoo" / "outputs" / "examples" / "alpha101_us_tech_experiment.py"
+EXAMPLE = (
+    ROOT
+    / "zoo"
+    / "wechat_docs"
+    / "articles"
+    / "alpha101-us-tech"
+    / "outputs"
+    / "examples"
+    / "alpha101_us_tech_experiment.py"
+)
 
 
 def _load_example_module():

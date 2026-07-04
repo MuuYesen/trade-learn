@@ -120,8 +120,57 @@ def _select_top_panel(
     if k <= 0:
         return _empty_panel_series("selected", dtype="bool")
 
-    parts: list[pd.Series] = []
     time_level = _time_level(scores.index)
+    if not exclude_nan:
+        return _select_top_panel_legacy(
+            scores,
+            k=k,
+            reverse=reverse,
+            min_score=min_score,
+            max_score=max_score,
+            time_level=time_level,
+        )
+
+    values = pd.Series(scores, dtype="float64")
+    mask = pd.Series(True, index=values.index)
+    if exclude_nan:
+        mask &= values.notna()
+    if min_score is not None:
+        mask &= values >= float(min_score)
+    if max_score is not None:
+        mask &= values <= float(max_score)
+    values = values[mask]
+    if values.empty:
+        return _empty_panel_series("selected", dtype="bool")
+
+    ranks = values.groupby(level=time_level, sort=False).rank(
+        method="first",
+        ascending=not reverse,
+    )
+    selected = values[ranks <= int(k)]
+    if selected.empty:
+        return _empty_panel_series("selected", dtype="bool")
+    index = pd.MultiIndex.from_arrays(
+        [
+            selected.index.get_level_values(time_level),
+            _symbol_keys_as_strings(selected.index, time_level),
+        ],
+        names=["timestamp", "symbol"],
+    )
+    return pd.Series(True, index=index, name="selected", dtype="bool").sort_index()
+
+
+def _select_top_panel_legacy(
+    scores: pd.Series,
+    *,
+    k: int,
+    reverse: bool,
+    min_score: float | None,
+    max_score: float | None,
+    time_level: str | int,
+) -> pd.Series:
+    """Preserve legacy NaN ordering when callers explicitly keep NaN scores."""
+    parts: list[pd.Series] = []
     for timestamp, daily_scores in scores.groupby(level=time_level):
         selected = _select_top_single(
             daily_scores.droplevel(time_level),
@@ -129,7 +178,7 @@ def _select_top_panel(
             reverse=reverse,
             min_score=min_score,
             max_score=max_score,
-            exclude_nan=exclude_nan,
+            exclude_nan=False,
         )
         if not selected:
             continue
@@ -141,6 +190,11 @@ def _select_top_panel(
     if not parts:
         return _empty_panel_series("selected", dtype="bool")
     return pd.concat(parts).sort_index().rename("selected")
+
+
+def _symbol_keys_as_strings(index: pd.MultiIndex, time_level: str | int) -> pd.Index:
+    symbols = index.droplevel(time_level)
+    return pd.Index([str(symbol) for symbol in symbols], dtype="object")
 
 
 @tracked(category="portfolio")
@@ -166,21 +220,18 @@ def _equal_weight_panel(selected: pd.Series, *, gross: float = 1.0) -> pd.Series
     if selected.empty:
         return _empty_panel_series("weight")
 
-    parts: list[pd.Series] = []
     time_level = _time_level(selected.index)
-    for timestamp, daily_selected in selected.groupby(level=time_level):
-        symbols = daily_selected.index.droplevel(time_level).astype(str)
-        if symbols.empty:
-            continue
-        weight = float(gross) / len(symbols)
-        index = pd.MultiIndex.from_product(
-            [[timestamp], symbols],
-            names=["timestamp", "symbol"],
-        )
-        parts.append(pd.Series(weight, index=index, name="weight", dtype="float64"))
-    if not parts:
-        return _empty_panel_series("weight")
-    return pd.concat(parts).sort_index().rename("weight")
+    counts = selected.groupby(level=time_level, sort=False).transform("size")
+    weights = (float(gross) / counts).astype("float64")
+    weights.index = pd.MultiIndex.from_arrays(
+        [
+            weights.index.get_level_values(time_level),
+            _symbol_keys_as_strings(weights.index, time_level),
+        ],
+        names=["timestamp", "symbol"],
+    )
+    weights.name = "weight"
+    return weights.sort_index()
 
 
 @tracked(category="portfolio")
@@ -238,25 +289,27 @@ def _apply_constraints_panel(
     if weights.empty:
         return _empty_panel_series("weight")
 
-    parts: list[pd.Series] = []
+    adjusted = pd.Series(weights, dtype="float64").copy()
     time_level = _time_level(weights.index)
-    for timestamp, daily_weights in weights.groupby(level=time_level):
-        adjusted = _apply_constraints_single(
-            daily_weights.droplevel(time_level),
-            max_weight=max_weight,
-            min_abs_weight=min_abs_weight,
-            normalize=normalize,
-        )
-        if adjusted.empty:
-            continue
-        index = pd.MultiIndex.from_product(
-            [[timestamp], adjusted.index.astype(str)],
-            names=["timestamp", "symbol"],
-        )
-        parts.append(pd.Series(adjusted.to_numpy(), index=index, name="weight"))
-    if not parts:
+
+    if max_weight is not None:
+        cap = float(max_weight)
+        adjusted = adjusted.clip(lower=-cap, upper=cap)
+    if min_abs_weight > 0:
+        adjusted = adjusted[adjusted.abs() >= float(min_abs_weight)]
+    if adjusted.empty:
         return _empty_panel_series("weight")
-    return pd.concat(parts).sort_index().astype("float64").rename("weight")
+    if normalize:
+        gross = adjusted.abs().groupby(level=time_level, sort=False).transform("sum")
+        adjusted = adjusted.where(gross <= 0, adjusted / gross)
+    adjusted.index = pd.MultiIndex.from_arrays(
+        [
+            adjusted.index.get_level_values(time_level),
+            _symbol_keys_as_strings(adjusted.index, time_level),
+        ],
+        names=["timestamp", "symbol"],
+    )
+    return adjusted.sort_index().astype("float64").rename("weight")
 
 
 @tracked(category="portfolio")
@@ -477,17 +530,18 @@ class RiskfolioOptimizer:
 
 
 def _import_optional(module: str, *, package: str):
+    extra = module.replace("_", "-")
     try:
         imported = import_module(module)
     except ImportError as exc:
         raise ImportError(
             f"{package} is required for this feature. Install with "
-            f"`pip install trade-learn[all]` or `pip install {package}`."
+            f"`pip install trade-learn[{extra}]` or `pip install {package}`."
         ) from exc
     if imported is None:
         raise ImportError(
             f"{package} is required for this feature. Install with "
-            f"`pip install trade-learn[all]` or `pip install {package}`."
+            f"`pip install trade-learn[{extra}]` or `pip install {package}`."
         )
     return imported
 

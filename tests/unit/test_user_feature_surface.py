@@ -7,6 +7,7 @@ from zipfile import ZipFile
 import pandas as pd
 
 import tradelearn.engine as bt
+import tradelearn.lite as lite
 from tradelearn import metrics
 from tradelearn.lite import Backtest, Strategy
 from tradelearn.research import ModelScorer
@@ -198,3 +199,19 @@ def test_user_facades_hide_internal_helper_functions() -> None:
     assert factor_hidden.isdisjoint(factor.__all__)
     assert all(not hasattr(alpha, name) for name in factor_hidden)
     assert factor_hidden.isdisjoint(alpha.__all__)
+
+
+def test_target_order_constraints_are_available_from_user_facades() -> None:
+    assert bt.TargetOrderConstraints(buy_lot_size=100).buy_lot_size == 100
+    assert lite.TargetOrderConstraints(sell_lot_size=100).sell_lot_size == 100
+
+
+def test_star_import_does_not_eagerly_import_optional_indicator_backends() -> None:
+    namespaces = [
+        "tradelearn",
+        "tradelearn.engine",
+        "tradelearn.lite",
+        "tradelearn.indicators",
+    ]
+    for namespace in namespaces:
+        exec(f"from {namespace} import *", {})

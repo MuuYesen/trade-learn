@@ -11,6 +11,8 @@
 | `tl.tv` / `bt.tv` | TradingView / PyneCore 口径 |
 | `tl.pta` / `bt.pta` | pandas-ta-classic 口径 |
 
+`tl.pta` 默认可用；`talib`、`tdx`、`tv` 是按需后端，分别通过 `trade-learn[talib]`、`trade-learn[tdx]`、`trade-learn[tv]` 安装。需要一次安装全部指标后端时使用 `trade-learn[indicators]`。
+
 Lite:
 
 ```python

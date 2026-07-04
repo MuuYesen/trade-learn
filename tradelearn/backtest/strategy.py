@@ -168,7 +168,15 @@ class Strategy:
         actual_size = float(abs(size))
         pending_delta = actual_size if isbuy else -actual_size
         self._pending_size[data] = self._pending_size.get(data, 0.0) + pending_delta
-        return self.broker._submit(self, data, side, actual_size, price, exectype, **kwargs)
+        try:
+            return self.broker._submit(self, data, side, actual_size, price, exectype, **kwargs)
+        except Exception:
+            pending_size = self._pending_size.get(data, 0.0) - pending_delta
+            if abs(pending_size) < 1e-12:
+                self._pending_size.pop(data, None)
+            else:
+                self._pending_size[data] = pending_size
+            raise
 
     def buy(
         self,
@@ -283,6 +291,7 @@ class Strategy:
         weights: Mapping[str, float],
         *,
         close_missing: bool = True,
+        constraints: Any | None = None,
     ) -> list[Any]:
         """Move all data feeds toward symbol target weights."""
         data_by_name = self._target_weight_data_map()
@@ -301,6 +310,7 @@ class Strategy:
             equity=float(self.broker.getvalue()) if self.broker is not None else 0.0,
             close_missing=close_missing,
             unknown_label="symbol(s)",
+            constraints=constraints,
         )
         orders: list[Any] = []
         for intent in intents:

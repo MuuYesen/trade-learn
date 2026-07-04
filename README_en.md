@@ -98,9 +98,16 @@ Optional extras:
 
 | extra | Usage |
 |---|---|
+| `[tdx]` | OpenTDX data / China-market indicator dependencies |
+| `[tv]` | TradingView datafeed and PyneCore-backed TradingView indicators |
+| `[talib]` | TA-Lib indicator namespace |
+| `[indicators]` | TDX + TradingView + TA-Lib indicator backends |
+| `[ml]` | Causal ML dependencies |
+| `[research]` | Research acceleration utilities such as Numba |
+| `[duckdb]` | DuckDB bars backend |
 | `[lab]` | JupyterLab / Jupyter AI / MCP / Pygwalker environment |
 | `[mlflow]` | MLflow tracking server and artifact logging |
-| `[all]` | Full environment (Lab, MLflow, Riskfolio-Lib, Optuna, DuckDB, etc.) |
+| `[all]` | Full environment (Lab, MLflow, indicators, ML, DuckDB, etc.) |
 
 > **💡 Installation Tip**:
 > The default install includes only the core engine. For the full research experience, use `[all]`:

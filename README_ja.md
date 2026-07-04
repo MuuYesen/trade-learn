@@ -98,9 +98,16 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 
 | Extra | 用途 |
 |---|---|
+| `[tdx]` | OpenTDX データ / 中国市場向け指標依存関係 |
+| `[tv]` | TradingView datafeed と PyneCore ベースの TradingView 指標 |
+| `[talib]` | TA-Lib 指標名前空間 |
+| `[indicators]` | TDX + TradingView + TA-Lib 指標バックエンド |
+| `[ml]` | 因果 ML 依存関係 |
+| `[research]` | Numba などのリサーチ高速化ユーティリティ |
+| `[duckdb]` | DuckDB bars backend |
 | `[lab]` | JupyterLab / Jupyter AI / MCP / Pygwalker 投資研究環境 |
 | `[mlflow]` | MLflow 実験管理とアーティファクト記録 |
-| `[all]` | 完全な研究環境 (Lab, MLflow, Riskfolio-Lib, Optuna, DuckDB など) |
+| `[all]` | 完全な研究環境 (Lab, MLflow, indicators, ML, DuckDB など) |
 
 > **💡 インストールのヒント**:
 > 標準インストールはコアエンジンのみです。JupyterLab と MLflow を含むフル体験には `[all]` を推奨します。

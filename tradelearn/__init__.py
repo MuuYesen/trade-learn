@@ -5,16 +5,11 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-__version__ = "0.2.1"
+__version__ = "0.2.4"
 
 __all__ = [
     "__version__",
     "optimize",
-    "ta",
-    "pta",
-    "talib",
-    "tdx",
-    "tv",
 ]
 
 
