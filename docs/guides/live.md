@@ -10,15 +10,15 @@ trade-learn 2.0 的主能力是事件驱动回测；paper / live 的边界已经
 | 状态来源 | Rust 内核内部状态 | 外部 broker / 交易柜台 |
 | 成交语义 | 按 bar 和撮合模式确定 | 由真实市场和 broker 回报决定 |
 | 策略假设 | `next()` 内发单，后续事件更新状态 | 同样发单，但不能假设立即成交 |
-| 接口边界 | `tradelearn.backtest.RustBroker` | `tradelearn.core.Broker` + `BrokerEventPump` |
+| 接口边界 | 内部 Rust 回测 broker | 私有适配器实现 broker-neutral 协议 |
 
 因此，为了加快回测而优化 RustBroker，不会自动改变实盘 broker；但策略层必须只依赖共同的“意图 + 事件”语义。
 
-`tradelearn.live` 不作为稳定用户 facade。具体 QMT / IB / CTP 适配器建议在私有扩展或部署目录中维护，用户策略只依赖 `tradelearn.engine` / `tradelearn.lite` 的公开策略 API。
+trade-learn 不公开 `tradelearn.live` 包。具体 QMT / IB / CTP 适配器应在私有扩展或部署目录中维护，用户策略只依赖 `tradelearn.engine` / `tradelearn.lite` 的公开策略 API。
 
 ## 中性订单协议
 
-实盘适配器应该接收 `OrderRequest`，返回 `OrderAck`，并通过事件回流 `Fill`、撤单、拒单和状态。
+实盘适配器应该接收中性订单请求，返回委托确认，并通过事件回流成交、撤单、拒单和状态。这里描述的是框架内部协议，不是用户策略应直接导入的公开 API；具体字段定义见 `docs/internals/contracts.md`。
 
 | 类型 | 关键字段 | 用途 |
 |---|---|---|
@@ -35,25 +35,7 @@ trade-learn 2.0 的主能力是事件驱动回测；paper / live 的边界已经
 
 ## BrokerEventPump
 
-`BrokerEventPump` 用来把外部 broker 的轮询结果标准化成框架事件。
-
-```python
-from tradelearn.core.broker_events import BrokerEvent, BrokerEventPump
-
-
-def poller():
-    # 从 QMT / IB / CTP / REST proxy 等外部系统拉取事件。
-    return [
-        BrokerEvent(kind="fill", order_id="O-1", payload=...),
-        BrokerEvent(kind="status", order_id="O-2", status="accepted"),
-    ]
-
-
-pump = BrokerEventPump(poller)
-pump.on_fill(lambda fill: print("fill", fill))
-pump.on_status(lambda oid, status, replay: print(oid, status))
-pump.poll_once()
-```
+内部事件泵用来把外部 broker 的轮询结果标准化成框架事件。普通用户不需要直接使用它；私有适配器作者如需对接 broker 事件，应参考内部契约文档，而不是在策略代码里导入 `tradelearn.core`。
 
 ## 策略侧约束
 
@@ -81,5 +63,5 @@ QMT、IB、CTP、Binance 等适配器应作为独立扩展实现：
 | Rust 事件驱动回测 | 稳定 |
 | Engine / Lite 策略入口 | 稳定 |
 | Broker 中性契约 | 稳定 |
-| `BrokerEventPump` | 可用 |
-| 具体 QMT / live broker 包 | 建议外部扩展或私有部署 |
+| 内部 broker 事件泵 | 可用，不作为公开 facade |
+| 具体 QMT / live broker 包 | 不公开，外部扩展或私有部署 |

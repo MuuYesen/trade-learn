@@ -66,13 +66,17 @@ def test_user_docs_include_runtime_boundaries_and_extension_guides() -> None:
     live = Path("docs/guides/live.md").read_text(encoding="utf-8")
     contracts = Path("docs/internals/contracts.md").read_text(encoding="utf-8")
 
-    assert "RustBroker 是回测实现" in architecture
+    assert "RustBroker 仅用于回测" in architecture
     assert "Cerebro.adddata(bars)" in data
     assert "NASDAQ:AAPL" in data
     assert "自定义 Engine 指标" in extensions
-    assert "BrokerEventPump" in extensions
+    assert "broker-neutral 协议" in extensions
+    assert "from tradelearn.core" not in extensions
+    assert "from tradelearn.backtest" not in extensions
     assert "OrderRequest" in live
     assert "不假设立即成交" in live
+    assert "from tradelearn.core" not in live
+    assert "from tradelearn.backtest" not in live
     assert "OrderRequest" in contracts
     assert "OrderStatusUpdate" in contracts
 

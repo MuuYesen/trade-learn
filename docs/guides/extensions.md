@@ -11,7 +11,7 @@ trade-learn 的扩展原则是：**用户层写策略语法，research 层写投
 | Research 预处理 / 特征 / 选股 / 权重 | sklearn-like 类：`fit()` / `transform()` / `fit_transform()` / `build()` | `tradelearn.research` |
 | 数据源 | 返回标准 OHLCV DataFrame 或 `MultiIndex(timestamp, symbol)` panel | `tradelearn.data` |
 | 报告 | 从 `Stats` 或 `Reporter` 读取结果生成 HTML / CSV / XLSX | `tradelearn.report` |
-| paper / live broker | 实现 `tradelearn.core.Broker` 中性协议，通过事件回流成交状态 | 外部适配器 |
+| paper / live broker | 实现内部 broker-neutral 协议，通过事件回流成交状态 | 外部适配器 |
 
 ## Engine 高级拓展
 
@@ -232,31 +232,12 @@ Reporter.from_returns(returns).report("returns_report.html")
 
 ## paper / live broker 拓展
 
-实盘 broker 不复用 RustBroker 状态机。外部适配器实现 `core` 的中性协议，并通过 `BrokerEventPump` 把成交、撤单、拒单回流给策略。
+实盘 broker 不复用 RustBroker 状态机。QMT / IB / CTP 等适配器应放在外部包或私有部署目录中，实现内部 broker-neutral 协议，并把成交、撤单、拒单回流给策略。
 
-```python
-from tradelearn.core.broker_contracts import AccountSnapshot, OrderAck, OrderRequest
-
-
-class MyLiveBroker:
-    def place(self, req: OrderRequest) -> OrderAck:
-        ...
-
-    def cancel(self, broker_oid: str) -> None:
-        ...
-
-    def positions(self):
-        ...
-
-    def account(self) -> AccountSnapshot:
-        ...
-
-    def on_fill(self, callback):
-        ...
-```
+这部分不是稳定用户 API；普通策略代码仍只调用 `tradelearn.engine` / `tradelearn.lite` 的公开方法。适配器作者如需查看订单请求、委托确认、成交和账户快照等字段定义，请参考 `docs/internals/contracts.md`。
 
 约束：
 
 - 策略发出的是订单意图，不假设立即成交。
 - 成交、撤单、拒单、状态变化必须通过 broker 事件回流。
-- QMT / IB / CTP 等具体适配器可以在外部包或私有扩展里实现，不进入 `core`。
+- QMT / IB / CTP 等具体适配器可以在外部包或私有扩展里实现，不进入公开 facade。
