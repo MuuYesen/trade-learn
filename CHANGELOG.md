@@ -5,6 +5,15 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
+## [0.2.5] - 2026-07-20
+
+### 优化
+- **Alpha101 因子计算**: 为部分滚动计算路径增加 numba 加速，降低沪深300指数增强实盘权重生成的原始因子计算耗时。
+- **实盘 API 边界**: 收敛 `engine` / `lite` 公开接口边界，减少策略代码对内部 `backtest` 模块的直接依赖。
+
+### 修复
+- **版本一致性**: 同步 Python 包版本、Rust 扩展版本与 wheel 构建测试断言，避免安装后 `tradelearn.__version__` 与发布版本不一致。
+
 ## [0.2.4] - 2026-05-05
 
 ### 修复

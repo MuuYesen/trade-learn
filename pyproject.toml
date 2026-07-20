@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "trade-learn"
-version = "0.2.4"
+version = "0.2.5"
 description = "Python quantitative research framework for traditional and ML strategies."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -134,7 +134,7 @@ include = [
 [tool.cibuildwheel]
 build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
 skip = "*-musllinux_*"
-test-command = "python -c \"import tradelearn._rust as rust; assert rust.tradelearn_rust_version() == '0.2.4'\""
+test-command = "python -c \"import tradelearn._rust as rust; assert rust.tradelearn_rust_version() == '0.2.5'\""
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]
