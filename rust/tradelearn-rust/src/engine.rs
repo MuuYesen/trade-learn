@@ -453,6 +453,14 @@ impl BacktestEngine {
         order_id
     }
 
+    /// Remove a pending order from the matching queue (called by Python cancel()).
+    /// Returns true if the order was found and removed.
+    pub fn remove_order(&mut self, order_ref: u64) -> bool {
+        let before = self.pending.len();
+        self.pending.retain(|o| o.order_id != order_ref);
+        self.pending.len() != before
+    }
+
     pub fn get_position(&self) -> (f64, f64) {
         self.get_position_for_symbol("data0")
     }

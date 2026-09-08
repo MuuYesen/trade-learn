@@ -86,6 +86,7 @@ class RustBroker:
         self._buffer_order_submissions = False
         self._terminal_order_suppression = False
         self._order_submit_buffer: list[OrderPayload] = []
+        self._cancel_buffer: list[int] = []
         self._proxy_events: list[Any] = []
         self._trade_on_close = False
         # For 'bt' mode, we maintain state in Python
@@ -746,8 +747,18 @@ class RustBroker:
             self._pending_orders.append(order)
 
     def cancel(self, order: Order) -> None:
-        """Cancel an order in the Python mirror and pending queue."""
+        """Cancel an order in the Python mirror and queue the Rust cancel for the bar loop drain."""
         self._cancel_order_mirror(order)
+        # Rust engine is borrowed during strategy.next(); buffer the cancel ref and
+        # let run_bar_loop drain it into the Rust kernel after the callback returns.
+        if self._engine is not None:
+            self._cancel_buffer.append(order.ref)
+
+    def drain_cancel_buffer(self) -> list[int]:
+        """Return and clear the buffered Rust cancel order refs (called by Rust bar loop)."""
+        buffered = self._cancel_buffer
+        self._cancel_buffer = []
+        return buffered
 
     def _cancel_order_mirror(self, order: Order, owner: Strategy | None = None) -> bool:
         """Cancel one Python-side order mirror and notify when an owner is available."""
@@ -768,6 +779,8 @@ class RustBroker:
                 continue
             if completed.oco is candidate or candidate.oco is completed:
                 self._cancel_order_mirror(candidate, owner)
+                if self._engine is not None:
+                    self._cancel_buffer.append(candidate.ref)
 
     def _activate_child_orders(self, owner: Strategy, parent: Order) -> None:
         """Route deferred bracket child orders once the parent has filled."""

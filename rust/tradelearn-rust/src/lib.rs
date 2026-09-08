@@ -13,7 +13,7 @@ use crate::types::*;
 
 #[pyfunction]
 fn tradelearn_rust_version() -> &'static str {
-    env!("CARGO_PKG_VERSION")
+    "0.2.5.1"
 }
 
 #[pyfunction]
@@ -184,6 +184,12 @@ impl RustBacktestEngine {
         self.inner.total_bars()
     }
 
+    /// Cancel a pending order in the Rust matching queue (synced from Python broker.cancel()).
+    #[pyo3(name = "cancel_order")]
+    fn cancel_order(&mut self, order_ref: u64) -> bool {
+        self.inner.remove_order(order_ref)
+    }
+
     fn step(&mut self, cursor: usize) -> Vec<(u64, String, f64, f64, f64, f64, f64)> {
         let fills = self.inner.step(cursor);
         self.map_fills(fills)
@@ -281,6 +287,17 @@ impl RustBacktestEngine {
             let cash = self.inner.get_cash();
             let (size, price) = self.inner.get_position();
             let drained = on_bar.call1(py, (cursor, fills, cash, size, price))?;
+
+            // v0.2.5.1: 撤单同步 —— strategy.next() 期间 Python broker.cancel() 将撤单 ref
+            // 缓冲到 _cancel_buffer，此处回调返回后统一下发到 Rust 撮合队列（假撤单修复）。
+            // 注意必须置于 continue 之前：即使回调返回 None（无新订单）也要同步撤单。
+            let cancels: Vec<u64> = broker
+                .call_method0(py, "drain_cancel_buffer")?
+                .extract(py)?;
+            for cancel_ref in cancels {
+                self.inner.remove_order(cancel_ref);
+            }
+
             if drained.is_none(py) {
                 continue;
             }

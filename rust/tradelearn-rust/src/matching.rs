@@ -157,8 +157,10 @@ pub fn match_order(
         OrderType::Stop => {
             let stop = order.stop_price?;
             match order.side {
-                OrderSide::Buy if bar.high >= stop => Some(execution_price),
-                OrderSide::Sell if bar.low <= stop => Some(execution_price),
+                // Stop Buy（突破买入）：跳空高开按 open，盘中突破按 stop；成交价=max(execution, stop)
+                OrderSide::Buy if bar.high >= stop => Some(execution_price.max(stop)),
+                // Stop Sell（止损卖出）：跳空低开按 open，盘中跌破按 stop；成交价=min(execution, stop)
+                OrderSide::Sell if bar.low <= stop => Some(execution_price.min(stop)),
                 _ => None,
             }
         }
