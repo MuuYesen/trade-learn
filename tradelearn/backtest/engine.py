@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from typing import Any
 
 import numpy as np
@@ -1324,7 +1325,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
         return []
 
     use_multi_data_rust_runner = clocked_multi_data_runner is not None
-    pbar = tqdm(total=limit, desc="Backtest.run", unit="bar", leave=True, delay=0)
+    _show_pbar = bool(getattr(strategy, "verbose", True) and not bool(os.environ.get("TQDM_DISABLE")))
+    pbar = tqdm(total=limit, desc="Backtest.run", unit="bar", leave=True, delay=0, disable=not _show_pbar)
     if use_multi_data_rust_runner:
         if getattr(broker, "_trade_on_close", False):
 
