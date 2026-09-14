@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::matching::{
     fill_from_raw_price, is_exit_fill, is_exit_order_for_position, match_order, match_order_smart,
-    smart_match_price, smart_order_priority,
+    smart_match_price, smart_order_priority, trailing_watermark,
 };
 use crate::types::*;
 
@@ -198,11 +198,10 @@ impl BacktestEngine {
                 remaining.push(order);
                 continue;
             }
-            if let Some(fill_event) = if options.smart_matching {
-                match_order_smart(&order, bar, options)
-            } else {
-                match_order(&order, bar, options)
-            } {
+            // 跟踪止损单：先用「上一根 bar 的水位」参与撮合判定，
+            // 避免同一根 bar 先拿 high 抬水位、再用自己的 low 触发（bar 内前视）。
+            let matched = match_order(&order, bar, options);
+            if let Some(fill_event) = matched {
                 if !self.can_apply_fill(&fill_event, options.mult) {
                     continue;
                 }
@@ -232,7 +231,16 @@ impl BacktestEngine {
                 self.results.fills.push(record.clone());
                 fills.push(record);
             } else {
-                remaining.push(order);
+                // 未成交的跟踪单：用当前 bar 极值推进水位后回写，供下一根 bar 使用。
+                let mut carried = order;
+                if matches!(
+                    carried.order_type,
+                    OrderType::StopTrail | OrderType::StopTrailLimit
+                ) {
+                    carried.trail_watermark =
+                        Some(trailing_watermark(carried.side, bar, carried.trail_watermark));
+                }
+                remaining.push(carried);
             }
         }
         self.pending = remaining;
@@ -386,6 +394,8 @@ impl BacktestEngine {
                 remaining.push(order);
                 continue;
             };
+            // 跟踪止损单：先用「上一根 bar 的水位」参与撮合判定，未成交再推进水位，
+            // 避免同一根 bar 用自身极值制造 bar 内前视。
             let matched = if options.smart_matching {
                 match_order_smart(&order, bar, options)
             } else {
@@ -421,7 +431,16 @@ impl BacktestEngine {
                 self.results.fills.push(record.clone());
                 fills.push(record);
             } else {
-                remaining.push(order);
+                // 未成交的跟踪单：用当前 bar 极值推进水位后回写，供下一根 bar 使用。
+                let mut carried = order;
+                if matches!(
+                    carried.order_type,
+                    OrderType::StopTrail | OrderType::StopTrailLimit
+                ) {
+                    carried.trail_watermark =
+                        Some(trailing_watermark(carried.side, bar, carried.trail_watermark));
+                }
+                remaining.push(carried);
             }
         }
         self.pending = remaining;
@@ -437,6 +456,8 @@ impl BacktestEngine {
         size: f64,
         limit_price: Option<f64>,
         stop_price: Option<f64>,
+        trail_amount: Option<f64>,
+        trail_percent: Option<f64>,
     ) -> OrderId {
         let order_id = self.next_order_id;
         self.next_order_id += 1;
@@ -449,6 +470,9 @@ impl BacktestEngine {
             limit_price,
             stop_price,
             created_ts: 0,
+            trail_amount,
+            trail_percent,
+            trail_watermark: None,
         });
         order_id
     }

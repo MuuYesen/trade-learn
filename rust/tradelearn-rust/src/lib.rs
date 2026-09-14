@@ -68,6 +68,8 @@ fn match_order_fill(
         "limit" => OrderType::Limit,
         "stop" => OrderType::Stop,
         "stop_limit" => OrderType::StopLimit,
+        "stop_trail" => OrderType::StopTrail,
+        "stop_trail_limit" => OrderType::StopTrailLimit,
         other => {
             return Err(PyValueError::new_err(format!(
                 "unsupported order type: {other}"
@@ -83,6 +85,9 @@ fn match_order_fill(
         limit_price,
         stop_price,
         created_ts,
+        trail_amount: None,
+        trail_percent: None,
+        trail_watermark: None,
     };
     let bar = BarEvent {
         ts,
@@ -310,6 +315,10 @@ impl RustBacktestEngine {
             {
                 let side = parse_order_side(&side)?;
                 let order_type = parse_order_type(&order_type)?;
+                // trail 参数经 broker.pop_trail_params(ref) 旁路取出（缓冲契约保持 7 元组）。
+                let (trail_amount, trail_percent): (Option<f64>, Option<f64>) = broker
+                    .call_method1(py, "pop_trail_params", (provisional_ref,))?
+                    .extract(py)?;
                 let order_id = self.inner.submit_order(
                     symbol,
                     side,
@@ -317,6 +326,8 @@ impl RustBacktestEngine {
                     order_size,
                     limit_price,
                     stop_price,
+                    trail_amount,
+                    trail_percent,
                 );
                 bindings.push((provisional_ref, order_id));
             }
@@ -327,7 +338,7 @@ impl RustBacktestEngine {
         Ok(())
     }
 
-    #[pyo3(signature = (symbol, side, order_type, size, limit_price=None, stop_price=None))]
+    #[pyo3(signature = (symbol, side, order_type, size, limit_price=None, stop_price=None, trail_amount=None, trail_percent=None))]
     fn submit_order_for_symbol(
         &mut self,
         symbol: String,
@@ -336,15 +347,24 @@ impl RustBacktestEngine {
         size: f64,
         limit_price: Option<f64>,
         stop_price: Option<f64>,
+        trail_amount: Option<f64>,
+        trail_percent: Option<f64>,
     ) -> PyResult<u64> {
         let side = parse_order_side(side)?;
         let order_type = parse_order_type(order_type)?;
-        Ok(self
-            .inner
-            .submit_order(symbol, side, order_type, size, limit_price, stop_price))
+        Ok(self.inner.submit_order(
+            symbol,
+            side,
+            order_type,
+            size,
+            limit_price,
+            stop_price,
+            trail_amount,
+            trail_percent,
+        ))
     }
 
-    #[pyo3(signature = (side, order_type, size, limit_price=None, stop_price=None))]
+    #[pyo3(signature = (side, order_type, size, limit_price=None, stop_price=None, trail_amount=None, trail_percent=None))]
     fn submit_order(
         &mut self,
         side: &str,
@@ -352,6 +372,8 @@ impl RustBacktestEngine {
         size: f64,
         limit_price: Option<f64>,
         stop_price: Option<f64>,
+        trail_amount: Option<f64>,
+        trail_percent: Option<f64>,
     ) -> PyResult<u64> {
         self.submit_order_for_symbol(
             "data0".to_string(),
@@ -360,6 +382,8 @@ impl RustBacktestEngine {
             size,
             limit_price,
             stop_price,
+            trail_amount,
+            trail_percent,
         )
     }
 
@@ -475,6 +499,8 @@ pub(crate) fn parse_order_type(order_type: &str) -> PyResult<OrderType> {
         "limit" => Ok(OrderType::Limit),
         "stop" => Ok(OrderType::Stop),
         "stop_limit" => Ok(OrderType::StopLimit),
+        "stop_trail" => Ok(OrderType::StopTrail),
+        "stop_trail_limit" => Ok(OrderType::StopTrailLimit),
         other => Err(PyValueError::new_err(format!(
             "unsupported order type: {other}"
         ))),

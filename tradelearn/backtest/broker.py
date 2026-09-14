@@ -15,13 +15,18 @@ if TYPE_CHECKING:
 OrderPayload = tuple[int, str, str, str, float, float | None, float | None]
 _EMPTY_ORDER_BUFFER: tuple[()] = ()
 CompactFillBatch = tuple[list[int], list[float], list[float], list[float], list[float], list[float]]
+# Order.exectype → Rust 订单类型字符串。
+# 数值对齐 backtrader 官方布局：
+#   Market=0, Close=1, Limit=2, Stop=3, StopLimit=4, StopTrail=5, StopTrailLimit=6, Historical=7
+# `Close` 作为市价收盘撮合语义，映射为 market。
 _ORDER_TYPE_TO_RUST = {
-    1: "market",
-    2: "limit",
-    3: "stop",
-    4: "stop_limit",
-    6: "stop",
-    7: "stop_limit",
+    0: "market",       # Market
+    1: "market",       # Close（收盘价成交，等同市价语义）
+    2: "limit",        # Limit
+    3: "stop",         # Stop
+    4: "stop_limit",   # StopLimit
+    5: "stop_trail",   # StopTrail
+    6: "stop_trail_limit",  # StopTrailLimit
 }
 
 
@@ -86,6 +91,8 @@ class RustBroker:
         self._buffer_order_submissions = False
         self._terminal_order_suppression = False
         self._order_submit_buffer: list[OrderPayload] = []
+        # 缓冲旁路：按 order.ref 携带 trail 参数，保持 OrderPayload 7 元组契约不变
+        self._trail_params_by_ref: dict[int, tuple[float | None, float | None]] = {}
         self._cancel_buffer: list[int] = []
         self._proxy_events: list[Any] = []
         self._trade_on_close = False
@@ -498,8 +505,18 @@ class RustBroker:
             limit_price,
             stop_price,
         ) in self.drain_order_buffer():
+            trail_amount, trail_percent = self._trail_params_by_ref.pop(
+                provisional_ref, (None, None)
+            )
             order_id = self._submit_payload_to_engine(
-                symbol, side_str, ot_str, actual_size, limit_price, stop_price
+                symbol,
+                side_str,
+                ot_str,
+                actual_size,
+                limit_price,
+                stop_price,
+                trail_amount,
+                trail_percent,
             )
             self.bind_rust_order_ref(provisional_ref, order_id)
             submitted = True
@@ -521,13 +538,24 @@ class RustBroker:
                 self._step_fills_from_collect = self._step_close(self._curr_idx)
 
     def drain_order_buffer(self) -> list[OrderPayload] | tuple[()]:
-        """Return buffered order payloads without calling back into Rust."""
+        """Return buffered order payloads without calling back into Rust.
+
+        缓冲契约保持 7 元组不变（OrderPayload）；跟踪止损的 trail 参数不在元组内，
+        由 Rust 侧在消化订单时经 `pop_trail_params(ref)` 旁路取出。
+        """
         buffered = self._order_submit_buffer
         self._buffer_order_submissions = False
         if not buffered:
             return _EMPTY_ORDER_BUFFER
         self._order_submit_buffer = []
         return buffered
+
+    def pop_trail_params(self, provisional_ref: int) -> tuple[float | None, float | None]:
+        """取出并移除某个（临时）订单 ref 的 trail 参数（供 Rust 订单消化时调用）。
+
+        仅在存在 trail 参数时返回非空，使无跟踪订单保持与历史一致的行为。
+        """
+        return self._trail_params_by_ref.pop(provisional_ref, (None, None))
 
     def bind_rust_order_ref(self, provisional_ref: int, rust_ref: int) -> None:
         """Replace a provisional Python order ref with the Rust-assigned ref."""
@@ -550,8 +578,18 @@ class RustBroker:
         stop_price: float | None,
     ) -> int:
         """Submit one drained order payload through Python's engine handle."""
+        trail_amount, trail_percent = self._trail_params_by_ref.pop(
+            provisional_ref, (None, None)
+        )
         order_id = self._submit_payload_to_engine(
-            "data0", side_str, ot_str, actual_size, limit_price, stop_price
+            "data0",
+            side_str,
+            ot_str,
+            actual_size,
+            limit_price,
+            stop_price,
+            trail_amount,
+            trail_percent,
         )
         self.bind_rust_order_ref(provisional_ref, order_id)
         return order_id
@@ -564,9 +602,16 @@ class RustBroker:
         actual_size: float,
         limit_price: float | None,
         stop_price: float | None,
+        trail_amount: float | None = None,
+        trail_percent: float | None = None,
     ) -> int:
         submit_for_symbol = getattr(self._engine, "submit_order_for_symbol", None)
         if callable(submit_for_symbol):
+            if trail_amount is None and trail_percent is None:
+                # 无跟踪参数时保持历史 6 参签名，避免第三方/测试 FakeEngine 破契约
+                return submit_for_symbol(
+                    symbol, side_str, ot_str, actual_size, limit_price, stop_price
+                )
             return submit_for_symbol(
                 symbol,
                 side_str,
@@ -574,6 +619,12 @@ class RustBroker:
                 actual_size,
                 limit_price,
                 stop_price,
+                trail_amount,
+                trail_percent,
+            )
+        if trail_amount is None and trail_percent is None:
+            return self._engine.submit_order(
+                side_str, ot_str, actual_size, limit_price, stop_price
             )
         return self._engine.submit_order(
             side_str,
@@ -581,6 +632,8 @@ class RustBroker:
             actual_size,
             limit_price,
             stop_price,
+            trail_amount,
+            trail_percent,
         )
 
     def _submit_to_rust_engine(
@@ -592,6 +645,8 @@ class RustBroker:
         actual_size: float,
         limit_price: float | None,
         stop_price: float | None,
+        trail_amount: float | None = None,
+        trail_percent: float | None = None,
     ) -> None:
         order_id = self._submit_payload_to_engine(
             symbol,
@@ -600,6 +655,8 @@ class RustBroker:
             actual_size,
             limit_price,
             stop_price,
+            trail_amount,
+            trail_percent,
         )
         self.bind_rust_order_ref(order.ref, order_id)
 
@@ -621,7 +678,18 @@ class RustBroker:
         elif order.exectype == Order.StopLimit:
             stop_price = price
             limit_price = order.pricelimit
+        elif order.exectype in (Order.StopTrail, Order.StopTrailLimit):
+            # 跟踪止损：初始止损价作为首帧水位基准；回撤量由 trail* 传入
+            stop_price = price
+            if order.exectype == Order.StopTrailLimit:
+                limit_price = order.pricelimit
         return symbol, side_str, ot_str, actual_size, limit_price, stop_price
+
+    def _trail_params(self, order: Order) -> tuple[float | None, float | None]:
+        """提取跟踪止损的 trailamount / trailpercent（仅跟踪类订单需要）。"""
+        if order.exectype in (Order.StopTrail, Order.StopTrailLimit):
+            return order.trailamount, order.trailpercent
+        return None, None
 
     def _submit(
         self,
@@ -738,9 +806,12 @@ class RustBroker:
             side_str = "buy" if is_buy else "sell"
             payload = self._rust_order_payload(order, side_str, actual_size, price)
             if self._buffer_order_submissions:
+                # 缓冲契约保持 7 元组不变；trail 参数经 _trail_params_by_ref 旁路携带
+                self._trail_params_by_ref[order.ref] = self._trail_params(order)
                 self._order_submit_buffer.append((order.ref, *payload))
             else:
-                self._submit_to_rust_engine(order, *payload)
+                trail_amount, trail_percent = self._trail_params(order)
+                self._submit_to_rust_engine(order, *payload, trail_amount, trail_percent)
             order.status = Order.Accepted
         else:
             order.status = Order.Accepted
@@ -790,6 +861,8 @@ class RustBroker:
                 if self._engine is not None and hasattr(self._engine, "run_bar_loop"):
                     side_str = "buy" if is_buy else "sell"
                     payload = self._rust_order_payload(child, side_str, actual_size, price)
+                    # 缓冲契约保持 7 元组不变；trail 参数旁路携带
+                    self._trail_params_by_ref[child.ref] = self._trail_params(child)
                     self._order_submit_buffer.append((child.ref, *payload))
                     child.status = Order.Accepted
                 else:

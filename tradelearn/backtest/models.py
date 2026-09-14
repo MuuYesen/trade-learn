@@ -266,7 +266,9 @@ class Order:
     Created, Submitted, Accepted, Partial, Completed, Canceled, Expired, Margin, Rejected = range(9)
     Cancelled = Canceled
     Buy, Sell = 1, 2
-    Market, Limit, Stop, StopLimit, Close, StopTrail, StopTrailLimit = range(1, 8)
+    # 对齐 backtrader 官方常量布局：
+    # (Market, Close, Limit, Stop, StopLimit, StopTrail, StopTrailLimit, Historical) = range(8)
+    Market, Close, Limit, Stop, StopLimit, StopTrail, StopTrailLimit, Historical = range(8)
     DAY, GTC, IOC = "day", "gtc", "ioc"
     ref: int
     data: Any
@@ -315,13 +317,16 @@ class Order:
         side = cls.Buy if request.side == "buy" else cls.Sell
         exectype = {
             "market": cls.Market,
+            "close": cls.Close,
             "limit": cls.Limit,
             "stop": cls.Stop,
             "stop_limit": cls.StopLimit,
+            "stop_trail": cls.StopTrail,
+            "stop_trail_limit": cls.StopTrailLimit,
         }.get(request.order_type, cls.Market)
         price = (
             request.stop_price
-            if request.order_type in ("stop", "stop_limit")
+            if request.order_type in ("stop", "stop_limit", "stop_trail", "stop_trail_limit")
             else request.limit_price
         )
         return cls(

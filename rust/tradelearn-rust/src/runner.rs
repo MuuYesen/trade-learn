@@ -224,6 +224,8 @@ impl RustBarRunner {
                     order_size,
                     limit_price,
                     stop_price,
+                    None,
+                    None,
                 );
                 bindings.push((provisional_ref, order_id));
             }
@@ -355,6 +357,8 @@ impl RustClockedMultiDataRunner {
                     order_size,
                     limit_price,
                     stop_price,
+                    None,
+                    None,
                 );
                 bindings.push((provisional_ref, order_id));
             }
