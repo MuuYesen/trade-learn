@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
 
 OrderPayload = tuple[int, str, str, str, float, float | None, float | None]
 _EMPTY_ORDER_BUFFER: tuple[()] = ()
+_MISSING = object()  # 缓存未命中哨兵（区分「未计算」与「计算为 None」）
 CompactFillBatch = tuple[list[int], list[float], list[float], list[float], list[float], list[float]]
 # Order.exectype → Rust 订单类型字符串。
 # 数值对齐 backtrader 官方布局：
@@ -93,6 +95,9 @@ class RustBroker:
         self._order_submit_buffer: list[OrderPayload] = []
         # 缓冲旁路：按 order.ref 携带 trail 参数，保持 OrderPayload 7 元组契约不变
         self._trail_params_by_ref: dict[int, tuple[float | None, float | None]] = {}
+        # valid 到期时间缓存：按 order.ref 记录「创建时刻 + valid」算出的绝对失效时间，
+        # 避免每 bar 用当前时间重算导致 deadline 永远后移。
+        self._valid_deadline_by_ref: dict[int, Any] = {}
         self._cancel_buffer: list[int] = []
         self._proxy_events: list[Any] = []
         self._trade_on_close = False
@@ -853,6 +858,111 @@ class RustBroker:
                 if self._engine is not None:
                     self._cancel_buffer.append(candidate.ref)
 
+    def _order_created_datetime(self, order: Order) -> Any:
+        """订单创建时刻（相对 valid 的基准时间）。
+
+        优先用 Order 的 created 时间戳（若存在），否则退回当前 bar 时间。
+        """
+        created = getattr(order, "created", None)
+        ts = getattr(created, "dt", None) if created is not None else None
+        if ts is None:
+            ts = self._fill_datetime(order.data)
+        if isinstance(ts, (int, float)):
+            try:
+                return datetime.datetime.fromtimestamp(int(ts), tz=datetime.timezone.utc)
+            except (OverflowError, OSError, ValueError):
+                return None
+        if isinstance(ts, datetime.datetime):
+            return ts
+        return None
+
+    def _order_valid_deadline(self, order: Order) -> Any:
+        """把 order.valid 解析为该订单的绝对失效时间；无有效值返回 None。
+
+        支持的类型（与 backtrader 语义对齐）：
+          - timedelta：自「创建 bar 时间」起相对 N 天/秒；
+          - datetime/date：绝对失效时间；
+          - 数字：视为相对秒数（向后兼容）。
+        """
+        valid = getattr(order, "valid", None)
+        if valid is None:
+            return None
+        # 相对 valid（timedelta/数字）必须以「订单创建时刻」为基准，
+        # 且只算一次并缓存，否则每 bar 用当前时间重算会让 deadline 永远后移、永不触发。
+        cached = self._valid_deadline_by_ref.get(order.ref, _MISSING)
+        if cached is not _MISSING:
+            return cached
+        base = self._order_created_datetime(order)
+        if isinstance(base, (int, float)):
+            try:
+                base = datetime.datetime.fromtimestamp(int(base), tz=datetime.timezone.utc)
+            except (OverflowError, OSError, ValueError):
+                base = None
+        try:
+            if isinstance(valid, datetime.timedelta):
+                if base is None:
+                    return None
+                deadline = base + valid
+                self._valid_deadline_by_ref[order.ref] = deadline
+                return deadline
+            if isinstance(valid, datetime.datetime):
+                return valid
+            if isinstance(valid, datetime.date):
+                return datetime.datetime(valid.year, valid.month, valid.day,
+                                         tzinfo=getattr(base, "tzinfo", None))
+            if isinstance(valid, (int, float)):
+                if base is None:
+                    return None
+                return base + datetime.timedelta(seconds=float(valid))
+        except Exception:
+            return None
+        return None
+
+    def _now_datetime(self, data: Any) -> Any:
+        """当前 bar 的时间（与 _fill_datetime 同源，转成 datetime）。"""
+        ts = self._fill_datetime(data)
+        if isinstance(ts, (int, float)):
+            try:
+                return datetime.datetime.fromtimestamp(int(ts), tz=datetime.timezone.utc)
+            except (OverflowError, OSError, ValueError):
+                return None
+        if isinstance(ts, datetime.datetime):
+            return ts
+        return None
+
+    def _expire_valid_orders(self, i: int, owner: Strategy | None = None) -> None:
+        """按 order.valid 到期撤销存活挂单（每 bar 撮合后调用）。
+
+        底层此前只存储 valid 字段但从不消费；这里补齐到期语义：
+        存活订单（Submitted/Accepted/Partial）超过 valid 失效时间即置为 Expired，
+        并从 Rust 侧撤单（经 _cancel_buffer 由 bar loop 消化）。
+        """
+        deadline_cache: dict[int, Any] = {}
+        now_cache: dict[int, Any] = {}
+        for order in self._orders:
+            if order.status not in (Order.Submitted, Order.Accepted, Order.Partial):
+                continue
+            deadline = deadline_cache.get(id(order.data), _MISSING)
+            if deadline is _MISSING:
+                deadline = self._order_valid_deadline(order)
+                deadline_cache[id(order.data)] = deadline
+            if deadline is None:
+                continue
+            now = now_cache.get(id(order.data), _MISSING)
+            if now is _MISSING:
+                now = self._now_datetime(order.data)
+                now_cache[id(order.data)] = now
+            if now is None or now <= deadline:
+                continue
+            # 到期：置 Expired + 通知 Rust 撤单 + 回调策略
+            order.status = Order.Expired
+            self._pending_orders = [p for p in self._pending_orders if p is not order]
+            if self._engine is not None:
+                self._cancel_buffer.append(order.ref)
+            if owner is not None:
+                self._notify_order_event(owner, order)
+
+
     def _activate_child_orders(self, owner: Strategy, parent: Order) -> None:
         """Route deferred bracket child orders once the parent has filled."""
         children = self._deferred_child_orders.pop(id(parent), ())
@@ -895,6 +1005,7 @@ class RustBroker:
         self._curr_idx = i
         self._clear_state_caches()
         self._step_fills_from_collect = None
+        self._expire_valid_orders(i)
         if self._engine is not None:
             if self._active_datas and self._step_open_bars_compact is not None:
                 fills, cash, size, price = self._step_open_bars_compact(
@@ -931,6 +1042,10 @@ class RustBroker:
 
     def process_fills(self, strategy: Strategy, i: int) -> None:
         """Synchronize filled orders back to Python."""
+        # 每 bar 撮合后、成交同步前，先按 valid 到期撤销存活挂单。
+        # 放在这里而非 step()：单标的回测走 Rust bar loop（on_rust_bar）路径，
+        # 不经 step()，只有 process_fills() 在所有 runner 路径上都会执行。
+        self._expire_valid_orders(i, owner=strategy)
         if self._engine is not None:
             if self._step_fills_from_collect is None:
                 if self._get_new_fills_compact is not None:

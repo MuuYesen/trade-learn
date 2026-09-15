@@ -1435,6 +1435,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 broker._rust_state_cache = (i, cash, size, price)
                 if fills:
                     broker_process_fills(strategy, i)
+                # 每 bar 无条件按 valid 到期撤销存活挂单（不依赖当 bar 是否有成交）。
+                _expire = getattr(broker, "_expire_valid_orders", None)
+                if _expire is not None:
+                    _expire(i, owner=strategy)
                 if i >= min_start:
                     orders = run_strategy_next_drained(i)
                     raise_if_runstopped()
@@ -1456,6 +1460,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 broker._rust_state_cache = (i, cash, size, price)
                 if fills:
                     broker_process_fills(strategy, i)
+                # 每 bar 无条件按 valid 到期撤销存活挂单（不依赖当 bar 是否有成交）。
+                _expire = getattr(broker, "_expire_valid_orders", None)
+                if _expire is not None:
+                    _expire(i, owner=strategy)
                 notify_cashvalue(broker_getcash(), broker_getvalue())
                 if i >= min_start:
                     orders = run_strategy_next_drained(i)
