@@ -279,6 +279,9 @@ class Order:
     status: int = Created
     executed: ExecutedInfo = field(default_factory=ExecutedInfo)
     activation_bar: int = 0
+    # 订单创建时刻的 bar 时间戳（由 broker 在注册订单时回填）。
+    # 用于回测落库时映射「委托日期」，包括未成交即被取消的订单。
+    created_ts: int | None = None
     valid: Any = None
     oco: Any = None
     parent: Any = None
