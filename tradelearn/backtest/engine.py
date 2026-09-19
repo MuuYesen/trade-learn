@@ -78,10 +78,16 @@ def _orders_frame(broker: Any) -> pd.DataFrame:
     rows = []
     for order in getattr(broker, "_orders", []):
         data = getattr(order, "data", None)
+        # 委托日期取「订单创建时刻」的 bar 时间戳（broker 注册订单时回填的 created_ts）。
+        # 不能用 broker._fill_datetime(data)：它读的是 broker._curr_idx，回测结束时为
+        # 末位游标，会让所有订单都落到同一（最后）日期。created_ts 缺失时才回退。
+        created_ts = getattr(order, "created_ts", None)
+        if created_ts is None and data is not None:
+            created_ts = broker._fill_datetime(data)
         rows.append(
             {
                 "ref": order.ref,
-                "datetime": broker._fill_datetime(data) if data is not None else None,
+                "datetime": created_ts,
                 "data": getattr(data, "_name", None),
                 "side": "buy" if order.isbuy() else "sell",
                 "exectype": order.exectype,
@@ -93,7 +99,15 @@ def _orders_frame(broker: Any) -> pd.DataFrame:
                 "info": dict(order.info),
             }
         )
-    return pd.DataFrame(rows)
+    frame = pd.DataFrame(rows)
+    # 与 _fills_frame 保持一致的列口径：数值时间戳统一转为 UTC datetime。
+    if not frame.empty and "datetime" in frame.columns:
+        datetimes = frame["datetime"]
+        if pd.api.types.is_numeric_dtype(datetimes):
+            frame["datetime"] = pd.to_datetime(datetimes, unit="s", utc=True)
+        else:
+            frame["datetime"] = pd.to_datetime(datetimes, utc=True)
+    return frame
 
 
 def _fills_frame(broker: Any) -> pd.DataFrame:
