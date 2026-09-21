@@ -72,6 +72,10 @@ class RustBroker:
         self._fills_frame_cache_len = -1
         self._pending_orders: list[Order] = []
         self._deferred_child_orders: dict[int, list[tuple[Order, bool, float, float | None]]] = {}
+        # Bracket 子单组注册表：按父单 id 记录该父单下的全部子单（含已激活的），
+        # 对齐 backtrader ``bbroker._pchildren``。任一子单成交/失效时通过
+        # ``_bracketize(cancel=True)`` 连带撤销同组其余子单，避免孤儿 bracket 子单残留。
+        self._pchildren: dict[int, list[Order]] = {}
         self._oco_order_count = 0
         self._order_count = 0
         self._closed_trade_count = 0
@@ -814,111 +818,123 @@ class RustBroker:
         if not order.alive():
             return
 
-        if order.parent is not None and order.parent.status != Order.Completed:
-            if not order.parent.alive():
-                self.cancel(order)
-                return
-            self._deferred_child_orders.setdefault(id(order.parent), []).append(
-                (order, is_buy, actual_size, price)
-            )
-            order.status = Order.Accepted
-            self._notify_order_event(owner, order)
-            return
+        """Cancel live OCO siblings after one order in the OCO pair fills.
 
-        self._route_accepted_order_to_matcher(order, is_buy, actual_size, price)
-        self._notify_order_event(owner, order)
-
-    def _route_accepted_order_to_matcher(
-        self,
-        order: Order,
-        is_buy: bool,
-        actual_size: float,
-        price: float | None,
-    ) -> None:
-        if self._engine is not None:
-            side_str = "buy" if is_buy else "sell"
-            payload = self._rust_order_payload(order, side_str, actual_size, price)
-            if self._buffer_order_submissions:
-                # 缓冲契约保持 7 元组不变；trail 参数经 _trail_params_by_ref 旁路携带
-                self._trail_params_by_ref[order.ref] = self._trail_params(order)
-                self._order_submit_buffer.append((order.ref, *payload))
-            else:
-                trail_amount, trail_percent = self._trail_params(order)
-                self._submit_to_rust_engine(order, *payload, trail_amount, trail_percent)
-            order.status = Order.Accepted
-        else:
-            order.status = Order.Accepted
-            self._pending_orders.append(order)
-
-    def cancel(self, order: Order) -> None:
-        """Cancel an intent, including children that have not reached the kernel."""
-        if order.ref in self._authoritative_terminal_refs:
-            return
-        if not self._cancel_order_mirror(order):
-            return
-        if id(order) in self._bound_orders:
-            self._cancel_buffer.append(order.ref)
-        for child, *_ in self._deferred_child_orders.pop(id(order), ()):
-            self.cancel(child)
-
-    def _cancel_order_mirror(self, order: Order, owner: Strategy | None = None) -> bool:
-        if not order.alive():
-            return False
-        self._finish_order(order, Order.Canceled, owner)
-        return True
-
-    def _finish_order(self, order: Order, status: int, owner: Strategy | None = None) -> None:
-        if not order.alive():
-            return
-        order.status = status
-        self._pending_orders = [pending for pending in self._pending_orders if pending is not order]
-        owner = owner or self._order_owners.get(id(order))
-        if owner is not None:
-            pending = owner._pending_size.get(order.data, 0.0)
-            size = order.size if order.isbuy() else -order.size
-            owner._pending_size[order.data] = pending - size
-            self._notify_order_event(owner, order)
-
-    def _cancel_oco_siblings(self, owner: Strategy, completed: Order) -> None:
-        # Native matching enforces exclusion atomically. Mirror peers, including
-        # deferred orders; this also supports existing broker test adapters.
+        被 OCO 连带撤销的兄弟单若本身是 bracket 子单，还需级联撤销其 bracket 同组
+        子单（如 ref2 止损子单被 OCO 撤下后，同组的 ref3 止盈子单也应一并撤销），
+        避免孤儿 bracket 子单残留。
+        """
         if completed.oco is None and self._oco_order_count == 0:
             return
-        group = {id(completed)}
-        changed = True
-        while changed:
-            changed = False
-            for order in self._orders:
-                if order.oco is not None and (id(order) in group or id(order.oco) in group):
-                    before = len(group)
-                    group.update((id(order), id(order.oco)))
-                    changed |= len(group) != before
-        for order in self._orders:
-            if order is not completed and id(order) in group and order.alive():
-                self.cancel(order)
+        for candidate in list(self._orders):
+            if candidate is completed or not candidate.alive():
+                continue
+            if completed.oco is candidate or candidate.oco is completed:
+                self._cancel_order_mirror(candidate, owner)
+                if self._engine is not None:
+                    self._cancel_buffer.append(candidate.ref)
+                # 级联：被 OCO 撤下的候选单若属于某 bracket 组，连带撤销其同组兄弟
+                self._bracketize(owner, candidate, cancel=True)
+
+    def _bracketize(self, owner: Strategy, order: Order, cancel: bool = False) -> None:
+        """Bracket 父子链连带撤销，对齐 backtrader ``bbroker._bracketize``。
+
+        - ``cancel=True``：订单（子单成交/失效/被 OCO 撤下、或父单被撤）离场时，
+          连带撤销其同组兄弟子单，杜绝孤儿挂单残留；
+        - ``cancel=False``：父单成交时清理其子单组里的父单登记（子单激活由
+          ``_activate_child_orders`` 负责），组内仅保留子单以便后续连带撤销。
+
+        组以父单 ``id(parent)`` 为键。子单成交时通过 ``order.parent`` 反查所在组，
+        撤销同组其余存活子单。
+        """
+        parent = getattr(order, "parent", None)
+        if parent is None:
+            # 本单无父单（顶层/父单自身）：
+            #  - cancel=True（父单离场，如 Expired/Canceled）→ 连带撤销其所有子单；
+            #  - cancel=False（父单成交）→ 仅解除父单在组中的登记，子单交由
+            #    _activate_child_orders 激活。
+            group = self._pchildren.get(id(order))
+            if group is not None:
+                if cancel:
+                    for child in list(group):
+                        if child is order or not child.alive():
+                            continue
+                        if self._cancel_order_mirror(child, owner) and self._engine is not None:
+                            self._cancel_buffer.append(child.ref)
+                    self._pchildren.pop(id(order), None)
+                else:
+                    remaining = [o for o in group if o is not order]
+                    if remaining:
+                        self._pchildren[id(order)] = remaining
+                    else:
+                        self._pchildren.pop(id(order), None)
+            return
+
+        group_key = id(parent)
+        group = self._pchildren.get(group_key, [])
+        if cancel:
+            # 子单离场 → 撤销同组其余存活子单（父单被撤时同样连带所有子单）
+            for sibling in list(group):
+                if sibling is order or not sibling.alive() or sibling is parent:
+                    continue
+                if self._cancel_order_mirror(sibling, owner) and self._engine is not None:
+                    self._cancel_buffer.append(sibling.ref)
+        # 组内除本单外已无存活子单 → 清理登记，避免字典无限增长
+        if not any(o.alive() for o in group if o is not order and o is not parent):
+            self._pchildren.pop(group_key, None)
+        self._deferred_child_orders.pop(group_key, None)
 
     def _normalize_deadline(self, order: Order) -> int | None:
         valid = order.valid
         if valid is None:
             return None
-        import numbers
-        import pandas as pd
-        if isinstance(valid, (datetime.timedelta, numbers.Real)):
-            # The primary runtime clock defines submission time, not the last
-            # available secondary-feed bar.
-            data = getattr(self._order_owners.get(id(order)), "data", None) or order.data
-            ts = self._fill_datetime(data)
-            if ts is None:
-                raise ValueError("relative order.valid requires a submission timestamp")
-            base = pd.Timestamp(ts, unit="s", tz="UTC") if isinstance(ts, numbers.Real) else pd.Timestamp(ts)
-            delta = valid if isinstance(valid, datetime.timedelta) else datetime.timedelta(seconds=float(valid))
-            deadline = base + delta
-        elif isinstance(valid, (datetime.datetime, datetime.date)):
-            deadline = pd.Timestamp(valid)
-        else:
-            raise ValueError("order.valid must be a date, datetime, timedelta or relative seconds")
-        deadline = deadline.tz_localize("UTC") if deadline.tzinfo is None else deadline.tz_convert("UTC")
-        return int(deadline.timestamp())
+        # 相对 valid（timedelta/数字）必须以「订单创建时刻」为基准，
+        # 且只算一次并缓存，否则每 bar 用当前时间重算会让 deadline 永远后移、永不触发。
+        #
+        # 关键：缓存键必须用对象身份 id(order) 而非 order.ref。
+        # order.ref 会被复用（Python provisional ref 与 Rust 分配的 ref 空间不一致，
+        # 撤销/未递交的订单消耗 provisional 号却不占 Rust 号），若按 ref 缓存，
+        # 新订单会命中旧订单遗留的 deadline，导致订单被错误地提前 Expired，
+        # 进而使真实成交无法同步（Rust 引擎已成交、Python 镜像停在 Expired），
+        # 最终持仓/交易/订单三表数据相互矛盾。
+        cache_key = id(order)
+        cached = self._valid_deadline_by_ref.get(cache_key, _MISSING)
+        if cached is not _MISSING:
+            return cached
+        base = self._order_created_datetime(order)
+        if isinstance(base, (int, float)):
+            try:
+                base = datetime.datetime.fromtimestamp(int(base), tz=datetime.timezone.utc)
+            except (OverflowError, OSError, ValueError):
+                base = None
+        try:
+            if isinstance(valid, datetime.timedelta):
+                if base is None:
+                    return None
+                deadline = base + valid
+                self._valid_deadline_by_ref[cache_key] = deadline
+                return deadline
+            if isinstance(valid, datetime.datetime):
+                self._valid_deadline_by_ref[cache_key] = valid
+                return valid
+            if isinstance(valid, datetime.date):
+                deadline = datetime.datetime(
+                    valid.year,
+                    valid.month,
+                    valid.day,
+                    tzinfo=getattr(base, "tzinfo", datetime.timezone.utc),
+                )
+                self._valid_deadline_by_ref[cache_key] = deadline
+                return deadline
+            if isinstance(valid, (int, float)):
+                if base is None:
+                    return None
+                deadline = base + datetime.timedelta(seconds=float(valid))
+                self._valid_deadline_by_ref[cache_key] = deadline
+                return deadline
+        except Exception:
+            return None
+        return None
 
     def drain_order_controls(self) -> tuple[list[int], list[tuple[int, int | None, int | None]]]:
         updates = []
@@ -943,8 +959,36 @@ class RustBroker:
             for ref in cancels:
                 cancel(ref)
 
-    def receive_order_events(self, events: list[tuple[int, str]]) -> None:
-        self._native_order_events.extend(events)
+    def _expire_valid_orders(self, i: int, owner: Strategy | None = None) -> None:
+        """按 order.valid 到期撤销存活挂单（在每 bar 撮合前调用）。
+
+        存活订单（Submitted/Accepted/Partial）超过 valid 失效时间即置为 Expired，
+        并从 Rust 侧撤单（经 _cancel_buffer 由 bar loop 消化）。
+        """
+        self._curr_idx = i
+        now_cache: dict[int, Any] = {}
+        for order in list(self._orders):
+            if order.status not in (Order.Submitted, Order.Accepted, Order.Partial):
+                continue
+            deadline = self._order_valid_deadline(order)
+            if deadline is None:
+                continue
+            now = now_cache.get(id(order.data), _MISSING)
+            if now is _MISSING:
+                now = self._now_datetime(order.data)
+                now_cache[id(order.data)] = now
+            if now is None or now <= deadline:
+                continue
+            # 到期：置 Expired + 通知 Rust 撤单 + 回调策略
+            order.status = Order.Expired
+            self._pending_orders = [p for p in self._pending_orders if p is not order]
+            if self._engine is not None:
+                self._cancel_buffer.append(order.ref)
+            if owner is not None:
+                self._notify_order_event(owner, order)
+            # 子单失效 → 连带撤销同组其余存活子单（对齐 backtrader bracket 语义）
+            if owner is not None:
+                self._bracketize(owner, order, cancel=True)
 
     def _process_order_events(self, strategy: Strategy) -> None:
         events, self._native_order_events = self._native_order_events, []
@@ -1154,6 +1198,11 @@ class RustBroker:
             self._notify_order_event(strategy, order)
             self._activate_child_orders(strategy, order)
             self._cancel_oco_siblings(strategy, order)
+            # Bracket 连带撤销（对齐 backtrader bbroker._bracketize）：
+            #  - 子单成交（有 parent）→ cancel=True，撤销同组其余存活子单；
+            #  - 父单成交（无 parent）→ cancel=False，仅解除父单在组中的登记，
+            #    子单已由 _activate_child_orders 激活，保持独立生命周期。
+            self._bracketize(strategy, order, cancel=order.parent is not None)
         return filled_order_refs
 
     def _reconcile_unfilled_market_orders(
