@@ -23,7 +23,20 @@ TARGET_STRATEGIES = [
 ]
 
 EXACT_TOLERANCE = 1e-3
-BAR_COUNT = len(pd.read_parquet(DATA_PATH))
+def load_benchmark_data() -> pd.DataFrame:
+    """Read local historical AAPL bars without requiring data at module import.
+
+    The archived TradingView fixture is an alternate source, not a copy of the
+    legacy benchmark dataset; saved timing baselines are not comparable to it.
+    """
+    path = DATA_PATH
+    if not path.exists():
+        path = PROJECT_ROOT / "tests/golden/datasets/tv/AAPL_2020-01-01_2024-12-31_1d.parquet"
+    frame = pd.read_parquet(path)
+    if isinstance(frame.index, pd.MultiIndex):
+        frame = frame.xs("NASDAQ:AAPL", level="symbol")
+    return frame.sort_index()
+
 
 STRATEGY_CLASSES = {
     "01_quickstart": "QuickstartSmaCross",
@@ -132,7 +145,7 @@ def run_strategy_in_process(
         strategy_cls.notify_trade = notify_trade
         strategy_cls.audit_log = []
 
-        dataframe = pd.read_parquet(DATA_PATH)
+        dataframe = load_benchmark_data()
         if engine_type == "Tradelearn":
             from tradelearn.engine import DataFeed
         else:
@@ -306,6 +319,7 @@ def run_benchmark(
     )
     print(f"{'=' * 80}")
 
+    bar_count = len(load_benchmark_data())
     final_results = {}
 
     for mod_name in TARGET_STRATEGIES:
@@ -360,7 +374,7 @@ def run_benchmark(
         final_results[cls_name] = results
 
     print(f"\n\n{'=' * 120}")
-    comparable_to_previous = repeats == 1 and warmup == 0
+    comparable_to_previous = repeats == 1 and warmup == 0 and DATA_PATH.exists()
     prev_header = "vs Prev TL" if comparable_to_previous else "vs Prev TL*"
     print(
         f"{'Strategy':<25} | {'TL Value':<12} | {'BT Value':<12} | "
@@ -374,15 +388,15 @@ def run_benchmark(
         if tl and bt_res:
             diff = tl["final_value"] - bt_res["final_value"]
             t_tl, t_bt = tl["elapsed_ms"], bt_res["elapsed_ms"]
-            tl_bars_per_sec = BAR_COUNT / (t_tl / 1000) if t_tl > 0 else 0
-            bt_bars_per_sec = BAR_COUNT / (t_bt / 1000) if t_bt > 0 else 0
+            tl_bars_per_sec = bar_count / (t_tl / 1000) if t_tl > 0 else 0
+            bt_bars_per_sec = bar_count / (t_bt / 1000) if t_bt > 0 else 0
             speedup = t_bt / t_tl if t_tl > 0 else 0
             prev_tl = PREVIOUS_TL_MS.get(cls_name)
             if comparable_to_previous and prev_tl:
                 improvement = (prev_tl - t_tl) / prev_tl * 100
                 improvement_text = f"{improvement:+6.1f}%"
             else:
-                improvement_text = "warm run"
+                improvement_text = "n/a"
             exact = abs(diff) < EXACT_TOLERANCE
             fast_enough = min_speedup <= 0 or speedup >= min_speedup
             status = "✅ EXACT" if exact else "❌ DIFF"
@@ -401,7 +415,7 @@ def run_benchmark(
         portfolio_results = run_portfolio_benchmark(match_mode, repeats=repeats, warmup=warmup)
     if not comparable_to_previous:
         print(
-            "* Warm/repeated runs are not directly comparable with the saved single-run "
+            "* Different datasets or warm/repeated runs are not comparable with the saved single-run "
             "previous TL baseline.\n"
         )
     single_data_ok = _benchmark_passed(final_results, min_speedup=min_speedup)

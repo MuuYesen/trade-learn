@@ -3,7 +3,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::types::*;
-use crate::{parse_order_side, parse_order_type, RustBacktestEngine};
+use crate::RustBacktestEngine;
 
 impl MultiDataFeed {
     pub fn new() -> Self {
@@ -199,37 +199,15 @@ impl RustBarRunner {
     ) -> PyResult<()> {
         let stop = end.min(engine.inner.total_bars()).min(self.cursors.len());
         for cursor in start..stop {
+            engine.sync_broker_controls(py, &broker)?;
             let fill_records = engine.inner.step_open(cursor);
+            engine.deliver_order_events(py, &broker)?;
             let fills = engine.map_fills_compact(fill_records);
             let cash = engine.inner.get_cash();
             let (size, price) = engine.inner.get_position();
             let data_cursors = self.cursors[cursor].clone();
             let drained = on_bar.call1(py, (cursor, data_cursors, fills, cash, size, price))?;
-            if drained.is_none(py) {
-                continue;
-            }
-            let orders: Vec<(u64, String, String, String, f64, Option<f64>, Option<f64>)> =
-                drained.extract(py)?;
-            let mut bindings: Vec<(u64, u64)> = Vec::with_capacity(orders.len());
-
-            for (provisional_ref, symbol, side, order_type, order_size, limit_price, stop_price) in
-                orders
-            {
-                let side = parse_order_side(&side)?;
-                let order_type = parse_order_type(&order_type)?;
-                let order_id = engine.inner.submit_order(
-                    symbol,
-                    side,
-                    order_type,
-                    order_size,
-                    limit_price,
-                    stop_price,
-                );
-                bindings.push((provisional_ref, order_id));
-            }
-            if !bindings.is_empty() {
-                broker.call_method1(py, "bind_rust_order_refs", (bindings,))?;
-            }
+            engine.consume_broker_callback(py, &broker, drained)?;
         }
         Ok(())
     }
@@ -326,8 +304,10 @@ impl RustClockedMultiDataRunner {
         for cursor in start..stop {
             let (fills, cash, size, price) = {
                 let mut engine_ref = engine.borrow_mut(py);
+                engine_ref.sync_broker_controls(py, &broker)?;
                 let bars = self.active_bars_at(cursor);
                 let fill_records = engine_ref.inner.step_open_bars(bars);
+                engine_ref.deliver_order_events(py, &broker)?;
                 let fills = engine_ref.map_fills_compact(fill_records);
                 let cash = engine_ref.inner.get_cash();
                 let (size, price) = engine_ref.inner.get_position();
@@ -335,32 +315,9 @@ impl RustClockedMultiDataRunner {
             };
             let data_cursors = self.cursors[cursor].clone();
             let drained = on_bar.call1(py, (cursor, data_cursors, fills, cash, size, price))?;
-            if drained.is_none(py) {
-                continue;
-            }
-            let orders: Vec<(u64, String, String, String, f64, Option<f64>, Option<f64>)> =
-                drained.extract(py)?;
-            let mut bindings: Vec<(u64, u64)> = Vec::with_capacity(orders.len());
-            let mut engine_ref = engine.borrow_mut(py);
-
-            for (provisional_ref, symbol, side, order_type, order_size, limit_price, stop_price) in
-                orders
-            {
-                let side = parse_order_side(&side)?;
-                let order_type = parse_order_type(&order_type)?;
-                let order_id = engine_ref.inner.submit_order(
-                    symbol,
-                    side,
-                    order_type,
-                    order_size,
-                    limit_price,
-                    stop_price,
-                );
-                bindings.push((provisional_ref, order_id));
-            }
-            if !bindings.is_empty() {
-                broker.call_method1(py, "bind_rust_order_refs", (bindings,))?;
-            }
+            engine
+                .borrow_mut(py)
+                .consume_broker_callback(py, &broker, drained)?;
         }
         Ok(())
     }

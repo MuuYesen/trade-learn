@@ -3,6 +3,7 @@ from __future__ import annotations
 import builtins
 
 import pandas as pd
+import pytest
 
 from tradelearn.engine import Cerebro, Strategy
 
@@ -20,7 +21,7 @@ def _bars() -> pd.DataFrame:
     )
 
 
-def test_engine_run_falls_back_to_python_runtime_when_rust_extension_is_unavailable(
+def test_default_rust_broker_fails_before_strategy_when_rust_extension_is_unavailable(
     monkeypatch,
 ) -> None:
     original_import = builtins.__import__
@@ -30,9 +31,11 @@ def test_engine_run_falls_back_to_python_runtime_when_rust_extension_is_unavaila
             raise ImportError("tradelearn._rust unavailable")
         return original_import(name, globals, locals, fromlist, level)
 
+    calls = []
+
     class Noop(Strategy):
         def next(self) -> None:
-            pass
+            calls.append("next")
 
     monkeypatch.setattr(builtins, "__import__", import_without_tradelearn_rust)
 
@@ -41,7 +44,7 @@ def test_engine_run_falls_back_to_python_runtime_when_rust_extension_is_unavaila
     cerebro.adddata(_bars())
     cerebro.addstrategy(Noop)
 
-    [strategy] = cerebro.run()
+    with pytest.raises(RuntimeError, match="tradelearn._rust.*RustBroker"):
+        cerebro.run()
 
-    assert strategy.stats.summary["final_value"] == 1234.0
-    assert strategy.stats.summary["bars"] == 3
+    assert calls == []

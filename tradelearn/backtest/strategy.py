@@ -462,7 +462,7 @@ class Strategy:
             self.notify_trade(trade)
 
     def _register_indicator(self, indicator: Any):
-        if indicator not in self._indicators:
+        if not any(existing is indicator for existing in self._indicators):
             self._indicators.append(indicator)
 
     def addminperiod(self, minperiod: int) -> None:

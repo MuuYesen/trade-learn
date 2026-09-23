@@ -53,7 +53,7 @@ class smart_tqdm(_tqdm_class):
 
     def close(self):
         # In CLI, ensure fast bars are rendered; in Notebook, tqdm handles this better
-        if not is_notebook():
+        if not is_notebook() and not getattr(self, "disable", False):
             if hasattr(self, 'n') and self.n > 0 and getattr(self, "last_print_n", 0) == 0:
                 try:
                     self.display()

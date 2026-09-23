@@ -55,8 +55,11 @@ def test_optional_backends_are_not_required_for_core_install() -> None:
 def test_cibuildwheel_smoke_test_imports_rust_extension() -> None:
     pyproject = PYPROJECT.read_text(encoding="utf-8")
 
-    assert "import tradelearn._rust as rust" in pyproject
-    assert "tradelearn_rust_version" in pyproject
+    assert "scripts/check_order_lifecycle_wheel.py" in pyproject
+    smoke = (PYPROJECT.parent / "scripts/check_order_lifecycle_wheel.py").read_text()
+    assert "tradelearn_rust_version" in smoke
+    assert "cancel_order" in smoke
+    assert "configure_order" in smoke
 
 
 def test_release_workflow_builds_cross_platform_artifacts_and_publishes_with_oidc() -> None:

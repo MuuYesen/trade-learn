@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::matching::{
-    fill_from_raw_price, is_exit_fill, is_exit_order_for_position, match_order, match_order_smart,
-    smart_match_price, smart_order_priority,
+    advance_trailing_order, fill_from_raw_price, is_exit_fill, is_exit_order_for_position,
+    match_order, match_order_smart, smart_match_price, smart_order_priority,
 };
 use crate::types::*;
 
@@ -51,6 +51,11 @@ pub struct BacktestEngine {
     // Pending orders
     pending: Vec<OrderEvent>,
     next_order_id: OrderId,
+    last_open_timestamps: HashMap<String, Timestamp>,
+    open_clock: HashMap<String, Timestamp>,
+    deadlines: HashMap<OrderId, Timestamp>,
+    oco_links: HashMap<OrderId, HashSet<OrderId>>,
+    terminal_events: Vec<(OrderId, String)>,
     activation_bar: usize,
 
     // Records
@@ -123,6 +128,11 @@ impl BacktestEngine {
             },
             pending: Vec::new(),
             next_order_id: 1,
+            last_open_timestamps: HashMap::new(),
+            open_clock: HashMap::new(),
+            deadlines: HashMap::new(),
+            oco_links: HashMap::new(),
+            terminal_events: Vec::new(),
             activation_bar: 1,
             results: BacktestResults::default(),
         }
@@ -193,17 +203,28 @@ impl BacktestEngine {
             return self.match_all_pending_smart(bar, options, current_pending);
         }
 
+        let mut excluded = HashSet::new();
         for order in current_pending {
+            if excluded.contains(&order.order_id) {
+                continue;
+            }
             if order.symbol != bar.symbol {
                 remaining.push(order);
                 continue;
             }
-            if let Some(fill_event) = if options.smart_matching {
-                match_order_smart(&order, bar, options)
-            } else {
-                match_order(&order, bar, options)
-            } {
+            if self.expire_order(&order, bar.ts) {
+                continue;
+            }
+            if options.trade_on_close && order.order_type != OrderType::Market {
+                remaining.push(order);
+                continue;
+            }
+            // 跟踪止损单：先用「上一根 bar 的水位」参与撮合判定，
+            // 避免同一根 bar 先拿 high 抬水位、再用自己的 low 触发（bar 内前视）。
+            let matched = match_order(&order, bar, options);
+            if let Some(fill_event) = matched {
                 if !self.can_apply_fill(&fill_event, options.mult) {
+                    self.terminal_events.push((order.order_id, "margin".into()));
                     continue;
                 }
                 let position = self.portfolio.position(&order.symbol);
@@ -218,6 +239,7 @@ impl BacktestEngine {
                 );
 
                 self.portfolio.apply_fill(&fill_event, options.mult);
+                excluded.extend(self.cancel_oco(order.order_id));
 
                 let record = FillRecord {
                     order_id: fill_event.order_id,
@@ -232,9 +254,18 @@ impl BacktestEngine {
                 self.results.fills.push(record.clone());
                 fills.push(record);
             } else {
-                remaining.push(order);
+                // 未成交的跟踪单：用当前 bar 极值推进水位后回写，供下一根 bar 使用。
+                let mut carried = order;
+                if carried.order_type == OrderType::Market {
+                    self.terminal_events
+                        .push((carried.order_id, "rejected".into()));
+                    continue;
+                }
+                advance_trailing_order(&mut carried, bar);
+                remaining.push(carried);
             }
         }
+        remaining.retain(|order| !excluded.contains(&order.order_id));
         self.pending = remaining;
         fills
     }
@@ -248,8 +279,13 @@ impl BacktestEngine {
         let mut fills = Vec::new();
         let mut candidates = Vec::new();
 
+        let mut current_pending = current_pending;
+        current_pending
+            .retain(|order| order.symbol != bar.symbol || !self.expire_order(order, bar.ts));
         for (idx, order) in current_pending.iter().enumerate() {
-            if order.symbol != bar.symbol {
+            if order.symbol != bar.symbol
+                || (options.trade_on_close && order.order_type != OrderType::Market)
+            {
                 continue;
             }
             if let Some((rank, raw_price)) = smart_match_price(order, bar, options) {
@@ -272,13 +308,14 @@ impl BacktestEngine {
             }
             let order = &current_pending[idx];
             if !self.can_apply_fill(&fill_event, options.mult) {
+                self.terminal_events.push((order.order_id, "margin".into()));
                 filled.insert(idx);
                 continue;
             }
             let position = self.portfolio.position(&order.symbol);
             let old_size = position.map(|p| p.size).unwrap_or(0.0);
             let old_price = position.map(|p| p.avg_price).unwrap_or(0.0);
-            let was_exit = is_exit_fill(old_size, fill_event.size);
+
             let pnl = realized_pnl(
                 old_size,
                 old_price,
@@ -288,12 +325,6 @@ impl BacktestEngine {
             );
 
             self.portfolio.apply_fill(&fill_event, options.mult);
-            let new_size = self
-                .portfolio
-                .position(&order.symbol)
-                .map(|p| p.size)
-                .unwrap_or(0.0);
-
             let record = FillRecord {
                 order_id: fill_event.order_id,
                 ts: fill_event.ts,
@@ -308,15 +339,34 @@ impl BacktestEngine {
             fills.push(record);
             filled.insert(idx);
 
-            if was_exit && new_size.abs() < 1e-9 {
+            let siblings = self.cancel_oco(order.order_id);
+            // Preserve the existing smart-mode protective-exit behavior. Explicit
+            // OCO additionally works in exact mode and across symbols.
+            let new_size = self
+                .portfolio
+                .position(&order.symbol)
+                .map(|p| p.size)
+                .unwrap_or(0.0);
+            if is_exit_fill(old_size, fill_event.size) && new_size.abs() < 1e-9 {
                 for (other_idx, other) in current_pending.iter().enumerate() {
                     if other_idx != idx
+                        && !filled.contains(&other_idx)
+                        && !canceled.contains(&other_idx)
                         && other.symbol == order.symbol
                         && other.side == order.side
                         && is_exit_order_for_position(old_size, other)
                     {
                         canceled.insert(other_idx);
+                        if !siblings.contains(&other.order_id) {
+                            self.terminal_events
+                                .push((other.order_id, "canceled".into()));
+                        }
                     }
+                }
+            }
+            for (other_idx, other) in current_pending.iter().enumerate() {
+                if siblings.contains(&other.order_id) {
+                    canceled.insert(other_idx);
                 }
             }
         }
@@ -324,10 +374,18 @@ impl BacktestEngine {
         self.pending = current_pending
             .into_iter()
             .enumerate()
-            .filter_map(|(idx, order)| {
+            .filter_map(|(idx, mut order)| {
                 if filled.contains(&idx) || canceled.contains(&idx) {
                     None
                 } else {
+                    if order.symbol == bar.symbol && !options.trade_on_close {
+                        if order.order_type == OrderType::Market {
+                            self.terminal_events
+                                .push((order.order_id, "rejected".into()));
+                            return None;
+                        }
+                        advance_trailing_order(&mut order, bar);
+                    }
                     Some(order)
                 }
             })
@@ -358,7 +416,25 @@ impl BacktestEngine {
     ) -> Vec<FillRecord> {
         let mut options = self.options;
         options.trade_on_close = trade_on_close;
-        let all_fills = self.match_all_pending_against_bars(&bars, &options);
+        let clock = bars.first().map(|bar| bar.ts);
+        let matching_bars: Vec<BarEvent> = bars
+            .iter()
+            .filter(|bar| {
+                if trade_on_close {
+                    return self.open_clock.get(&bar.symbol).copied() == clock;
+                }
+                if self.last_open_timestamps.get(&bar.symbol) == Some(&bar.ts) {
+                    return false;
+                }
+                self.last_open_timestamps.insert(bar.symbol.clone(), bar.ts);
+                if let Some(clock) = clock {
+                    self.open_clock.insert(bar.symbol.clone(), clock);
+                }
+                true
+            })
+            .cloned()
+            .collect();
+        let all_fills = self.match_all_pending_against_bars(&matching_bars, &options);
         self.portfolio.mark_to_market(&bars, self.options.mult);
         if let Some(primary) = bars.first() {
             self.results.equity.push(EquityRecord {
@@ -381,11 +457,40 @@ impl BacktestEngine {
             bars.iter().map(|bar| (bar.symbol.as_str(), bar)).collect();
         let current_pending = std::mem::take(&mut self.pending);
 
+        let mut excluded = HashSet::new();
+        let mut current_pending = current_pending;
+        if options.smart_matching {
+            current_pending.sort_by(|a, b| {
+                let rank = |o: &OrderEvent| {
+                    bars_by_symbol
+                        .get(o.symbol.as_str())
+                        .and_then(|bar| smart_match_price(o, bar, options))
+                        .map(|(rank, _)| rank)
+                        .unwrap_or(f64::INFINITY)
+                };
+                rank(a)
+                    .partial_cmp(&rank(b))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then(smart_order_priority(a).cmp(&smart_order_priority(b)))
+            });
+        }
         for order in current_pending {
+            if excluded.contains(&order.order_id) {
+                continue;
+            }
             let Some(bar) = bars_by_symbol.get(order.symbol.as_str()) else {
                 remaining.push(order);
                 continue;
             };
+            if self.expire_order(&order, bar.ts) {
+                continue;
+            }
+            if options.trade_on_close && order.order_type != OrderType::Market {
+                remaining.push(order);
+                continue;
+            }
+            // 跟踪止损单：先用「上一根 bar 的水位」参与撮合判定，未成交再推进水位，
+            // 避免同一根 bar 用自身极值制造 bar 内前视。
             let matched = if options.smart_matching {
                 match_order_smart(&order, bar, options)
             } else {
@@ -393,6 +498,7 @@ impl BacktestEngine {
             };
             if let Some(fill_event) = matched {
                 if !self.can_apply_fill(&fill_event, options.mult) {
+                    self.terminal_events.push((order.order_id, "margin".into()));
                     continue;
                 }
                 let position = self.portfolio.position(&order.symbol);
@@ -407,6 +513,7 @@ impl BacktestEngine {
                 );
 
                 self.portfolio.apply_fill(&fill_event, options.mult);
+                excluded.extend(self.cancel_oco(order.order_id));
 
                 let record = FillRecord {
                     order_id: fill_event.order_id,
@@ -421,9 +528,18 @@ impl BacktestEngine {
                 self.results.fills.push(record.clone());
                 fills.push(record);
             } else {
-                remaining.push(order);
+                // 未成交的跟踪单：用当前 bar 极值推进水位后回写，供下一根 bar 使用。
+                let mut carried = order;
+                if carried.order_type == OrderType::Market {
+                    self.terminal_events
+                        .push((carried.order_id, "rejected".into()));
+                    continue;
+                }
+                advance_trailing_order(&mut carried, bar);
+                remaining.push(carried);
             }
         }
+        remaining.retain(|order| !excluded.contains(&order.order_id));
         self.pending = remaining;
         fills
     }
@@ -437,6 +553,8 @@ impl BacktestEngine {
         size: f64,
         limit_price: Option<f64>,
         stop_price: Option<f64>,
+        trail_amount: Option<f64>,
+        trail_percent: Option<f64>,
     ) -> OrderId {
         let order_id = self.next_order_id;
         self.next_order_id += 1;
@@ -449,8 +567,71 @@ impl BacktestEngine {
             limit_price,
             stop_price,
             created_ts: 0,
+            trail_amount,
+            trail_percent,
+            trail_watermark: stop_price,
+            trail_triggered: false,
         });
         order_id
+    }
+
+    pub fn configure_order(
+        &mut self,
+        order_id: OrderId,
+        deadline: Option<Timestamp>,
+        peer: Option<OrderId>,
+    ) {
+        if let Some(ts) = deadline {
+            self.deadlines.insert(order_id, ts);
+        }
+        if let Some(peer) = peer {
+            let mut group = self.oco_links.get(&order_id).cloned().unwrap_or_default();
+            group.extend(self.oco_links.get(&peer).cloned().unwrap_or_default());
+            group.insert(order_id);
+            group.insert(peer);
+            for member in &group {
+                self.oco_links.insert(*member, group.clone());
+            }
+        }
+    }
+
+    fn expire_order(&mut self, order: &OrderEvent, ts: Timestamp) -> bool {
+        if self
+            .deadlines
+            .get(&order.order_id)
+            .is_some_and(|deadline| ts > *deadline)
+        {
+            self.deadlines.remove(&order.order_id);
+            self.terminal_events
+                .push((order.order_id, "expired".into()));
+            true
+        } else {
+            false
+        }
+    }
+
+    fn cancel_oco(&mut self, order_id: OrderId) -> HashSet<OrderId> {
+        let mut group = self.oco_links.remove(&order_id).unwrap_or_default();
+        group.remove(&order_id);
+        for peer in &group {
+            self.oco_links.remove(peer);
+            self.deadlines.remove(peer);
+            self.terminal_events.push((*peer, "canceled".into()));
+        }
+        self.deadlines.remove(&order_id);
+        group
+    }
+
+    pub fn drain_order_events(&mut self) -> Vec<(OrderId, String)> {
+        std::mem::take(&mut self.terminal_events)
+    }
+
+    /// Remove a pending order from the matching queue (called by Python cancel()).
+    /// Returns true if the order was found and removed.
+    pub fn remove_order(&mut self, order_ref: u64) -> bool {
+        let before = self.pending.len();
+        self.pending.retain(|o| o.order_id != order_ref);
+        self.pending.len() != before
     }
 
     pub fn get_position(&self) -> (f64, f64) {

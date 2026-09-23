@@ -68,6 +68,8 @@ fn match_order_fill(
         "limit" => OrderType::Limit,
         "stop" => OrderType::Stop,
         "stop_limit" => OrderType::StopLimit,
+        "stop_trail" => OrderType::StopTrail,
+        "stop_trail_limit" => OrderType::StopTrailLimit,
         other => {
             return Err(PyValueError::new_err(format!(
                 "unsupported order type: {other}"
@@ -83,6 +85,10 @@ fn match_order_fill(
         limit_price,
         stop_price,
         created_ts,
+        trail_amount: None,
+        trail_percent: None,
+        trail_watermark: None,
+        trail_triggered: false,
     };
     let bar = BarEvent {
         ts,
@@ -184,6 +190,12 @@ impl RustBacktestEngine {
         self.inner.total_bars()
     }
 
+    /// Cancel a pending order in the Rust matching queue (synced from Python broker.cancel()).
+    #[pyo3(name = "cancel_order")]
+    fn cancel_order(&mut self, order_ref: u64) -> bool {
+        self.inner.remove_order(order_ref)
+    }
+
     fn step(&mut self, cursor: usize) -> Vec<(u64, String, f64, f64, f64, f64, f64)> {
         let fills = self.inner.step(cursor);
         self.map_fills(fills)
@@ -276,41 +288,20 @@ impl RustBacktestEngine {
     ) -> PyResult<()> {
         let stop = end.min(self.inner.total_bars());
         for cursor in start..stop {
+            self.sync_broker_controls(py, &broker)?;
             let fill_records = self.inner.step_open(cursor);
+            self.deliver_order_events(py, &broker)?;
             let fills = self.map_fills_compact(fill_records);
             let cash = self.inner.get_cash();
             let (size, price) = self.inner.get_position();
             let drained = on_bar.call1(py, (cursor, fills, cash, size, price))?;
-            if drained.is_none(py) {
-                continue;
-            }
-            let orders: Vec<(u64, String, String, String, f64, Option<f64>, Option<f64>)> =
-                drained.extract(py)?;
-            let mut bindings: Vec<(u64, u64)> = Vec::with_capacity(orders.len());
 
-            for (provisional_ref, symbol, side, order_type, order_size, limit_price, stop_price) in
-                orders
-            {
-                let side = parse_order_side(&side)?;
-                let order_type = parse_order_type(&order_type)?;
-                let order_id = self.inner.submit_order(
-                    symbol,
-                    side,
-                    order_type,
-                    order_size,
-                    limit_price,
-                    stop_price,
-                );
-                bindings.push((provisional_ref, order_id));
-            }
-            if !bindings.is_empty() {
-                broker.call_method1(py, "bind_rust_order_refs", (bindings,))?;
-            }
+            self.consume_broker_callback(py, &broker, drained)?;
         }
         Ok(())
     }
 
-    #[pyo3(signature = (symbol, side, order_type, size, limit_price=None, stop_price=None))]
+    #[pyo3(signature = (symbol, side, order_type, size, limit_price=None, stop_price=None, trail_amount=None, trail_percent=None))]
     fn submit_order_for_symbol(
         &mut self,
         symbol: String,
@@ -319,15 +310,24 @@ impl RustBacktestEngine {
         size: f64,
         limit_price: Option<f64>,
         stop_price: Option<f64>,
+        trail_amount: Option<f64>,
+        trail_percent: Option<f64>,
     ) -> PyResult<u64> {
         let side = parse_order_side(side)?;
         let order_type = parse_order_type(order_type)?;
-        Ok(self
-            .inner
-            .submit_order(symbol, side, order_type, size, limit_price, stop_price))
+        Ok(self.inner.submit_order(
+            symbol,
+            side,
+            order_type,
+            size,
+            limit_price,
+            stop_price,
+            trail_amount,
+            trail_percent,
+        ))
     }
 
-    #[pyo3(signature = (side, order_type, size, limit_price=None, stop_price=None))]
+    #[pyo3(signature = (side, order_type, size, limit_price=None, stop_price=None, trail_amount=None, trail_percent=None))]
     fn submit_order(
         &mut self,
         side: &str,
@@ -335,6 +335,8 @@ impl RustBacktestEngine {
         size: f64,
         limit_price: Option<f64>,
         stop_price: Option<f64>,
+        trail_amount: Option<f64>,
+        trail_percent: Option<f64>,
     ) -> PyResult<u64> {
         self.submit_order_for_symbol(
             "data0".to_string(),
@@ -343,7 +345,18 @@ impl RustBacktestEngine {
             size,
             limit_price,
             stop_price,
+            trail_amount,
+            trail_percent,
         )
+    }
+
+    #[pyo3(signature = (order_ref, deadline=None, oco_peer=None))]
+    fn configure_order(&mut self, order_ref: u64, deadline: Option<i64>, oco_peer: Option<u64>) {
+        self.inner.configure_order(order_ref, deadline, oco_peer);
+    }
+
+    fn drain_order_events(&mut self) -> Vec<(u64, String)> {
+        self.inner.drain_order_events()
     }
 
     fn get_position(&self) -> (f64, f64) {
@@ -458,6 +471,8 @@ pub(crate) fn parse_order_type(order_type: &str) -> PyResult<OrderType> {
         "limit" => Ok(OrderType::Limit),
         "stop" => Ok(OrderType::Stop),
         "stop_limit" => Ok(OrderType::StopLimit),
+        "stop_trail" => Ok(OrderType::StopTrail),
+        "stop_trail_limit" => Ok(OrderType::StopTrailLimit),
         other => Err(PyValueError::new_err(format!(
             "unsupported order type: {other}"
         ))),
@@ -556,4 +571,76 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<RustBacktestEngine>()?;
     runner::register_pyclasses(m)?;
     Ok(())
+}
+
+// Every runner consumes the same broker command boundary, including empty callbacks.
+impl RustBacktestEngine {
+    pub(crate) fn sync_broker_controls(
+        &mut self,
+        py: Python<'_>,
+        broker: &Py<PyAny>,
+    ) -> PyResult<()> {
+        if broker.bind(py).hasattr("drain_order_controls")? {
+            let (cancels, updates): (Vec<u64>, Vec<(u64, Option<i64>, Option<u64>)>) = broker
+                .call_method0(py, "drain_order_controls")?
+                .extract(py)?;
+            for (order_id, deadline, peer) in updates {
+                self.inner.configure_order(order_id, deadline, peer);
+            }
+            for order_id in cancels {
+                self.inner.remove_order(order_id);
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn deliver_order_events(
+        &mut self,
+        py: Python<'_>,
+        broker: &Py<PyAny>,
+    ) -> PyResult<()> {
+        let events = self.inner.drain_order_events();
+        if !events.is_empty() && broker.bind(py).hasattr("receive_order_events")? {
+            broker.call_method1(py, "receive_order_events", (events,))?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn consume_broker_callback(
+        &mut self,
+        py: Python<'_>,
+        broker: &Py<PyAny>,
+        drained: Py<PyAny>,
+    ) -> PyResult<()> {
+        if !drained.is_none(py) {
+            let orders: Vec<(u64, String, String, String, f64, Option<f64>, Option<f64>)> =
+                drained.extract(py)?;
+            let mut bindings = Vec::with_capacity(orders.len());
+            let has_trails = broker.bind(py).hasattr("pop_trail_params")?;
+            for (provisional, symbol, side, kind, size, limit, stop) in orders {
+                let (amount, percent): (Option<f64>, Option<f64>) = if has_trails {
+                    broker
+                        .call_method1(py, "pop_trail_params", (provisional,))?
+                        .extract(py)?
+                } else {
+                    (None, None)
+                };
+                let id = self.inner.submit_order(
+                    symbol,
+                    parse_order_side(&side)?,
+                    parse_order_type(&kind)?,
+                    size,
+                    limit,
+                    stop,
+                    amount,
+                    percent,
+                );
+                bindings.push((provisional, id));
+            }
+            if !bindings.is_empty() {
+                broker.call_method1(py, "bind_rust_order_refs", (bindings,))?;
+            }
+        }
+        self.sync_broker_controls(py, broker)
+    }
 }

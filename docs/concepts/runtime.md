@@ -30,15 +30,20 @@ sequenceDiagram
     participant RB as RustBroker
     participant ST as Stats
 
-    BT->>RR: 推进 bar clock
-    RR-->>BT: 当前 cursor / active bars
+    BT->>RR: 推进 bar clock / 同步订单控制
+    RR->>RR: 撮合前检查有效期
+    RR->>RR: 撮合存量订单 / 原子处理 OCO
+    RR-->>RB: fills / 终态事件 / portfolio
+    RB-->>S: notify_order() / notify_trade()
     BT->>S: 调用策略 next()
-    S->>BT: 产生订单意图
-    BT->>RB: 提交订单
-    RB->>RB: 撮合、成交、更新 portfolio
-    RB-->>BT: compact fills / state
+    S->>RB: 提交或撤销订单
+    RB->>RR: 缓冲订单 / 截止时刻 / OCO / 撤单
     BT->>ST: 更新 summary / artifacts
 ```
+
+默认 `next()` 新单在下一根 bar 获得撮合机会；启用 close / cheat 配置时使用对应的额外撮合时点。每条 runner 路径共享原生订单控制与终态回传，不另建 Python 撮合循环。Python fallback 同样在成交前执行有效期检查。
+
+`valid` 在提交时归一化为 UTC 截止时刻，相对期限使用提交时主时钟，避免次要数据源的旧 bar 改变有效期。撤单、OCO 撤单和过期会更新 broker 状态、待成交数量并触发订单通知。详见[撮合与成交](../internals/matching.md)。
 
 ## 为什么不是纯向量化
 

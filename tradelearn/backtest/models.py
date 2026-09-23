@@ -315,13 +315,16 @@ class Order:
         side = cls.Buy if request.side == "buy" else cls.Sell
         exectype = {
             "market": cls.Market,
+            "close": cls.Close,
             "limit": cls.Limit,
             "stop": cls.Stop,
             "stop_limit": cls.StopLimit,
+            "stop_trail": cls.StopTrail,
+            "stop_trail_limit": cls.StopTrailLimit,
         }.get(request.order_type, cls.Market)
         price = (
             request.stop_price
-            if request.order_type in ("stop", "stop_limit")
+            if request.order_type in ("stop", "stop_limit", "stop_trail", "stop_trail_limit")
             else request.limit_price
         )
         return cls(

@@ -1,0 +1,9 @@
+# Order lifecycle implementation plan
+
+1. Use isolated fix/pr-4-order-lifecycle worktree based on PR head; preserve PR ancestry. Record baseline: wheel builds, 71 focused tests pass and four fail; review repros demonstrate cancellation, expiry, OCO and trailing failures.
+2. Add failing integration tests in tests/unit/backtest/test_order_lifecycle.py for cancellation (single/multi, same callback, close), expiry (mixed deadlines, boundary, relative time), OCO same-bar mutual exclusion, metadata and existing numeric constants. Run with current PR native wheel to establish red.
+3. Repair native matching in matching.rs with regression tests for buy/sell absolute/percent trailing watermarks, smart limit enforcement, persistent triggered-limit state. Keep watermark state updates in engine matching paths.
+4. Add native lifecycle controls: per-order expiry/explicit OCO associations; pre-match expiry and terminal-event collection. Share callback order/control bridge across lib.rs and runner.rs. Python normalizes metadata and synchronizes native events; buffered submissions/cancellations handle rebinding atomically.
+5. Restore existing public numeric order constants; merge local engine trade-accounting and rejected-target changes into isolated integration candidate. Correct Stop expectation tests and broker test doubles. Preserve tag/info in orders artifacts.
+6. Build native wheel with maturin using existing Python 3.12 environment; run lifecycle matrix, matching, broker, runtime, core layering, existing local accounting regressions, then broader relevant tests. Run independent code review and address findings.
+7. Update matching/runtime docs and changelog, consistent release version. Assemble a merge commit with PR ancestry, reconcile local work without overwrite. Push tested merge to master and verify GitHub PR merged state. Tag tested release and verify GitHub Actions/PyPI outcome. Report precise verification or external blocker.

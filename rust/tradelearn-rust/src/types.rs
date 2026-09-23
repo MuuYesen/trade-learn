@@ -50,6 +50,10 @@ pub enum OrderType {
     Limit,
     Stop,
     StopLimit,
+    /// 跟踪止损：止损价随有利方向自适应移动（回撤 trail 触发）。
+    StopTrail,
+    /// 跟踪止损限价：触发后按限价撮合。
+    StopTrailLimit,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -62,6 +66,13 @@ pub struct OrderEvent {
     pub limit_price: Option<f64>,
     pub stop_price: Option<f64>,
     pub created_ts: Timestamp,
+    /// 跟踪止损的绝对回撤量（价格单位）。
+    pub trail_amount: Option<f64>,
+    /// 跟踪止损的百分比回撤（如 0.035 表示 3.5%）。
+    pub trail_percent: Option<f64>,
+    /// 跟踪止损的当前水位（持仓期间最优价），跨 bar 持久化。
+    pub trail_watermark: Option<f64>,
+    pub trail_triggered: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]

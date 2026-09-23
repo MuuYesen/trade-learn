@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from typing import Any
 
 import numpy as np
@@ -10,6 +11,9 @@ from tradelearn.backtest.models import BarSnapshot, Stats, SummaryDict
 from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
 from tradelearn.utils.console import smart_tqdm as tqdm
+
+
+TRADE_STATISTICS_REVISION = "flat-to-flat-fees-v1"
 
 
 class _AttrDict(dict):
@@ -85,6 +89,8 @@ def _orders_frame(broker: Any) -> pd.DataFrame:
                 "size": order.size,
                 "executed_size": order.executed.size,
                 "executed_price": order.executed.price,
+                "tag": order.info.get("tag"),
+                "info": dict(order.info),
             }
         )
     return pd.DataFrame(rows)
@@ -126,65 +132,52 @@ def _trades_frame(fills: pd.DataFrame) -> pd.DataFrame:
     if fills.empty:
         return pd.DataFrame(columns=columns)
 
-    position_sizes: dict[Any, float] = {}
-    avg_prices: dict[Any, float] = {}
-    open_datetimes: dict[Any, Any] = {}
+    # Per-asset flat-to-flat lifecycle; partial exits retain realized PnL.
+    positions: dict[Any, dict[str, Any]] = {}
     rows: list[dict[str, Any]] = []
+
+    def open_position(data: Any, size: float, price: float, fee: float, dt: Any) -> None:
+        positions[data] = dict(size=size, price=price, commission=fee, pnl=0.0, dtopen=dt)
+        rows.append(dict(datetime=dt, data=data, size=size, price=price,
+                         value=abs(size) * price, commission=fee, pnl=0.0,
+                         pnlcomm=-fee, isopen=True, isclosed=False, dtopen=dt, dtclose=None))
+
     for fill in fills.to_dict("records"):
-        fill_data = fill.get("data")
-        signed_size = float(fill.get("size", 0.0))
+        data = fill.get("data")
+        size = float(fill.get("size", 0.0))
         price = float(fill.get("price", 0.0))
-        comm = float(fill.get("commission", 0.0))
-        curr_dt = fill.get("datetime")
-        old_size = position_sizes.get(fill_data, 0.0)
-        avg_price = avg_prices.get(fill_data, 0.0)
-        open_datetime = open_datetimes.get(fill_data)
-        new_size = old_size + signed_size
-        if old_size == 0.0 and abs(new_size) > 1e-9:
-            avg_price = price
-            open_datetime = curr_dt
-            rows.append(
-                {
-                    "datetime": curr_dt,
-                    "data": fill_data,
-                    "size": new_size,
-                    "price": price,
-                    "value": abs(new_size) * price,
-                    "commission": comm,
-                    "pnl": 0.0,
-                    "pnlcomm": -comm,
-                    "isopen": True,
-                    "isclosed": False,
-                    "dtopen": open_datetime,
-                    "dtclose": None,
-                }
-            )
-        elif old_size * new_size <= 0:
-            pnl = (price - avg_price) * old_size
-            rows.append(
-                {
-                    "datetime": curr_dt,
-                    "data": fill_data,
-                    "size": 0.0 if abs(new_size) < 1e-9 else new_size,
-                    "price": price,
-                    "value": abs(new_size) * price,
-                    "commission": comm,
-                    "pnl": pnl,
-                    "pnlcomm": pnl - comm,
-                    "isopen": False,
-                    "isclosed": True,
-                    "dtopen": open_datetime,
-                    "dtclose": curr_dt,
-                }
-            )
-            avg_price = price if abs(new_size) > 1e-9 else 0.0
-            open_datetime = curr_dt if abs(new_size) > 1e-9 else None
-        elif old_size * signed_size > 0:
-            total_abs = abs(old_size) + abs(signed_size)
-            avg_price = (abs(old_size) * avg_price + abs(signed_size) * price) / total_abs
-        position_sizes[fill_data] = 0.0 if abs(new_size) < 1e-9 else new_size
-        avg_prices[fill_data] = avg_price
-        open_datetimes[fill_data] = open_datetime
+        fee = float(fill.get("commission", 0.0))
+        dt = fill.get("datetime")
+        if abs(size) < 1e-9:
+            continue
+        pos = positions.get(data)
+        if pos is None:
+            open_position(data, size, price, fee, dt)
+            continue
+        old_size = pos["size"]
+        if old_size * size > 0:
+            pos["price"] = (abs(old_size) * pos["price"] + abs(size) * price) / abs(old_size + size)
+            pos["size"] += size
+            pos["commission"] += fee
+            continue
+
+        closing_size = min(abs(old_size), abs(size))
+        closing_fee = fee * closing_size / abs(size)
+        pos["pnl"] += closing_size * (price - pos["price"]) * (1 if old_size > 0 else -1)
+        pos["commission"] += closing_fee
+        remaining = old_size + size
+        if abs(size) < abs(old_size) - 1e-9:
+            pos["size"] = remaining
+            continue
+
+        rows.append(dict(datetime=dt, data=data, size=0.0, price=price, value=0.0,
+                         commission=pos["commission"], pnl=pos["pnl"],
+                         pnlcomm=pos["pnl"] - pos["commission"], isopen=False,
+                         isclosed=True, dtopen=pos["dtopen"], dtclose=dt))
+        del positions[data]
+        # A reversal closes one lifecycle and opens another, sharing fill fees.
+        if abs(remaining) > 1e-9:
+            open_position(data, remaining, price, fee - closing_fee, dt)
     return pd.DataFrame(rows, columns=columns)
 
 
@@ -628,7 +621,8 @@ def _summary_trade_metrics(trades: pd.DataFrame) -> dict[str, float]:
     losses = pnl[pnl < 0]
     gross_profit = float(wins.sum()) if not wins.empty else 0.0
     gross_loss = float(losses.sum()) if not losses.empty else 0.0
-    profit_factor = gross_profit / abs(gross_loss) if abs(gross_loss) > 1e-9 else 0.0
+    profit_factor = (gross_profit / abs(gross_loss) if abs(gross_loss) > 1e-9
+                     else math.inf if gross_profit > 0 else 0.0)
     expectancy = float(pnl.mean()) if not pnl.empty else 0.0
     avg_win = float(wins.mean()) if not wins.empty else 0.0
     avg_loss = float(losses.mean()) if not losses.empty else 0.0
@@ -1278,6 +1272,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
             finally:
                 if end_terminal_order_suppression is not None:
                     end_terminal_order_suppression()
+            if flush_order_buffer is not None:
+                flush_order_buffer()
             return
         if begin_order_buffering is not None:
             begin_order_buffering()
@@ -1296,7 +1292,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
             finally:
                 if end_terminal_order_suppression is not None:
                     end_terminal_order_suppression()
-            return None
+            orders = drain_order_buffer()
+            return orders if orders else None
         begin_order_buffering()
         strategy_next()
         orders = drain_order_buffer()
@@ -1308,6 +1305,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
         # Broker Match
         if broker:
             broker_step(i)
+            if begin_order_buffering is not None:
+                begin_order_buffering()
             broker_process_fills(strategy, i)
             if notify_cashvalue is not None:
                 notify_cashvalue(broker_getcash(), broker_getvalue())
@@ -1324,7 +1323,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
         return []
 
     use_multi_data_rust_runner = clocked_multi_data_runner is not None
-    pbar = tqdm(total=limit, desc="Backtest.run", unit="bar", leave=True, delay=0)
+    _show_pbar = bool(getattr(strategy, "verbose", True) and not bool(os.environ.get("TQDM_DISABLE")))
+    pbar = tqdm(total=limit, desc="Backtest.run", unit="bar", leave=True, delay=0, disable=not _show_pbar)
     if use_multi_data_rust_runner:
         if getattr(broker, "_trade_on_close", False):
 
@@ -1342,10 +1342,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 for advance in bar_advancers:
                     advance(i)
                 broker._curr_idx = i
-                broker._step_fills_from_collect = fills
+                begin_order_buffering()
+                broker._step_fills_from_collect = fills if fills is not None else []
                 broker._rust_state_cache = (i, cash, size, price)
-                if fills:
-                    broker_process_fills(strategy, i)
+                broker_process_fills(strategy, i)
                 if notify_cashvalue is not None:
                     notify_cashvalue(broker_getcash(), broker_getvalue())
                 if i >= min_start:
@@ -1372,10 +1372,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 for advance in bar_advancers:
                     advance(i)
                 broker._curr_idx = i
-                broker._step_fills_from_collect = fills
+                begin_order_buffering()
+                broker._step_fills_from_collect = fills if fills is not None else []
                 broker._rust_state_cache = (i, cash, size, price)
-                if fills:
-                    broker_process_fills(strategy, i)
+                broker_process_fills(strategy, i)
                 if i >= min_start:
                     orders = run_strategy_next_drained(i)
                     raise_if_runstopped()
@@ -1384,7 +1384,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     if has_observer_nexts:
                         _observer_step(observer_nexts)
                     return orders
-                return None
+                orders = drain_order_buffer()
+                return orders if orders else None
         else:
 
             def on_rust_bar_multi(
@@ -1401,10 +1402,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 for advance in bar_advancers:
                     advance(i)
                 broker._curr_idx = i
-                broker._step_fills_from_collect = fills
+                begin_order_buffering()
+                broker._step_fills_from_collect = fills if fills is not None else []
                 broker._rust_state_cache = (i, cash, size, price)
-                if fills:
-                    broker_process_fills(strategy, i)
+                broker_process_fills(strategy, i)
                 notify_cashvalue(broker_getcash(), broker_getvalue())
                 if i >= min_start:
                     orders = run_strategy_next_drained(i)
@@ -1414,7 +1415,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     if has_observer_nexts:
                         _observer_step(observer_nexts)
                     return orders
-                return None
+                orders = drain_order_buffer()
+                return orders if orders else None
 
         try:
             clocked_multi_data_runner.run(broker._engine, broker, on_rust_bar_multi, 0, limit)
@@ -1429,10 +1431,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 pbar.update(1)
                 strategy_pre_next(i)
                 broker._curr_idx = i
-                broker._step_fills_from_collect = fills
+                begin_order_buffering()
+                broker._step_fills_from_collect = fills if fills is not None else []
                 broker._rust_state_cache = (i, cash, size, price)
-                if fills:
-                    broker_process_fills(strategy, i)
+                broker_process_fills(strategy, i)
                 if i >= min_start:
                     orders = run_strategy_next_drained(i)
                     raise_if_runstopped()
@@ -1441,7 +1443,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     if has_observer_nexts:
                         _observer_step(observer_nexts)
                     return orders
-                return None
+                orders = drain_order_buffer()
+                return orders if orders else None
         else:
 
             def on_rust_bar(
@@ -1450,10 +1453,10 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 pbar.update(1)
                 strategy_pre_next(i)
                 broker._curr_idx = i
-                broker._step_fills_from_collect = fills
+                begin_order_buffering()
+                broker._step_fills_from_collect = fills if fills is not None else []
                 broker._rust_state_cache = (i, cash, size, price)
-                if fills:
-                    broker_process_fills(strategy, i)
+                broker_process_fills(strategy, i)
                 notify_cashvalue(broker_getcash(), broker_getvalue())
                 if i >= min_start:
                     orders = run_strategy_next_drained(i)
@@ -1463,7 +1466,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
                     if has_observer_nexts:
                         _observer_step(observer_nexts)
                     return orders
-                return None
+                orders = drain_order_buffer()
+                return orders if orders else None
 
         try:
             broker._engine.run_bar_loop(broker, on_rust_bar, 0, limit)
