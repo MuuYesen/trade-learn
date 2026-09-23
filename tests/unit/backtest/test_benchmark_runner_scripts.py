@@ -190,3 +190,33 @@ def test_research_pipeline_benchmark_reports_stage12_segments() -> None:
         "total",
     ]
     assert all(segment.seconds >= 0.0 for segment in result.segments)
+
+
+def test_benchmark_import_does_not_read_optional_market_data(monkeypatch) -> None:
+    import importlib
+    import pandas as pd
+    from benchmarks.runners import benchmark_bt
+
+    def unexpected_read(*args, **kwargs):
+        raise AssertionError("import must not read market data")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(pd, "read_parquet", unexpected_read)
+        importlib.reload(benchmark_bt)
+
+
+def test_benchmark_loader_preserves_archived_historical_prices(tmp_path, monkeypatch) -> None:
+    import pandas as pd
+    from benchmarks.runners import benchmark_bt
+
+    dates = pd.date_range("2024-01-01", periods=2, tz="UTC")
+    source = pd.DataFrame(
+        {"close": [101.0, 102.0]},
+        index=pd.MultiIndex.from_product([dates, ["NASDAQ:AAPL"]], names=["timestamp", "symbol"]),
+    )
+    archive = tmp_path / "tests/golden/datasets/tv/AAPL_2020-01-01_2024-12-31_1d.parquet"
+    archive.parent.mkdir(parents=True)
+    source.to_parquet(archive)
+    monkeypatch.setattr(benchmark_bt, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(benchmark_bt, "DATA_PATH", tmp_path / "missing-legacy.parquet")
+    pd.testing.assert_frame_equal(benchmark_bt.load_benchmark_data(), pd.read_parquet(archive).droplevel("symbol"))

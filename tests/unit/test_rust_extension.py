@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import builtins
+
 import pandas as pd
 import pytest
 
@@ -24,7 +26,15 @@ class BuyOnce(bt.Strategy):
         self.buy(size=1)
 
 
-def test_backtest_reports_missing_rust_extension_before_matching() -> None:
+def test_backtest_reports_missing_rust_extension_before_matching(monkeypatch) -> None:
+    original_import = builtins.__import__
+
+    def import_without_tradelearn_rust(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "tradelearn._rust":
+            raise ImportError("tradelearn._rust unavailable")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_tradelearn_rust)
     cerebro = bt.Cerebro()
     cerebro.adddata(bt.feeds.PandasData(dataname=_bars(), name="demo"))
     cerebro.addstrategy(BuyOnce)

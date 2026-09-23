@@ -266,9 +266,7 @@ class Order:
     Created, Submitted, Accepted, Partial, Completed, Canceled, Expired, Margin, Rejected = range(9)
     Cancelled = Canceled
     Buy, Sell = 1, 2
-    # 对齐 backtrader 官方常量布局：
-    # (Market, Close, Limit, Stop, StopLimit, StopTrail, StopTrailLimit, Historical) = range(8)
-    Market, Close, Limit, Stop, StopLimit, StopTrail, StopTrailLimit, Historical = range(8)
+    Market, Limit, Stop, StopLimit, Close, StopTrail, StopTrailLimit = range(1, 8)
     DAY, GTC, IOC = "day", "gtc", "ioc"
     ref: int
     data: Any

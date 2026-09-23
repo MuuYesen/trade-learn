@@ -72,6 +72,7 @@ pub struct OrderEvent {
     pub trail_percent: Option<f64>,
     /// 跟踪止损的当前水位（持仓期间最优价），跨 bar 持久化。
     pub trail_watermark: Option<f64>,
+    pub trail_triggered: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]

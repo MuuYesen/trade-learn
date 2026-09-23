@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -28,6 +29,7 @@ def test_stage3_benchmark_script_emits_machine_readable_results() -> None:
             "--json",
         ],
         cwd=ROOT,
+        env={**os.environ, "PYTHONPATH": str(ROOT)},
         check=True,
         capture_output=True,
         text=True,
@@ -61,6 +63,7 @@ def test_stage3_benchmark_script_fails_when_threshold_is_exceeded() -> None:
             "--json",
         ],
         cwd=ROOT,
+        env={**os.environ, "PYTHONPATH": str(ROOT)},
         check=False,
         capture_output=True,
         text=True,

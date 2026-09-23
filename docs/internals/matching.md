@@ -6,14 +6,16 @@
 
 ## 订单类型与触发条件
 
-trade-learn 2.0 支持四种订单类型：
+trade-learn 0.2.6 支持以下订单类型（表内价格为应用滑点前的 raw price）：
 
 | 类型 | 何时触发 | 成交价 |
 |---|---|---|
 | **Market（市价）** | 立即（下一根 bar 的执行时点） | 配置的执行时点价（默认 next open）+ 滑点 |
 | **Limit（限价）** | 下一根 bar 的 high/low 触达 limit 时 | 买：`min(limit, next_open)`<br>卖：`max(limit, next_open)` |
-| **Stop（止损）** | high/low 触达 stop 时 | 转为市价语义 |
+| **Stop（止损）** | high/low 触达 stop 时 | 默认 next-open 模式：买入跳空高开取 open、盘中触达取 stop，即 `max(open, stop)`；卖出反向，即 `min(open, stop)` |
 | **Stop-Limit（止损限价）** | stop 触发后再按 limit 规则撮合 | Python 门面：`price` 表示 stop 触发价、`pricelimit` 表示 limit 成交价 |
+| **StopTrail（跟踪止损）** | 触达上一根有效 bar 保存的跟踪线 | 按 Stop 的跳空 / 触达规则成交 |
+| **StopTrailLimit（跟踪止损限价）** | 跟踪线触发后成为持续有效的限价单 | 仅在触发之后满足 `pricelimit` 时成交 |
 
 ## 默认成交时点
 
@@ -24,37 +26,41 @@ trade-learn 2.0 支持四种订单类型：
 
 ## bar 内 stop + limit 同时触达
 
-在同一根 OHLC bar 内不推断真实 tick 路径。若 stop 与 limit 在同一根 bar 内均可见，按确定性规则处理：
+普通 `StopLimit` 在 exact 模式下沿用以下规则；OHLC 无法还原真实 tick 顺序：
 
 1. 先用 high / low 判定 stop 是否被触发
 2. 再用同一根 bar 的 high / low 判定 limit 是否可成交
 3. 买入限价成交价为 `min(limit_price, open)`，卖出为 `max(limit_price, open)`
 
-这条规则保证回测可重放、不依赖真实 tick 序。
+smart 模式采用确定性路径：阳线 / 平线为 `open → low → high → close`，阴线为 `open → high → low → close`。这是一项可复现的撮合约定，不代表真实 tick 路径。
+
+`StopTrailLimit` 在 exact 与 smart 模式都使用上述路径，且只检查触发点之后的限价机会；触发之前触达限价不能倒推成交。跳空越过跟踪线但未满足限价时，订单保留已触发状态，之后的 bar 只按限价撮合。
+
+## 跟踪水位
+
+`trailamount` 指定绝对回撤，`trailpercent` 指定比例回撤（例如 `0.05`）；同时指定时优先使用 `trailamount`。`price` 是初始参考水位，Python 门面省略时以当前 `close` 初始化。卖出水位只升不降，买入水位只降不升，初始参考价也参与比较。
+
+每根 bar 先按已保存水位撮合，未成交订单再用本 bar 极值推进下一根 bar 的水位，避免用当前 high 抬高水位后回看当前 low。无成交量的 bar 不推进水位。跟踪限价单一旦触发便冻结水位。
 
 ## 订单生命周期
 
-订单状态机显式保留以下状态：
+订单沿用现有 Python broker 与 Rust matcher 的职责划分：broker 创建、通知并保存订单元数据，Rust 在撮合前处理有效期，并在成交时原子撤销显式 OCO 同组订单。终态回传 broker，由 `notify_order()` 通知策略并清理待成交数量。
 
-```
-submitted → accepted → filled
-                     ↘ partially_filled  (2.0 不支持，预留)
-                     ↘ cancelled
-                     ↘ rejected
-                     ↘ expired
+```text
+Created → Submitted → Accepted → Completed
+                            ↘ Canceled / Expired / Margin / Rejected
 ```
 
-`time_in_force` 控制过期：
-
-| 取值 | 语义 |
-|---|---|
-| `day` | 当日有效 |
-| `gtc` | good-till-cancelled |
-| `ioc` | immediate-or-cancel |
+- `valid=None` 表示无截止时间；`date` / `datetime` 表示绝对截止时刻（日期按当天零点），`timedelta` / 数字秒数相对提交时的主时钟计算一次。
+- 无时区值按 UTC 解释，有时区值换算为 UTC。仅当当前时间严格晚于截止时刻才过期，截止时刻本身仍可成交。
+- single-data Rust runner、multi-data Rust runner 和 Python fallback 均在撮合前执行过期检查；过期订单不会先成交再被标记失效。
+- 显式 `oco=other_order` 在 exact 与 smart 模式都互斥；一笔成交即撤销仍存活的同组订单。smart 原有隐式保护性退出互斥规则为兼容性保留。
+- 手动撤单、OCO 撤单和过期均同步原生待撮合队列与 Python 状态；关联策略收到相应的终态通知。括号订单的子单在父单成交后激活，父单终止时撤销尚未激活的子单。
+- 原有 `Order` 数值常量保持兼容；`tag` 和 `info` 元数据可随订单 / 交易统计保留。
 
 ## 2.0 不支持 Partial Fill
 
-若订单数量超过当前 bar 可用 `volume`，订单**直接 rejected**，不会按 volume 部分成交。
+当前撮合采用整单成交，不根据 bar 的 `volume` 拆分成交量；零成交量 bar 不成交。
 
 > 这是有意为之：partial fill 会污染 Analyzer 的盈亏统计与 trade 闭环判定。后续版本若要支持，需先扩展订单状态、fill 聚合和 `notify_trade` 语义。
 

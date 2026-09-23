@@ -15,20 +15,11 @@ if TYPE_CHECKING:
 
 OrderPayload = tuple[int, str, str, str, float, float | None, float | None]
 _EMPTY_ORDER_BUFFER: tuple[()] = ()
-_MISSING = object()  # 缓存未命中哨兵（区分「未计算」与「计算为 None」）
 CompactFillBatch = tuple[list[int], list[float], list[float], list[float], list[float], list[float]]
-# Order.exectype → Rust 订单类型字符串。
-# 数值对齐 backtrader 官方布局：
-#   Market=0, Close=1, Limit=2, Stop=3, StopLimit=4, StopTrail=5, StopTrailLimit=6, Historical=7
-# `Close` 作为市价收盘撮合语义，映射为 market。
 _ORDER_TYPE_TO_RUST = {
-    0: "market",       # Market
-    1: "market",       # Close（收盘价成交，等同市价语义）
-    2: "limit",        # Limit
-    3: "stop",         # Stop
-    4: "stop_limit",   # StopLimit
-    5: "stop_trail",   # StopTrail
-    6: "stop_trail_limit",  # StopTrailLimit
+    Order.Market: "market", Order.Close: "market", Order.Limit: "limit",
+    Order.Stop: "stop", Order.StopLimit: "stop_limit",
+    Order.StopTrail: "stop_trail", Order.StopTrailLimit: "stop_trail_limit",
 }
 
 
@@ -95,10 +86,13 @@ class RustBroker:
         self._order_submit_buffer: list[OrderPayload] = []
         # 缓冲旁路：按 order.ref 携带 trail 参数，保持 OrderPayload 7 元组契约不变
         self._trail_params_by_ref: dict[int, tuple[float | None, float | None]] = {}
-        # valid 到期时间缓存：按 order.ref 记录「创建时刻 + valid」算出的绝对失效时间，
-        # 避免每 bar 用当前时间重算导致 deadline 永远后移。
-        self._valid_deadline_by_ref: dict[int, Any] = {}
         self._cancel_buffer: list[int] = []
+        self._bound_orders: set[int] = set()
+        self._control_updates: dict[int, Order] = {}
+        self._order_owners: dict[int, Strategy] = {}
+        self._order_deadlines: dict[int, int | None] = {}
+        self._native_order_events: list[tuple[int, str]] = []
+        self._authoritative_terminal_refs: set[int] = set()
         self._proxy_events: list[Any] = []
         self._trade_on_close = False
         # For 'bt' mode, we maintain state in Python
@@ -525,6 +519,7 @@ class RustBroker:
             )
             self.bind_rust_order_ref(provisional_ref, order_id)
             submitted = True
+        self._flush_order_controls()
         if (
             submitted
             and self._trade_on_close
@@ -542,6 +537,10 @@ class RustBroker:
             elif self._step_close is not None:
                 self._step_fills_from_collect = self._step_close(self._curr_idx)
 
+        drain_events = getattr(self._engine, "drain_order_events", None)
+        if drain_events is not None:
+            self.receive_order_events(drain_events())
+
     def drain_order_buffer(self) -> list[OrderPayload] | tuple[()]:
         """Return buffered order payloads without calling back into Rust.
 
@@ -553,7 +552,8 @@ class RustBroker:
         if not buffered:
             return _EMPTY_ORDER_BUFFER
         self._order_submit_buffer = []
-        return buffered
+        return [payload for payload in buffered
+                if (order := self._orders_by_ref.get(payload[0])) is not None and order.alive()]
 
     def pop_trail_params(self, provisional_ref: int) -> tuple[float | None, float | None]:
         """取出并移除某个（临时）订单 ref 的 trail 参数（供 Rust 订单消化时调用）。
@@ -567,11 +567,23 @@ class RustBroker:
         order = self._orders_by_ref.pop(provisional_ref)
         order.ref = rust_ref
         self._orders_by_ref[order.ref] = order
+        self._bound_orders.add(id(order))
+        self._control_updates[id(order)] = order
+        for other in self._orders if self._oco_order_count else ():
+            if other.oco is order and id(other) in self._bound_orders:
+                self._control_updates[id(other)] = other
 
     def bind_rust_order_refs(self, bindings: list[tuple[int, int]]) -> None:
         """Replace multiple provisional Python order refs with Rust-assigned refs."""
-        for provisional_ref, rust_ref in bindings:
-            self.bind_rust_order_ref(provisional_ref, rust_ref)
+        orders = [(self._orders_by_ref.pop(provisional), native) for provisional, native in bindings]
+        for order, native in orders:
+            order.ref = native
+            self._orders_by_ref[native] = order
+            self._bound_orders.add(id(order))
+            self._control_updates[id(order)] = order
+        for order in self._orders if self._oco_order_count else ():
+            if order.oco is not None and id(order) in self._bound_orders:
+                self._control_updates[id(order)] = order
 
     def submit_drained_order(
         self,
@@ -664,6 +676,7 @@ class RustBroker:
             trail_percent,
         )
         self.bind_rust_order_ref(order.ref, order_id)
+        self._flush_order_controls()
 
     def _rust_order_payload(
         self,
@@ -685,7 +698,7 @@ class RustBroker:
             limit_price = order.pricelimit
         elif order.exectype in (Order.StopTrail, Order.StopTrailLimit):
             # 跟踪止损：初始止损价作为首帧水位基准；回撤量由 trail* 传入
-            stop_price = price
+            stop_price = price if price is not None else float(order.data.close[0])
             if order.exectype == Order.StopTrailLimit:
                 limit_price = order.pricelimit
         return symbol, side_str, ot_str, actual_size, limit_price, stop_price
@@ -712,7 +725,7 @@ class RustBroker:
         actual_size = float(size if size is not None else 1.0)
 
         order = Order(
-            ref=self._order_count,
+            ref=self._order_count + ((1 << 32) if hasattr(self._engine, "configure_order") else 0),
             data=data,
             ordtype=side,
             size=actual_size,
@@ -725,7 +738,7 @@ class RustBroker:
             transmit=bool(kwargs.get("transmit", True)),
             trailamount=kwargs.get("trailamount"),
             trailpercent=kwargs.get("trailpercent"),
-            info=dict(kwargs.get("info", {})),
+            info={**dict(kwargs.get("info", {})), **({"tag": kwargs["tag"]} if "tag" in kwargs else {})},
         )
         if self._terminal_order_suppression:
             return order
@@ -749,7 +762,7 @@ class RustBroker:
         exectype = exectype or Order.Market
 
         order = Order(
-            ref=self._order_count,
+            ref=self._order_count + ((1 << 32) if hasattr(self._engine, "configure_order") else 0),
             data=data,
             ordtype=side,
             size=actual_size,
@@ -782,14 +795,23 @@ class RustBroker:
         actual_size: float,
         price: float | None,
     ) -> None:
+        self._order_owners[id(order)] = owner
+        self._order_deadlines[id(order)] = self._normalize_deadline(order)
         order.status = Order.Submitted
         self._orders.append(order)
         self._orders_by_ref[order.ref] = order
         if order.oco is not None:
             self._oco_order_count += 1
         self._notify_order_event(owner, order)
+        # Submitted notifications are actionable; do not resurrect an intent
+        # canceled before it reached either the native or deferred queue.
+        if not order.alive():
+            return
 
         if order.parent is not None and order.parent.status != Order.Completed:
+            if not order.parent.alive():
+                self.cancel(order)
+                return
             self._deferred_child_orders.setdefault(id(order.parent), []).append(
                 (order, is_buy, actual_size, price)
             )
@@ -823,145 +845,112 @@ class RustBroker:
             self._pending_orders.append(order)
 
     def cancel(self, order: Order) -> None:
-        """Cancel an order in the Python mirror and queue the Rust cancel for the bar loop drain."""
-        self._cancel_order_mirror(order)
-        # Rust engine is borrowed during strategy.next(); buffer the cancel ref and
-        # let run_bar_loop drain it into the Rust kernel after the callback returns.
-        if self._engine is not None:
+        """Cancel an intent, including children that have not reached the kernel."""
+        if order.ref in self._authoritative_terminal_refs:
+            return
+        if not self._cancel_order_mirror(order):
+            return
+        if id(order) in self._bound_orders:
             self._cancel_buffer.append(order.ref)
-
-    def drain_cancel_buffer(self) -> list[int]:
-        """Return and clear the buffered Rust cancel order refs (called by Rust bar loop)."""
-        buffered = self._cancel_buffer
-        self._cancel_buffer = []
-        return buffered
+        for child, *_ in self._deferred_child_orders.pop(id(order), ()):
+            self.cancel(child)
 
     def _cancel_order_mirror(self, order: Order, owner: Strategy | None = None) -> bool:
-        """Cancel one Python-side order mirror and notify when an owner is available."""
-        if order.status in (Order.Completed, Order.Canceled, Order.Expired):
+        if not order.alive():
             return False
-        order.status = Order.Canceled
-        self._pending_orders = [pending for pending in self._pending_orders if pending is not order]
-        if owner is not None:
-            self._notify_order_event(owner, order)
+        self._finish_order(order, Order.Canceled, owner)
         return True
 
+    def _finish_order(self, order: Order, status: int, owner: Strategy | None = None) -> None:
+        if not order.alive():
+            return
+        order.status = status
+        self._pending_orders = [pending for pending in self._pending_orders if pending is not order]
+        owner = owner or self._order_owners.get(id(order))
+        if owner is not None:
+            pending = owner._pending_size.get(order.data, 0.0)
+            size = order.size if order.isbuy() else -order.size
+            owner._pending_size[order.data] = pending - size
+            self._notify_order_event(owner, order)
+
     def _cancel_oco_siblings(self, owner: Strategy, completed: Order) -> None:
-        """Cancel live OCO siblings after one order in the OCO pair fills."""
+        # Native matching enforces exclusion atomically. Mirror peers, including
+        # deferred orders; this also supports existing broker test adapters.
         if completed.oco is None and self._oco_order_count == 0:
             return
-        for candidate in self._orders:
-            if candidate is completed or not candidate.alive():
-                continue
-            if completed.oco is candidate or candidate.oco is completed:
-                self._cancel_order_mirror(candidate, owner)
-                if self._engine is not None:
-                    self._cancel_buffer.append(candidate.ref)
+        group = {id(completed)}
+        changed = True
+        while changed:
+            changed = False
+            for order in self._orders:
+                if order.oco is not None and (id(order) in group or id(order.oco) in group):
+                    before = len(group)
+                    group.update((id(order), id(order.oco)))
+                    changed |= len(group) != before
+        for order in self._orders:
+            if order is not completed and id(order) in group and order.alive():
+                self.cancel(order)
 
-    def _order_created_datetime(self, order: Order) -> Any:
-        """订单创建时刻（相对 valid 的基准时间）。
-
-        优先用 Order 的 created 时间戳（若存在），否则退回当前 bar 时间。
-        """
-        created = getattr(order, "created", None)
-        ts = getattr(created, "dt", None) if created is not None else None
-        if ts is None:
-            ts = self._fill_datetime(order.data)
-        if isinstance(ts, (int, float)):
-            try:
-                return datetime.datetime.fromtimestamp(int(ts), tz=datetime.timezone.utc)
-            except (OverflowError, OSError, ValueError):
-                return None
-        if isinstance(ts, datetime.datetime):
-            return ts
-        return None
-
-    def _order_valid_deadline(self, order: Order) -> Any:
-        """把 order.valid 解析为该订单的绝对失效时间；无有效值返回 None。
-
-        支持的类型（与 backtrader 语义对齐）：
-          - timedelta：自「创建 bar 时间」起相对 N 天/秒；
-          - datetime/date：绝对失效时间；
-          - 数字：视为相对秒数（向后兼容）。
-        """
-        valid = getattr(order, "valid", None)
+    def _normalize_deadline(self, order: Order) -> int | None:
+        valid = order.valid
         if valid is None:
             return None
-        # 相对 valid（timedelta/数字）必须以「订单创建时刻」为基准，
-        # 且只算一次并缓存，否则每 bar 用当前时间重算会让 deadline 永远后移、永不触发。
-        cached = self._valid_deadline_by_ref.get(order.ref, _MISSING)
-        if cached is not _MISSING:
-            return cached
-        base = self._order_created_datetime(order)
-        if isinstance(base, (int, float)):
-            try:
-                base = datetime.datetime.fromtimestamp(int(base), tz=datetime.timezone.utc)
-            except (OverflowError, OSError, ValueError):
-                base = None
-        try:
-            if isinstance(valid, datetime.timedelta):
-                if base is None:
-                    return None
-                deadline = base + valid
-                self._valid_deadline_by_ref[order.ref] = deadline
-                return deadline
-            if isinstance(valid, datetime.datetime):
-                return valid
-            if isinstance(valid, datetime.date):
-                return datetime.datetime(valid.year, valid.month, valid.day,
-                                         tzinfo=getattr(base, "tzinfo", None))
-            if isinstance(valid, (int, float)):
-                if base is None:
-                    return None
-                return base + datetime.timedelta(seconds=float(valid))
-        except Exception:
-            return None
-        return None
+        import numbers
+        import pandas as pd
+        if isinstance(valid, (datetime.timedelta, numbers.Real)):
+            # The primary runtime clock defines submission time, not the last
+            # available secondary-feed bar.
+            data = getattr(self._order_owners.get(id(order)), "data", None) or order.data
+            ts = self._fill_datetime(data)
+            if ts is None:
+                raise ValueError("relative order.valid requires a submission timestamp")
+            base = pd.Timestamp(ts, unit="s", tz="UTC") if isinstance(ts, numbers.Real) else pd.Timestamp(ts)
+            delta = valid if isinstance(valid, datetime.timedelta) else datetime.timedelta(seconds=float(valid))
+            deadline = base + delta
+        elif isinstance(valid, (datetime.datetime, datetime.date)):
+            deadline = pd.Timestamp(valid)
+        else:
+            raise ValueError("order.valid must be a date, datetime, timedelta or relative seconds")
+        deadline = deadline.tz_localize("UTC") if deadline.tzinfo is None else deadline.tz_convert("UTC")
+        return int(deadline.timestamp())
 
-    def _now_datetime(self, data: Any) -> Any:
-        """当前 bar 的时间（与 _fill_datetime 同源，转成 datetime）。"""
-        ts = self._fill_datetime(data)
-        if isinstance(ts, (int, float)):
-            try:
-                return datetime.datetime.fromtimestamp(int(ts), tz=datetime.timezone.utc)
-            except (OverflowError, OSError, ValueError):
-                return None
-        if isinstance(ts, datetime.datetime):
-            return ts
-        return None
+    def drain_order_controls(self) -> tuple[list[int], list[tuple[int, int | None, int | None]]]:
+        updates = []
+        for order in self._control_updates.values():
+            peer = order.oco
+            peer_ref = peer.ref if peer is not None and id(peer) in self._bound_orders else None
+            updates.append((order.ref, self._order_deadlines.get(id(order)), peer_ref))
+        self._control_updates.clear()
+        cancels, self._cancel_buffer = self._cancel_buffer, []
+        return cancels, updates
 
-    def _expire_valid_orders(self, i: int, owner: Strategy | None = None) -> None:
-        """按 order.valid 到期撤销存活挂单（每 bar 撮合后调用）。
+    def _flush_order_controls(self) -> None:
+        if self._engine is None:
+            return
+        cancels, updates = self.drain_order_controls()
+        configure = getattr(self._engine, "configure_order", None)
+        if configure is not None:
+            for update in updates:
+                configure(*update)
+        cancel = getattr(self._engine, "cancel_order", None)
+        if cancel is not None:
+            for ref in cancels:
+                cancel(ref)
 
-        底层此前只存储 valid 字段但从不消费；这里补齐到期语义：
-        存活订单（Submitted/Accepted/Partial）超过 valid 失效时间即置为 Expired，
-        并从 Rust 侧撤单（经 _cancel_buffer 由 bar loop 消化）。
-        """
-        deadline_cache: dict[int, Any] = {}
-        now_cache: dict[int, Any] = {}
-        for order in self._orders:
-            if order.status not in (Order.Submitted, Order.Accepted, Order.Partial):
-                continue
-            deadline = deadline_cache.get(id(order.data), _MISSING)
-            if deadline is _MISSING:
-                deadline = self._order_valid_deadline(order)
-                deadline_cache[id(order.data)] = deadline
-            if deadline is None:
-                continue
-            now = now_cache.get(id(order.data), _MISSING)
-            if now is _MISSING:
-                now = self._now_datetime(order.data)
-                now_cache[id(order.data)] = now
-            if now is None or now <= deadline:
-                continue
-            # 到期：置 Expired + 通知 Rust 撤单 + 回调策略
-            order.status = Order.Expired
-            self._pending_orders = [p for p in self._pending_orders if p is not order]
-            if self._engine is not None:
-                self._cancel_buffer.append(order.ref)
-            if owner is not None:
-                self._notify_order_event(owner, order)
+    def receive_order_events(self, events: list[tuple[int, str]]) -> None:
+        self._native_order_events.extend(events)
 
+    def _process_order_events(self, strategy: Strategy) -> None:
+        events, self._native_order_events = self._native_order_events, []
+        for ref, status in events:
+            order = self._orders_by_ref.get(ref)
+            if order is not None:
+                self._finish_order(order, {
+                    "expired": Order.Expired, "canceled": Order.Canceled,
+                    "margin": Order.Margin, "rejected": Order.Rejected,
+                }[status], strategy)
+                for child, *_ in self._deferred_child_orders.pop(id(order), ()):
+                    self.cancel(child)
 
     def _activate_child_orders(self, owner: Strategy, parent: Order) -> None:
         """Route deferred bracket child orders once the parent has filled."""
@@ -1005,7 +994,7 @@ class RustBroker:
         self._curr_idx = i
         self._clear_state_caches()
         self._step_fills_from_collect = None
-        self._expire_valid_orders(i)
+        self._flush_order_controls()
         if self._engine is not None:
             if self._active_datas and self._step_open_bars_compact is not None:
                 fills, cash, size, price = self._step_open_bars_compact(
@@ -1028,6 +1017,10 @@ class RustBroker:
                 self._engine.step_open(i)
                 self._rust_state_cache = None
 
+        drain_events = getattr(self._engine, "drain_order_events", None)
+        if drain_events is not None:
+            self.receive_order_events(drain_events())
+
     @staticmethod
     def _fill_batch_len(fills: Any) -> int:
         if fills is None:
@@ -1041,11 +1034,8 @@ class RustBroker:
         return isinstance(fills, tuple) and len(fills) == 6
 
     def process_fills(self, strategy: Strategy, i: int) -> None:
-        """Synchronize filled orders back to Python."""
-        # 每 bar 撮合后、成交同步前，先按 valid 到期撤销存活挂单。
-        # 放在这里而非 step()：单标的回测走 Rust bar loop（on_rust_bar）路径，
-        # 不经 step()，只有 process_fills() 在所有 runner 路径上都会执行。
-        self._expire_valid_orders(i, owner=strategy)
+        """Synchronize a native batch without permitting retroactive cancellation."""
+        new_fills = []
         if self._engine is not None:
             if self._step_fills_from_collect is None:
                 if self._get_new_fills_compact is not None:
@@ -1055,15 +1045,33 @@ class RustBroker:
             else:
                 new_fills = self._step_fills_from_collect
                 self._step_fills_from_collect = None
-            fill_count = self._fill_batch_len(new_fills)
-            if fill_count:
-                filled_order_refs = self._process_rust_fills_batch(strategy, new_fills)
-                self._last_fill_idx += fill_count
-            else:
-                filled_order_refs = set()
-            self._reconcile_unfilled_market_orders(strategy, filled_order_refs)
-        elif self._pending_orders:
-            raise RuntimeError("RustBroker requires a Rust engine for order matching")
+
+        if new_fills is None:
+            new_fills = []
+        # The kernel has already resolved these orders, even though Python
+        # notifications are delivered sequentially. Preserve outer batch guards
+        # if a callback causes nested processing.
+        previous_terminal_refs = self._authoritative_terminal_refs
+        self._authoritative_terminal_refs = previous_terminal_refs | {
+            ref for ref, _ in self._native_order_events
+        } | {int(fill[0]) for fill in self._iter_rust_fills(new_fills)}
+        try:
+            self._process_order_events(strategy)
+            if self._engine is not None:
+                fill_count = self._fill_batch_len(new_fills)
+                if fill_count:
+                    filled_order_refs = self._process_rust_fills_batch(strategy, new_fills)
+                    self._last_fill_idx += fill_count
+                else:
+                    filled_order_refs = set()
+                # Modern kernels report actual rejections. An Accepted market
+                # order may be deferred, buffered, or awaiting its symbol's bar.
+                if not callable(getattr(self._engine, "drain_order_events", None)):
+                    self._reconcile_unfilled_market_orders(strategy, filled_order_refs)
+            elif self._pending_orders:
+                raise RuntimeError("RustBroker requires a Rust engine for order matching")
+        finally:
+            self._authoritative_terminal_refs = previous_terminal_refs
 
     def _iter_rust_fills(self, fills: Any):
         if self._is_compact_fill_batch(fills):

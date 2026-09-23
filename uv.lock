@@ -6754,33 +6754,28 @@ wheels = [
 
 [[package]]
 name = "trade-learn"
-version = "0.2.4"
+version = "0.2.6"
 source = { editable = "." }
 dependencies = [
     { name = "bokeh" },
-    { name = "causal-learn" },
-    { name = "numba" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "opentdx", marker = "python_full_version >= '3.12'" },
     { name = "pandas" },
     { name = "pandas-ta-classic" },
     { name = "pyarrow" },
-    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11'" },
     { name = "pyyaml" },
     { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "ta-lib" },
     { name = "tqdm" },
-    { name = "tradingview-datafeed" },
     { name = "typer" },
     { name = "xlsxwriter" },
 ]
 
 [package.optional-dependencies]
 all = [
+    { name = "causal-learn" },
     { name = "duckdb" },
     { name = "ipywidgets" },
     { name = "jupyter-ai" },
@@ -6788,10 +6783,15 @@ all = [
     { name = "jupyterlab-git" },
     { name = "mcp" },
     { name = "mlflow" },
+    { name = "numba" },
+    { name = "opentdx", marker = "python_full_version >= '3.12'" },
     { name = "optuna" },
     { name = "pygwalker" },
+    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11'" },
     { name = "riskfolio-lib", version = "7.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "riskfolio-lib", version = "7.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "ta-lib" },
+    { name = "tradingview-datafeed" },
 ]
 dev = [
     { name = "cibuildwheel", version = "2.23.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -6805,6 +6805,15 @@ docs = [
     { name = "mkdocs-material" },
     { name = "mkdocstrings-python" },
 ]
+duckdb = [
+    { name = "duckdb" },
+]
+indicators = [
+    { name = "opentdx", marker = "python_full_version >= '3.12'" },
+    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11'" },
+    { name = "ta-lib" },
+    { name = "tradingview-datafeed" },
+]
 lab = [
     { name = "ipywidgets" },
     { name = "jupyter-ai" },
@@ -6813,8 +6822,24 @@ lab = [
     { name = "mcp" },
     { name = "pygwalker" },
 ]
+ml = [
+    { name = "causal-learn" },
+]
 mlflow = [
     { name = "mlflow" },
+]
+research = [
+    { name = "numba" },
+]
+talib = [
+    { name = "ta-lib" },
+]
+tdx = [
+    { name = "opentdx", marker = "python_full_version >= '3.12'" },
+]
+tv = [
+    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11'" },
+    { name = "tradingview-datafeed" },
 ]
 
 [package.dev-dependencies]
@@ -6827,9 +6852,11 @@ oracle = [
 [package.metadata]
 requires-dist = [
     { name = "bokeh" },
-    { name = "causal-learn" },
+    { name = "causal-learn", marker = "extra == 'all'" },
+    { name = "causal-learn", marker = "extra == 'ml'" },
     { name = "cibuildwheel", marker = "extra == 'dev'" },
     { name = "duckdb", marker = "extra == 'all'" },
+    { name = "duckdb", marker = "extra == 'duckdb'" },
     { name = "interrogate", marker = "extra == 'dev'" },
     { name = "ipywidgets", marker = "extra == 'all'" },
     { name = "ipywidgets", marker = "extra == 'lab'" },
@@ -6845,16 +6872,21 @@ requires-dist = [
     { name = "mkdocstrings-python", marker = "extra == 'docs'" },
     { name = "mlflow", marker = "extra == 'all'" },
     { name = "mlflow", marker = "extra == 'mlflow'" },
-    { name = "numba", specifier = ">=0.65.1" },
+    { name = "numba", marker = "extra == 'all'", specifier = ">=0.65.1" },
+    { name = "numba", marker = "extra == 'research'", specifier = ">=0.65.1" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "opentdx", marker = "python_full_version >= '3.12'" },
+    { name = "opentdx", marker = "python_full_version >= '3.12' and extra == 'all'" },
+    { name = "opentdx", marker = "python_full_version >= '3.12' and extra == 'indicators'" },
+    { name = "opentdx", marker = "python_full_version >= '3.12' and extra == 'tdx'" },
     { name = "optuna", marker = "extra == 'all'" },
     { name = "pandas" },
     { name = "pandas-ta-classic" },
     { name = "pyarrow" },
     { name = "pygwalker", marker = "extra == 'all'" },
     { name = "pygwalker", marker = "extra == 'lab'" },
-    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11'" },
+    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11' and extra == 'all'" },
+    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11' and extra == 'indicators'" },
+    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11' and extra == 'tv'" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "pyyaml" },
@@ -6862,13 +6894,17 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "scikit-learn" },
     { name = "scipy" },
-    { name = "ta-lib" },
+    { name = "ta-lib", marker = "extra == 'all'" },
+    { name = "ta-lib", marker = "extra == 'indicators'" },
+    { name = "ta-lib", marker = "extra == 'talib'" },
     { name = "tqdm" },
-    { name = "tradingview-datafeed" },
+    { name = "tradingview-datafeed", marker = "extra == 'all'" },
+    { name = "tradingview-datafeed", marker = "extra == 'indicators'" },
+    { name = "tradingview-datafeed", marker = "extra == 'tv'" },
     { name = "typer" },
     { name = "xlsxwriter" },
 ]
-provides-extras = ["lab", "mlflow", "all", "dev", "docs"]
+provides-extras = ["lab", "mlflow", "tdx", "tv", "talib", "ml", "research", "duckdb", "indicators", "all", "dev", "docs"]
 
 [package.metadata.requires-dev]
 oracle = [

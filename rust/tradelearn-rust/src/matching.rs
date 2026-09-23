@@ -69,60 +69,18 @@ pub fn match_order_at_price(
                 }
             }
         }
-        // 跟踪止损：以当前点价格评估跟踪线（水位取自订单已有水位，无则用 stop_price 兜底）。
-        OrderType::StopTrail => {
-            let watermark = order.trail_watermark.or(order.stop_price);
-            let stop = match (order.trail_amount, order.trail_percent) {
-                (Some(amount), _) if amount > 0.0 => match (order.side, watermark) {
-                    (OrderSide::Sell, Some(w)) => Some(w - amount),
-                    (OrderSide::Buy, Some(w)) => Some(w + amount),
-                    _ => None,
-                },
-                (_, Some(percent)) if percent > 0.0 => match (order.side, watermark) {
-                    (OrderSide::Sell, Some(w)) => Some(w * (1.0 - percent)),
-                    (OrderSide::Buy, Some(w)) => Some(w * (1.0 + percent)),
-                    _ => None,
-                },
-                _ => None,
-            }?;
-            let triggered = if order.side == OrderSide::Buy {
-                price >= stop
-            } else {
-                price <= stop
-            };
-            if triggered {
-                Some(price)
-            } else {
-                None
-            }
-        }
-        // 跟踪止损限价：触发条件同 StopTrail，另外要求点在 limit 边界内。
-        OrderType::StopTrailLimit => {
-            let watermark = order.trail_watermark.or(order.stop_price);
-            let stop = match (order.trail_amount, order.trail_percent) {
-                (Some(amount), _) if amount > 0.0 => match (order.side, watermark) {
-                    (OrderSide::Sell, Some(w)) => Some(w - amount),
-                    (OrderSide::Buy, Some(w)) => Some(w + amount),
-                    _ => None,
-                },
-                (_, Some(percent)) if percent > 0.0 => match (order.side, watermark) {
-                    (OrderSide::Sell, Some(w)) => Some(w * (1.0 - percent)),
-                    (OrderSide::Buy, Some(w)) => Some(w * (1.0 + percent)),
-                    _ => None,
-                },
-                _ => None,
-            }?;
-            let limit = order.limit_price?;
-            let triggered = if order.side == OrderSide::Buy {
-                price >= stop && price <= limit
-            } else {
-                price <= stop && price >= limit
-            };
-            if triggered {
-                Some(price)
-            } else {
-                None
-            }
+        OrderType::StopTrail | OrderType::StopTrailLimit => {
+            let triggered = order.trail_triggered
+                || trailing_stop_price(order).is_some_and(|stop| match order.side {
+                    OrderSide::Buy => price >= stop,
+                    OrderSide::Sell => price <= stop,
+                });
+            let within_limit = order.order_type != OrderType::StopTrailLimit
+                || match order.side {
+                    OrderSide::Buy => price <= order.limit_price?,
+                    OrderSide::Sell => price >= order.limit_price?,
+                };
+            (triggered && within_limit).then_some(price)
         }
     }?;
 
@@ -232,10 +190,9 @@ pub fn match_order(
                 _ => None,
             }
         }
-        // 跟踪止损：先用当前 bar 的极值推进水位，再判断是否触发回撤止损。
-        // 水位取值：Buy 用最高价、Sell 用最低价；止损线 = 水位 ∓ 回撤。
+        // Evaluate the saved watermark; current-bar extrema apply only to the next bar.
         OrderType::StopTrail => {
-            let effective_stop = trailing_stop_price(order, bar)?;
+            let effective_stop = trailing_stop_price(order)?;
             match order.side {
                 // 卖出跟踪止损（多头持仓）：跌破跟踪线触发，成交价取 min(execution, 跟踪线)
                 OrderSide::Sell if bar.low <= effective_stop => {
@@ -248,20 +205,8 @@ pub fn match_order(
                 _ => None,
             }
         }
-        // 跟踪止损限价：先按跟踪线判定触发，再以 limit 作为撮合边界。
-        OrderType::StopTrailLimit => {
-            let effective_stop = trailing_stop_price(order, bar)?;
-            let limit = order.limit_price?;
-            match order.side {
-                OrderSide::Sell if bar.low <= effective_stop && bar.high >= limit => {
-                    Some(execution_price.max(limit))
-                }
-                OrderSide::Buy if bar.high >= effective_stop && bar.low <= limit => {
-                    Some(execution_price.min(limit))
-                }
-                _ => None,
-            }
-        }
+        // Use the deterministic intrabar path so a pre-trigger limit touch cannot fill.
+        OrderType::StopTrailLimit => smart_match_price(order, bar, options).map(|(_, price)| price),
     }?;
 
     Some(fill_from_raw_price(order, raw_price, bar, options))
@@ -301,7 +246,8 @@ pub(crate) fn smart_match_price(
         return Some((0.0, path[0]));
     }
 
-    let mut stop_limit_armed = false;
+    let mut stop_limit_armed =
+        order.order_type == OrderType::StopTrailLimit && order.trail_triggered;
     for (segment_idx, pair) in path.windows(2).enumerate() {
         let start = pair[0];
         let end = pair[1];
@@ -331,26 +277,27 @@ pub(crate) fn smart_match_price(
                 }
             }
             OrderType::Market => unreachable!(),
-            // 跟踪止损（smart 路径）：以 segment 内的跟踪线穿越判定触发。
-            OrderType::StopTrail | OrderType::StopTrailLimit => {
-                let watermark = order.trail_watermark.or(order.stop_price);
-                let trail_stop = match (order.trail_amount, order.trail_percent) {
-                    (Some(amount), _) if amount > 0.0 => match (order.side, watermark) {
-                        (OrderSide::Sell, Some(w)) => Some(w - amount),
-                        (OrderSide::Buy, Some(w)) => Some(w + amount),
-                        _ => None,
-                    },
-                    (_, Some(percent)) if percent > 0.0 => match (order.side, watermark) {
-                        (OrderSide::Sell, Some(w)) => Some(w * (1.0 - percent)),
-                        (OrderSide::Buy, Some(w)) => Some(w * (1.0 + percent)),
-                        _ => None,
-                    },
-                    _ => None,
+            OrderType::StopTrail => {
+                let stop = trailing_stop_price(order)?;
+                if let Some(price) = stop_cross_price(order.side, stop, start, end) {
+                    return Some((smart_segment_rank(segment_idx, start, end, price), price));
+                }
+            }
+            OrderType::StopTrailLimit => {
+                let limit = order.limit_price?;
+                let limit_start = if stop_limit_armed {
+                    start
+                } else {
+                    let stop = trailing_stop_price(order)?;
+                    let Some(trigger_price) = stop_cross_price(order.side, stop, start, end) else {
+                        continue;
+                    };
+                    stop_limit_armed = true;
+                    trigger_price
                 };
-                if let Some(stop) = trail_stop {
-                    if let Some(price) = stop_cross_price(order.side, stop, start, end) {
-                        return Some((smart_segment_rank(segment_idx, start, end, price), price));
-                    }
+                // Only the remainder of this segment occurs after activation.
+                if let Some(price) = limit_cross_price(order.side, limit, limit_start, end) {
+                    return Some((smart_segment_rank(segment_idx, start, end, price), price));
                 }
             }
         }
@@ -391,7 +338,7 @@ fn stop_cross_price(side: OrderSide, stop: f64, start: f64, end: f64) -> Option<
 /// 造成 bar 内前视（先拿本 bar 的 high 抬水位，再用本 bar 的 low 触发）。
 ///
 /// 回撤量优先取 `trail_amount`（绝对价差），否则用 `trail_percent`（相对水位比例）。
-fn trailing_stop_price(order: &OrderEvent, _bar: &BarEvent) -> Option<f64> {
+fn trailing_stop_price(order: &OrderEvent) -> Option<f64> {
     let watermark = order.trail_watermark.or(order.stop_price)?;
 
     if let Some(amount) = order.trail_amount {
@@ -417,7 +364,32 @@ fn trailing_stop_price(order: &OrderEvent, _bar: &BarEvent) -> Option<f64> {
     None
 }
 
-/// 计算并返回订单在给定 bar 之后应保存的水位（用于跨 bar 持久化）。
+/// Advance a surviving order only after matching against the old watermark.
+/// A triggered trailing limit remains a limit order and never trails again.
+pub(crate) fn advance_trailing_order(order: &mut OrderEvent, bar: &BarEvent) {
+    if !is_tradable_bar(bar)
+        || !matches!(
+            order.order_type,
+            OrderType::StopTrail | OrderType::StopTrailLimit
+        )
+        || order.trail_triggered
+    {
+        return;
+    }
+    if order.order_type == OrderType::StopTrailLimit {
+        let triggered = trailing_stop_price(order).is_some_and(|stop| match order.side {
+            OrderSide::Sell => bar.low <= stop,
+            OrderSide::Buy => bar.high >= stop,
+        });
+        if triggered {
+            order.trail_triggered = true;
+            return;
+        }
+    }
+    let previous = order.trail_watermark.or(order.stop_price);
+    order.trail_watermark = Some(trailing_watermark(order.side, bar, previous));
+}
+
 pub(crate) fn trailing_watermark(side: OrderSide, bar: &BarEvent, prev: Option<f64>) -> f64 {
     match side {
         OrderSide::Sell => prev.unwrap_or(bar.high).max(bar.high),

@@ -124,6 +124,18 @@ class Indicator(metaclass=MetaSimple):
     def __sub__(self, other: Any):
         return self.lines[0] - other
 
+    def __eq__(self, other: Any):
+        return self.lines[0] == other
+
+    def __ne__(self, other: Any):
+        return self.lines[0] != other
+
+    def __le__(self, other: Any):
+        return self.lines[0] <= other
+
+    def __ge__(self, other: Any):
+        return self.lines[0] >= other
+
     def __lt__(self, other: Any):
         return self.lines[0] < other
 
