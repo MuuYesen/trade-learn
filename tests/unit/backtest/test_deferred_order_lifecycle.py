@@ -3,7 +3,7 @@ import datetime as dt
 
 import pytest
 
-from test_order_lifecycle import RecordingStrategy, _run, _terminal
+from tests.unit.backtest.test_order_lifecycle import RecordingStrategy, _run, _terminal
 from tradelearn.backtest.models import Order
 
 
