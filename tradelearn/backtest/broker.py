@@ -76,6 +76,9 @@ class RustBroker:
         self._curr_idx = 0
         self._orders: list[Order] = []
         self._orders_by_ref: dict[int, Order] = {}
+        # 订单 → 归属策略（按 id(order) 键）。cancel() 等无 owner 入参的路径据此
+        # 反查策略以便回调 notify_order，避免撤单后策略收不到终态事件。
+        self._order_owners: dict[int, Strategy] = {}
         self._fills: list[dict[str, Any]] = []
         self._fills_frame_cache: Any = None
         self._fills_frame_cache_len = -1
@@ -799,6 +802,7 @@ class RustBroker:
         actual_size: float,
         price: float | None,
     ) -> None:
+        self._order_owners[id(order)] = owner
         # 回填订单创建时刻的 bar 时间戳（用于回测落库映射「委托日期」，未成交取消单同样可得）
         if getattr(order, "created_ts", None) is None:
             try:
@@ -905,6 +909,11 @@ class RustBroker:
         """
         if order.status in (Order.Completed, Order.Canceled, Order.Expired):
             return False
+
+        # 无 owner 入参时（如策略主动 self.cancel(order)）反查归属策略，
+        # 确保终态（Canceled/Expired）仍能回调 notify_order。
+        if owner is None:
+            owner = self._order_owners.get(id(order))
 
         parent = getattr(order, "parent", None)
         if parent is not None:
