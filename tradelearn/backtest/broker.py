@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from tradelearn.backtest.strategy import Strategy
 
 OrderPayload = tuple[int, str, str, str, float, float | None, float | None]
+_MISSING = object()
 _EMPTY_ORDER_BUFFER: tuple[()] = ()
 CompactFillBatch = tuple[list[int], list[float], list[float], list[float], list[float], list[float]]
 _ORDER_TYPE_TO_RUST = {
@@ -95,6 +96,7 @@ class RustBroker:
         self._control_updates: dict[int, Order] = {}
         self._order_owners: dict[int, Strategy] = {}
         self._order_deadlines: dict[int, int | None] = {}
+        self._valid_deadline_by_ref: dict[int, Any] = {}
         self._native_order_events: list[tuple[int, str]] = []
         self._authoritative_terminal_refs: set[int] = set()
         self._proxy_events: list[Any] = []
@@ -818,6 +820,85 @@ class RustBroker:
         if not order.alive():
             return
 
+        # 对齐 backtrader ``_pchildren``：把子单登记进其父单的子单组，
+        # 供任一子单成交/失效时连带撤销同组其余子单（见 ``_bracketize``）。
+        if order.parent is not None:
+            self._pchildren.setdefault(id(order.parent), []).append(order)
+
+        # 父单未成交时，bracket 子单只是被登记并挂起，**尚未递交市场**。
+        if order.parent is not None and order.parent.status != Order.Completed:
+            if not order.parent.alive():
+                self.cancel(order)
+                return
+            self._deferred_child_orders.setdefault(id(order.parent), []).append(
+                (order, is_buy, actual_size, price)
+            )
+            order.status = Order.Accepted
+            self._notify_order_event(owner, order)
+            return
+
+        self._route_accepted_order_to_matcher(order, is_buy, actual_size, price)
+        self._notify_order_event(owner, order)
+
+    def _route_accepted_order_to_matcher(
+        self,
+        order: Order,
+        is_buy: bool,
+        actual_size: float,
+        price: float | None,
+    ) -> None:
+        if self._engine is not None:
+            side_str = "buy" if is_buy else "sell"
+            payload = self._rust_order_payload(order, side_str, actual_size, price)
+            if self._buffer_order_submissions:
+                # 缓冲契约保持 7 元组不变；trail 参数经 _trail_params_by_ref 旁路携带
+                self._trail_params_by_ref[order.ref] = self._trail_params(order)
+                self._order_submit_buffer.append((order.ref, *payload))
+            else:
+                trail_amount, trail_percent = self._trail_params(order)
+                self._submit_to_rust_engine(order, *payload, trail_amount, trail_percent)
+            order.status = Order.Accepted
+        else:
+            order.status = Order.Accepted
+            self._pending_orders.append(order)
+
+    def cancel(self, order: Order) -> None:
+        """Cancel an intent, including children that have not reached the kernel."""
+        if order.ref in self._authoritative_terminal_refs:
+            return
+        if not self._cancel_order_mirror(order):
+            return
+        if id(order) in self._bound_orders:
+            self._cancel_buffer.append(order.ref)
+        for child, *_ in self._deferred_child_orders.pop(id(order), ()):
+            self.cancel(child)
+
+    def _cancel_order_mirror(self, order: Order, owner: Strategy | None = None) -> bool:
+        if not order.alive():
+            return False
+        self._finish_order(order, Order.Canceled, owner)
+        return True
+
+    def _finish_order(self, order: Order, status: int, owner: Strategy | None = None) -> None:
+        if not order.alive():
+            return
+        order.status = status
+        self._pending_orders = [pending for pending in self._pending_orders if pending is not order]
+        # 注意：不能用 ``owner or ...`` —— Strategy 定义了 ``__len__``，对其做布尔
+        # 判断会触发 ``len(owner)``（在无数据/哑数据的测试适配器上会抛错），
+        # 必须显式判 None。
+        if owner is None:
+            owner = self._order_owners.get(id(order))
+        if owner is not None:
+            pending = owner._pending_size.get(order.data, 0.0)
+            size = order.size if order.isbuy() else -order.size
+            owner._pending_size[order.data] = pending - size
+            self._notify_order_event(owner, order)
+
+    def receive_order_events(self, events: list[tuple[int, str]]) -> None:
+        self._native_order_events.extend(events)
+
+    def _cancel_oco_siblings(self, owner: Strategy, completed: Order) -> None:
         """Cancel live OCO siblings after one order in the OCO pair fills.
 
         被 OCO 连带撤销的兄弟单若本身是 bracket 子单，还需级联撤销其 bracket 同组
@@ -884,19 +965,45 @@ class RustBroker:
             self._pchildren.pop(group_key, None)
         self._deferred_child_orders.pop(group_key, None)
 
-    def _normalize_deadline(self, order: Order) -> int | None:
-        valid = order.valid
+    def _order_created_datetime(self, order: Order) -> Any:
+        """订单创建时刻的时间基准（相对 order.valid 以此为起算点）。
+
+        主运行时时钟来自策略主数据（owner.data），而非最后可用的次数据 bar；
+        优先复用已回填的 ``order.created_ts``，缺失时按 owner/order 数据取当前 bar 时间戳。
+        """
+        created_ts = getattr(order, "created_ts", None)
+        if created_ts is not None:
+            return created_ts
+        owner = self._order_owners.get(id(order))
+        data = getattr(owner, "data", None) or order.data
+        if data is None:
+            return None
+        try:
+            return self._fill_datetime(data)
+        except Exception:
+            return None
+
+    def _order_valid_deadline(self, order: Order) -> Any:
+        """把 order.valid 解析为该订单的绝对失效时间（datetime）；无有效值返回 None。
+
+        支持的类型（与 backtrader 语义对齐）：
+          - timedelta：自「创建 bar 时间」起相对 N 天/秒；
+          - datetime/date：绝对失效时间；
+          - 数字：视为相对秒数（向后兼容）。
+
+        相对 valid 以「订单创建时刻」为基准，且只算一次并缓存，否则每 bar 用当前
+        时间重算会让 deadline 永远后移、永不触发。
+
+        关键：缓存键必须用对象身份 id(order) 而非 order.ref。
+        order.ref 会被复用（Python provisional ref 与 Rust 分配的 ref 空间不一致，
+        撤销/未递交的订单消耗 provisional 号却不占 Rust 号），若按 ref 缓存，
+        新订单会命中旧订单遗留的 deadline，导致订单被错误地提前 Expired，
+        进而使真实成交无法同步（Rust 引擎已成交、Python 镜像停在 Expired），
+        最终持仓/交易/订单三表数据相互矛盾。
+        """
+        valid = getattr(order, "valid", None)
         if valid is None:
             return None
-        # 相对 valid（timedelta/数字）必须以「订单创建时刻」为基准，
-        # 且只算一次并缓存，否则每 bar 用当前时间重算会让 deadline 永远后移、永不触发。
-        #
-        # 关键：缓存键必须用对象身份 id(order) 而非 order.ref。
-        # order.ref 会被复用（Python provisional ref 与 Rust 分配的 ref 空间不一致，
-        # 撤销/未递交的订单消耗 provisional 号却不占 Rust 号），若按 ref 缓存，
-        # 新订单会命中旧订单遗留的 deadline，导致订单被错误地提前 Expired，
-        # 进而使真实成交无法同步（Rust 引擎已成交、Python 镜像停在 Expired），
-        # 最终持仓/交易/订单三表数据相互矛盾。
         cache_key = id(order)
         cached = self._valid_deadline_by_ref.get(cache_key, _MISSING)
         if cached is not _MISSING:
@@ -936,6 +1043,18 @@ class RustBroker:
             return None
         return None
 
+    def _normalize_deadline(self, order: Order) -> int | None:
+        """Rust ``configure_order`` 所需的失效时间戳（int epoch 秒）；无有效值返回 None。"""
+        deadline = self._order_valid_deadline(order)
+        if deadline is None:
+            return None
+        try:
+            if deadline.tzinfo is None:
+                deadline = deadline.replace(tzinfo=datetime.timezone.utc)
+            return int(deadline.timestamp())
+        except (AttributeError, OverflowError, OSError, ValueError):
+            return None
+
     def drain_order_controls(self) -> tuple[list[int], list[tuple[int, int | None, int | None]]]:
         updates = []
         for order in self._control_updates.values():
@@ -958,37 +1077,6 @@ class RustBroker:
         if cancel is not None:
             for ref in cancels:
                 cancel(ref)
-
-    def _expire_valid_orders(self, i: int, owner: Strategy | None = None) -> None:
-        """按 order.valid 到期撤销存活挂单（在每 bar 撮合前调用）。
-
-        存活订单（Submitted/Accepted/Partial）超过 valid 失效时间即置为 Expired，
-        并从 Rust 侧撤单（经 _cancel_buffer 由 bar loop 消化）。
-        """
-        self._curr_idx = i
-        now_cache: dict[int, Any] = {}
-        for order in list(self._orders):
-            if order.status not in (Order.Submitted, Order.Accepted, Order.Partial):
-                continue
-            deadline = self._order_valid_deadline(order)
-            if deadline is None:
-                continue
-            now = now_cache.get(id(order.data), _MISSING)
-            if now is _MISSING:
-                now = self._now_datetime(order.data)
-                now_cache[id(order.data)] = now
-            if now is None or now <= deadline:
-                continue
-            # 到期：置 Expired + 通知 Rust 撤单 + 回调策略
-            order.status = Order.Expired
-            self._pending_orders = [p for p in self._pending_orders if p is not order]
-            if self._engine is not None:
-                self._cancel_buffer.append(order.ref)
-            if owner is not None:
-                self._notify_order_event(owner, order)
-            # 子单失效 → 连带撤销同组其余存活子单（对齐 backtrader bracket 语义）
-            if owner is not None:
-                self._bracketize(owner, order, cancel=True)
 
     def _process_order_events(self, strategy: Strategy) -> None:
         events, self._native_order_events = self._native_order_events, []
