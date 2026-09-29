@@ -6738,7 +6738,7 @@ wheels = [
 
 [[package]]
 name = "trade-learn"
-version = "0.2.5+2"
+version = "0.2.6+1"
 source = { editable = "." }
 dependencies = [
     { name = "bokeh" },

@@ -72,6 +72,8 @@ pub struct BacktestEngine {
     // Pending orders
     pending: Vec<OrderEvent>,
     next_order_id: OrderId,
+    // 预留字段：历史遗留，当前撮合流程未读取（订单激活门控已下沉到 Python 侧 broker）。
+    #[allow(dead_code)]
     activation_bar: usize,
 
     // Records
