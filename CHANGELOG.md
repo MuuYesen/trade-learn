@@ -5,6 +5,13 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
+## [Unreleased]
+
+### 修复
+- **订单历史**：记录真实委托创建时间和成交时间，附带委托价格与 parent/OCO 引用，保留 tag/info；异步数据源按各自游标记录成交，避免引用未来日期。
+- **括号订单**：`buy_bracket` / `sell_bracket` 支持以 `stopexec=None` 或 `limitexec=None` 关闭对应侧，返回值保留 `None` 占位，不生成额外市场订单。
+- 保持 `exact` 默认撮合模式和已验证的 Rust 订单生命周期。PR #6 中重复的平行实现未替换现有内核。
+
 ## [0.2.6] - 2026-09-23
 
 ### 新增

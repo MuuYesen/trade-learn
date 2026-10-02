@@ -81,19 +81,32 @@ def _orders_frame(broker: Any) -> pd.DataFrame:
         rows.append(
             {
                 "ref": order.ref,
-                "datetime": broker._fill_datetime(data) if data is not None else None,
+                "datetime": order.created_ts,
                 "data": getattr(data, "_name", None),
                 "side": "buy" if order.isbuy() else "sell",
                 "exectype": order.exectype,
                 "status": order.getstatusname(),
+                "price": order.price,
+                "pricelimit": order.pricelimit,
+                "parent_ref": getattr(order.parent, "ref", None),
+                "oco_ref": getattr(order.oco, "ref", None),
                 "size": order.size,
                 "executed_size": order.executed.size,
                 "executed_price": order.executed.price,
+                "executed_dt": order.executed.dt,
                 "tag": order.info.get("tag"),
                 "info": dict(order.info),
             }
         )
-    return pd.DataFrame(rows)
+    frame = pd.DataFrame(rows)
+    for column in ("datetime", "executed_dt"):
+        if not frame.empty:
+            values = frame[column]
+            if pd.api.types.is_numeric_dtype(values):
+                frame[column] = pd.to_datetime(values, unit="s", utc=True)
+            else:
+                frame[column] = pd.to_datetime(values, utc=True)
+    return frame
 
 
 def _fills_frame(broker: Any) -> pd.DataFrame:

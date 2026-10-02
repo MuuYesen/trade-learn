@@ -362,9 +362,10 @@ class RustBroker:
         if timestamps is None:
             return None
         try:
-            if self._curr_idx >= len(timestamps):
+            cursor = getattr(data, "_cursor", self._curr_idx)
+            if cursor < 0 or cursor >= len(timestamps):
                 return None
-            value = timestamps[self._curr_idx]
+            value = timestamps[cursor]
         except (IndexError, TypeError):
             return None
         try:
@@ -795,6 +796,8 @@ class RustBroker:
         actual_size: float,
         price: float | None,
     ) -> None:
+        clock = getattr(owner, "data", None)
+        order.created_ts = self._fill_datetime(clock if clock is not None else order.data)
         self._order_owners[id(order)] = owner
         self._order_deadlines[id(order)] = self._normalize_deadline(order)
         order.status = Order.Submitted
@@ -1104,6 +1107,7 @@ class RustBroker:
                 size=abs_size,
                 comm=comm,
                 value=abs_size * price * mult,
+                dt=self._fill_datetime(order.data),
             )
 
             data = order.data

@@ -259,6 +259,7 @@ class ExecutedInfo:
     comm: float = 0.0
     slippage: float = 0.0
     pnl: float = 0.0
+    dt: Any = None
 
 
 @dataclass
@@ -286,6 +287,7 @@ class Order:
     trailamount: float | None = None
     trailpercent: float | None = None
     info: dict[str, Any] = field(default_factory=dict)
+    created_ts: Any = None
 
     def getstatusname(self) -> str:
         return [

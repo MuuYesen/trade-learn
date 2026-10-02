@@ -344,36 +344,59 @@ class Strategy:
         limitargs: dict[str, Any] | None = None,
         **kwargs,
     ) -> list[Any]:
+        """Create a bracket order group (low side = buy, high side = sell).
+
+        Behavior mirrors ``backtrader.Strategy.buy_bracket``:
+
+          - main side : **buy** with ``exectype`` (default ``Limit``)
+          - low  side : **sell** with ``stopexec``  (default ``Stop``)
+          - high side : **sell** with ``limitexec`` (default ``Limit``)
+
+        High/low sides can be suppressed by passing ``None``:
+
+          - ``limitexec=None`` suppresses the *high side* (take-profit)
+          - ``stopexec=None``  suppresses the *low side*  (stop-loss)
+
+        Returns a list of exactly 3 orders ``[main, stop, limit]``; suppressed
+        entries are ``None``.
+        """
         data = self._resolve_data(data)
+        # 边被抑制时不能把 None 当作 exectype 传下去，否则会被 broker 兜底成 Market 单。
         main = self._buy_data(
             data=data,
             size=size,
             price=price,
             pricelimit=pricelimit,
             exectype=exectype,
-            transmit=False,
+            transmit=limitexec is None and stopexec is None,
             **kwargs,
             **dict(oargs or {}),
         )
-        stop = self._sell_data(
-            data=data,
-            size=size,
-            price=stopprice,
-            exectype=stopexec,
-            parent=main,
-            transmit=False,
-            **dict(stopargs or {}),
-        )
-        limit = self._sell_data(
-            data=data,
-            size=size,
-            price=limitprice,
-            exectype=limitexec,
-            parent=main,
-            oco=stop,
-            transmit=True,
-            **dict(limitargs or {}),
-        )
+
+        stop = None
+        if stopexec is not None:
+            stop = self._sell_data(
+                data=data,
+                size=size,
+                price=stopprice,
+                exectype=stopexec,
+                parent=main,
+                transmit=limitexec is None,
+                **dict(stopargs or {}),
+            )
+
+        limit = None
+        if limitexec is not None:
+            limit = self._sell_data(
+                data=data,
+                size=size,
+                price=limitprice,
+                exectype=limitexec,
+                parent=main,
+                oco=stop,
+                transmit=True,
+                **dict(limitargs or {}),
+            )
         return [main, stop, limit]
 
     def sell_bracket(
@@ -392,6 +415,17 @@ class Strategy:
         limitargs: dict[str, Any] | None = None,
         **kwargs,
     ) -> list[Any]:
+        """Create a bracket order group (low side = sell, high side = buy).
+
+        Mirror image of :meth:`buy_bracket`; same suppress semantics:
+
+          - main side : **sell** with ``exectype`` (default ``Limit``)
+          - high side : **buy**  with ``stopexec``  (default ``Stop``)
+          - low  side : **buy**  with ``limitexec`` (default ``Limit``)
+
+        Suppress sides by passing ``None`` (``stopexec=None`` / ``limitexec=None``).
+        Returns ``[main, stop, limit]`` with ``None`` for suppressed entries.
+        """
         data = self._resolve_data(data)
         main = self._sell_data(
             data=data,
@@ -399,29 +433,35 @@ class Strategy:
             price=price,
             pricelimit=pricelimit,
             exectype=exectype,
-            transmit=False,
+            transmit=limitexec is None and stopexec is None,
             **kwargs,
             **dict(oargs or {}),
         )
-        stop = self._buy_data(
-            data=data,
-            size=size,
-            price=stopprice,
-            exectype=stopexec,
-            parent=main,
-            transmit=False,
-            **dict(stopargs or {}),
-        )
-        limit = self._buy_data(
-            data=data,
-            size=size,
-            price=limitprice,
-            exectype=limitexec,
-            parent=main,
-            oco=stop,
-            transmit=True,
-            **dict(limitargs or {}),
-        )
+
+        stop = None
+        if stopexec is not None:
+            stop = self._buy_data(
+                data=data,
+                size=size,
+                price=stopprice,
+                exectype=stopexec,
+                parent=main,
+                transmit=limitexec is None,
+                **dict(stopargs or {}),
+            )
+
+        limit = None
+        if limitexec is not None:
+            limit = self._buy_data(
+                data=data,
+                size=size,
+                price=limitprice,
+                exectype=limitexec,
+                parent=main,
+                oco=stop,
+                transmit=True,
+                **dict(limitargs or {}),
+            )
         return [main, stop, limit]
 
     def _on_fill(self, data: Any, signed_size: float, price: float) -> None:
