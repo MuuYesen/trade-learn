@@ -109,6 +109,10 @@ provider.history_ohlc("AAPL", exchange="NASDAQ", start="2024-01-01")
 
 ### TDX
 
+Provider 的频率区分大小写：`1m` 表示一分钟，`1M` 表示月线。
+TDX 与 TradingView 均接受月线别名 `M` / `monthly`，返回的 `attrs["freq"]` 统一为 `1M`。
+旧版 TDX 将 `1m` 错误映射为月线；依赖该行为的调用应改用 `1M`。
+
 TDX 输出会归一为 canonical symbol：
 
 ```python

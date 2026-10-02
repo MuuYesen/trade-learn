@@ -56,13 +56,13 @@ pub fn match_order_at_price(
             let stop = order.stop_price?;
             let limit = order.limit_price?;
             if order.side == OrderSide::Buy {
-                if price >= stop && price <= limit {
+                if (order.trail_triggered || price >= stop) && price <= limit {
                     Some(price)
                 } else {
                     None
                 }
             } else {
-                if price <= stop && price >= limit {
+                if (order.trail_triggered || price <= stop) && price >= limit {
                     Some(price)
                 } else {
                     None
@@ -181,10 +181,14 @@ pub fn match_order(
             let stop = order.stop_price?;
             let limit = order.limit_price?;
             match order.side {
-                OrderSide::Buy if bar.high >= stop && bar.low <= limit => {
+                OrderSide::Buy
+                    if (order.trail_triggered || bar.high >= stop) && bar.low <= limit =>
+                {
                     Some(execution_price.min(limit))
                 }
-                OrderSide::Sell if bar.low <= stop && bar.high >= limit => {
+                OrderSide::Sell
+                    if (order.trail_triggered || bar.low <= stop) && bar.high >= limit =>
+                {
                     Some(execution_price.max(limit))
                 }
                 _ => None,
@@ -246,8 +250,10 @@ pub(crate) fn smart_match_price(
         return Some((0.0, path[0]));
     }
 
-    let mut stop_limit_armed =
-        order.order_type == OrderType::StopTrailLimit && order.trail_triggered;
+    let mut stop_limit_armed = matches!(
+        order.order_type,
+        OrderType::StopLimit | OrderType::StopTrailLimit
+    ) && order.trail_triggered;
     for (segment_idx, pair) in path.windows(2).enumerate() {
         let start = pair[0];
         let end = pair[1];
@@ -267,13 +273,18 @@ pub(crate) fn smart_match_price(
             OrderType::StopLimit => {
                 let stop = order.stop_price?;
                 let limit = order.limit_price?;
-                if !stop_limit_armed && stop_cross_price(order.side, stop, start, end).is_some() {
+                let limit_start = if stop_limit_armed {
+                    start
+                } else {
+                    let Some(trigger_price) = stop_cross_price(order.side, stop, start, end) else {
+                        continue;
+                    };
                     stop_limit_armed = true;
-                }
-                if stop_limit_armed {
-                    if let Some(price) = limit_cross_price(order.side, limit, start, end) {
-                        return Some((smart_segment_rank(segment_idx, start, end, price), price));
-                    }
+                    trigger_price
+                };
+                // Do not reuse prices visited before the stop activated.
+                if let Some(price) = limit_cross_price(order.side, limit, limit_start, end) {
+                    return Some((smart_segment_rank(segment_idx, start, end, price), price));
                 }
             }
             OrderType::Market => unreachable!(),
@@ -367,6 +378,17 @@ fn trailing_stop_price(order: &OrderEvent) -> Option<f64> {
 /// Advance a surviving order only after matching against the old watermark.
 /// A triggered trailing limit remains a limit order and never trails again.
 pub(crate) fn advance_trailing_order(order: &mut OrderEvent, bar: &BarEvent) {
+    // The persisted flag also represents ordinary StopLimit activation. Once
+    // armed, either kind remains a limit order across subsequent bars.
+    if order.order_type == OrderType::StopLimit {
+        if is_tradable_bar(bar) {
+            order.trail_triggered |= order.stop_price.is_some_and(|stop| match order.side {
+                OrderSide::Buy => bar.high >= stop,
+                OrderSide::Sell => bar.low <= stop,
+            });
+        }
+        return;
+    }
     if !is_tradable_bar(bar)
         || !matches!(
             order.order_type,

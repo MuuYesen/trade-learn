@@ -7,32 +7,39 @@ from collections.abc import Callable
 import pandas as pd
 import pynecore.lib as pyne_lib
 import pynecore.lib.ta as pyne_ta
-from pynecore.core.function_isolation import isolate_function, reset as reset_pyne_functions
+from pynecore.core.function_isolation import isolate_function
+from pynecore.core.function_isolation import reset as reset_pyne_functions
 from pynecore.core.series import inline_series
 from pynecore.types.na import NA
 
 
 def _sma(close: pd.Series, length: int = 20) -> pd.Series:
+    """Replay PyneCore simple moving averages over the indexed close-price history."""
     return _run_source_indicator(close, "sma", lambda source, fn: fn(source, length))
 
 
 def _ema(close: pd.Series, length: int = 20) -> pd.Series:
+    """Replay PyneCore exponential moving averages over the indexed close-price history."""
     return _run_source_indicator(close, "ema", lambda source, fn: fn(source, length))
 
 
 def _wma(close: pd.Series, length: int = 20) -> pd.Series:
+    """Replay PyneCore weighted moving averages with the requested window length."""
     return _run_source_indicator(close, "wma", lambda source, fn: fn(source, length))
 
 
 def _rma(close: pd.Series, length: int = 14) -> pd.Series:
+    """Replay PyneCore running moving averages with the requested smoothing length."""
     return _run_source_indicator(close, "rma", lambda source, fn: fn(source, length))
 
 
 def _hma(close: pd.Series, length: int = 20) -> pd.Series:
+    """Replay PyneCore Hull moving averages over the indexed close-price history."""
     return _run_source_indicator(close, "hma", lambda source, fn: fn(source, length))
 
 
 def _swma(close: pd.Series) -> pd.Series:
+    """Replay PyneCore symmetrically weighted moving averages using its fixed window."""
     return _run_source_indicator(close, "swma", lambda source, fn: fn(source))
 
 
@@ -43,6 +50,7 @@ def _alma(
     sigma: float = 6.0,
     floor: bool = False,
 ) -> pd.Series:
+    """Replay PyneCore ALMA with the requested window, offset, sigma, and floor option."""
     return _run_source_indicator(
         close,
         "alma",
@@ -51,26 +59,32 @@ def _alma(
 
 
 def _stdev(close: pd.Series, length: int = 20, biased: bool = True) -> pd.Series:
+    """Return PyneCore rolling standard deviations with the requested bias convention."""
     return _run_source_indicator(close, "stdev", lambda source, fn: fn(source, length, biased))
 
 
 def _variance(close: pd.Series, length: int = 20, biased: bool = True) -> pd.Series:
+    """Return PyneCore rolling variances with the requested bias convention."""
     return _run_source_indicator(close, "variance", lambda source, fn: fn(source, length, biased))
 
 
 def _roc(close: pd.Series, length: int = 10) -> pd.Series:
+    """Replay PyneCore rate of change over the requested number of bars."""
     return _run_source_indicator(close, "roc", lambda source, fn: fn(source, length))
 
 
 def _mom(close: pd.Series, length: int = 10) -> pd.Series:
+    """Replay PyneCore momentum over the requested number of bars."""
     return _run_source_indicator(close, "mom", lambda source, fn: fn(source, length))
 
 
 def _cmo(close: pd.Series, length: int = 14) -> pd.Series:
+    """Replay the PyneCore Chande momentum oscillator over the close-price history."""
     return _run_source_indicator(close, "cmo", lambda source, fn: fn(source, length))
 
 
 def _tsi(close: pd.Series, short_length: int = 13, long_length: int = 25) -> pd.Series:
+    """Replay PyneCore true strength with independent short and long smoothing lengths."""
     return _run_source_indicator(
         close,
         "tsi",
@@ -79,18 +93,22 @@ def _tsi(close: pd.Series, short_length: int = 13, long_length: int = 25) -> pd.
 
 
 def _change(close: pd.Series, length: int = 1) -> pd.Series:
+    """Return PyneCore changes relative to the observation length bars earlier."""
     return _run_source_indicator(close, "change", lambda source, fn: fn(source, length))
 
 
 def _cum(close: pd.Series) -> pd.Series:
+    """Replay the PyneCore cumulative sum while preserving the source index."""
     return _run_source_indicator(close, "cum", lambda source, fn: fn(source))
 
 
 def _linreg(close: pd.Series, length: int = 14, offset: int = 0) -> pd.Series:
+    """Replay PyneCore rolling linear regression with the specified output offset."""
     return _run_source_indicator(close, "linreg", lambda source, fn: fn(source, length, offset))
 
 
 def _bbands(close: pd.Series, length: int = 20, std: float = 2.0) -> pd.DataFrame:
+    """Return Bollinger bands with normalized lower, mid, and upper column ordering."""
     frame = _run_source_frame(
         close,
         "bb",
@@ -101,6 +119,7 @@ def _bbands(close: pd.Series, length: int = 20, std: float = 2.0) -> pd.DataFram
 
 
 def _bb(close: pd.Series, length: int = 20, mult: float = 2.0) -> pd.DataFrame:
+    """Return PyneCore Bollinger bands in native mid, upper, and lower column ordering."""
     return _run_source_frame(
         close,
         "bb",
@@ -110,10 +129,12 @@ def _bb(close: pd.Series, length: int = 20, mult: float = 2.0) -> pd.DataFrame:
 
 
 def _bbw(close: pd.Series, length: int = 20, mult: float = 2.0) -> pd.Series:
+    """Replay PyneCore Bollinger bandwidth for the requested window and multiplier."""
     return _run_source_indicator(close, "bbw", lambda source, fn: fn(source, length, mult))
 
 
 def _rsi(close: pd.Series, length: int = 14) -> pd.Series:
+    """Replay PyneCore relative strength over the indexed close-price history."""
     return _run_source_indicator(close, "rsi", lambda source, fn: fn(source, length))
 
 
@@ -123,6 +144,7 @@ def _macd(
     slow: int = 26,
     signal: int = 9,
 ) -> pd.DataFrame:
+    """Return indexed PyneCore macd, signal, and histogram columns."""
     return _run_source_frame(
         close,
         "macd",
@@ -137,6 +159,7 @@ def _atr(
     close: pd.Series,
     length: int = 14,
 ) -> pd.Series:
+    """Replay PyneCore average true range from synchronized high, low, and close bars."""
     return _run_ohlcv_indicator(high, low, close, None, "atr", lambda fn: fn(length))
 
 
@@ -146,6 +169,7 @@ def _adx(
     close: pd.Series,
     length: int = 14,
 ) -> pd.DataFrame:
+    """Return ADX, positive DI, and negative DI using one length for both DMI smoothings."""
     frame = _run_ohlcv_frame(
         high,
         low,
@@ -165,6 +189,7 @@ def _dmi(
     length: int = 14,
     smoothing: int = 14,
 ) -> pd.DataFrame:
+    """Return positive DI, negative DI, and ADX with independent directional and ADX lengths."""
     return _run_ohlcv_frame(
         high,
         low,
@@ -182,10 +207,12 @@ def _tr(
     close: pd.Series,
     handle_na: bool = False,
 ) -> pd.Series:
+    """Return PyneCore true range with its optional missing-previous-close handling."""
     return _run_ohlcv_indicator(high, low, close, None, "tr", lambda fn: fn(handle_na))
 
 
 def _obv(close: pd.Series, volume: pd.Series) -> pd.Series:
+    """Replay PyneCore on-balance volume from close prices and their aligned volume."""
     close_series = pd.Series(close)
     return _run_ohlcv_indicator(
         close_series,
@@ -205,6 +232,7 @@ def _sar(
     inc: float = 0.02,
     max: float = 0.2,
 ) -> pd.Series:
+    """Replay PyneCore parabolic SAR with configured initial, incremental, and maximum factors."""
     return _run_ohlcv_indicator(high, low, close, None, "sar", lambda fn: fn(start, inc, max))
 
 
@@ -214,6 +242,7 @@ def _stoch(
     close: pd.Series,
     length: int = 14,
 ) -> pd.Series:
+    """Replay PyneCore stochastic values using close within the high-low price range."""
     return _run_ohlcv_indicator(
         high,
         low,
@@ -232,6 +261,7 @@ def _kc(
     mult: float = 2.0,
     use_true_range: bool = True,
 ) -> pd.DataFrame:
+    """Return Keltner mid, upper, and lower bands using true range or high-low range."""
     return _run_ohlcv_frame(
         high,
         low,
@@ -251,6 +281,7 @@ def _kcw(
     mult: float = 2.0,
     use_true_range: bool = True,
 ) -> pd.Series:
+    """Return Keltner channel width with the requested range source and multiplier."""
     return _run_ohlcv_indicator(
         high,
         low,
@@ -267,6 +298,7 @@ def _cci(
     close: pd.Series,
     length: int = 20,
 ) -> pd.Series:
+    """Replay PyneCore commodity channel values using the high-low-close typical price."""
     return _run_ohlcv_indicator(
         high,
         low,
@@ -284,6 +316,7 @@ def _mfi(
     volume: pd.Series,
     length: int = 14,
 ) -> pd.Series:
+    """Replay PyneCore money-flow strength from typical price and aligned volume."""
     return _run_ohlcv_indicator(
         high,
         low,
@@ -300,6 +333,7 @@ def _vwap(
     close: pd.Series,
     volume: pd.Series,
 ) -> pd.Series:
+    """Return close-based volume-weighted average price anchored at the first supplied bar."""
     return _run_ohlcv_indicator(
         high,
         low,
@@ -317,6 +351,7 @@ def _supertrend(
     length: int = 10,
     multiplier: float = 3.0,
 ) -> pd.DataFrame:
+    """Return trend and direction plus long/short columns masked by direction sign."""
     frame = _run_ohlcv_frame(
         high,
         low,
@@ -340,6 +375,7 @@ def _ichimoku(
     kijun: int = 26,
     senkou: int = 52,
 ) -> pd.DataFrame:
+    """Return rolling midpoint lines, forward-shifted spans, and backward-shifted close."""
     high = pd.Series(high)
     low = pd.Series(low)
     close = pd.Series(close)
@@ -365,6 +401,7 @@ def _run_source_indicator(
     name: str,
     call: Callable[[object, Callable], object],
 ) -> pd.Series:
+    """Wrap one PyneCore output per source bar in a Series retaining index and name."""
     values = _run_source_values(source, name, call)
     return pd.Series(values, index=pd.Series(source).index, name=getattr(source, "name", None))
 
@@ -375,6 +412,7 @@ def _run_source_frame(
     call: Callable[[object, Callable], object],
     columns: tuple[str, ...],
 ) -> pd.DataFrame:
+    """Wrap tuple-valued PyneCore outputs in named columns retaining the source index."""
     rows = _run_source_values(source, name, call)
     return pd.DataFrame(rows, index=pd.Series(source).index, columns=list(columns))
 
@@ -384,6 +422,7 @@ def _run_source_values(
     name: str,
     call: Callable[[object, Callable], object],
 ) -> list[object]:
+    """Reset isolated PyneCore state, replay source bars, and normalize missing outputs."""
     series = pd.Series(source)
     reset_pyne_functions()
     fn = isolate_function(getattr(pyne_ta, name), name, f"tradelearn.tv.{name}")
@@ -404,6 +443,7 @@ def _run_ohlcv_indicator(
     name: str,
     call: Callable[[Callable], object],
 ) -> pd.Series:
+    """Wrap scalar OHLCV replay results using the close index and indicator name."""
     values = _run_ohlcv_values(high, low, close, volume, name, call)
     return pd.Series(values, index=pd.Series(close).index, name=name)
 
@@ -417,6 +457,7 @@ def _run_ohlcv_frame(
     call: Callable[[Callable], object],
     columns: tuple[str, ...],
 ) -> pd.DataFrame:
+    """Wrap multi-output OHLCV replay results using named columns and the close index."""
     rows = _run_ohlcv_values(high, low, close, volume, name, call)
     return pd.DataFrame(rows, index=pd.Series(close).index, columns=list(columns))
 
@@ -429,6 +470,7 @@ def _run_ohlcv_values(
     name: str,
     call: Callable[[Callable], object],
 ) -> list[object]:
+    """Replay isolated OHLCV state, defaulting absent volume to one and aligning supplied volume."""
     high_series = pd.Series(high)
     low_series = pd.Series(low)
     close_series = pd.Series(close)
@@ -455,6 +497,7 @@ def _set_pyne_ohlcv(
     close: object,
     volume: object,
 ) -> None:
+    """Set the current PyneCore bar and derived prices, substituting close for unavailable open."""
     high_value = _pyne_value(high)
     low_value = _pyne_value(low)
     close_value = _pyne_value(close)
@@ -482,12 +525,14 @@ def _set_pyne_ohlcv(
 
 
 def _pyne_value(value: object) -> float | NA:
+    """Convert pandas missing values to typed PyneCore NA and numeric values to float."""
     if pd.isna(value):
         return NA(float)
     return float(value)
 
 
 def _to_pandas_value(value: object) -> object:
+    """Recursively convert PyneCore NA values to None, including tuple-valued outputs."""
     if isinstance(value, NA):
         return None
     if isinstance(value, tuple):

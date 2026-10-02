@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 
-from examples.tutorials import run_tutorial_smoke
+from tests.smoke.test_tutorials import run_tutorial_smoke
 
 
 def test_tutorial_smoke_covers_stage9_topics() -> None:

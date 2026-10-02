@@ -122,6 +122,23 @@ def test_alpha101_exports_migrated_formulas_like_legacy_oracle() -> None:
         "alpha101",
     ]
     expected = _legacy_alpha101(data, names)
+    # Alpha002/003 intentionally correct the legacy zero-fill of undefined
+    # correlations. Use pandas Pearson correlation as their independent oracle;
+    # all other formulas still compare with the original legacy output.
+    wide = data.pivot(index="date", columns="symbol")
+    def rank(values):
+        return values.rank(axis=1, method="min", pct=True)
+
+    corrected = {
+        "alpha002_101": -rank(np.log(wide["volume"]).diff(2)).rolling(6).corr(
+            rank((wide["close"] - wide["open"]) / wide["open"])
+        ),
+        "alpha003_101": -rank(wide["open"]).rolling(10).corr(rank(wide["volume"])),
+    }
+    expected = expected.set_index(["date", "symbol"])
+    for column, values in corrected.items():
+        expected[column] = values.replace([np.inf, -np.inf], np.nan).stack(future_stack=True)
+    expected = expected.reset_index()
 
     result = alpha101(data, names=names)
 
@@ -281,3 +298,10 @@ def _stock_data() -> pd.DataFrame:
                 }
             )
     return pd.DataFrame(rows)
+
+
+def test_alpha066_undefined_price_ratio_does_not_become_finite_rank() -> None:
+    data = _stock_data().groupby("symbol").head(30)
+    assert (data["open"] == (data["high"] + data["low"]) / 2).all()
+    result = alpha101(data, names=["alpha066"])
+    assert result["alpha066_101"].isna().all()

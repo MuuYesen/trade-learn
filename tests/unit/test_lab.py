@@ -105,16 +105,18 @@ def test_start_lab_stack_starts_mlflow_mcp_then_jupyter() -> None:
         def __init__(self, args: tuple[str, ...], env: dict[str, str]) -> None:
             self.args = args
             self.env = env
+            self.returncode = None
             started.append(args)
 
-        def wait(self) -> int:
+        def wait(self, timeout=None) -> int:
+            self.returncode = 0
             return 0
 
         def terminate(self) -> None:
             terminated.append(self.args)
 
-        def poll(self) -> None:
-            return None
+        def poll(self) -> int | None:
+            return self.returncode
 
     def fake_popen(args: tuple[str, ...], *, env: dict[str, str]) -> FakeProcess:
         return FakeProcess(args, env)

@@ -10,8 +10,8 @@ import pytest
 from bokeh.plotting import figure
 
 from tradelearn import metrics
-from tradelearn.report import Reporter
 from tradelearn.backtest.reporting import market_data_from_datas
+from tradelearn.report import Reporter
 
 
 def test_reporter_summary_uses_metrics_functions() -> None:
@@ -527,7 +527,9 @@ def test_reporter_factor_rank_ic_uses_factor_analyzer() -> None:
         {"returns": _returns(), "trades": pd.DataFrame(), "analyzers": {"factor": analyzer}}
     )
 
-    pd.testing.assert_series_equal(reporter.factor_rank_ic(), analyzer.factor_information_coefficient())
+    pd.testing.assert_series_equal(
+        reporter.factor_rank_ic(), analyzer.factor_information_coefficient()
+    )
 
 
 def test_reporter_factor_turnover_uses_factor_analyzer() -> None:

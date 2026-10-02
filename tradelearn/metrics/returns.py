@@ -29,7 +29,7 @@ def simple_returns(prices: pd.Series | pd.DataFrame) -> pd.Series | pd.DataFrame
     >>> simple_returns(pd.Series([100.0, 105.0, 102.9])).round(4).tolist()
     [0.05, -0.02]
     """
-    return prices.pct_change().iloc[1:]
+    return prices.pct_change(fill_method=None).iloc[1:]
 
 
 def cum_returns(
@@ -61,7 +61,7 @@ def cum_returns(
     [0.1, 0.045, 0.0659]
     """
     clean = apply_nan_policy(returns, nan_policy)
-    compounded = (1.0 + clean).cumprod()
+    compounded = (1.0 + clean).cumprod(skipna=False)
     if starting_value == 0:
         return compounded - 1.0
     return compounded * starting_value
@@ -99,7 +99,7 @@ def annual_return(
     if len(clean) == 0:
         return np.nan
 
-    total_return = (1.0 + clean).prod()
+    total_return = (1.0 + clean).prod(skipna=False)
     years = len(clean) / periods
     result = total_return ** (1.0 / years) - 1.0
     if isinstance(result, pd.Series):

@@ -7,6 +7,8 @@ from collections.abc import Iterable
 import numpy as np
 import pandas as pd
 
+from ._rolling import weighted_mean
+
 try:
     from numba import njit
 except ImportError:  # pragma: no cover - exercised only in environments without numba
@@ -1895,7 +1897,6 @@ def _sequence(size: int) -> np.ndarray:
 
 def _regbeta(frame: pd.DataFrame, x_values: np.ndarray) -> pd.DataFrame:
     """Return rolling linear-regression slope against ``x_values``."""
-    window = len(x_values)
     values = frame.to_numpy(dtype=float, copy=False)
     slopes = _rolling_regression_slope_2d(values, np.asarray(x_values, dtype=float))
     return pd.DataFrame(slopes, index=frame.index, columns=frame.columns)
@@ -1913,7 +1914,7 @@ def _decay_linear(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return rolling linear weighted average."""
     weights = np.arange(1, window + 1, dtype=float)
     values = frame.to_numpy(dtype=float, copy=False)
-    result = _rolling_weighted_mean_2d(values, weights)
+    result = weighted_mean(values, weights)
     return pd.DataFrame(result, index=frame.index, columns=frame.columns)
 
 
@@ -1921,7 +1922,7 @@ def _wma(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     """Return legacy exponentially decayed weighted moving average."""
     weights = np.power(0.9, np.arange(window - 1, -1, -1, dtype=float))
     values = frame.to_numpy(dtype=float, copy=False)
-    result = _rolling_weighted_mean_2d(values, weights)
+    result = weighted_mean(values, weights)
     return pd.DataFrame(result, index=frame.index, columns=frame.columns)
 
 
@@ -1996,7 +1997,7 @@ def _rolling_average_rank_last_2d_numpy(values: np.ndarray, window: int) -> np.n
             valid = True
             for offset in range(window):
                 value = values[row - window + 1 + offset, col]
-                if np.isnan(value):
+                if not np.isfinite(value):
                     valid = False
                     break
                 if value < latest:
@@ -2005,33 +2006,6 @@ def _rolling_average_rank_last_2d_numpy(values: np.ndarray, window: int) -> np.n
                     equal += 1
             if valid:
                 result[row, col] = 1.0 + less + (equal - 1) / 2.0
-    return result
-
-
-def _rolling_weighted_mean_2d(values: np.ndarray, weights: np.ndarray) -> np.ndarray:
-    """Return rolling weighted means for each column."""
-    if njit is not None:
-        return _rolling_weighted_mean_2d_numba(values, weights)
-    return _rolling_weighted_mean_2d_numpy(values, weights)
-
-
-def _rolling_weighted_mean_2d_numpy(values: np.ndarray, weights: np.ndarray) -> np.ndarray:
-    rows, cols = values.shape
-    window = len(weights)
-    result = np.full((rows, cols), np.nan, dtype=float)
-    weight_sum = float(np.sum(weights))
-    for col in range(cols):
-        for row in range(window - 1, rows):
-            total = 0.0
-            valid = True
-            for offset in range(window):
-                value = values[row - window + 1 + offset, col]
-                if np.isnan(value):
-                    valid = False
-                    break
-                total += weights[offset] * value
-            if valid:
-                result[row, col] = total / weight_sum
     return result
 
 
@@ -2084,7 +2058,7 @@ if njit is not None:
                 valid = True
                 for offset in range(window):
                     value = values[row - window + 1 + offset, col]
-                    if np.isnan(value):
+                    if not np.isfinite(value):
                         valid = False
                         break
                     if value < latest:
@@ -2093,29 +2067,6 @@ if njit is not None:
                         equal += 1
                 if valid:
                     result[row, col] = 1.0 + less + (equal - 1) / 2.0
-        return result
-
-    @njit(cache=True)
-    def _rolling_weighted_mean_2d_numba(values: np.ndarray, weights: np.ndarray) -> np.ndarray:
-        rows, cols = values.shape
-        window = len(weights)
-        result = np.empty((rows, cols), dtype=np.float64)
-        result[:, :] = np.nan
-        weight_sum = 0.0
-        for offset in range(window):
-            weight_sum += weights[offset]
-        for col in range(cols):
-            for row in range(window - 1, rows):
-                total = 0.0
-                valid = True
-                for offset in range(window):
-                    value = values[row - window + 1 + offset, col]
-                    if np.isnan(value):
-                        valid = False
-                        break
-                    total += weights[offset] * value
-                if valid:
-                    result[row, col] = total / weight_sum
         return result
 
     @njit(cache=True)
@@ -2154,7 +2105,6 @@ if njit is not None:
 
 else:
     _rolling_average_rank_last_2d_numba = _rolling_average_rank_last_2d_numpy
-    _rolling_weighted_mean_2d_numba = _rolling_weighted_mean_2d_numpy
     _rolling_regression_slope_2d_numba = _rolling_regression_slope_2d_numpy
 
 

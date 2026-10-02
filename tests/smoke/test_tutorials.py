@@ -9,7 +9,7 @@ import pandas as pd
 
 import tradelearn.engine as bt
 from examples.engine import QuickstartSmaCross
-from scripts.examples.ml_strategy import prepare_ml_data as build_alpha101_features
+from scripts.examples.ml_strategy import build_alpha101_features
 from scripts.examples.ml_strategy import run_example as run_ml_example
 from tradelearn.core.config import TradelearnConfig
 from tradelearn.engine.analyzers import MLflowAnalyzer

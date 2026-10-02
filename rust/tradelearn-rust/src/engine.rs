@@ -394,11 +394,7 @@ impl BacktestEngine {
     }
 
     fn can_apply_fill(&self, fill: &FillEvent, mult: f64) -> bool {
-        if fill.size <= 0.0 {
-            return true;
-        }
-        let required_cash = fill.price * fill.size * mult + fill.commission;
-        self.portfolio.cash() + 1e-9 >= required_cash
+        self.portfolio.can_apply_fill(fill, mult)
     }
 
     pub fn step_open_bars(&mut self, bars: Vec<BarEvent>) -> Vec<FillRecord> {
@@ -417,6 +413,15 @@ impl BacktestEngine {
         let mut options = self.options;
         options.trade_on_close = trade_on_close;
         let clock = bars.first().map(|bar| bar.ts);
+        // Validity follows the primary runtime clock even when a target feed
+        // has no new bar. Expire all intents before matching or OCO resolution.
+        if let Some(ts) = clock {
+            let pending = std::mem::take(&mut self.pending);
+            self.pending = pending
+                .into_iter()
+                .filter(|order| !self.expire_order(order, ts))
+                .collect();
+        }
         let matching_bars: Vec<BarEvent> = bars
             .iter()
             .filter(|bar| {

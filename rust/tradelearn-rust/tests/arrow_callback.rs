@@ -1,4 +1,4 @@
-use _rust::core::{BarBatch, BarEvent, CallbackBatcher};
+use _rust::types::{BarBatch, BarEvent, CallbackBatcher};
 
 fn bar(ts: i64, symbol: &str, close: f64) -> BarEvent {
     BarEvent {

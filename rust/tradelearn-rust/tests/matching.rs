@@ -1,7 +1,8 @@
-use _rust::core::{
-    match_order, match_order_smart, BarEvent, CNAStockCommission, CommissionModel,
-    ExecutionOptions, FixedCommission, FixedSlippage, OrderEvent, OrderSide, OrderType,
-    PercentCommission, PercentSlippage, SlippageModel,
+use _rust::matching::{match_order, match_order_smart};
+use _rust::types::{
+    BarEvent, CNAStockCommission, CommissionModel, ExecutionOptions, FixedCommission,
+    FixedSlippage, OrderEvent, OrderSide, OrderType, PercentCommission, PercentSlippage,
+    SlippageModel,
 };
 
 fn assert_close(actual: f64, expected: f64) {
@@ -40,6 +41,10 @@ fn order(order_type: OrderType, side: OrderSide) -> OrderEvent {
         limit_price: None,
         stop_price: None,
         created_ts: 1,
+        trail_amount: None,
+        trail_percent: None,
+        trail_watermark: None,
+        trail_triggered: false,
     }
 }
 
@@ -135,8 +140,9 @@ fn stop_orders_trigger_to_market_and_stop_limit_requires_both_prices() {
     let stop_sell_fill = match_order(&stop_sell, &bar(), &options()).expect("sell stop fills");
     let stop_limit_fill = match_order(&stop_limit, &bar(), &options()).expect("stop limit fills");
 
-    assert_eq!(stop_buy_fill.price, 10.0);
-    assert_eq!(stop_sell_fill.price, 10.0);
+    // Intrabar triggers cannot execute at the earlier, more favorable open.
+    assert_eq!(stop_buy_fill.price, 11.5);
+    assert_eq!(stop_sell_fill.price, 8.5);
     assert_eq!(stop_limit_fill.price, 9.5);
     assert!(match_order(&missed_stop, &bar(), &options()).is_none());
 }
@@ -229,4 +235,167 @@ fn smart_matching_follows_bullish_open_low_high_close_path() {
     assert_eq!(sell_limit_fill.price, 11.0);
     assert_eq!(sell_stop_fill.price, 8.5);
     assert_eq!(buy_stop_fill.price, 11.5);
+}
+
+#[test]
+fn stop_orders_fill_at_open_when_the_market_gaps_beyond_the_trigger() {
+    let mut buy = order(OrderType::Stop, OrderSide::Buy);
+    buy.stop_price = Some(11.5);
+    let mut sell = order(OrderType::Stop, OrderSide::Sell);
+    sell.stop_price = Some(8.5);
+    let gap_up = BarEvent {
+        open: 13.0,
+        high: 14.0,
+        low: 12.0,
+        close: 13.5,
+        ..bar()
+    };
+    let gap_down = BarEvent {
+        open: 7.0,
+        high: 8.0,
+        low: 6.0,
+        close: 6.5,
+        ..bar()
+    };
+    for smart in [false, true] {
+        let matcher = if smart {
+            match_order_smart
+        } else {
+            match_order
+        };
+        assert_eq!(
+            matcher(&buy, &gap_up, &options())
+                .expect("gap buy fills")
+                .price,
+            13.0
+        );
+        assert_eq!(
+            matcher(&sell, &gap_down, &options())
+                .expect("gap sell fills")
+                .price,
+            7.0
+        );
+    }
+}
+
+#[test]
+fn smart_stop_limit_never_uses_a_pre_trigger_limit_touch() {
+    let mut buy = order(OrderType::StopLimit, OrderSide::Buy);
+    buy.stop_price = Some(11.0);
+    buy.limit_price = Some(10.0);
+    let buy_bar = BarEvent {
+        open: 10.0,
+        low: 9.0,
+        high: 12.0,
+        close: 11.0,
+        ..bar()
+    };
+    assert!(match_order_smart(&buy, &buy_bar, &options()).is_none());
+    let mut sell = order(OrderType::StopLimit, OrderSide::Sell);
+    sell.stop_price = Some(9.0);
+    sell.limit_price = Some(10.0);
+    let sell_bar = BarEvent {
+        open: 10.0,
+        high: 11.0,
+        low: 8.0,
+        close: 9.0,
+        ..bar()
+    };
+    assert!(match_order_smart(&sell, &sell_bar, &options()).is_none());
+    // Exact mode intentionally retains its documented unordered OHLC contract.
+    assert!(match_order(&buy, &buy_bar, &options()).is_some());
+    assert!(match_order(&sell, &sell_bar, &options()).is_some());
+}
+
+#[test]
+fn stop_limit_activation_survives_into_a_later_bar() {
+    use _rust::engine::BacktestEngine;
+    for smart in [false, true] {
+        for side in [OrderSide::Buy, OrderSide::Sell] {
+            let mut engine = BacktestEngine::new(
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                100_000.0,
+                0.0,
+                false,
+                false,
+                false,
+                0.0,
+                0.0,
+                true,
+                true,
+                false,
+                1.0,
+                1.0,
+                smart,
+                false,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            );
+            let (stop, limit, trigger, later) = if side == OrderSide::Buy {
+                (
+                    11.0,
+                    10.0,
+                    BarEvent {
+                        ts: 1,
+                        open: 11.5,
+                        low: 11.0,
+                        high: 12.0,
+                        close: 11.5,
+                        ..bar()
+                    },
+                    BarEvent {
+                        ts: 2,
+                        open: 9.5,
+                        low: 9.0,
+                        high: 10.0,
+                        close: 9.5,
+                        ..bar()
+                    },
+                )
+            } else {
+                (
+                    9.0,
+                    10.0,
+                    BarEvent {
+                        ts: 1,
+                        open: 8.5,
+                        low: 8.0,
+                        high: 9.0,
+                        close: 8.5,
+                        ..bar()
+                    },
+                    BarEvent {
+                        ts: 2,
+                        open: 10.5,
+                        low: 10.0,
+                        high: 11.0,
+                        close: 10.5,
+                        ..bar()
+                    },
+                )
+            };
+            engine.submit_order(
+                "AAPL".into(),
+                side,
+                OrderType::StopLimit,
+                1.0,
+                Some(limit),
+                Some(stop),
+                None,
+                None,
+            );
+            assert!(engine.step_open_bars(vec![trigger]).is_empty());
+            let expected = later.open;
+            let fills = engine.step_open_bars(vec![later]);
+            assert_eq!(fills.len(), 1, "smart={smart}, side={side:?}");
+            assert_eq!(fills[0].price, expected);
+        }
+    }
 }

@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.26",
-    "pandas",
+    "pandas>=2.1",
     "scipy",
     "scikit-learn",
     "pyarrow",
@@ -99,8 +99,10 @@ all = [
     "numba>=0.65.1",
 ]
 dev = [
+    "mcp>=1.8.0",
     "pytest",
     "pytest-cov",
+    "statsmodels",
     "ruff",
     "interrogate",
     "cibuildwheel",
@@ -147,7 +149,7 @@ archs = ["AMD64"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/golden", "tests/consistency"]
-addopts = "-ra"
+addopts = "-ra --import-mode=importlib"
 pythonpath = ["."]
 
 [tool.ruff]

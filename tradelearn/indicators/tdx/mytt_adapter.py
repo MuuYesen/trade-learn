@@ -11,26 +11,32 @@ from tradelearn.indicators.base import FunctionIndicator
 
 
 def _arr(values) -> np.ndarray:
+    """Coerce formula inputs to floating-point NumPy arrays."""
     return np.asarray(values, dtype=float)
 
 
 def _s(values) -> pd.Series:
+    """Wrap floating-point values in a positional Series for rolling calculations."""
     return pd.Series(_arr(values))
 
 
 def _nan_to_zero(values) -> np.ndarray:
+    """Replace missing and infinite formula results with numeric zeros."""
     return np.nan_to_num(np.asarray(values, dtype=float), nan=0.0, posinf=0.0, neginf=0.0)
 
 
 def _mytt_ma(values, N=5):
+    """Return rolling arithmetic means, using available bars during the initial window."""
     return _s(values).rolling(int(N), min_periods=1).mean().to_numpy()
 
 
 def _mytt_ema(values, N=5):
+    """Return recursive exponential means with span N and the first observation as seed."""
     return _s(values).ewm(span=int(N), adjust=False).mean().to_numpy()
 
 
 def _mytt_sma(values, N=5, M=1):
+    """Apply the recurrence (M*x + (N-M)*previous)/N, seeded by the first value."""
     values = _arr(values)
     n = int(N)
     m = float(M)
@@ -44,6 +50,7 @@ def _mytt_sma(values, N=5, M=1):
 
 
 def _mytt_wma(values, N=5):
+    """Return linearly weighted rolling means, weighting recent bars more heavily."""
     weights = np.arange(1, int(N) + 1, dtype=float)
     return _s(values).rolling(int(N), min_periods=1).apply(
         lambda x: np.dot(x, weights[-len(x):]) / weights[-len(x):].sum(),
@@ -52,12 +59,14 @@ def _mytt_wma(values, N=5):
 
 
 def _mytt_macd(values, SHORT=12, LONG=26, M=9):
+    """Return the EMA difference, its signal EMA, and twice their difference."""
     dif = _mytt_ema(values, SHORT) - _mytt_ema(values, LONG)
     dea = _mytt_ema(dif, M)
     return dif, dea, (dif - dea) * 2
 
 
 def _mytt_kdj(close, high, low, N=9, M1=3, M2=3):
+    """Smooth the rolling high-low position into K and D, then return J as 3*K-2*D."""
     close_s = _s(close)
     high_n = _s(high).rolling(int(N), min_periods=1).max()
     low_n = _s(low).rolling(int(N), min_periods=1).min()
@@ -68,6 +77,7 @@ def _mytt_kdj(close, high, low, N=9, M1=3, M2=3):
 
 
 def _mytt_rsi(close, N=24):
+    """Express smoothed positive changes as a percentage of smoothed absolute changes."""
     diff = _s(close).diff().fillna(0)
     up = diff.clip(lower=0)
     down = (-diff).clip(lower=0)
@@ -76,7 +86,9 @@ def _mytt_rsi(close, N=24):
 
 
 def _mytt_wr(close, high, low, N=10, N1=6):
+    """Return two rolling high-low position percentages for windows N and N1."""
     def _wr(n):
+        """Compute the close distance below the rolling high as a percentage of its range."""
         high_n = _s(high).rolling(int(n), min_periods=1).max()
         low_n = _s(low).rolling(int(n), min_periods=1).min()
         width = (high_n - low_n).replace(0, np.nan)
@@ -86,9 +98,11 @@ def _mytt_wr(close, high, low, N=10, N1=6):
 
 
 def _mytt_bias(close, L1=6, L2=12, L3=24):
+    """Return percentage deviations from the three requested moving-average windows."""
     close_s = _s(close)
 
     def _bias(n):
+        """Express close minus its moving average as a percentage of that average."""
         ma = _s(_mytt_ma(close, n)).replace(0, np.nan)
         return ((close_s - ma) / ma * 100).fillna(0).to_numpy()
 
@@ -96,18 +110,21 @@ def _mytt_bias(close, L1=6, L2=12, L3=24):
 
 
 def _mytt_boll(close, N=20, P=2):
+    """Return upper, middle, and lower bands using population rolling standard deviation."""
     mid = _mytt_ma(close, N)
     std = _s(close).rolling(int(N), min_periods=1).std(ddof=0).fillna(0).to_numpy()
     return mid + float(P) * std, mid, mid - float(P) * std
 
 
 def _mytt_psy(close, N=12, M=6):
+    """Return the rolling percentage of advancing bars and its moving-average signal."""
     up = (_s(close).diff() > 0).astype(float)
     psy = up.rolling(int(N), min_periods=1).mean().to_numpy() * 100
     return psy, _mytt_ma(psy, M)
 
 
 def _mytt_cci(close, high, low, N=14):
+    """Scale typical-price deviation by 0.015 times its rolling mean absolute deviation."""
     tp = (_s(close) + _s(high) + _s(low)) / 3
     ma = tp.rolling(int(N), min_periods=1).mean()
     md = (tp - ma).abs().rolling(int(N), min_periods=1).mean().replace(0, np.nan)
@@ -115,6 +132,7 @@ def _mytt_cci(close, high, low, N=14):
 
 
 def _mytt_atr(close, high, low, N=20):
+    """Average true ranges that include gaps from the previous close."""
     close_s = _s(close)
     tr = pd.concat(
         [
@@ -128,10 +146,14 @@ def _mytt_atr(close, high, low, N=20):
 
 
 def _mytt_bbi(close, M1=3, M2=6, M3=12, M4=20):
-    return (_mytt_ma(close, M1) + _mytt_ma(close, M2) + _mytt_ma(close, M3) + _mytt_ma(close, M4)) / 4
+    """Average four simple moving averages with independently configurable windows."""
+    return (
+        _mytt_ma(close, M1) + _mytt_ma(close, M2) + _mytt_ma(close, M3) + _mytt_ma(close, M4)
+    ) / 4
 
 
 def _mytt_dmi(close, high, low, M1=14, M2=6):
+    """Return positive DI, negative DI, smoothed DX, and a moving average of that DX."""
     high_s, low_s = _s(high), _s(low)
     tr = _mytt_atr(close, high, low, 1)
     hd = high_s.diff().fillna(0)
@@ -147,11 +169,16 @@ def _mytt_dmi(close, high, low, M1=14, M2=6):
 
 
 def _mytt_trix(close, M1=12, M2=20):
-    tr = _s(_mytt_ema(_mytt_ema(_mytt_ema(close, M1), M1), M1)).pct_change().fillna(0).to_numpy() * 100
+    """Return percentage changes of triple-smoothed EMA values and their signal average."""
+    tr = (
+        _s(_mytt_ema(_mytt_ema(_mytt_ema(close, M1), M1), M1)).pct_change().fillna(0).to_numpy()
+        * 100
+    )
     return tr, _mytt_ma(tr, M2)
 
 
 def _mytt_vr(close, volume, M1=26):
+    """Express advancing-bar volume as a percentage of non-advancing volume over M1 bars."""
     close_s = _s(close)
     vol = _s(volume)
     up = vol.where(close_s > close_s.shift(1), 0).rolling(int(M1), min_periods=1).sum()
@@ -161,29 +188,34 @@ def _mytt_vr(close, volume, M1=26):
 
 
 def _mytt_mtm(close, N=12, M=6):
+    """Return N-bar price differences and their M-bar moving-average signal."""
     mtm = (_s(close) - _s(close).shift(int(N))).fillna(0).to_numpy()
     return mtm, _mytt_ma(mtm, M)
 
 
 def _mytt_roc(close, N=12, M=6):
+    """Return N-bar percentage price changes and their M-bar moving-average signal."""
     previous = _s(close).shift(int(N)).replace(0, np.nan)
     roc = ((_s(close) - _s(close).shift(int(N))) / previous * 100).fillna(0).to_numpy()
     return roc, _mytt_ma(roc, M)
 
 
 def _mytt_taq(high, low, N=20):
+    """Return rolling high, channel midpoint, and rolling low for window N."""
     up = _s(high).rolling(int(N), min_periods=1).max().to_numpy()
     down = _s(low).rolling(int(N), min_periods=1).min().to_numpy()
     return up, (up + down) / 2, down
 
 
 def _mytt_ktn(close, high, low, N=20, M=10):
+    """Return an EMA centerline with upper and lower bands one average true range away."""
     mid = _mytt_ema(close, N)
     atr = _mytt_atr(close, high, low, M)
     return mid + atr, mid, mid - atr
 
 
 def _mytt_cr(close, high, low, N=20):
+    """Compare summed upward and downward excursions from the previous high-low midpoint."""
     mid_prev = ((_s(high) + _s(low)) / 2).shift(1)
     up = (_s(high) - mid_prev).clip(lower=0).rolling(int(N), min_periods=1).sum()
     down = (mid_prev - _s(low)).clip(lower=0)
@@ -192,6 +224,7 @@ def _mytt_cr(close, high, low, N=20):
 
 
 def _mytt_emv(high, low, volume, N=14, M=9):
+    """Return smoothed midpoint movement scaled by range and volume, plus its signal average."""
     mid = (_s(high) + _s(low)) / 2
     distance = mid.diff().fillna(0)
     box_ratio = (_s(volume) / 10000) / (_s(high) - _s(low)).replace(0, np.nan)
@@ -201,11 +234,13 @@ def _mytt_emv(high, low, volume, N=14, M=9):
 
 
 def _mytt_dpo(close, M1=20, M2=10, M3=6):
+    """Subtract a displaced moving average from close and return it with its signal average."""
     dpo = (_s(close) - _s(_mytt_ma(close, M1)).shift(int(M2))).fillna(0).to_numpy()
     return dpo, _mytt_ma(dpo, M3)
 
 
 def _mytt_brar(open_, close, high, low, M1=26):
+    """Return AR from open-relative ranges and BR from previous-close excursions."""
     ar_up = (_s(high) - _s(open_)).rolling(int(M1), min_periods=1).sum()
     ar_down = (_s(open_) - _s(low)).rolling(int(M1), min_periods=1).sum()
     ar = (ar_up / ar_down.replace(0, np.nan) * 100).fillna(0).to_numpy()
@@ -218,27 +253,34 @@ def _mytt_brar(open_, close, high, low, M1=26):
 
 
 def _mytt_dfma(close, N1=10, N2=50, M=10):
+    """Return the difference between two simple moving averages and its signal average."""
     dif = _mytt_ma(close, N1) - _mytt_ma(close, N2)
     return dif, _mytt_ma(dif, M)
 
 
 def _mytt_mass(high, low, N1=9, N2=25, M=6):
+    """Sum single-to-double EMA range ratios, then return the sum and its signal average."""
     spread = _s(high) - _s(low)
-    mass = (_s(_mytt_ema(spread, N1)) / _s(_mytt_ema(_mytt_ema(spread, N1), N1)).replace(0, np.nan)).fillna(0)
+    mass = (
+        _s(_mytt_ema(spread, N1)) / _s(_mytt_ema(_mytt_ema(spread, N1), N1)).replace(0, np.nan)
+    ).fillna(0)
     mass = mass.rolling(int(N2), min_periods=1).sum().to_numpy()
     return mass, _mytt_ma(mass, M)
 
 
 def _mytt_expma(close, N1=12, N2=50):
+    """Return exponential moving averages for the two requested windows."""
     return _mytt_ema(close, N1), _mytt_ema(close, N2)
 
 
 def _mytt_obv(close, volume):
+    """Accumulate volume signed by the direction of each close-price change."""
     direction = np.sign(_s(close).diff().fillna(0))
     return (direction * _s(volume)).cumsum().to_numpy()
 
 
 def _mytt_mfi(close, high, low, volume, N=14):
+    """Compute money-flow strength from rolling positive and non-positive typical-price flows."""
     typical = (_s(close) + _s(high) + _s(low)) / 3
     money = typical * _s(volume)
     pos = money.where(typical > typical.shift(1), 0).rolling(int(N), min_periods=1).sum()
@@ -248,12 +290,14 @@ def _mytt_mfi(close, high, low, volume, N=14):
 
 
 def _mytt_asi(open_, close, high, low, M1=26, M2=10):
+    """Accumulate close changes plus half the intrabar move, then smooth that total."""
     si = (_s(close) - _s(close).shift(1)).fillna(0) + (_s(close) - _s(open_)) / 2
     asi = si.cumsum().to_numpy()
     return asi, _mytt_ma(asi, M2)
 
 
 def _mytt_xsii(close, high, low, N=102, M=7):
+    """Return rolling high/low boundaries and two mean-centered lines a third-range apart."""
     mid = _mytt_ma(close, M)
     td1 = _s(high).rolling(int(N), min_periods=1).max().to_numpy()
     td4 = _s(low).rolling(int(N), min_periods=1).min().to_numpy()
@@ -261,6 +305,7 @@ def _mytt_xsii(close, high, low, N=102, M=7):
 
 
 class _MyTT:
+    """Expose the internal array formulas through familiar uppercase MyTT function names."""
     MA = staticmethod(_mytt_ma)
     EMA = staticmethod(_mytt_ema)
     SMA = staticmethod(_mytt_sma)

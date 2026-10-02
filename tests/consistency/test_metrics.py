@@ -1,12 +1,15 @@
 """Consistency checks for metrics against the frozen 1.x oracle code."""
 
+import importlib
 import importlib.util
 import sys
 import types
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from tradelearn.metrics import (
     alpha,
@@ -28,23 +31,45 @@ from tradelearn.metrics import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-if not hasattr(np, "NINF"):
-    np.NINF = -np.inf
-ipython = types.ModuleType("IPython")
-ipython_display = types.ModuleType("IPython.display")
-ipython_display.display = lambda *args, **kwargs: None
-ipython_display.HTML = str
-sys.modules.setdefault("IPython", ipython)
-sys.modules.setdefault("IPython.display", ipython_display)
-sys.modules.setdefault("yfinance", types.ModuleType("yfinance"))
-sys.modules.setdefault("pandas_datareader", types.ModuleType("pandas_datareader"))
-sys.modules.setdefault("pandas_datareader.data", types.ModuleType("pandas_datareader.data"))
 LEGACY_ROOT = ROOT / "reference" / "tradelearn_1x"
-sys.path.insert(0, str(LEGACY_ROOT / "strategy" / "evaluate"))
-from empyrical import stats as empyrical  # noqa: E402
 
 
-def test_return_metrics_match_vendored_empyrical() -> None:
+@contextmanager
+def _oracle_imports():
+    """Scope legacy optional-import shims to oracle loading and evaluation."""
+    with pytest.MonkeyPatch.context() as patch:
+        if not hasattr(np, "NINF"):
+            patch.setattr(np, "NINF", -np.inf, raising=False)
+        for name in (
+            "IPython", "IPython.display", "yfinance",
+            "pandas_datareader", "pandas_datareader.data",
+        ):
+            if name not in sys.modules:
+                module = types.ModuleType(name)
+                if name == "IPython.display":
+                    module.display = lambda *args, **kwargs: None
+                    module.HTML = str
+                patch.setitem(sys.modules, name, module)
+        yield patch
+
+
+@pytest.fixture
+def empyrical():
+    """Load the frozen stats directly, never an installed empyrical fallback."""
+    package_name = "legacy_metrics_empyrical"
+    with _oracle_imports() as patch:
+        package = types.ModuleType(package_name)
+        package.__path__ = [str(LEGACY_ROOT / "strategy" / "evaluate" / "empyrical")]
+        patch.setitem(sys.modules, package_name, package)
+        try:
+            yield importlib.import_module(f"{package_name}.stats")
+        finally:
+            for name in list(sys.modules):
+                if name.startswith(package_name + "."):
+                    sys.modules.pop(name, None)
+
+
+def test_return_metrics_match_vendored_empyrical(empyrical) -> None:
     """Implemented return metrics match the frozen 1.x oracle."""
     prices = pd.Series([100.0, 95.0, 101.0, 99.0, 105.0])
     returns = simple_returns(prices)
@@ -58,7 +83,7 @@ def test_return_metrics_match_vendored_empyrical() -> None:
     )
 
 
-def test_risk_metrics_match_vendored_empyrical() -> None:
+def test_risk_metrics_match_vendored_empyrical(empyrical) -> None:
     """Implemented risk metrics match the frozen 1.x oracle on a drawdown-heavy fixture."""
     returns = pd.Series([-0.10, 0.05, -0.03, 0.08, -0.02, 0.04])
 
@@ -96,7 +121,7 @@ def test_risk_metrics_match_vendored_empyrical() -> None:
     )
 
 
-def test_alpha_beta_metrics_match_vendored_empyrical() -> None:
+def test_alpha_beta_metrics_match_vendored_empyrical(empyrical) -> None:
     """Alpha and beta match the 1.x oracle on aligned benchmark returns."""
     index = pd.date_range("2024-01-01", periods=6)
     returns = pd.Series([0.01, 0.03, -0.02, 0.04, 0.00, 0.02], index=index)
@@ -132,6 +157,16 @@ def test_factor_rank_ic_matches_vendored_alphalens() -> None:
 
 
 def _load_legacy_alphalens_performance() -> types.ModuleType:
+    with _oracle_imports():
+        try:
+            return _load_legacy_alphalens_performance_isolated()
+        finally:
+            for name in list(sys.modules):
+                if name == "legacy_alphalens" or name.startswith("legacy_alphalens."):
+                    sys.modules.pop(name, None)
+
+
+def _load_legacy_alphalens_performance_isolated() -> types.ModuleType:
     """Load frozen 1.x alphalens performance without importing old package initializers."""
     package_name = "legacy_alphalens"
     package = types.ModuleType(package_name)

@@ -2,8 +2,10 @@ import argparse
 import importlib
 import statistics
 import sys
+import time
 from multiprocessing import Process, Queue
 from pathlib import Path
+from queue import Empty
 
 import pandas as pd
 
@@ -304,6 +306,61 @@ def run_portfolio_strategy_in_process(
         queue.put({"status": "error", "error": str(e), "traceback": traceback.format_exc()})
 
 
+def _collect_worker_result(process, queue, *, timeout=120.0, join_timeout=5.0):
+    """Collect a benchmark result without hanging after a crash or stalled worker."""
+    deadline = time.monotonic() + timeout
+    result = None
+    try:
+        while result is None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                result = {
+                    "status": "error",
+                    "error": f"Worker {process.pid} timed out after {timeout}s",
+                }
+                break
+            try:
+                result = queue.get(timeout=min(0.1, remaining))
+            except Empty:
+                if not process.is_alive():
+                    # An exiting worker flushes its queue feeder. Check once
+                    # more in case its final result arrived after the timeout.
+                    try:
+                        result = queue.get_nowait()
+                    except Empty:
+                        result = {
+                            "status": "error",
+                            "error": (
+                                f"Worker {process.pid} exited without a result "
+                                f"(exitcode={process.exitcode})"
+                            ),
+                        }
+                    break
+        process.join(timeout=join_timeout)
+        if process.is_alive() and result.get("status") == "success":
+            # Targets publish success only after completing all calculation.
+            # Slow interpreter shutdown must not invalidate that result.
+            result = dict(result)
+            result["cleanup_warning"] = (
+                f"Worker {process.pid} required forced cleanup after publishing its result"
+            )
+        elif process.exitcode not in (None, 0) and result.get("status") == "success":
+            result = {
+                "status": "error",
+                "error": f"Worker {process.pid} exited abnormally (exitcode={process.exitcode})",
+            }
+        return result
+    finally:
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=join_timeout)
+        if process.is_alive():
+            process.kill()
+            process.join(timeout=join_timeout)
+        queue.cancel_join_thread()
+        queue.close()
+
+
 def run_benchmark(
     match_mode="smart",
     repeats: int = 1,
@@ -336,8 +393,9 @@ def run_benchmark(
                 args=(engine, mod_name, cls_name, queue, mode, repeats, warmup),
             )
             p.start()
-            res = queue.get()
-            p.join()
+            res = _collect_worker_result(p, queue)
+            if res.get("cleanup_warning"):
+                print(f"  [{engine}] WARNING: {res['cleanup_warning']}")
             if res["status"] == "success":
                 results[engine] = res
             else:
@@ -457,8 +515,9 @@ def run_portfolio_benchmark(
                 args=(engine, mod_name, cls_name, queue, mode, repeats, warmup),
             )
             p.start()
-            res = queue.get()
-            p.join()
+            res = _collect_worker_result(p, queue)
+            if res.get("cleanup_warning"):
+                print(f"  [{engine}] WARNING: {res['cleanup_warning']}")
             if res["status"] == "success":
                 results[engine] = res
             else:

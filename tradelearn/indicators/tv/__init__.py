@@ -36,7 +36,6 @@ from .pynecore_adapter import (
     _rma,
     _roc,
     _rsi,
-    _run_source_indicator,
     _sar,
     _sma,
     _stdev,
@@ -48,6 +47,9 @@ from .pynecore_adapter import (
     _variance,
     _vwap,
     _wma,
+)
+from .pynecore_adapter import (
+    _run_source_indicator as _run_source_indicator,
 )
 
 BACKEND = "pynecore"

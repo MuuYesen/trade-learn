@@ -21,7 +21,7 @@
 ```python
 {
     "market":  "CN" | "US" | "HK" | "CRYPTO",
-    "freq":    "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1w",
+    "freq":    "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1w" | "1M",
     "adjust":  "pre" | "post" | "none",   # 默认 "pre"
     "engine":  "tv" | "tdx" | ...,
     "source":  "<URL 或标识>",

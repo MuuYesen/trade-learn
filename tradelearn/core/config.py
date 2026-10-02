@@ -61,6 +61,7 @@ def load_config(
 
 
 def _merge_yaml(values: dict[str, Any], path: Path) -> None:
+    """Load an existing YAML mapping into resolved values; reject malformed configuration."""
     if not path.exists():
         return
     try:
@@ -73,6 +74,7 @@ def _merge_yaml(values: dict[str, Any], path: Path) -> None:
 
 
 def _merge_mapping(values: dict[str, Any], data: Mapping[str, Any], path: Path) -> None:
+    """Validate supported sections and merge their normalized fields into resolved values."""
     allowed_top = {"mlflow", "data", "log_level"}
     for key in data:
         if key not in allowed_top:
@@ -104,6 +106,7 @@ def _merge_mapping(values: dict[str, Any], data: Mapping[str, Any], path: Path) 
 
 
 def _merge_env(values: dict[str, Any], env: Mapping[str, str]) -> None:
+    """Override resolved values with recognized environment variables and typed conversions."""
     if "MLFLOW_TRACKING_URI" in env:
         values["mlflow_tracking_uri"] = env["MLFLOW_TRACKING_URI"]
     if "TRADELEARN_DATA_CACHE_DIR" in env:
@@ -120,18 +123,21 @@ def _merge_env(values: dict[str, Any], env: Mapping[str, str]) -> None:
 
 
 def _mapping(value: Any, key: str, path: Path) -> Mapping[str, Any]:
+    """Require a mapping-valued section and identify its key and file on failure."""
     if not isinstance(value, dict):
         raise ConfigurationError(f"Config key {key!r} in {path} must be a mapping.")
     return value
 
 
 def _reject_unknown(data: Mapping[str, Any], allowed: set[str], key: str, path: Path) -> None:
+    """Reject the first unsupported section key with its configuration path."""
     unknown = sorted(set(data) - allowed)
     if unknown:
         raise ConfigurationError(f"Unknown config key {key}.{unknown[0]!r} in {path}")
 
 
 def _bool(value: Any, key: str) -> bool:
+    """Parse booleans and conventional true/false strings, rejecting other representations."""
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
@@ -144,6 +150,7 @@ def _bool(value: Any, key: str) -> bool:
 
 
 def _optional_int(value: Any, key: str) -> int | None:
+    """Preserve None or convert a value to int, wrapping failures as configuration errors."""
     if value is None:
         return None
     try:

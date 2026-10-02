@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from tradelearn.metrics._common import NanPolicy, apply_nan_policy, validate_periods
-from tradelearn.metrics.returns import annual_return, excess_returns
+from tradelearn.metrics.returns import annual_return, cum_returns, excess_returns
 
 
 def volatility(
@@ -38,7 +38,7 @@ def volatility(
     """
     validate_periods(periods)
     clean = apply_nan_policy(returns, nan_policy)
-    return float(clean.std(ddof=1) * math.sqrt(periods))
+    return float(clean.std(ddof=1, skipna=False) * math.sqrt(periods))
 
 
 def sharpe(
@@ -73,11 +73,11 @@ def sharpe(
     """
     validate_periods(periods)
     clean = apply_nan_policy(returns, nan_policy)
-    std = clean.std(ddof=1)
+    std = clean.std(ddof=1, skipna=False)
     if std == 0:
         return np.nan
     adjusted = excess_returns(clean, rf=rf, periods=periods)
-    return float(adjusted.mean() / std * math.sqrt(periods))
+    return float(adjusted.mean(skipna=False) / std * math.sqrt(periods))
 
 
 def downside_risk(
@@ -113,7 +113,7 @@ def downside_risk(
     validate_periods(periods)
     clean = apply_nan_policy(returns, nan_policy)
     downside = np.minimum(clean - required, 0.0)
-    return float(math.sqrt(np.mean(np.square(downside))) * math.sqrt(periods))
+    return float(math.sqrt(np.square(downside).mean(skipna=False)) * math.sqrt(periods))
 
 
 def sortino(
@@ -155,7 +155,7 @@ def sortino(
     if downside == 0:
         return np.nan
     adjusted = excess_returns(clean, rf=rf, periods=periods)
-    return float(adjusted.mean() / (downside / math.sqrt(periods)) * math.sqrt(periods))
+    return float(adjusted.mean(skipna=False) / (downside / math.sqrt(periods)) * math.sqrt(periods))
 
 
 def drawdown_series(
@@ -183,8 +183,8 @@ def drawdown_series(
     [0.0, -0.2, -0.16]
     """
     clean = apply_nan_policy(returns, nan_policy)
-    equity = (1.0 + clean).cumprod()
-    running_max = equity.cummax().clip(lower=1.0)
+    equity = cum_returns(clean, starting_value=1.0, nan_policy="propagate")
+    running_max = equity.cummax(skipna=False).clip(lower=1.0)
     return equity / running_max - 1.0
 
 
@@ -212,7 +212,7 @@ def max_drawdown(
     >>> round(max_drawdown(pd.Series([0.10, -0.20, 0.05, -0.10])), 4)
     -0.244
     """
-    return float(drawdown_series(returns, nan_policy=nan_policy).min())
+    return float(drawdown_series(returns, nan_policy=nan_policy).min(skipna=False))
 
 
 def calmar(
@@ -277,6 +277,8 @@ def var(
     -0.085
     """
     clean = apply_nan_policy(returns, nan_policy)
+    if clean.empty:
+        return np.nan
     return float(np.percentile(clean, cutoff * 100.0))
 
 
@@ -342,7 +344,9 @@ def beta(
     aligned = _align_pair(returns, benchmark, nan_policy)
     r = aligned.iloc[:, 0]
     b = aligned.iloc[:, 1]
-    variance = b.var(ddof=1)
+    if aligned.isna().to_numpy().any():
+        return np.nan
+    variance = b.var(ddof=1, skipna=False)
     if variance == 0:
         return np.nan
     return float(r.cov(b) / variance)
@@ -388,7 +392,7 @@ def alpha(
     period_rf = rf / periods
     slope = beta(r, b, nan_policy="propagate")
     alpha_series = (r - period_rf) - slope * (b - period_rf)
-    return float((1.0 + alpha_series.mean()) ** periods - 1.0)
+    return float((1.0 + alpha_series.mean(skipna=False)) ** periods - 1.0)
 
 
 def information_ratio(
@@ -426,10 +430,10 @@ def information_ratio(
     validate_periods(periods)
     aligned = _align_pair(returns, benchmark, nan_policy)
     active = aligned.iloc[:, 0] - aligned.iloc[:, 1]
-    tracking_error = active.std(ddof=1)
+    tracking_error = active.std(ddof=1, skipna=False)
     if tracking_error == 0:
         return np.nan
-    return float(active.mean() / tracking_error * math.sqrt(periods))
+    return float(active.mean(skipna=False) / tracking_error * math.sqrt(periods))
 
 
 def tail_ratio(
@@ -460,6 +464,8 @@ def tail_ratio(
     0.9412
     """
     clean = apply_nan_policy(returns, nan_policy)
+    if clean.empty:
+        return np.nan
     lower = np.percentile(clean, cutoff * 100.0)
     upper = np.percentile(clean, (1.0 - cutoff) * 100.0)
     if lower == 0:
@@ -499,6 +505,8 @@ def omega(
     """
     validate_periods(periods)
     clean = apply_nan_policy(returns, nan_policy)
+    if clean.isna().any():
+        return np.nan
     adjusted = clean - threshold / periods
     gains = adjusted[adjusted > 0].sum()
     losses = adjusted[adjusted < 0].sum()

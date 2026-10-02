@@ -69,8 +69,12 @@ def test_feature_set_exposes_wide_fields_and_dataset() -> None:
     assert not hasattr(features, "dataset")
     assert dataset.index.names == ["timestamp", "symbol"]
     assert dataset.columns.tolist() == ["ret_1d", "label"]
-    assert dataset.loc[(pd.Timestamp("2024-01-02", tz="UTC"), "AAA"), "ret_1d"] == pytest.approx(0.2)
-    assert dataset.loc[(pd.Timestamp("2024-01-01", tz="UTC"), "BBB"), "label"] == pytest.approx(-0.1)
+    assert dataset.loc[(pd.Timestamp("2024-01-02", tz="UTC"), "AAA"), "ret_1d"] == pytest.approx(
+        0.2
+    )
+    assert dataset.loc[(pd.Timestamp("2024-01-01", tz="UTC"), "BBB"), "label"] == pytest.approx(
+        -0.1
+    )
 
 
 def test_normalize_bars_applies_pre_adjustment() -> None:

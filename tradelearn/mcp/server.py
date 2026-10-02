@@ -1,6 +1,7 @@
 """Model Context Protocol server for tradelearn project tooling."""
 
-from __future__ import annotations
+# MCP 1.8 inspects concrete annotations when registering tool functions.
+# Keep these annotations evaluated so the minimum supported SDK can build schemas.
 
 import importlib
 import inspect

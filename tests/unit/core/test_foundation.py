@@ -115,3 +115,32 @@ def test_validate_returns_requires_utc_datetime_index() -> None:
     bad = pd.Series([0.01], index=pd.DatetimeIndex(["2026-04-25"]))
     with pytest.raises(ContractError, match="tz-aware UTC"):
         validate_returns(bad)
+
+
+def test_validate_bars_rejects_duplicate_timestamp_symbol() -> None:
+    index = pd.MultiIndex.from_tuples(
+        [(ensure_utc("2026-04-25"), "GOOG")] * 2,
+        names=["timestamp", "symbol"],
+    )
+    bars = pd.DataFrame(
+        {"open": 10.0, "high": 12.0, "low": 9.0, "close": 11.0, "volume": 0.0},
+        index=index,
+    )
+    with pytest.raises(ContractError, match="duplicate"):
+        validate_bars(bars)
+
+
+def test_validate_bars_preserves_suspended_symbols_at_shared_timestamp() -> None:
+    index = pd.MultiIndex.from_product(
+        [[ensure_utc("2026-04-25")], ["GOOG", "AAPL"]],
+        names=["timestamp", "symbol"],
+    )
+    bars = pd.DataFrame(
+        {"open": 10.0, "high": 12.0, "low": 9.0, "close": 11.0,
+         "volume": [0.0, float("nan")]},
+        index=index,
+    )
+    assert validate_bars(bars) is bars
+    assert len(bars) == 2
+    assert bars["volume"].iloc[0] == 0.0
+    assert pd.isna(bars["volume"].iloc[1])

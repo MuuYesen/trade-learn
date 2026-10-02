@@ -1,4 +1,4 @@
-use _rust::core::{BarEvent, MultiDataFeed};
+use _rust::types::{BarEvent, MultiDataFeed};
 
 fn bar(ts: i64, symbol: &str, close: f64) -> BarEvent {
     BarEvent {

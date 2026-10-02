@@ -62,10 +62,10 @@ def _try_rust_resample_frame(
 
     timestamps = df.index
     if timestamps.tz is None:
-        timestamp_seconds = timestamps.tz_localize("UTC").asi8 // 1_000_000_000
+        timestamp_seconds = timestamps.tz_localize("UTC").as_unit("s").asi8
         tz = "UTC"
     else:
-        timestamp_seconds = timestamps.tz_convert("UTC").asi8 // 1_000_000_000
+        timestamp_seconds = timestamps.tz_convert("UTC").as_unit("s").asi8
         tz = timestamps.tz
     try:
         labels, opens, highs, lows, closes, volumes = _rust_resample_ohlcv(

@@ -12,7 +12,7 @@ from tradelearn.core.contracts import validate_bars
 from tradelearn.core.errors import ContractError
 
 Market = Literal["CN", "US", "HK", "CRYPTO"]
-Frequency = Literal["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
+Frequency = Literal["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M", "M", "monthly"]
 Adjustment = Literal["pre", "post", "none"]
 
 REQUIRED_COLUMNS = ("open", "high", "low", "close", "volume")
@@ -36,7 +36,7 @@ def normalize_bars(
         DataFrame with timestamp, symbol, OHLCV columns.
     market : {"CN", "US", "HK", "CRYPTO"}
         Market identifier.
-    freq : {"1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"}
+    freq : {"1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"}
         Bar frequency.
     engine : str
         Data provider identifier.

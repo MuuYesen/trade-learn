@@ -1,0 +1,16 @@
+{
+  "reference/tradelearn_1x/query/query.py": "4e948a7d82b96ce0d9540a59151dceb9617fc4fcc8b9d7f05e645882132a0092",
+  "reference/tradelearn_1x/query/__init__.py": "6a85aea205277bdd59aeb231e37e28910ffcd95c27c42dd9061bf1239d1bdf19",
+  "reference/tradelearn_1x/strategy/evaluate/empyrical/deprecate.py": "d4b2427573ba4697255fe8a4589345bddd416e7339a050ef71cf5ddb8e0f1fd3",
+  "reference/tradelearn_1x/strategy/evaluate/empyrical/perf_attrib.py": "5d31f7cd8f597b28b32af71f330267e144db38e685e72176bfa30b5aefc03b98",
+  "reference/tradelearn_1x/strategy/evaluate/empyrical/__init__.py": "75a125f0e82768442f6ace754aad63162ecbcd887f2b274651bd47a42c32d295",
+  "reference/tradelearn_1x/strategy/evaluate/empyrical/utils.py": "4913a0db96a3e845907ddd268362816b295df195b89af20363fa04c6528004e0",
+  "reference/tradelearn_1x/strategy/evaluate/empyrical/stats.py": "9defb75e4b32a1a4164d27164c2ff3a4fb285e525c2d35ae8638a878bd818145",
+  "reference/tradelearn_1x/strategy/evaluate/empyrical/periods.py": "a42ce8e71ac9412be36487d46b27e956c47fd1ba2c1bbdc27d28714b09f5b048",
+  "reference/tradelearn_1x/strategy/examine/alphalens/utils.py": "f071fc576c9a13188631c3342c3be0bef9ca2b4f145268bb50e42e00f9752cfc",
+  "reference/tradelearn_1x/strategy/examine/alphalens/performance.py": "715ef4bbb79de33d1657557c3360fbbb826fea114b4320b6cbe951d4a831ae7d",
+  "reference/tradelearn_1x/query/alpha/alphas101.py": "3f8fbcc5e2d51ecf90c150a15fd5a6a68bff5216a41b19b3a8c03a4e4ec0b862",
+  "reference/tradelearn_1x/query/alpha/alphas191.py": "1adf3ffe8ae7b7e7aef4567a0de3f642fdb53edabfe535d1edd3411c416962ee",
+  "reference/tradelearn_1x/query/tec/mytt/tdx30.py": "79cb05e6a2fd0732825bd49a8f3146e5517dd64a64cc6b6f2985c6df93a340d3",
+  "tests/golden/datasets/tv/AAPL_2020-01-01_2024-12-31_1d.parquet": "65b9e4511735a2259f7e0bc6a19ee3a4486e8514cf2b407d777fa806dcb5f06a"
+}

@@ -128,6 +128,8 @@ def validate_bars(bars: pd.DataFrame) -> pd.DataFrame:
         raise ContractError("Bars index must be a MultiIndex(timestamp, symbol)")
     if bars.index.nlevels != 2:
         raise ContractError("Bars index must have two levels: timestamp and symbol")
+    if bars.index.has_duplicates:
+        raise ContractError("Bars index contains duplicate timestamp/symbol rows")
     missing = [col for col in REQUIRED_BAR_COLUMNS if col not in bars.columns]
     if missing:
         raise ContractError(f"Bars missing required columns: {missing}")

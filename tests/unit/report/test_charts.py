@@ -1,10 +1,11 @@
 """Tests for reusable Bokeh report charts."""
 
 import pandas as pd
-from bokeh.plotting import figure
-from bokeh.models import BoxAnnotation, FixedTicker, GlyphRenderer, HoverTool, Legend, Spacer, Span
+from bokeh.models import BoxAnnotation, FixedTicker, GlyphRenderer, HoverTool, Legend, Span
+from bokeh.models import Spacer as Spacer
 from bokeh.models.glyphs import HBar, MultiLine, Scatter, Segment, VBar
 from bokeh.models.widgets import Select
+from bokeh.plotting import figure
 
 from tradelearn.report.charts import (
     annual_returns,
@@ -154,8 +155,12 @@ def test_support_chart_titles_describe_metric_units() -> None:
     assert trade_distribution(_trade_distribution()).xaxis[0].axis_label == "PnL"
     assert turnover(_transactions(), _positions()).title.text == "Daily Turnover"
     assert daily_volume(_transactions()).title.text == "Daily Fill Volume"
-    assert rolling_sharpe(_series("rolling_sharpe"), window=3).title.text == "Rolling Sharpe (3-Bar)"
-    assert rolling_volatility(_series("returns"), window=3).title.text == "Rolling Volatility (3-Bar)"
+    assert (
+        rolling_sharpe(_series("rolling_sharpe"), window=3).title.text == "Rolling Sharpe (3-Bar)"
+    )
+    assert (
+        rolling_volatility(_series("returns"), window=3).title.text == "Rolling Volatility (3-Bar)"
+    )
 
 
 def test_large_summary_charts_match_heatmap_height() -> None:
@@ -202,7 +207,9 @@ def test_equity_curve_highlights_drawdown_period_with_left_legend() -> None:
 
 def test_monthly_heatmap_uses_readable_neutral_color_and_hover() -> None:
     """Near-zero monthly returns should not look like blank white cells."""
-    plot = monthly_heatmap(pd.DataFrame({1: [0.01], 2: [0.0], 3: [-0.02], 4: [pd.NA]}, index=[2024]))
+    plot = monthly_heatmap(
+        pd.DataFrame({1: [0.01], 2: [0.0], 3: [-0.02], 4: [pd.NA]}, index=[2024])
+    )
 
     assert plot.height == 380
     rect = plot.renderers[0]
@@ -213,7 +220,9 @@ def test_monthly_heatmap_uses_readable_neutral_color_and_hover() -> None:
     assert mapper.high == 0.10
     assert rect.data_source.data["label"] == ["+1.0%", "+0.0%", "-2.0%", "--"]
     assert set(rect.data_source.data["label_color"]) == {"#243247"}
-    label_renderer = next(renderer for renderer in plot.renderers if renderer.name == "monthly_return_labels")
+    label_renderer = next(
+        renderer for renderer in plot.renderers if renderer.name == "monthly_return_labels"
+    )
     assert label_renderer.glyph.text_color.field == "label_color"
     assert label_renderer.glyph.text_font_size == "8pt"
     assert label_renderer.glyph.text_font_style == "normal"
@@ -482,7 +491,9 @@ def test_portfolio_replay_uses_compact_above_legends() -> None:
     assert not [item for item in allocation.right if isinstance(item, Legend)]
     assert not [item for item in activity.right if isinstance(item, Legend)]
     assert all(legend.click_policy == "hide" for legend in allocation_legends + activity_legends)
-    assert all(legend.background_fill_alpha >= 0.7 for legend in allocation_legends + activity_legends)
+    assert all(
+        legend.background_fill_alpha >= 0.7 for legend in allocation_legends + activity_legends
+    )
     assert all(legend.location == "top_left" for legend in allocation_legends + activity_legends)
     assert all(legend.margin == 2 for legend in allocation_legends + activity_legends)
     assert all(legend.padding <= 3 for legend in allocation_legends + activity_legends)
@@ -759,7 +770,9 @@ def test_allocation_legend_matches_selected_assets_and_keeps_hover_details() -> 
 
     plot = _find_plot(replay, "Allocation")
     legend = next(item for item in plot.above if isinstance(item, Legend))
-    hover_renderer = next(renderer for renderer in plot.renderers if renderer.name == "allocation_hover_segments")
+    hover_renderer = next(
+        renderer for renderer in plot.renderers if renderer.name == "allocation_hover_segments"
+    )
     visible_labels = [item.label.value for item in legend.items if item.visible]
 
     assert len([label for label in visible_labels if label not in {"Others", "Cash"}]) == 8

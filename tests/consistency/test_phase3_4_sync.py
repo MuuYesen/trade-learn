@@ -1,11 +1,13 @@
 
-import tradelearn.engine as bt
-import pandas as pd
 import numpy as np
+import pandas as pd
+
+import tradelearn.engine as bt
+
 
 class MultiTimeframeStrategy(bt.Strategy):
     def next(self):
-        d0_close = self.datas[0].close[0]
+        self.datas[0].close[0]
         d1_close = self.datas[1].close[0] if len(self.datas[1]) > 0 else None
         
         d0_ts = self.datas[0].datetime[0]
@@ -29,7 +31,7 @@ def test_resampling_alignment():
     cerebro.adddata(data0)
     
     # Use the new API
-    data1 = cerebro.resampledata(data0, bt.TimeFrame.Minutes, 5)
+    cerebro.resampledata(data0, bt.TimeFrame.Minutes, 5)
     
     cerebro.addstrategy(MultiTimeframeStrategy)
     cerebro.run()

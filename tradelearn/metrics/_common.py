@@ -1,7 +1,9 @@
 """Shared helpers for metric calculations."""
 
+from numbers import Integral
 from typing import Literal
 
+import numpy as np
 import pandas as pd
 
 NanPolicy = Literal["drop", "zero", "propagate", "raise"]
@@ -9,7 +11,7 @@ NanPolicy = Literal["drop", "zero", "propagate", "raise"]
 
 def validate_periods(periods: int) -> None:
     """Validate an annualization period count."""
-    if periods <= 0:
+    if isinstance(periods, (bool, np.bool_)) or not isinstance(periods, Integral) or periods <= 0:
         raise ValueError("periods must be a positive integer")
 
 
@@ -18,6 +20,8 @@ def apply_nan_policy(
     nan_policy: NanPolicy = "drop",
 ) -> pd.Series | pd.DataFrame:
     """Apply a common NaN policy to pandas inputs."""
+    if np.isinf(values.to_numpy(dtype=float, na_value=np.nan)).any():
+        raise ValueError("Metric inputs must not contain infinite values")
     if nan_policy == "drop":
         return values.dropna()
     if nan_policy == "zero":

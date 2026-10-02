@@ -202,11 +202,15 @@ class Reporter:
 
     def exposure(self) -> pd.DataFrame:
         """Return daily symbol exposure weights."""
-        return exposure_weights(self._positions_frame(self._get("positions", default=pd.DataFrame())))
+        return exposure_weights(
+            self._positions_frame(self._get("positions", default=pd.DataFrame()))
+        )
 
     def correlation_matrix(self) -> pd.DataFrame:
         """Return multi-asset exposure correlation matrix."""
-        return exposure_correlation(self._positions_frame(self._get("positions", default=pd.DataFrame())))
+        return exposure_correlation(
+            self._positions_frame(self._get("positions", default=pd.DataFrame()))
+        )
 
     def factor_quantile_returns(self) -> pd.DataFrame:
         """Return factor quantile cumulative returns from analyzers."""
@@ -260,7 +264,9 @@ class Reporter:
     def factor_rank_ic(self) -> pd.Series:
         """Return factor rank information coefficient series from analyzers."""
         factor_analyzer = self._factor_analyzer()
-        if factor_analyzer is None or not hasattr(factor_analyzer, "factor_information_coefficient"):
+        if factor_analyzer is None or not hasattr(
+            factor_analyzer, "factor_information_coefficient"
+        ):
             return pd.Series(dtype="float64", name="rank_ic")
         return pd.Series(factor_analyzer.factor_information_coefficient()).copy()
 
@@ -359,7 +365,9 @@ class Reporter:
 
     def holdings_chart(self):
         """Return a Bokeh holdings chart."""
-        return charts.holdings(self._positions_frame(self._get("positions", default=pd.DataFrame())))
+        return charts.holdings(
+            self._positions_frame(self._get("positions", default=pd.DataFrame()))
+        )
 
     def long_short_holdings_chart(self):
         """Return a Bokeh long/short holdings chart."""
@@ -623,7 +631,9 @@ class Reporter:
             var_name="symbol",
             value_name="_position_value",
         )
-        return Reporter._normalize_position_dates(result.rename(columns={"_position_value": "value"}))
+        return Reporter._normalize_position_dates(
+            result.rename(columns={"_position_value": "value"})
+        )
 
     @staticmethod
     def _normalize_position_dates(frame: pd.DataFrame) -> pd.DataFrame:

@@ -496,7 +496,7 @@
       {% endif %}
       <div class="chart-grid">
         {% for title, chart in charts.items() if title not in ("Price / Trades", "Portfolio Replay") %}
-        <section class="chart">
+        <section class="chart" aria-label="{{ title }}">
           {{ chart | safe }}
         </section>
         {% endfor %}

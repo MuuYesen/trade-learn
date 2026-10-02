@@ -388,6 +388,39 @@ impl Portfolio {
         self.cash
     }
 
+    /// Keep short proceeds and equal entry-cost collateral unavailable to new
+    /// exposure. Book cash remains unchanged; only fill admission uses this reserve.
+    pub(crate) fn can_apply_fill(&self, fill: &FillEvent, mult: f64) -> bool {
+        let cash_after = self.cash - fill.price * fill.size * mult - fill.commission;
+        if !cash_after.is_finite() || cash_after < -1e-9 {
+            return false;
+        }
+        let mut projected = self
+            .positions
+            .get(&fill.symbol)
+            .cloned()
+            .unwrap_or_else(|| Position::new(fill.symbol.clone()));
+        let reduces_only = projected.size * fill.size < 0.0
+            && fill.size.abs() <= projected.size.abs();
+        // A losing cover may leave a collateral deficit. Permit pure risk
+        // reduction if cash stays nonnegative; never grant new exposure on it.
+        if reduces_only {
+            return true;
+        }
+        projected.apply_fill(fill.size, fill.price, mult);
+        let reserve = |position: &Position| {
+            (-position.size).max(0.0) * position.avg_price * mult * 2.0
+        };
+        let reserved_after = self
+            .positions
+            .values()
+            .filter(|position| position.symbol != fill.symbol)
+            .map(reserve)
+            .sum::<f64>()
+            + reserve(&projected);
+        reserved_after.is_finite() && cash_after + 1e-9 >= reserved_after
+    }
+
     pub fn equity(&self, mult: f64) -> f64 {
         self.cash
             + self

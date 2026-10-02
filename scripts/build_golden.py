@@ -105,7 +105,9 @@ def ensure_reference_path() -> None:
 def _install_reference_tdx_bridge() -> None:
     """Bridge the frozen 1.x TDX import to the current opentdx provider."""
 
-    package = sys.modules.setdefault(REFERENCE_TDX_PACKAGE, types.ModuleType(REFERENCE_TDX_PACKAGE))
+    # Never mutate a pre-existing provider package while installing the bridge.
+    package = types.ModuleType(REFERENCE_TDX_PACKAGE)
+    sys.modules[REFERENCE_TDX_PACKAGE] = package
     quotes = types.ModuleType(REFERENCE_TDX_MODULE)
 
     class Quotes:
@@ -162,20 +164,23 @@ def load_reference_query(allow_provider_stubs: bool = False) -> Any:
     """Load Query from the frozen 1.x oracle."""
 
     validate_reference()
-    ensure_reference_path()
-    if allow_provider_stubs:
-        _install_provider_stubs()
-    saved = {
-        name: module
-        for name, module in list(sys.modules.items())
-        if name == "tradelearn" or name.startswith("tradelearn.")
-    }
-    for name in saved:
-        sys.modules.pop(name, None)
-    reference_pkg = types.ModuleType("tradelearn")
-    reference_pkg.__path__ = [str(REFERENCE)]
-    sys.modules["tradelearn"] = reference_pkg
+    before_path = list(sys.path)
+    roots = ("tradelearn", "yfinance", "tvDatafeed", REFERENCE_TDX_PACKAGE)
+
+    def scoped(name: str) -> bool:
+        return any(name == root or name.startswith(root + ".") for root in roots)
+
+    saved = {name: module for name, module in list(sys.modules.items()) if scoped(name)}
     try:
+        ensure_reference_path()
+        if allow_provider_stubs:
+            _install_provider_stubs()
+        for name in saved:
+            if name == "tradelearn" or name.startswith("tradelearn."):
+                sys.modules.pop(name, None)
+        reference_pkg = types.ModuleType("tradelearn")
+        reference_pkg.__path__ = [str(REFERENCE)]
+        sys.modules["tradelearn"] = reference_pkg
         query_module = importlib.import_module("tradelearn.query")
         Query = query_module.Query
     except ModuleNotFoundError as exc:
@@ -186,13 +191,10 @@ def load_reference_query(allow_provider_stubs: bool = False) -> Any:
         message = f"failed to import reference Query: {type(exc).__name__}: {exc}"
         raise GoldenDataError(message) from exc
     finally:
-        loaded_reference_modules = [
-            name
-            for name in sys.modules
-            if name == "tradelearn" or name.startswith("tradelearn.")
-        ]
-        for name in loaded_reference_modules:
-            sys.modules.pop(name, None)
+        sys.path[:] = before_path
+        for name in list(sys.modules):
+            if scoped(name):
+                sys.modules.pop(name, None)
         sys.modules.update(saved)
     return Query
 

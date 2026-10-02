@@ -28,24 +28,24 @@ def test_docs_navigation_keeps_lite_before_engine() -> None:
     )
 
 
-def test_root_readme_is_chinese_default_and_links_to_english() -> None:
+def test_root_readme_is_english_default_and_links_to_translations() -> None:
     text = Path("README.md").read_text(encoding="utf-8")
 
-    assert "./README_en.md" in text
-    assert "English version" in text
-    assert "Python 写策略与投研流程，Rust 扛事件驱动回测内核" in text
-    assert "核心亮点" in text
-    assert "Lite 是推荐起点" in text
-    assert "Backtrader 风格 Engine" in text
-    assert "MLflow / JupyterLab / MCP" in text
+    assert "./README_zh.md" in text
+    assert "./README_ja.md" in text
+    assert "Python for Strategy & Research, Rust for Event-Driven Backtest Engine" in text
+    assert "Core Highlights" in text
+    assert "Lite Mode (Agile Validation)" in text
+    assert "Engine Mode (Deep Research)" in text
+    assert "MLflow" in text and "JupyterLab/MCP" in text
 
 
-def test_english_readme_links_back_to_chinese_default() -> None:
-    text = Path("README_en.md").read_text(encoding="utf-8")
+def test_chinese_readme_links_back_to_english_default() -> None:
+    text = Path("README_zh.md").read_text(encoding="utf-8")
 
     assert "./README.md" in text
-    assert "中文主页" in text
-    assert "Python for strategy and research, Rust for the event-driven backtest core" in text
+    assert "English" in text
+    assert "Python 写策略与投研流程，Rust 扛事件驱动回测内核" in text
 
 
 def test_quickstart_is_compatible_with_homepage_positioning() -> None:
@@ -81,5 +81,6 @@ def test_user_docs_include_runtime_boundaries_and_extension_guides() -> None:
     assert "OrderStatusUpdate" in contracts
 
 
-def test_legacy_chinese_readme_alias_is_removed() -> None:
-    assert not Path("README_zh.md").exists()
+def test_supported_readme_translations_exist() -> None:
+    for filename in ("README_zh.md", "README_ja.md"):
+        assert Path(filename).is_file()

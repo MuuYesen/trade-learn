@@ -50,13 +50,15 @@ def ic(
         result = (
             aligned[["factor", "returns"]]
             .groupby(group_keys)
-            .apply(lambda frame: frame["factor"].corr(frame["returns"]))
+            .apply(lambda frame: _pair_correlation(frame[["factor", "returns"]]))
             .unstack(level=-1)
         )
         result.index.name = _date_level_name(factor)
         result.columns.name = None
         return result
-    result = aligned.groupby(level=0).apply(lambda frame: frame["factor"].corr(frame["returns"]))
+    result = aligned.groupby(level=0).apply(
+        lambda frame: _pair_correlation(frame[["factor", "returns"]])
+    )
     result.index.name = _date_level_name(factor)
     result.name = "ic"
     return result
@@ -98,17 +100,14 @@ def rank_ic(
     aligned = _align_factor_and_returns(factor, forward_returns, nan_policy)
 
     def _spearman(frame: pd.DataFrame) -> float:
-        return frame["factor"].rank().corr(frame["returns"].rank())
+        return _pair_correlation(frame[["factor", "returns"]].rank())
 
     if groupby is not None:
         aligned = _attach_group(aligned, groupby)
     if by_group:
         group_keys = [aligned.index.get_level_values(0), aligned["group"]]
         result = (
-            aligned[["factor", "returns"]]
-            .groupby(group_keys)
-            .apply(_spearman)
-            .unstack(level=-1)
+            aligned[["factor", "returns"]].groupby(group_keys).apply(_spearman).unstack(level=-1)
         )
         result.index.name = _date_level_name(factor)
         result.columns.name = None
@@ -264,10 +263,10 @@ def ic_ir(
     """
     validate_periods(periods)
     clean = apply_nan_policy(ic_series, nan_policy)
-    std = clean.std(ddof=1)
+    std = clean.std(ddof=1, skipna=False)
     if np.isclose(std, 0.0):
         return np.nan
-    return float(clean.mean() / std * math.sqrt(periods))
+    return float(clean.mean(skipna=False) / std * math.sqrt(periods))
 
 
 def factor_returns(
@@ -351,13 +350,23 @@ def quantile_returns(
     aligned = _align_factor_and_returns(factor, forward_returns, nan_policy)
     if groupby is not None:
         aligned = _attach_group(aligned, groupby)
+    dates = aligned.index.get_level_values(0).unique().sort_values()
+    if nan_policy == "propagate":
+        missing_dates = aligned["factor"].isna().groupby(level=0).any()
+        aligned = aligned.loc[
+            ~aligned.index.get_level_values(0).isin(missing_dates[missing_dates].index)
+        ]
+    if aligned.empty:
+        return pd.DataFrame(
+            np.nan, index=dates.rename(_date_level_name(factor)), columns=range(1, quantiles + 1)
+        )
     if group_neutral:
         if "group" not in aligned.columns:
             raise ValueError("group_neutral=True requires groupby")
         aligned = aligned.copy()
         aligned["returns"] = aligned["returns"] - aligned.groupby(
             [aligned.index.get_level_values(0), "group"]
-        )["returns"].transform("mean")
+        )["returns"].transform(lambda values: values.mean(skipna=False))
 
     def _assign_quantiles(frame: pd.DataFrame) -> pd.DataFrame:
         frame = frame.copy()
@@ -370,8 +379,10 @@ def quantile_returns(
         return frame
 
     assigned = aligned.groupby(level=0, group_keys=False).apply(_assign_quantiles)
-    grouped = assigned.groupby([assigned.index.get_level_values(0), "quantile"])["returns"].mean()
-    result = grouped.unstack("quantile").sort_index(axis=1)
+    grouped = assigned.groupby([assigned.index.get_level_values(0), "quantile"])["returns"].agg(
+        lambda values: values.mean(skipna=False)
+    )
+    result = grouped.unstack("quantile").sort_index(axis=1).reindex(dates)
     result.index.name = _date_level_name(factor)
     result.columns.name = None
     return result
@@ -418,8 +429,7 @@ def event_returns(
             loc = dates.get_loc(pd.Timestamp(event_date))
         except KeyError:
             continue
-        if isinstance(loc, slice) or isinstance(loc, np.ndarray):
-            continue
+        # unstack requires unique (date, symbol) keys and produces a unique date index.
         start = loc - before
         end = loc + after
         if start < 0 or end >= len(dates):
@@ -492,9 +502,7 @@ def quantile_turnover(
     shifted = name_sets.shift(periods=period)
     new_names = name_sets.combine(
         shifted,
-        lambda current, previous: np.nan
-        if not isinstance(previous, set)
-        else current - previous,
+        lambda current, previous: np.nan if not isinstance(previous, set) else current - previous,
     ).dropna()
 
     result = new_names.apply(len) / name_sets.loc[new_names.index].apply(len)
@@ -544,8 +552,10 @@ def autocorrelation(
     for position in range(lag, len(rank_frame)):
         previous = rank_frame.iloc[position - lag]
         current = rank_frame.iloc[position]
-        aligned = pd.concat([previous, current], axis=1).dropna()
-        correlations.append(float(aligned.iloc[:, 0].corr(aligned.iloc[:, 1])))
+        aligned = pd.concat([previous, current], axis=1)
+        if nan_policy != "propagate":
+            aligned = aligned.dropna()
+        correlations.append(_pair_correlation(aligned))
         index.append(rank_frame.index[position])
     result = pd.Series(correlations, index=pd.Index(index, name=_date_level_name(factor)))
     result.name = "autocorrelation"
@@ -557,7 +567,7 @@ def _forward_returns_from_prices(prices: pd.Series, periods: int = 1) -> pd.Seri
     _validate_multiindex(prices)
     forward = (
         prices.groupby(level=1, group_keys=False)
-        .pct_change(periods=periods)
+        .pct_change(periods=periods, fill_method=None)
         .groupby(level=1)
         .shift(-periods)
     )
@@ -577,8 +587,6 @@ def _factor_names(factor: str | Sequence[str]) -> tuple[str, ...]:
 
 def _factor_column(factors: pd.DataFrame, factor: str) -> pd.Series:
     """Return the selected factor column from a factor table."""
-    if not isinstance(factors, pd.DataFrame):
-        raise TypeError("factors must be a pandas DataFrame indexed by (date, symbol)")
     if factor not in factors:
         raise ValueError(f"factors must contain factor column {factor!r}")
     return pd.Series(factors[factor], index=factors.index, name=factor).sort_index()
@@ -615,10 +623,10 @@ def _price_series(prices: pd.Series | pd.DataFrame) -> pd.Series:
 
 def _canonical_price_index(prices: pd.Series) -> pd.Series:
     """Return prices with provider Bars index names aligned to factor metrics."""
-    if (
-        isinstance(prices.index, pd.MultiIndex)
-        and prices.index.names[:2] == ["timestamp", "symbol"]
-    ):
+    if isinstance(prices.index, pd.MultiIndex) and prices.index.names[:2] == [
+        "timestamp",
+        "symbol",
+    ]:
         return prices.copy().set_axis(prices.index.set_names(["date", "symbol"]))
     return prices
 
@@ -687,3 +695,10 @@ def _validate_multiindex(series: pd.Series) -> None:
 def _date_level_name(series: pd.Series) -> str | None:
     """Return the date level name for output indexes."""
     return series.index.names[0]
+
+
+def _pair_correlation(frame: pd.DataFrame) -> float:
+    """Correlate a complete pair; upstream policy decides whether to drop rows."""
+    if frame.isna().to_numpy().any():
+        return np.nan
+    return float(frame.iloc[:, 0].corr(frame.iloc[:, 1]))

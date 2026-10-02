@@ -2,31 +2,31 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any, Protocol
-
 import logging
 import os
 import sys
+from collections.abc import Callable
 from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Any, Protocol
 
 import pandas as pd
-from tradelearn.utils.console import smart_tqdm as tqdm
 
 from tradelearn.core.logging import get_logger
 from tradelearn.data.bars import Frequency, normalize_bars
+from tradelearn.utils.console import smart_tqdm as tqdm
 
 LOGGER = get_logger("data.providers")
 
 TDX_PERIOD: dict[str, str] = {
+    "1m": "MIN_1",
     "5m": "MIN_5",
     "15m": "MIN_15",
     "30m": "MIN_30",
     "1h": "MIN_60",
     "1d": "DAILY",
     "1w": "WEEKLY",
-    "1m": "MONTHLY",
+    "1M": "MONTHLY",
 }
 
 TRADINGVIEW_INTERVAL: dict[str, str] = {
@@ -99,6 +99,7 @@ class TdxProvider:
         freq: Frequency = "1d",
     ) -> pd.DataFrame:
         """Fetch A-share OHLCV data and return contract-valid Bars."""
+        freq = "1M" if freq in {"M", "monthly"} else freq
         if freq not in TDX_PERIOD:
             raise ValueError(f"Unsupported TDX frequency: {freq}")
         if _is_symbol_collection(symbol):
@@ -227,6 +228,7 @@ class TdxProvider:
             from opentdx.tdxClient import PERIOD
         except ModuleNotFoundError:
             period_values = {
+                "MIN_1": 7,
                 "MIN_5": 0,
                 "MIN_15": 1,
                 "MIN_30": 2,
@@ -277,6 +279,7 @@ class TradingViewProvider:
         exchange: str | None = None,
     ) -> pd.DataFrame:
         """Fetch TradingView OHLCV data and return contract-valid Bars."""
+        freq = "1M" if freq in {"M", "monthly"} else freq
         if freq not in TRADINGVIEW_INTERVAL:
             raise ValueError(f"Unsupported TradingView frequency: {freq}")
         if _is_symbol_collection(symbol):
@@ -288,7 +291,9 @@ class TradingViewProvider:
                 freq,
             )
             results = []
-            for item in tqdm(symbol, desc="TradingViewProvider.history_ohlc", leave=True, unit="symbol"):
+            for item in tqdm(
+                symbol, desc="TradingViewProvider.history_ohlc", leave=True, unit="symbol"
+            ):
                 results.append(self.history_ohlc(
                     item,
                     start=start,

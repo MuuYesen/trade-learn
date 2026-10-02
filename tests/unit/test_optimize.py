@@ -24,7 +24,7 @@ def test_optuna_search_requires_optional_dependency(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "optuna", None)
     search = OptunaSearch(lambda trial: 1.0, n_trials=1)
 
-    with pytest.raises(ImportError, match="trade-learn\\[optuna\\]"):
+    with pytest.raises(ImportError, match="trade-learn\\[all\\]"):
         search.run()
 
 

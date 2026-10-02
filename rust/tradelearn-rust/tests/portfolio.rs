@@ -1,6 +1,7 @@
-use _rust::core::{
-    match_order, BarEvent, CommissionModel, ExecutionOptions, FillEvent, FixedCommission,
-    FixedSlippage, OrderEvent, OrderSide, OrderType, Portfolio, SlippageModel,
+use _rust::matching::match_order;
+use _rust::types::{
+    BarEvent, CommissionModel, ExecutionOptions, FillEvent, FixedCommission, FixedSlippage,
+    OrderEvent, OrderSide, OrderType, Portfolio, SlippageModel,
 };
 
 fn assert_close(actual: f64, expected: f64) {
@@ -44,12 +45,26 @@ fn market_order(order_id: u64, symbol: &str, side: OrderSide, size: f64) -> Orde
         limit_price: None,
         stop_price: None,
         created_ts: order_id as i64,
+        trail_amount: None,
+        trail_percent: None,
+        trail_watermark: None,
+        trail_triggered: false,
     }
 }
 
 fn close_options() -> ExecutionOptions {
     ExecutionOptions {
         trade_on_close: true,
+        smart_matching: false,
+        cheat_on_close: false,
+        cheat_on_open: false,
+        slip_perc: 0.0,
+        slip_fixed: 0.0,
+        slip_match: true,
+        slip_limit: true,
+        slip_out: false,
+        mult: 1.0,
+        margin: 1.0,
         slippage: SlippageModel::Fixed(FixedSlippage { amount: 0.0 }),
         commission: CommissionModel::Fixed(FixedCommission { amount: 0.0 }),
     }
@@ -59,8 +74,8 @@ fn close_options() -> ExecutionOptions {
 fn portfolio_tracks_cash_positions_equity_margin_and_pnl() {
     let mut portfolio = Portfolio::new(10_000.0);
 
-    portfolio.apply_fill(&fill(1, "AAPL", 10.0, 100.0, 1.0));
-    portfolio.mark_to_market(&[bar("AAPL", 2, 105.0, 110.0)]);
+    portfolio.apply_fill(&fill(1, "AAPL", 10.0, 100.0, 1.0), 1.0);
+    portfolio.mark_to_market(&[bar("AAPL", 2, 105.0, 110.0)], 1.0);
 
     assert_close(portfolio.cash(), 8_999.0);
     assert_close(
@@ -73,11 +88,11 @@ fn portfolio_tracks_cash_positions_equity_margin_and_pnl() {
     );
     assert_close(portfolio.unrealized_pnl(), 100.0);
     assert_close(portfolio.realized_pnl(), 0.0);
-    assert_close(portfolio.equity(), 10_099.0);
-    assert_close(portfolio.margin_used(), 1_100.0);
+    assert_close(portfolio.equity(1.0), 10_099.0);
+    assert_close(portfolio.margin_used(1.0, 1.0), 1_100.0);
 
-    portfolio.apply_fill(&fill(2, "AAPL", -4.0, 120.0, 2.0));
-    portfolio.mark_to_market(&[bar("AAPL", 3, 115.0, 90.0)]);
+    portfolio.apply_fill(&fill(2, "AAPL", -4.0, 120.0, 2.0), 1.0);
+    portfolio.mark_to_market(&[bar("AAPL", 3, 115.0, 90.0)], 1.0);
 
     assert_close(portfolio.cash(), 9_477.0);
     assert_close(portfolio.position("AAPL").expect("AAPL position").size, 6.0);
@@ -87,8 +102,8 @@ fn portfolio_tracks_cash_positions_equity_margin_and_pnl() {
     );
     assert_close(portfolio.realized_pnl(), 80.0);
     assert_close(portfolio.unrealized_pnl(), -60.0);
-    assert_close(portfolio.equity(), 10_017.0);
-    assert_close(portfolio.margin_used(), 540.0);
+    assert_close(portfolio.equity(1.0), 10_017.0);
+    assert_close(portfolio.margin_used(1.0, 1.0), 540.0);
 }
 
 #[test]
@@ -107,9 +122,12 @@ fn portfolio_aggregates_multiple_assets_and_trade_on_close_fills() {
     )
     .expect("MSFT close fill");
 
-    portfolio.apply_fill(&aapl_fill);
-    portfolio.apply_fill(&msft_fill);
-    portfolio.mark_to_market(&[bar("AAPL", 3, 104.0, 110.0), bar("MSFT", 3, 199.0, 190.0)]);
+    portfolio.apply_fill(&aapl_fill, 1.0);
+    portfolio.apply_fill(&msft_fill, 1.0);
+    portfolio.mark_to_market(
+        &[bar("AAPL", 3, 104.0, 110.0), bar("MSFT", 3, 199.0, 190.0)],
+        1.0,
+    );
 
     assert_close(aapl_fill.price, 103.0);
     assert_close(msft_fill.price, 198.0);
@@ -123,6 +141,6 @@ fn portfolio_aggregates_multiple_assets_and_trade_on_close_fills() {
         198.0,
     );
     assert_close(portfolio.unrealized_pnl(), 30.0);
-    assert_close(portfolio.equity(), 5_030.0);
-    assert_close(portfolio.margin_used(), 2_050.0);
+    assert_close(portfolio.equity(1.0), 5_030.0);
+    assert_close(portfolio.margin_used(1.0, 1.0), 2_050.0);
 }

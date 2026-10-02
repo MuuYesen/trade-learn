@@ -1,7 +1,9 @@
 
-import tradelearn.engine as bt
-import pandas as pd
 import numpy as np
+import pandas as pd
+
+import tradelearn.engine as bt
+
 
 class TestStrategy(bt.Strategy):
     params = (('buy_bar', 5), ('sell_bar', 10))
@@ -50,8 +52,10 @@ def test_coc_alignment():
     fills_no_coc = strat_no_coc.broker.fills_frame()
     buy_fill_no_coc = fills_no_coc.iloc[0]
     # Buy issued at bar 5, should execute at bar 6 open
-    print(f"NO COC - Buy Fill Price: {buy_fill_no_coc['price']}, Date: {buy_fill_no_coc['datetime']}")
-    
+    print(
+        f"NO COC - Buy Fill Price: {buy_fill_no_coc['price']}, Date: {buy_fill_no_coc['datetime']}"
+    )
+
     # Case 2: WITH COC (Execute on SAME bar close)
     strat_coc = run_test_case(coc=True)
     fills_coc = strat_coc.broker.fills_frame()

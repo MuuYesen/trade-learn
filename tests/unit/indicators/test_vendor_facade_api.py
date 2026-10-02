@@ -1,17 +1,16 @@
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import pandas as pd
 import pytest
-import importlib.util
 
 import tradelearn as tl
 import tradelearn.engine as bt
 import tradelearn.lite as lite
 from tradelearn.lite import Backtest
 from tradelearn.lite import Strategy as LiteStrategy
-
 
 HAS_PYNECORE = importlib.util.find_spec("pynecore") is not None
 requires_pynecore = pytest.mark.skipif(

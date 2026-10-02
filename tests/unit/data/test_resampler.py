@@ -119,3 +119,25 @@ def test_resample_frame_rejects_non_datetime_index() -> None:
 
     with pytest.raises(TypeError, match="DatetimeIndex"):
         resample_frame(bars, timeframe=_DAYS, compression=1)
+
+
+@pytest.mark.parametrize("unit", ["s", "ms", "us", "ns"])
+@pytest.mark.parametrize("timezone", [None, "UTC", "Asia/Shanghai"])
+def test_rust_resampling_preserves_timestamp_units(unit, timezone) -> None:
+    pytest.importorskip("tradelearn._rust")
+    bars = _minute_bars()
+    if timezone is None:
+        bars.index = bars.index.tz_localize(None)
+    else:
+        bars.index = bars.index.tz_convert(timezone)
+    bars.index = bars.index.as_unit(unit)
+
+    result = resample_frame(bars, timeframe=_MINUTES, compression=3)
+    expected = bars.resample("3min", label="right", closed="right").agg(
+        {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+    )
+    if timezone is None:
+        expected.index = expected.index.tz_localize("UTC")
+    expected.index = expected.index.as_unit("ns")
+
+    pd.testing.assert_frame_equal(result, expected, check_freq=False)

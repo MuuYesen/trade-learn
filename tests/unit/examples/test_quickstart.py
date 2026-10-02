@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 
-from examples.quickstart import run_quickstart
+from tests.smoke.test_tutorials import run_quickstart
 
 
 def test_quickstart_example_runs_end_to_end() -> None:

@@ -70,7 +70,9 @@ def write_html_report(
         # Format max_drawdown as percentage and dates using our clean formatter
         top_drawdowns = top_drawdowns.copy()
         if "max_drawdown" in top_drawdowns.columns:
-            top_drawdowns["max_drawdown"] = top_drawdowns["max_drawdown"].apply(lambda x: f"{x:.2%}")
+            top_drawdowns["max_drawdown"] = top_drawdowns["max_drawdown"].apply(
+                lambda x: f"{x:.2%}"
+            )
         for col in ["peak", "valley", "recovery"]:
             if col in top_drawdowns.columns:
                 top_drawdowns[col] = top_drawdowns[col].apply(_format_date)
@@ -348,7 +350,7 @@ def _research_section(config: dict[str, Any]) -> str:
     )
     return (
         "<h3>Research Parameters</h3>"
-        "<div class=\"table-scroll\"><table><thead><tr><th>parameter</th><th>value</th></tr></thead>"
+        '<div class="table-scroll"><table><thead><tr><th>parameter</th><th>value</th></tr></thead>'
         f"<tbody>{rows}</tbody></table></div>"
     )
 
@@ -375,7 +377,10 @@ def _frame_table(frame: pd.DataFrame) -> str:
         + "</tr>"
         for row in frame.itertuples(index=False, name=None)
     )
-    return f"<div class=\"table-scroll\"><table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table></div>"
+    return (
+        f'<div class="table-scroll"><table><thead><tr>{headers}</tr></thead>'
+        f'<tbody>{rows}</tbody></table></div>'
+    )
 
 
 def _metadata(
@@ -525,7 +530,9 @@ def _format_date(value: Any) -> str:
     if pd.isna(value):
         return "-"
     if isinstance(value, pd.Timestamp):
-        return str(value.tz_localize(None) if value.tzinfo is None else value.tz_convert(None)).split(".")[0]
+        return str(
+            value.tz_localize(None) if value.tzinfo is None else value.tz_convert(None)
+        ).split(".")[0]
     return str(value)
 
 
@@ -608,7 +615,8 @@ def _format_metric_value(key: str, value: Any) -> str:
             token in lowered
             for token in ("return", "drawdown", "rate", "turnover", "volatility")
         ):
-            # If the value is already large (e.g. > 1.0), it might be pre-scaled (unlikely for QS metrics but safe to check)
+            # A value already above 1.0 might be pre-scaled.
+            # This is unlikely for QS metrics but safe to check.
             # Usually QuantStats returns decimal (0.05), but native return_pct returns 5.0
             return f"{value:.2%}"
             

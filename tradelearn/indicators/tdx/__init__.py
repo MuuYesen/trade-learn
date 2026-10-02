@@ -1,6 +1,6 @@
 """Tongdaxin-compatible indicator namespace."""
 
-from tradelearn.indicators.tdx import mytt_adapter
+from tradelearn.indicators.tdx import mytt_adapter as mytt_adapter
 from tradelearn.indicators.tdx.mytt_adapter import (
     ASI,
     ATR,

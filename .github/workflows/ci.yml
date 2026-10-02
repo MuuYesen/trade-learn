@@ -21,7 +21,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: uv sync --extra dev
+      - run: uv sync --group oracle --extra dev
       - run: uv run ruff check tradelearn/core tradelearn/data tradelearn/factor tradelearn/indicators tradelearn/metrics tradelearn/report tests/unit/core tests/unit/data tests/unit/factor tests/unit/indicators tests/unit/metrics tests/unit/report tests/golden tests/consistency scripts
       - run: uv run pytest
       - run: uv run pytest tests/unit/metrics tests/consistency/test_metrics.py --cov=tradelearn.metrics --cov-report=term-missing --cov-fail-under=100
@@ -38,7 +38,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
-      - run: uv sync --extra dev
+      - run: uv sync --group oracle --extra dev
       - run: uv run pytest tests/consistency/ -v --tb=short
       - run: uv run pytest tests/golden/ -v
 
@@ -65,3 +65,17 @@ jobs:
       - run: uv run pytest tests/unit/backtest/test_compat_runner_scripts.py -q
       - run: uv run python benchmarks/runners/compare_backtesting.py
       - run: uv run python benchmarks/runners/benchmark_bt.py smart --warmup 1 --repeat 3 --min-speedup 1.2
+
+  rust-tests:
+    name: Rust contract tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run kernel tests with Python embedding enabled
+        env:
+          PYO3_PYTHON: python
+        run: cargo test --workspace --locked

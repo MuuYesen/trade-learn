@@ -26,7 +26,7 @@ def test_backtrader_benchmark_runner_completes() -> None:
         text=True,
     )
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     assert "FAILED" not in result.stdout
     assert "❌ DIFF" not in result.stdout
     assert "QuickstartSmaCross" in result.stdout
@@ -220,3 +220,101 @@ def test_benchmark_loader_preserves_archived_historical_prices(tmp_path, monkeyp
     monkeypatch.setattr(benchmark_bt, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(benchmark_bt, "DATA_PATH", tmp_path / "missing-legacy.parquet")
     pd.testing.assert_frame_equal(benchmark_bt.load_benchmark_data(), pd.read_parquet(archive).droplevel("symbol"))
+
+
+def test_benchmark_worker_exit_without_result_is_reported():
+    import multiprocessing
+    import os
+    from benchmarks.runners import benchmark_bt
+
+    context = multiprocessing.get_context("spawn")
+    for exitcode in (0, 17):
+        queue = context.Queue()
+        worker = context.Process(target=os._exit, args=(exitcode,))
+        worker.start()
+        try:
+            result = benchmark_bt._collect_worker_result(worker, queue, timeout=10)
+            assert result["status"] == "error"
+            assert f"exitcode={exitcode}" in result["error"]
+            assert not worker.is_alive()
+        finally:
+            if worker.is_alive():
+                worker.terminate()
+            worker.join(timeout=5)
+            queue.close()
+
+
+def test_benchmark_hung_worker_is_terminated():
+    import multiprocessing
+    import time
+    from benchmarks.runners import benchmark_bt
+
+    context = multiprocessing.get_context("spawn")
+    queue = context.Queue()
+    worker = context.Process(target=time.sleep, args=(60,))
+    worker.start()
+    try:
+        result = benchmark_bt._collect_worker_result(worker, queue, timeout=.2, join_timeout=.2)
+        assert result["status"] == "error"
+        assert "timed out" in result["error"]
+        assert not worker.is_alive()
+    finally:
+        if worker.is_alive():
+            worker.terminate()
+        worker.join(timeout=5)
+        queue.close()
+
+
+def test_benchmark_worker_result_does_not_allow_unbounded_join():
+    import multiprocessing
+    from tests.unit.backtest._benchmark_worker_helpers import send_result_then_stall
+    from benchmarks.runners import benchmark_bt
+
+    context = multiprocessing.get_context("spawn")
+    queue = context.Queue()
+    worker = context.Process(target=send_result_then_stall, args=(queue,))
+    worker.start()
+    try:
+        result = benchmark_bt._collect_worker_result(worker, queue, timeout=30, join_timeout=.2)
+        assert result["status"] == "success", result
+        assert result["final_value"] == 100.0
+        assert "forced cleanup" in result["cleanup_warning"]
+        assert not worker.is_alive()
+    finally:
+        if worker.is_alive():
+            worker.terminate()
+        worker.join(timeout=5)
+        queue.close()
+
+
+def test_benchmark_controllers_preserve_valid_results_with_cleanup_warning(monkeypatch, capsys):
+    import pandas as pd
+    from benchmarks.runners import benchmark_bt
+
+    class StartedWorker:
+        def __init__(self, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+    collected = []
+
+    def completed_result(process, queue):
+        collected.append(process)
+        return {
+            "status": "success", "final_value": 100., "elapsed_ms": 1., "trades": [],
+            "order_count": 1, "target_count": 1, "cleanup_warning": "forced cleanup",
+        }
+
+    monkeypatch.setattr(benchmark_bt, "Process", StartedWorker)
+    monkeypatch.setattr(benchmark_bt, "Queue", object)
+    monkeypatch.setattr(benchmark_bt, "_collect_worker_result", completed_result)
+    monkeypatch.setattr(benchmark_bt, "load_benchmark_data", lambda: pd.DataFrame({"close": [10.]}))
+    monkeypatch.setattr(benchmark_bt, "TARGET_STRATEGIES", ["01_quickstart"])
+    monkeypatch.setattr(benchmark_bt, "_iter_portfolio_strategies", lambda: [("example", "Portfolio")])
+    assert benchmark_bt.run_benchmark(include_portfolio=True)
+    output = capsys.readouterr().out
+    assert len(collected) == 4
+    assert output.count("WARNING: forced cleanup") == 4
+    assert "FAILED" not in output

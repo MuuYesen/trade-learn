@@ -90,3 +90,10 @@ def test_stage3_full_benchmark_result_is_recorded_in_baseline() -> None:
     assert stage3["portfolio"]["elapsed_ms"] <= (
         payload["targets"]["portfolio_500_symbols_10y_daily_s"] * 1000
     )
+
+
+def test_stage3_benchmark_uses_finite_synthetic_prices():
+    from scripts.check_stage3_benchmark import build_bars
+    bars = build_bars(5)
+    assert bars[["open", "high", "low", "close", "volume"]].notna().all().all()
+    assert bars["open"].tolist() == [100., 101., 102., 103., 104.]

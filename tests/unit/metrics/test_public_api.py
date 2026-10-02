@@ -34,6 +34,7 @@ def test_metrics_public_api_matches_documented_inventory() -> None:
         "ic",
         "ic_ir",
         "quantile_returns",
+        "quantile_turnover",
         "rank_ic",
         "turnover",
     }
@@ -50,4 +51,4 @@ def test_metrics_public_api_matches_documented_inventory() -> None:
     expected = expected_returns | expected_risk | expected_factor | expected_trade
 
     assert set(metrics.__all__) == expected
-    assert len(metrics.__all__) == 33
+    assert len(metrics.__all__) == 34

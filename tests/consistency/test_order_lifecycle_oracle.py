@@ -8,10 +8,10 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-bt = pytest.importorskip("backtrader")
-
 from tradelearn.backtest.models import Order
 from tradelearn.engine import Cerebro, Strategy
+
+bt = pytest.importorskip("backtrader")
 
 
 def _bars(scenario):
@@ -48,15 +48,21 @@ def _run(scenario, *, backtrader):
             self.bar += 1
             if self.bar == 1:
                 if scenario.startswith("buy-stop"):
-                    self.named_orders["entry"] = self.buy(size=2, price=110., exectype=order_type.Stop)
+                    self.named_orders["entry"] = self.buy(
+                        size=2, price=110.0, exectype=order_type.Stop
+                    )
                 elif scenario.startswith("sell-stop"):
-                    self.named_orders["entry"] = self.sell(size=2, price=90., exectype=order_type.Stop)
+                    self.named_orders["entry"] = self.sell(
+                        size=2, price=90.0, exectype=order_type.Stop
+                    )
                 elif scenario == "cancel":
-                    self.named_orders["entry"] = self.buy(size=2, price=90., exectype=order_type.Limit)
+                    self.named_orders["entry"] = self.buy(
+                        size=2, price=90.0, exectype=order_type.Limit
+                    )
                 else:
                     orders = self.buy_bracket(size=2, exectype=order_type.Market,
                                               stopprice=90., limitprice=110.)
-                    self.named_orders = dict(zip(("entry", "stop", "limit"), orders))
+                    self.named_orders = dict(zip(("entry", "stop", "limit"), orders, strict=False))
             elif self.bar == 2 and scenario == "cancel":
                 self.cancel(self.named_orders["entry"])
 

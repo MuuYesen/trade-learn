@@ -43,7 +43,8 @@ API_REFERENCE_MODULES: tuple[ApiReferenceModule, ...] = (
     ApiReferenceModule(
         "Indicators",
         "tradelearn.indicators",
-        "Technical indicator facade for core indicators and optional pandas-ta-classic, TA-Lib, TDX, and TradingView styles.",
+        "Technical indicator facade for core indicators and optional "
+        "pandas-ta-classic, TA-Lib, TDX, and TradingView styles.",
         ("sma", "ema", "rsi", "macd", "adx", "atr", "bbands", "vwap"),
     ),
     ApiReferenceModule(
@@ -174,7 +175,8 @@ def _render_guide(
         intro,
         "",
         "本页偏查询:用于核对函数签名、参数名和返回值。第一次写策略请先看 "
-        "[Lite Guide](lite.md)、[Engine Guide](engine.md) 或 [Strategy Writing Guide](strategy.md)。",
+        "[Lite Guide](lite.md)、[Engine Guide](engine.md) 或 "
+        "[Strategy Writing Guide](strategy.md)。",
         "",
         f"Generated from `{source_module}` code signatures by `scripts/generate_api_reference.py`.",
         "",
@@ -527,7 +529,8 @@ def render_lite_api_guide() -> str:
             examples=(
                 "def zscore(close, window=20):\n"
                 "    series = close.to_series() if hasattr(close, 'to_series') else close\n"
-                "    return (series - series.rolling(window).mean()) / series.rolling(window).std()\n\n"
+                "    return (series - series.rolling(window).mean()) / "
+                "series.rolling(window).std()\n\n"
                 "self.z = self.I(zscore, self.data.close, window=20)",
             ),
         ),
@@ -546,7 +549,10 @@ def render_lite_api_guide() -> str:
             "提交 Lite 买入订单。",
             {
                 "ticker": "目标 ticker; `None` 表示主数据。",
-                "size": "订单数量; 百分比仓位请使用 `order_target_percent()` 或 `target_percent()`。",
+                "size": (
+                    "订单数量; 百分比仓位请使用 "
+                    "`order_target_percent()` 或 `target_percent()`。"
+                ),
                 "limit": "限价价格。",
                 "stop": "Stop 触发价格。",
                 "sl": "止损价格; 有 `sl` 或 `tp` 时走 bracket。",
@@ -561,7 +567,10 @@ def render_lite_api_guide() -> str:
             "提交 Lite 卖出订单。",
             {
                 "ticker": "目标 ticker; `None` 表示主数据。",
-                "size": "订单数量; 百分比仓位请使用 `order_target_percent()` 或 `target_percent()`。",
+                "size": (
+                    "订单数量; 百分比仓位请使用 "
+                    "`order_target_percent()` 或 `target_percent()`。"
+                ),
                 "limit": "限价价格。",
                 "stop": "Stop 触发价格。",
                 "sl": "止损价格; 有 `sl` 或 `tp` 时走 bracket。",
@@ -758,10 +767,7 @@ def render_strategy_writing_guide() -> str:
         "",
         "Tradelearn 当前有两个用户入口:",
         "",
-        (
-            "- `tradelearn.lite`: Tradelearn 1.x 风格轻量 API,"
-            "适合快速写单文件策略和研究原型。"
-        ),
+        ("- `tradelearn.lite`: Tradelearn 1.x 风格轻量 API,适合快速写单文件策略和研究原型。"),
         (
             "- `tradelearn.engine`: Backtrader 风格高级 API,适合复杂事件策略、"
             "Analyzer、Observer、Sizer、多数据和参数优化。"
@@ -776,17 +782,14 @@ def render_strategy_writing_guide() -> str:
         "",
         "- `line[0]` 是当前 bar,`line[-1]` 是前一根 bar。",
         (
-        "- 指标不下沉 Rust;使用真实 TA-Lib、pandas-ta-classic、TDX、TradingView "
+            "- 指标不下沉 Rust;使用真实 TA-Lib、pandas-ta-classic、TDX、TradingView "
             "等 Python 指标生态批量计算。"
         ),
         (
             "- Engine 是 Backtrader 数值对齐主入口;修改撮合、订单、broker、"
             "生命周期后必须跑 Backtrader 对齐测试。"
         ),
-        (
-            "- Lite 只验证语法层是否正确接入同一 runtime;"
-            "底层正确性仍以 Engine/Backtrader 对齐为主。"
-        ),
+        ("- Lite 只验证语法层是否正确接入同一 runtime;底层正确性仍以 Engine/Backtrader 对齐为主。"),
         "",
         "## Lite 策略",
         "",
@@ -922,7 +925,8 @@ def render_strategy_writing_guide() -> str:
         "self.custom = self.I(my_func, self.data.close, window=20)",
         "```",
         "",
-        "TA-Lib / pandas-ta-classic / TDX / TradingView 指标都保留在 Python 生态中,不要写成 Rust 指标:",
+        "TA-Lib / pandas-ta-classic / TDX / TradingView 指标都保留在 Python 生态中,"
+        "不要写成 Rust 指标:",
         "",
         "```python",
         "self.talib_sma = tl.talib.SMA(self.data.close, timeperiod=20)",

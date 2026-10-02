@@ -420,3 +420,34 @@ def test_tradingview_provider_reports_empty_response() -> None:
 
     with pytest.raises(ConnectionError, match="returned no rows"):
         provider.history_ohlc("NASDAQ:AAPL")
+
+
+@pytest.mark.parametrize("freq,canonical,tdx_period,tv_interval", [
+    ("1m", "1m", 7, "in_1_minute"),
+    ("1M", "1M", 6, "in_monthly"),
+    ("M", "1M", 6, "in_monthly"),
+    ("monthly", "1M", 6, "in_monthly"),
+])
+def test_providers_distinguish_minutes_from_months(freq, canonical, tdx_period, tv_interval):
+    tdx = FakeTdxClient()
+    tdx_bars = TdxProvider(client_factory=lambda: tdx).history_ohlc("600519", freq=freq)
+    assert enum_value(tdx.calls[0][2]) == tdx_period
+    assert tdx_bars.attrs["freq"] == canonical
+
+    tv = FakeTvDatafeedClient()
+    tv_bars = TradingViewProvider(client_factory=lambda: tv).history_ohlc("NASDAQ:AAPL", freq=freq)
+    assert enum_name(tv.calls[0][2]) == tv_interval
+    assert tv_bars.attrs["freq"] == canonical
+
+
+def test_tdx_minute_period_without_optional_dependency(monkeypatch):
+    import builtins
+    real_import = builtins.__import__
+
+    def without_opentdx(name, *args, **kwargs):
+        if name == "opentdx.tdxClient":
+            raise ModuleNotFoundError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", without_opentdx)
+    assert TdxProvider._period_value("1m") == 7

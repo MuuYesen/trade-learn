@@ -422,7 +422,9 @@ def market_replay(
         if last_idx not in tick_indices and (last_idx - tick_indices[-1]) >= step // 2:
             tick_indices.append(last_idx)
         date_labels = {
-            int(frame.loc[i, "bar_index"]): str(pd.to_datetime(frame.loc[i, "date"]).strftime("%Y-%m-%d"))
+            int(frame.loc[i, "bar_index"]): str(
+                pd.to_datetime(frame.loc[i, "date"]).strftime("%Y-%m-%d")
+            )
             for i in tick_indices
         }
         bottom_plot = plots[-1]
@@ -690,7 +692,9 @@ def _allocation_replay_plot(
     if not symbols:
         symbols = available_stackers
     visible_symbols = [
-        symbol for symbol in (visible_symbols or symbols[:PORTFOLIO_VISIBLE_ASSET_LIMIT]) if symbol in symbols
+        symbol
+        for symbol in (visible_symbols or symbols[:PORTFOLIO_VISIBLE_ASSET_LIMIT])
+        if symbol in symbols
     ]
     display_symbols = _symbol_display_map(symbols)
     display = _allocation_display_frame(allocation, symbols, visible_symbols)
@@ -711,7 +715,7 @@ def _allocation_replay_plot(
         source=source,
         legend_label=stacker_labels,
     )
-    for renderer, stacker in zip(renderers, stackers):
+    for renderer, stacker in zip(renderers, stackers, strict=False):
         renderer.name = stacker
     _sync_allocation_legend(plot, visible_symbols, display_symbols)
     hover_source = ColumnDataSource(
@@ -781,7 +785,7 @@ def _profit_loss_replay_plot(trades_frame: pd.DataFrame, x_range):
     source = ColumnDataSource(bins)
     max_count = max(float(bins["trade_count"].max()), 1.0)
     plot.extra_y_ranges["trade_count"] = Range1d(start=0.0, end=max_count * 1.12)
-    count_bars = plot.vbar(
+    plot.vbar(
         x="bar_index",
         width="width",
         top="trade_count",
@@ -865,7 +869,9 @@ def _trade_activity_replay_plot(
     )
 
     if not visible.empty:
-        separators_source = ColumnDataSource(_trade_rebalance_separator_frame(visible, visible_assets))
+        separators_source = ColumnDataSource(
+            _trade_rebalance_separator_frame(visible, visible_assets)
+        )
         separators_full_source = ColumnDataSource(activity)
         plot.segment(
             "bar_index",
@@ -1572,13 +1578,13 @@ def quantile_returns(returns: pd.DataFrame):
         sizing_mode="stretch_width",
     )
     colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#8c564b", "#e377c2"]
-    for index, column in enumerate(returns.columns):
+    for index, series_column in enumerate(returns.columns):
         plot.line(
             frame["date"],
-            frame[column],
+            frame[series_column],
             line_width=2,
             color=colors[index % len(colors)],
-            legend_label=f"Q{column}",
+            legend_label=f"Q{series_column}",
         )
     _make_static_chart(plot)
     return plot
@@ -1684,13 +1690,13 @@ def factor_long_short_returns(returns: pd.DataFrame):
         "short": "#d62728",
         "spread": "#1f77b4",
     }
-    for column in returns.columns:
+    for series_column in returns.columns:
         plot.line(
             frame["date"],
-            frame[column],
+            frame[series_column],
             line_width=2,
-            color=colors.get(str(column), "#9467bd"),
-            legend_label=str(column),
+            color=colors.get(str(series_column), "#9467bd"),
+            legend_label=str(series_column),
         )
     _make_static_chart(plot)
     return plot
@@ -1846,13 +1852,13 @@ def quantile_counts(counts: pd.DataFrame):
         sizing_mode="stretch_width",
     )
     colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#8c564b", "#e377c2"]
-    for index, column in enumerate(counts.columns):
+    for index, series_column in enumerate(counts.columns):
         plot.line(
             frame["date"],
-            frame[column],
+            frame[series_column],
             line_width=2,
             color=colors[index % len(colors)],
-            legend_label=f"Q{column}",
+            legend_label=f"Q{series_column}",
         )
     _make_static_chart(plot)
     return plot
@@ -1933,13 +1939,13 @@ def _add_drawdown_markers(plot, equity: pd.Series, drawdowns: pd.DataFrame) -> N
                 name="max_drawdown_period",
             )
         )
-    for column, name, color, marker in [
+    for series_column, name, color, marker in [
         ("peak", "drawdown_peak", "#2ca02c", "triangle"),
         ("valley", "drawdown_valley", "#d62728", "inverted_triangle"),
     ]:
-        if column not in drawdowns:
+        if series_column not in drawdowns:
             continue
-        dates = pd.to_datetime(drawdowns[column]).dropna()
+        dates = pd.to_datetime(drawdowns[series_column]).dropna()
         values = equity.reindex(dates).dropna()
         if values.empty:
             continue
@@ -1950,7 +1956,7 @@ def _add_drawdown_markers(plot, equity: pd.Series, drawdowns: pd.DataFrame) -> N
             marker=marker,
             size=9,
             color=color,
-            legend_label="Peak" if column == "peak" else "Valley",
+            legend_label="Peak" if series_column == "peak" else "Valley",
             name=name,
         )
     if plot.legend:
@@ -2510,10 +2516,12 @@ for (let index = 0; index < rows; index++) {{
   const topHoldings = holdings.slice(0, limit);
   hover.date.push(next.date[index]);
   hover.bar_index.push(next.bar_index[index]);
-  hover.invested.push(holdings.filter((item) => item[0] !== "Others").reduce((total, item) => total + item[1], 0));
+  hover.invested.push(holdings.filter((item) => item[0] !== "Others")
+    .reduce((total, item) => total + item[1], 0));
   hover.cash.push(next.Cash ? (next.Cash[index] || 0) : 0);
   hover.top_count.push(limit);
-  hover.top_holdings.push(topHoldings.length ? topHoldings.map((item) => formatHolding(item[0], item[1])).join("<br>") : "-");
+  hover.top_holdings.push(topHoldings.length
+    ? topHoldings.map((item) => formatHolding(item[0], item[1])).join("<br>") : "-");
 }}
 allocation_hover_source.data = hover;
 const showLegend = cb_obj.value !== "all" && limit <= 15;
@@ -2522,7 +2530,8 @@ if (allocation_legend != null) {{
 }}
 for (const item of allocation_legend_items) {{
   const label = item.label && item.label.value;
-  item.visible = showLegend && (selectedLabels.has(label) || label === "Others" || label === "Cash");
+  item.visible = showLegend
+    && (selectedLabels.has(label) || label === "Others" || label === "Cash");
 }}
 allocation_source.change.emit();
 allocation_hover_source.change.emit();
@@ -2602,7 +2611,9 @@ def _filter_trade_activity(activity: pd.DataFrame, symbols: list[str]) -> pd.Dat
     return visible.sort_values(["symbol", "bar_index"])
 
 
-def _trade_rebalance_separator_frame(activity: pd.DataFrame, visible_symbols: list[str]) -> pd.DataFrame:
+def _trade_rebalance_separator_frame(
+    activity: pd.DataFrame, visible_symbols: list[str]
+) -> pd.DataFrame:
     """Return vertical separators for dates where visible assets traded."""
     if activity.empty or not visible_symbols:
         return pd.DataFrame(columns=["bar_index", "y0", "y1"])
@@ -2903,7 +2914,9 @@ def _palette(count: int) -> list[str]:
 
 def _allocation_stack_colors(stackers: list[str]) -> list[str]:
     """Return portfolio allocation colors with muted residual buckets."""
-    asset_colors = iter(_palette(len([item for item in stackers if item not in {"Others", "Cash"}])))
+    asset_colors = iter(
+        _palette(len([item for item in stackers if item not in {"Others", "Cash"}]))
+    )
     colors = []
     for stacker in stackers:
         if stacker == "Others":

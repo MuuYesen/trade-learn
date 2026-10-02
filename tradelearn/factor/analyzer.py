@@ -499,7 +499,9 @@ class FactorAnalyzer:
         t = self.quantile_turnover()
         ac = self.factor_rank_autocorrelation()
         if not t.empty or not ac.empty:
-            turnover_series = t.mean(axis=1).rename("turnover") if isinstance(t, pd.DataFrame) else t
+            turnover_series = (
+                t.mean(axis=1).rename("turnover") if isinstance(t, pd.DataFrame) else t
+            )
             items.append(charts.factor_turnover(turnover_series, ac))
         return bk_column(*items, sizing_mode="stretch_width") if items else None
 
@@ -569,9 +571,13 @@ class FactorAnalyzer:
         quantiles = _rank_qcut_quantiles(aligned["factor"], self.quantiles)
         return aligned, quantiles
 
-    def _non_overlapping_returns(self, returns: pd.Series | pd.DataFrame) -> pd.Series | pd.DataFrame:
+    def _non_overlapping_returns(
+        self, returns: pd.Series | pd.DataFrame
+    ) -> pd.Series | pd.DataFrame:
         """Sample forward returns on non-overlapping horizons before compounding."""
-        values = returns.dropna(how="all") if isinstance(returns, pd.DataFrame) else returns.dropna()
+        values = (
+            returns.dropna(how="all") if isinstance(returns, pd.DataFrame) else returns.dropna()
+        )
         if self.return_period == 1 or values.empty:
             return values
         return values.sort_index().iloc[:: self.return_period]
@@ -905,7 +911,8 @@ def _render_factor_html(
       gap: 8px 40px;
       padding-bottom: 4px;
     }}
-    .meta-label {{ color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }}
+    .meta-label {{ color: var(--muted); font-size: 9px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }}
     .meta-value {{ color: var(--accent); font-size: 13px; font-weight: 600; white-space: nowrap; }}
     section {{
       margin: 0 0 32px;
@@ -914,8 +921,10 @@ def _render_factor_html(
       border-radius: 12px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }}
-    h1 {{ margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -0.025em; color: var(--ink); }}
-    h2 {{ margin: 0 0 20px; font-size: 18px; font-weight: 700; color: var(--accent); border-bottom: 2px solid var(--row-hover); padding-bottom: 12px; }}
+    h1 {{ margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -0.025em;
+        color: var(--ink); }}
+    h2 {{ margin: 0 0 20px; font-size: 18px; font-weight: 700; color: var(--accent);
+        border-bottom: 2px solid var(--row-hover); padding-bottom: 12px; }}
     p {{ margin: 0; color: var(--muted); font-size: 15px; }}
     .grid {{
       display: grid;
@@ -926,19 +935,22 @@ def _render_factor_html(
     aside {{ position: sticky; top: 32px; }}
     table {{ border-collapse: collapse; width: 100%; margin: 8px 0; min-width: 600px; }}
     th, td {{ padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--line); }}
-    th {{ background: var(--bg); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }}
+    th {{ background: var(--bg); font-weight: 600; font-size: 12px; text-transform: uppercase;
+        letter-spacing: 0.05em; color: var(--muted); }}
     tr:hover {{ background: var(--row-hover); }}
     td {{ font-variant-numeric: tabular-nums; }}
     td:last-child, th:last-child {{ text-align: right; }}
     .summary-table {{ min-width: 0; }}
-    .summary-table th {{ width: 55%; color: var(--accent); background: none; text-transform: none; font-size: 14px; letter-spacing: normal; padding-left: 0; }}
+    .summary-table th {{ width: 55%; color: var(--accent); background: none; text-transform: none;
+        font-size: 14px; letter-spacing: normal; padding-left: 0; }}
     .chart {{ overflow: hidden; }}
     .chart > div, .chart .bk-root, .chart .bk-root > div {{
       width: 100% !important;
       max-width: 100% !important;
     }}
     .full-width-tables {{ margin-top: 32px; }}
-    .scroll-container {{ overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; border: 1px solid var(--line); }}
+    .scroll-container {{ overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px;
+        border: 1px solid var(--line); }}
     @media (max-width: 1100px) {{
       .grid {{ grid-template-columns: 1fr; }}
       aside {{ position: static; }}
@@ -986,14 +998,18 @@ def _render_factor_html(
     <div class="full-width-tables">
       <section>
         <h2>Quantile Statistics</h2>
-        <p style="margin-bottom: 16px; font-size: 13px;">Statistical summary of forward returns for each factor quantile. This table shows the performance distribution and risk metrics across groups.</p>
+        <p style="margin-bottom: 16px; font-size: 13px;">Statistical summary of forward \
+returns for each factor quantile. This table shows the performance distribution and risk \
+metrics across groups.</p>
         <div class="scroll-container">
           {_frame_table(quantile_stats)}
         </div>
       </section>
       <section>
         <h2>Quantile Counts</h2>
-        <p style="margin-bottom: 16px; font-size: 13px;">The number of assets assigned to each quantile at each point in time. This helps verify data density and ensure balanced quantile allocation across the sample period.</p>
+        <p style="margin-bottom: 16px; font-size: 13px;">The number of assets assigned to \
+each quantile at each point in time. This helps verify data density and ensure balanced \
+quantile allocation across the sample period.</p>
         <div class="scroll-container">
           {_frame_table(quantile_counts.tail(10))}
         </div>

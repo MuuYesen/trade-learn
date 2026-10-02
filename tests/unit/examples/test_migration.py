@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from examples.migration import MIGRATION_CHECKPOINTS, run_migration_smoke
+from tests.smoke.test_migration import MIGRATION_CHECKPOINTS, run_migration_smoke
 
 
 def test_migration_smoke_covers_core_migration_checkpoints() -> None:

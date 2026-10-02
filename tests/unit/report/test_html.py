@@ -490,7 +490,7 @@ def test_reporter_html_adds_factor_quantile_chart_when_analyzer_exists(tmp_path)
 
     html = path.read_text()
     assert "Factor Quantile Returns" in html
-    assert "Factor Mean Return by Quantile" in html
+    assert 'aria-label="Factor Mean Return by Quantile"' in html
     assert "Factor Quantile Returns Violin" in html
     assert "Factor Quantile Spread" in html
     assert "Factor Events Distribution" in html

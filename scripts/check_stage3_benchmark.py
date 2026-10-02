@@ -39,7 +39,7 @@ class NoopStrategy(Strategy):
 
 def build_bars(count: int, *, offset: float = 0.0) -> pd.DataFrame:
     index = pd.date_range("2016-01-01", periods=count, freq="B", tz="UTC")
-    base = pd.Series(range(count), dtype="float64") + 100.0 + offset
+    base = (pd.Series(range(count), dtype="float64") + 100.0 + offset).to_numpy()
     return pd.DataFrame(
         {
             "open": base,
@@ -53,11 +53,19 @@ def build_bars(count: int, *, offset: float = 0.0) -> pd.DataFrame:
 
 
 def run_case(*, bars: int, symbols: int, max_ms: float) -> BenchmarkResult:
-    cerebro = Cerebro(stdstats=False)
-    for symbol_index in range(symbols):
-        cerebro.adddata(build_bars(bars, offset=float(symbol_index)), name=f"S{symbol_index:04d}")
-    cerebro.addstrategy(NoopStrategy)
+    def make_engine() -> Cerebro:
+        cerebro = Cerebro(stdstats=False, progress=False)
+        for symbol_index in range(symbols):
+            cerebro.adddata(
+                build_bars(bars, offset=float(symbol_index)), name=f"S{symbol_index:04d}"
+            )
+        cerebro.addstrategy(NoopStrategy)
+        return cerebro
 
+    # Measure steady-state execution, separately from first-use imports/JIT.
+    # Use an independent warm-up engine so no portfolio state leaks into timing.
+    make_engine().run()
+    cerebro = make_engine()
     start = time.perf_counter()
     cerebro.run()
     elapsed_ms = (time.perf_counter() - start) * 1000.0
@@ -85,6 +93,7 @@ def main() -> int:
     )
     payload = {
         "ok": single.ok and portfolio.ok,
+        "warmup_runs": 1,
         "single": single.asdict(),
         "portfolio": portfolio.asdict(),
     }
