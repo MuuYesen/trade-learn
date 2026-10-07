@@ -33,6 +33,7 @@ def test_optional_backends_are_not_required_for_core_install() -> None:
     optional_runtime_prefixes = (
         "opentdx",
         "tradingview-datafeed",
+        "websocket-client",
         "TA-Lib",
         "pynesys-pynecore",
         "causal-learn",
@@ -40,12 +41,11 @@ def test_optional_backends_are_not_required_for_core_install() -> None:
     )
 
     assert not any(
-        dep.startswith(prefix)
-        for dep in dependencies
-        for prefix in optional_runtime_prefixes
+        dep.startswith(prefix) for dep in dependencies for prefix in optional_runtime_prefixes
     )
     assert any(dep.startswith("opentdx") for dep in extras["tdx"])
-    assert any(dep.startswith("tradingview-datafeed") for dep in extras["tv"])
+    # TradingView transport is maintained in-tree and uses websocket-client.
+    assert any(dep.startswith("websocket-client") for dep in extras["tv"])
     assert any(dep.startswith("pynesys-pynecore") for dep in extras["tv"])
     assert any(dep.startswith("TA-Lib") for dep in extras["talib"])
     assert any(dep.startswith("causal-learn") for dep in extras["ml"])

@@ -59,7 +59,7 @@ tdx = [
     "opentdx; python_version >= '3.12'",
 ]
 tv = [
-    "tradingview-datafeed",
+    "websocket-client>=1.8",
     "pynesys-pynecore; python_version >= '3.11'",
 ]
 talib = [
@@ -76,7 +76,7 @@ duckdb = [
 ]
 indicators = [
     "opentdx; python_version >= '3.12'",
-    "tradingview-datafeed",
+    "websocket-client>=1.8",
     "TA-Lib",
     "pynesys-pynecore; python_version >= '3.11'",
 ]
@@ -92,7 +92,7 @@ all = [
     "optuna",
     "duckdb",
     "opentdx; python_version >= '3.12'",
-    "tradingview-datafeed",
+    "websocket-client>=1.8",
     "TA-Lib",
     "pynesys-pynecore; python_version >= '3.11'",
     "causal-learn",

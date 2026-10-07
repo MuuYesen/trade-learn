@@ -1,5 +1,6 @@
 """Portfolio and factor metrics."""
 
+from tradelearn.metrics.cash_flows import cash_flow_return
 from tradelearn.metrics.factor import (
     autocorrelation,
     factor_returns,
@@ -44,6 +45,7 @@ from tradelearn.metrics.trade import (
 )
 
 __all__ = [
+    "cash_flow_return",
     "alpha",
     "annual_return",
     "autocorrelation",

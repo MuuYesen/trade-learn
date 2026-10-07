@@ -1,0 +1,3666 @@
+[
+  {
+    "id": "accumulation_distribution",
+    "name": "Accumulation/Distribution",
+    "overlay": false,
+    "params": [],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "accumulative_swing_index",
+    "name": "Accumulative Swing Index",
+    "overlay": false,
+    "params": [
+      {
+        "id": "limit_move",
+        "label": "Limit Move",
+        "type": "number",
+        "default": 10,
+        "min": 0.001,
+        "max": 100000
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "advance_decline",
+    "name": "Advance/Decline",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "arnaud_legoux_moving_average",
+    "name": "Arnaud Legoux Moving Average",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      },
+      {
+        "id": "offset",
+        "label": "Offset",
+        "type": "number",
+        "default": 0.85,
+        "min": 0,
+        "max": 1
+      },
+      {
+        "id": "sigma",
+        "label": "Sigma",
+        "type": "number",
+        "default": 6.0,
+        "min": 0.01,
+        "max": 100
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "aroon",
+    "name": "Aroon",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "up",
+        "label": "Up",
+        "type": "line"
+      },
+      {
+        "id": "down",
+        "label": "Down",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "average_price",
+    "name": "Average Price",
+    "overlay": true,
+    "params": [],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "average_directional_index",
+    "name": "Average Directional Index",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "DI Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "adx_smoothing",
+        "label": "ADX Smoothing",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "average_true_range",
+    "name": "Average True Range",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "awesome_oscillator",
+    "name": "Awesome Oscillator",
+    "overlay": false,
+    "params": [],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "histogram"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "balance_of_power",
+    "name": "Balance of Power",
+    "overlay": false,
+    "params": [],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "bollinger_bands",
+    "name": "Bollinger Bands",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      },
+      {
+        "id": "mult",
+        "label": "Mult",
+        "type": "number",
+        "default": 2.0,
+        "min": 0.01,
+        "max": 20
+      }
+    ],
+    "plots": [
+      {
+        "id": "mid",
+        "label": "Mid",
+        "type": "line"
+      },
+      {
+        "id": "upper",
+        "label": "Upper",
+        "type": "line"
+      },
+      {
+        "id": "lower",
+        "label": "Lower",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "bollinger_bands_b",
+    "name": "Bollinger Bands %B",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      },
+      {
+        "id": "mult",
+        "label": "Mult",
+        "type": "number",
+        "default": 2.0,
+        "min": 0.01,
+        "max": 20
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "bollinger_bands_width",
+    "name": "Bollinger Bands Width",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      },
+      {
+        "id": "mult",
+        "label": "Mult",
+        "type": "number",
+        "default": 2.0,
+        "min": 0.01,
+        "max": 20
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "chaikin_money_flow",
+    "name": "Chaikin Money Flow",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "chaikin_oscillator",
+    "name": "Chaikin Oscillator",
+    "overlay": false,
+    "params": [
+      {
+        "id": "fast",
+        "label": "Fast",
+        "type": "integer",
+        "default": 3,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "slow",
+        "label": "Slow",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "chaikin_volatility",
+    "name": "Chaikin Volatility",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "chande_kroll_stop",
+    "name": "Chande Kroll Stop",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "mult",
+        "label": "Mult",
+        "type": "number",
+        "default": 1,
+        "min": 0.01,
+        "max": 20
+      },
+      {
+        "id": "stop_length",
+        "label": "Stop Length",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "long",
+        "label": "Long",
+        "type": "line"
+      },
+      {
+        "id": "short",
+        "label": "Short",
+        "type": "line"
+      }
+    ],
+    "notes": [
+      "Uses the canonical lowest-low short stop; the bundled legacy script uses lowest-high instead."
+    ]
+  },
+  {
+    "id": "chande_momentum_oscillator",
+    "name": "Chande Momentum Oscillator",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "chop_zone",
+    "name": "Chop Zone",
+    "overlay": false,
+    "params": [],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "histogram"
+      },
+      {
+        "id": "color",
+        "label": "Zone",
+        "type": "colorer",
+        "target": "value",
+        "colors": [
+          "#26c6da",
+          "#43a047",
+          "#a5d6a7",
+          "#c8e6c9",
+          "#d50000",
+          "#f4511e",
+          "#ffb74d",
+          "#ffe0b2",
+          "#9e9e9e"
+        ]
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "choppiness_index",
+    "name": "Choppiness Index",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 14,
+        "min": 2,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "commodity_channel_index",
+    "name": "Commodity Channel Index",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "connors_rsi",
+    "name": "Connors RSI",
+    "overlay": false,
+    "params": [
+      {
+        "id": "rsi_length",
+        "label": "Rsi Length",
+        "type": "integer",
+        "default": 3,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "streak_length",
+        "label": "Streak Length",
+        "type": "integer",
+        "default": 2,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "rank_length",
+        "label": "Rank Length",
+        "type": "integer",
+        "default": 100,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "coppock_curve",
+    "name": "Coppock Curve",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "long",
+        "label": "Long",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "short",
+        "label": "Short",
+        "type": "integer",
+        "default": 11,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "correlation_coefficient",
+    "name": "Correlation Coefficient",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "symbol",
+        "label": "Second symbol",
+        "type": "string",
+        "default": ""
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "correlation_log",
+    "name": "Correlation - Log",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 25,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "symbol",
+        "label": "Second symbol",
+        "type": "string",
+        "default": ""
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "detrended_price_oscillator",
+    "name": "Detrended Price Oscillator",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 21,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": [
+      "Causal uncentered mode: source minus the moving average delayed by floor(length/2)+1 bars."
+    ]
+  },
+  {
+    "id": "directional_movement",
+    "name": "Directional Movement",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "DI Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "adx_smoothing",
+        "label": "ADX Smoothing",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "plus",
+        "label": "Plus",
+        "type": "line"
+      },
+      {
+        "id": "minus",
+        "label": "Minus",
+        "type": "line"
+      },
+      {
+        "id": "adx",
+        "label": "Adx",
+        "type": "line"
+      },
+      {
+        "id": "dx",
+        "label": "DX",
+        "type": "line"
+      },
+      {
+        "id": "adxr",
+        "label": "ADXR",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "donchian_channels",
+    "name": "Donchian Channels",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "mid",
+        "label": "Mid",
+        "type": "line"
+      },
+      {
+        "id": "upper",
+        "label": "Upper",
+        "type": "line"
+      },
+      {
+        "id": "lower",
+        "label": "Lower",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "double_ema",
+    "name": "Double EMA",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "ease_of_movement",
+    "name": "Ease Of Movement",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "elder_s_force_index",
+    "name": "Elder's Force Index",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 13,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "ema_cross",
+    "name": "EMA Cross",
+    "overlay": true,
+    "params": [
+      {
+        "id": "fast",
+        "label": "Fast",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "slow",
+        "label": "Slow",
+        "type": "integer",
+        "default": 26,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "fast",
+        "label": "Fast",
+        "type": "line"
+      },
+      {
+        "id": "slow",
+        "label": "Slow",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "envelopes",
+    "name": "Envelopes",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      },
+      {
+        "id": "percent",
+        "label": "Percent",
+        "type": "number",
+        "default": 2,
+        "min": 0.01,
+        "max": 100
+      }
+    ],
+    "plots": [
+      {
+        "id": "mid",
+        "label": "Mid",
+        "type": "line"
+      },
+      {
+        "id": "upper",
+        "label": "Upper",
+        "type": "line"
+      },
+      {
+        "id": "lower",
+        "label": "Lower",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "standard_error",
+    "name": "Standard Error",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 14,
+        "min": 3,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "standard_error_bands",
+    "name": "Standard Error Bands",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 21,
+        "min": 3,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      },
+      {
+        "id": "mult",
+        "label": "Mult",
+        "type": "number",
+        "default": 2.0,
+        "min": 0.01,
+        "max": 20
+      },
+      {
+        "id": "average_length",
+        "label": "Average Length",
+        "type": "integer",
+        "default": 3,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "method",
+        "label": "Method",
+        "type": "select",
+        "default": "Simple",
+        "options": [
+          "Simple",
+          "Exponential",
+          "Weighted"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "mid",
+        "label": "Mid",
+        "type": "line"
+      },
+      {
+        "id": "upper",
+        "label": "Upper",
+        "type": "line"
+      },
+      {
+        "id": "lower",
+        "label": "Lower",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "fisher_transform",
+    "name": "Fisher Transform",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "historical_volatility",
+    "name": "Historical Volatility",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 2,
+        "max": 500
+      },
+      {
+        "id": "annualization",
+        "label": "Annualization",
+        "type": "integer",
+        "default": 365,
+        "min": 1,
+        "max": 10000
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": [
+      "Annualization is an explicit bars-per-year factor; it is not inferred from chart resolution."
+    ]
+  },
+  {
+    "id": "hull_moving_average",
+    "name": "Hull Moving Average",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "ichimoku_cloud",
+    "name": "Ichimoku Cloud",
+    "overlay": true,
+    "params": [],
+    "plots": [
+      {
+        "id": "conversion",
+        "label": "Conversion",
+        "type": "line"
+      },
+      {
+        "id": "base",
+        "label": "Base",
+        "type": "line"
+      },
+      {
+        "id": "span_a",
+        "label": "Span A",
+        "type": "line"
+      },
+      {
+        "id": "span_b",
+        "label": "Span B",
+        "type": "line"
+      },
+      {
+        "id": "lagging",
+        "label": "Lagging",
+        "type": "line",
+        "offset": -25
+      }
+    ],
+    "notes": [
+      "Cloud spans shifted forward within supplied timestamps. Lagging values are current closes with a visual offset of -25 bars."
+    ]
+  },
+  {
+    "id": "keltner_channels",
+    "name": "Keltner Channels",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "mult",
+        "label": "Mult",
+        "type": "number",
+        "default": 1.0,
+        "min": 0.01,
+        "max": 20
+      }
+    ],
+    "plots": [
+      {
+        "id": "mid",
+        "label": "Mid",
+        "type": "line"
+      },
+      {
+        "id": "upper",
+        "label": "Upper",
+        "type": "line"
+      },
+      {
+        "id": "lower",
+        "label": "Lower",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "klinger_oscillator",
+    "name": "Klinger Oscillator",
+    "overlay": false,
+    "params": [
+      {
+        "id": "fast",
+        "label": "Fast",
+        "type": "integer",
+        "default": 34,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "slow",
+        "label": "Slow",
+        "type": "integer",
+        "default": 55,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "type": "integer",
+        "default": 13,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "know_sure_thing",
+    "name": "Know Sure Thing",
+    "overlay": false,
+    "params": [
+      {
+        "id": "roc_1",
+        "label": "Roc 1",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "smooth_1",
+        "label": "Smooth 1",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "roc_2",
+        "label": "Roc 2",
+        "type": "integer",
+        "default": 15,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "smooth_2",
+        "label": "Smooth 2",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "roc_3",
+        "label": "Roc 3",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "smooth_3",
+        "label": "Smooth 3",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "roc_4",
+        "label": "Roc 4",
+        "type": "integer",
+        "default": 30,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "smooth_4",
+        "label": "Smooth 4",
+        "type": "integer",
+        "default": 15,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "least_squares_moving_average",
+    "name": "Least Squares Moving Average",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 25,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "linear_regression_curve",
+    "name": "Linear Regression Curve",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "linear_regression_slope",
+    "name": "Linear Regression Slope",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "ma_cross",
+    "name": "MA Cross",
+    "overlay": true,
+    "params": [
+      {
+        "id": "fast",
+        "label": "Fast",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "slow",
+        "label": "Slow",
+        "type": "integer",
+        "default": 26,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "fast",
+        "label": "Fast",
+        "type": "line"
+      },
+      {
+        "id": "slow",
+        "label": "Slow",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "ma_with_ema_cross",
+    "name": "MA with EMA Cross",
+    "overlay": true,
+    "params": [
+      {
+        "id": "fast",
+        "label": "Fast",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "slow",
+        "label": "Slow",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "fast",
+        "label": "Fast",
+        "type": "line"
+      },
+      {
+        "id": "slow",
+        "label": "Slow",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "mass_index",
+    "name": "Mass Index",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "mcginley_dynamic",
+    "name": "McGinley Dynamic",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "median_price",
+    "name": "Median Price",
+    "overlay": true,
+    "params": [],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "momentum",
+    "name": "Momentum",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "money_flow_index",
+    "name": "Money Flow Index",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "moving_average",
+    "name": "Moving Average",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "moving_average_channel",
+    "name": "Moving Average Channel",
+    "overlay": true,
+    "params": [
+      {
+        "id": "high_length",
+        "label": "High Length",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "low_length",
+        "label": "Low Length",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "upper",
+        "label": "Upper",
+        "type": "line"
+      },
+      {
+        "id": "lower",
+        "label": "Lower",
+        "type": "line"
+      }
+    ],
+    "notes": [
+      "Unshifted high/low averages; legacy visual offsets are not exposed."
+    ]
+  },
+  {
+    "id": "macd",
+    "name": "MACD",
+    "overlay": false,
+    "params": [
+      {
+        "id": "fast",
+        "label": "Fast",
+        "type": "integer",
+        "default": 12,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "slow",
+        "label": "Slow",
+        "type": "integer",
+        "default": 26,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "macd",
+        "label": "Macd",
+        "type": "line"
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "type": "line"
+      },
+      {
+        "id": "histogram",
+        "label": "Histogram",
+        "type": "histogram"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "moving_average_exponential",
+    "name": "Moving Average Exponential",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "moving_average_weighted",
+    "name": "Moving Average Weighted",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "moving_average_double",
+    "name": "Moving Average Double",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length_1",
+        "label": "Length 1",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "length_2",
+        "label": "Length 2",
+        "type": "integer",
+        "default": 21,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "method",
+        "label": "Method",
+        "type": "select",
+        "default": "Simple",
+        "options": [
+          "Simple",
+          "Exponential",
+          "Weighted"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "ma1",
+        "label": "Ma1",
+        "type": "line"
+      },
+      {
+        "id": "ma2",
+        "label": "Ma2",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "moving_average_triple",
+    "name": "Moving Average Triple",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length_1",
+        "label": "Length 1",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "length_2",
+        "label": "Length 2",
+        "type": "integer",
+        "default": 21,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "length_3",
+        "label": "Length 3",
+        "type": "integer",
+        "default": 35,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "method",
+        "label": "Method",
+        "type": "select",
+        "default": "Simple",
+        "options": [
+          "Simple",
+          "Exponential",
+          "Weighted"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "ma1",
+        "label": "Ma1",
+        "type": "line"
+      },
+      {
+        "id": "ma2",
+        "label": "Ma2",
+        "type": "line"
+      },
+      {
+        "id": "ma3",
+        "label": "Ma3",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "moving_average_adaptive",
+    "name": "Moving Average Adaptive",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "moving_average_hamming",
+    "name": "Moving Average Hamming",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "moving_average_multiple",
+    "name": "Moving Average Multiple",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length_1",
+        "label": "Length 1",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "length_2",
+        "label": "Length 2",
+        "type": "integer",
+        "default": 21,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "length_3",
+        "label": "Length 3",
+        "type": "integer",
+        "default": 35,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "length_4",
+        "label": "Length 4",
+        "type": "integer",
+        "default": 50,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "length_5",
+        "label": "Length 5",
+        "type": "integer",
+        "default": 100,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "length_6",
+        "label": "Length 6",
+        "type": "integer",
+        "default": 200,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "method",
+        "label": "Method",
+        "type": "select",
+        "default": "Simple",
+        "options": [
+          "Simple",
+          "Exponential",
+          "Weighted"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "ma1",
+        "label": "Ma1",
+        "type": "line"
+      },
+      {
+        "id": "ma2",
+        "label": "Ma2",
+        "type": "line"
+      },
+      {
+        "id": "ma3",
+        "label": "Ma3",
+        "type": "line"
+      },
+      {
+        "id": "ma4",
+        "label": "Ma4",
+        "type": "line"
+      },
+      {
+        "id": "ma5",
+        "label": "Ma5",
+        "type": "line"
+      },
+      {
+        "id": "ma6",
+        "label": "Ma6",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "majority_rule",
+    "name": "Majority Rule",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "net_volume",
+    "name": "Net Volume",
+    "overlay": false,
+    "params": [],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "histogram"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "on_balance_volume",
+    "name": "On Balance Volume",
+    "overlay": false,
+    "params": [],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "parabolic_sar",
+    "name": "Parabolic SAR",
+    "overlay": true,
+    "params": [
+      {
+        "id": "start",
+        "label": "Start",
+        "type": "number",
+        "default": 0.02,
+        "min": 0.001,
+        "max": 1
+      },
+      {
+        "id": "increment",
+        "label": "Increment",
+        "type": "number",
+        "default": 0.02,
+        "min": 0.001,
+        "max": 1
+      },
+      {
+        "id": "maximum",
+        "label": "Maximum",
+        "type": "number",
+        "default": 0.2,
+        "min": 0.001,
+        "max": 1
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "price_channel",
+    "name": "Price Channel",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "mid",
+        "label": "Mid",
+        "type": "line"
+      },
+      {
+        "id": "upper",
+        "label": "Upper",
+        "type": "line"
+      },
+      {
+        "id": "lower",
+        "label": "Lower",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "price_oscillator",
+    "name": "Price Oscillator",
+    "overlay": false,
+    "params": [
+      {
+        "id": "fast",
+        "label": "Fast",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "slow",
+        "label": "Slow",
+        "type": "integer",
+        "default": 21,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "price_volume_trend",
+    "name": "Price Volume Trend",
+    "overlay": false,
+    "params": [],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "rate_of_change",
+    "name": "Rate Of Change",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "relative_strength_index",
+    "name": "Relative Strength Index",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "relative_vigor_index",
+    "name": "Relative Vigor Index",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "relative_volatility_index",
+    "name": "Relative Volatility Index",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "smi_ergodic_indicator_oscillator",
+    "name": "SMI Ergodic Indicator/Oscillator",
+    "overlay": false,
+    "params": [
+      {
+        "id": "short",
+        "label": "Short",
+        "type": "integer",
+        "default": 5,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "long",
+        "label": "Long",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "type": "integer",
+        "default": 5,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "type": "line"
+      },
+      {
+        "id": "histogram",
+        "label": "Histogram",
+        "type": "histogram"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "smoothed_moving_average",
+    "name": "Smoothed Moving Average",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 7,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "standard_deviation",
+    "name": "Standard Deviation",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 5,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "stochastic",
+    "name": "Stochastic",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "smooth_k",
+        "label": "Smooth K",
+        "type": "integer",
+        "default": 1,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "smooth_d",
+        "label": "Smooth D",
+        "type": "integer",
+        "default": 3,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "k",
+        "label": "K",
+        "type": "line"
+      },
+      {
+        "id": "d",
+        "label": "D",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "stochastic_rsi",
+    "name": "Stochastic RSI",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "RSI Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "smooth_k",
+        "label": "Smooth K",
+        "type": "integer",
+        "default": 3,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "smooth_d",
+        "label": "Smooth D",
+        "type": "integer",
+        "default": 3,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "stoch_length",
+        "label": "Stochastic Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "k",
+        "label": "K",
+        "type": "line"
+      },
+      {
+        "id": "d",
+        "label": "D",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "trix",
+    "name": "TRIX",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 18,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "triple_ema",
+    "name": "Triple EMA",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 9,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "close",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "true_strength_index",
+    "name": "True Strength Index",
+    "overlay": false,
+    "params": [
+      {
+        "id": "short",
+        "label": "Short",
+        "type": "integer",
+        "default": 13,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "long",
+        "label": "Long",
+        "type": "integer",
+        "default": 25,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "type": "integer",
+        "default": 13,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "trend_strength_index",
+    "name": "Trend Strength Index",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "typical_price",
+    "name": "Typical Price",
+    "overlay": true,
+    "params": [],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "ultimate_oscillator",
+    "name": "Ultimate Oscillator",
+    "overlay": false,
+    "params": [
+      {
+        "id": "short",
+        "label": "Short",
+        "type": "integer",
+        "default": 7,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "medium",
+        "label": "Medium",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "long",
+        "label": "Long",
+        "type": "integer",
+        "default": 28,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "volatility_close_to_close",
+    "name": "Volatility Close-to-Close",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 2,
+        "max": 500
+      },
+      {
+        "id": "annualization",
+        "label": "Annualization",
+        "type": "integer",
+        "default": 252,
+        "min": 1,
+        "max": 10000
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "volatility_zero_trend_close_to_close",
+    "name": "Volatility Zero Trend Close-to-Close",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "annualization",
+        "label": "Annualization",
+        "type": "integer",
+        "default": 252,
+        "min": 1,
+        "max": 10000
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "volatility_o_h_l_c",
+    "name": "Volatility O-H-L-C",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "annualization",
+        "label": "Annualization",
+        "type": "integer",
+        "default": 252,
+        "min": 1,
+        "max": 10000
+      },
+      {
+        "id": "market_closed",
+        "label": "Market Closed",
+        "type": "number",
+        "default": 0.0,
+        "min": 0,
+        "max": 0.99
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "volatility_index",
+    "name": "Volatility Index",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "mult",
+        "label": "Mult",
+        "type": "number",
+        "default": 3.0,
+        "min": 0.01,
+        "max": 20
+      },
+      {
+        "id": "method",
+        "label": "Method",
+        "type": "select",
+        "default": "Wilder",
+        "options": [
+          "Wilder",
+          "Exponential"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": [
+      "Wilder ATR trailing stop; seeded after length bars. Repeated closes still advance bar state."
+    ]
+  },
+  {
+    "id": "vwap",
+    "name": "VWAP",
+    "overlay": true,
+    "params": [
+      {
+        "id": "mult",
+        "label": "Mult",
+        "type": "number",
+        "default": 2.0,
+        "min": 0.01,
+        "max": 20
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "select",
+        "default": "hlc3",
+        "options": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "hl2",
+          "hlc3",
+          "ohlc4"
+        ]
+      },
+      {
+        "id": "anchor",
+        "label": "Anchor",
+        "type": "select",
+        "default": "day",
+        "options": [
+          "day",
+          "week",
+          "month",
+          "all"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "mid",
+        "label": "Mid",
+        "type": "line"
+      },
+      {
+        "id": "upper",
+        "label": "Upper",
+        "type": "line"
+      },
+      {
+        "id": "lower",
+        "label": "Lower",
+        "type": "line"
+      }
+    ],
+    "notes": [
+      "Anchors use UTC calendar boundaries; exchange-session calendars are not inferred."
+    ]
+  },
+  {
+    "id": "vwma",
+    "name": "VWMA",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 20,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "volume_oscillator",
+    "name": "Volume Oscillator",
+    "overlay": false,
+    "params": [
+      {
+        "id": "fast",
+        "label": "Fast",
+        "type": "integer",
+        "default": 5,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "slow",
+        "label": "Slow",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "vortex_indicator",
+    "name": "Vortex Indicator",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "plus",
+        "label": "Plus",
+        "type": "line"
+      },
+      {
+        "id": "minus",
+        "label": "Minus",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "williams_r",
+    "name": "Williams %R",
+    "overlay": false,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 14,
+        "min": 1,
+        "max": 500
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "williams_alligator",
+    "name": "Williams Alligator",
+    "overlay": true,
+    "params": [],
+    "plots": [
+      {
+        "id": "jaw",
+        "label": "Jaw",
+        "type": "line"
+      },
+      {
+        "id": "teeth",
+        "label": "Teeth",
+        "type": "line"
+      },
+      {
+        "id": "lips",
+        "label": "Lips",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "williams_fractal",
+    "name": "Williams Fractal",
+    "overlay": true,
+    "params": [
+      {
+        "id": "period",
+        "label": "Period",
+        "type": "integer",
+        "default": 2,
+        "min": 1,
+        "max": 20
+      }
+    ],
+    "plots": [
+      {
+        "id": "high",
+        "label": "High",
+        "type": "circles"
+      },
+      {
+        "id": "low",
+        "label": "Low",
+        "type": "circles"
+      }
+    ],
+    "notes": [
+      "Fractals are reported at confirmation time, not backdated to the pivot."
+    ]
+  },
+  {
+    "id": "guppy_multiple_moving_average",
+    "name": "Guppy Multiple Moving Average",
+    "overlay": true,
+    "params": [],
+    "plots": [
+      {
+        "id": "ma3",
+        "label": "Ma3",
+        "type": "line"
+      },
+      {
+        "id": "ma5",
+        "label": "Ma5",
+        "type": "line"
+      },
+      {
+        "id": "ma8",
+        "label": "Ma8",
+        "type": "line"
+      },
+      {
+        "id": "ma10",
+        "label": "Ma10",
+        "type": "line"
+      },
+      {
+        "id": "ma12",
+        "label": "Ma12",
+        "type": "line"
+      },
+      {
+        "id": "ma15",
+        "label": "Ma15",
+        "type": "line"
+      },
+      {
+        "id": "ma30",
+        "label": "Ma30",
+        "type": "line"
+      },
+      {
+        "id": "ma35",
+        "label": "Ma35",
+        "type": "line"
+      },
+      {
+        "id": "ma40",
+        "label": "Ma40",
+        "type": "line"
+      },
+      {
+        "id": "ma45",
+        "label": "Ma45",
+        "type": "line"
+      },
+      {
+        "id": "ma50",
+        "label": "Ma50",
+        "type": "line"
+      },
+      {
+        "id": "ma60",
+        "label": "Ma60",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "volume",
+    "name": "Volume",
+    "overlay": false,
+    "params": [],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "histogram"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "zig_zag",
+    "name": "Zig Zag",
+    "overlay": true,
+    "params": [
+      {
+        "id": "deviation",
+        "label": "Deviation",
+        "type": "number",
+        "default": 5.0,
+        "min": 0.01,
+        "max": 100
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": [
+      "Close-based percentage reversals; confirmed extremes reported at confirmation time without repainting."
+    ]
+  },
+  {
+    "id": "supertrend",
+    "name": "SuperTrend",
+    "overlay": true,
+    "params": [
+      {
+        "id": "length",
+        "label": "Length",
+        "type": "integer",
+        "default": 10,
+        "min": 1,
+        "max": 500
+      },
+      {
+        "id": "mult",
+        "label": "Mult",
+        "type": "number",
+        "default": 3.0,
+        "min": 0.01,
+        "max": 20
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      },
+      {
+        "id": "direction",
+        "label": "Direction",
+        "type": "line",
+        "visible": false
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "pivot_points_standard",
+    "name": "Pivot Points Standard",
+    "overlay": true,
+    "params": [
+      {
+        "id": "anchor",
+        "label": "Anchor",
+        "type": "select",
+        "default": "day",
+        "options": [
+          "day",
+          "week",
+          "month"
+        ]
+      }
+    ],
+    "plots": [
+      {
+        "id": "pivot",
+        "label": "Pivot",
+        "type": "line"
+      },
+      {
+        "id": "r1",
+        "label": "R1",
+        "type": "line"
+      },
+      {
+        "id": "s1",
+        "label": "S1",
+        "type": "line"
+      },
+      {
+        "id": "r2",
+        "label": "R2",
+        "type": "line"
+      },
+      {
+        "id": "s2",
+        "label": "S2",
+        "type": "line"
+      },
+      {
+        "id": "r3",
+        "label": "R3",
+        "type": "line"
+      },
+      {
+        "id": "s3",
+        "label": "S3",
+        "type": "line"
+      }
+    ],
+    "notes": [
+      "Traditional pivot levels use the previous complete UTC day/week/month."
+    ]
+  },
+  {
+    "id": "volume_profile_visible_range",
+    "name": "Volume Profile Visible Range",
+    "overlay": true,
+    "params": [
+      {
+        "id": "bins",
+        "label": "Bins",
+        "type": "integer",
+        "default": 24,
+        "min": 2,
+        "max": 200
+      }
+    ],
+    "plots": [],
+    "notes": [
+      "OHLCV approximation: uniform volume allocation across each bar high-low range."
+    ]
+  },
+  {
+    "id": "volume_profile_fixed_range",
+    "name": "Volume Profile Fixed Range",
+    "overlay": true,
+    "params": [
+      {
+        "id": "bins",
+        "label": "Bins",
+        "type": "integer",
+        "default": 24,
+        "min": 2,
+        "max": 200
+      },
+      {
+        "id": "bars",
+        "label": "Bars",
+        "type": "integer",
+        "default": 100,
+        "min": 1,
+        "max": 10000
+      }
+    ],
+    "plots": [],
+    "notes": [
+      "OHLCV approximation over the last bars parameter; uniform volume allocation across each high-low range."
+    ]
+  },
+  {
+    "id": "spread",
+    "name": "Spread",
+    "overlay": false,
+    "params": [
+      {
+        "id": "symbol",
+        "label": "Second symbol",
+        "type": "string",
+        "default": ""
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "ratio",
+    "name": "Ratio",
+    "overlay": false,
+    "params": [
+      {
+        "id": "symbol",
+        "label": "Second symbol",
+        "type": "string",
+        "default": ""
+      }
+    ],
+    "plots": [
+      {
+        "id": "value",
+        "label": "Value",
+        "type": "line"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "smart-money-concepts",
+    "name": "Smart Money Concepts",
+    "overlay": true,
+    "params": [
+      {
+        "id": "depth",
+        "label": "Swing Depth",
+        "type": "integer",
+        "default": 5,
+        "min": 1,
+        "max": 1000
+      }
+    ],
+    "plots": [],
+    "notes": [
+      "SMC geometry uses only the supplied closed-bar snapshot (maximum 5000 bars).",
+      "Swing origins are backdated geometry; confirmedAt records confirmation and provisional marks the mutable terminal pivot. Recompute on each replay prefix; drawings are not historical trading signals."
+    ]
+  }
+]

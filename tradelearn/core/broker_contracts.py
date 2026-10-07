@@ -74,6 +74,8 @@ class PositionSnapshot:
     qty: float
     avg_price: float
     ts: pd.Timestamp
+    market_value: float | None = None
+    mark_price: float | None = None
 
 
 @dataclass(frozen=True)

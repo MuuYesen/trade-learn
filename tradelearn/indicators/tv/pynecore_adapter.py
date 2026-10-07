@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import wraps
+from threading import RLock
 
 import pandas as pd
 import pynecore.lib as pyne_lib
@@ -11,6 +13,108 @@ from pynecore.core.function_isolation import isolate_function
 from pynecore.core.function_isolation import reset as reset_pyne_functions
 from pynecore.core.series import inline_series
 from pynecore.types.na import NA
+
+_PYNE_LOCK = RLock()
+
+
+def _isolated_run(func):
+    """Serialize access to PyneCore's global bar and function-isolation state."""
+
+    @wraps(func)
+    def run(*args, **kwargs):
+        with _PYNE_LOCK:
+            fields = ("bar_index", "open", "high", "low", "close", "volume", "hl2", "hlc3", "ohlc4")
+            previous = {key: getattr(pyne_lib, key) for key in fields}
+            try:
+                return func(*args, **kwargs)
+            finally:
+                for key, value in previous.items():
+                    setattr(pyne_lib, key, value)
+
+    return run
+
+
+def _aligned(reference: pd.Series, **inputs: pd.Series) -> None:
+    for name, value in inputs.items():
+        if not pd.Series(value).index.equals(reference.index):
+            raise ValueError(f"{name} index must exactly match the reference index")
+
+
+def _anchor_series(reference: pd.Series, anchor: pd.Series | None) -> pd.Series:
+    if anchor is None:
+        return (
+            pd.Series([True] + [False] * (len(reference) - 1), index=reference.index, dtype=bool)
+            if len(reference)
+            else pd.Series(index=reference.index, dtype=bool)
+        )
+    anchor = pd.Series(anchor)
+    _aligned(reference, anchor=anchor)
+    if not pd.api.types.is_bool_dtype(anchor.dtype) or anchor.isna().any():
+        raise ValueError("anchor must contain nonmissing bool values")
+    return anchor
+
+
+def _accdist(high: pd.Series, low: pd.Series, close: pd.Series, volume: pd.Series) -> pd.Series:
+    return _run_ohlcv_indicator(high, low, close, volume, "accdist", lambda fn: fn())
+
+
+def _pvt(close: pd.Series, volume: pd.Series) -> pd.Series:
+    return _run_ohlcv_indicator(close, close, close, volume, "pvt", lambda fn: fn())
+
+
+def _wpr(high: pd.Series, low: pd.Series, close: pd.Series, length: int = 14) -> pd.Series:
+    return _run_ohlcv_indicator(high, low, close, None, "wpr", lambda fn: fn(length))
+
+
+def _vwma(close: pd.Series, volume: pd.Series, length: int = 20) -> pd.Series:
+    return _run_ohlcv_indicator(
+        close, close, close, volume, "vwma", lambda fn: fn(pyne_lib.close, length)
+    )
+
+
+def _correlation(source1: pd.Series, source2: pd.Series, length: int = 20) -> pd.Series:
+    source1, source2 = pd.Series(source1), pd.Series(source2)
+    _aligned(source1, source2=source2)
+    return _run_source_indicator(
+        source1,
+        "correlation",
+        lambda source, fn: fn(source, _pyne_value(source2.iloc[pyne_lib.bar_index]), length),
+    )
+
+
+def _pivot_point_levels(
+    open: pd.Series,
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    anchor: pd.Series,
+    type: str = "Traditional",
+    developing: bool = False,
+) -> pd.DataFrame:
+    """Native PyneCore pivot levels from completed periods (unless developing).
+
+    Unsupported native levels are NaN. The first completed period becomes
+    available only at the next anchor. Woodie uses the current period's open.
+    """
+    if type.lower() not in {"traditional", "fibonacci", "woodie", "classic", "dm", "camarilla"}:
+        raise ValueError("unknown pivot type")
+    close = pd.Series(close)
+    anchor = _anchor_series(close, anchor)
+    rows = _run_ohlcv_values(
+        high,
+        low,
+        close,
+        None,
+        "pivot_point_levels",
+        lambda fn: fn(type, bool(anchor.iloc[pyne_lib.bar_index]), developing),
+        open=open,
+    )
+    return pd.DataFrame(
+        rows,
+        index=close.index,
+        columns=("p", "r1", "s1", "r2", "s2", "r3", "s3", "r4", "s4", "r5", "s5"),
+        dtype=float,
+    )
 
 
 def _sma(close: pd.Series, length: int = 20) -> pd.Series:
@@ -332,16 +436,36 @@ def _vwap(
     low: pd.Series,
     close: pd.Series,
     volume: pd.Series,
-) -> pd.Series:
-    """Return close-based volume-weighted average price anchored at the first supplied bar."""
-    return _run_ohlcv_indicator(
+    source: pd.Series | None = None,
+    anchor: pd.Series | None = None,
+    stdev_mult: float | None = None,
+) -> pd.Series | pd.DataFrame:
+    """VWAP with optional explicit source, reset bars, and weighted bands.
+
+    Defaults retain close-price accumulation starting at the first bar.
+    Explicit anchors produce NaN until the first True bar.
+    """
+    close = pd.Series(close)
+    source = close if source is None else pd.Series(source)
+    _aligned(close, source=source)
+    anchor = _anchor_series(close, anchor)
+    rows = _run_ohlcv_values(
         high,
         low,
         close,
         volume,
         "vwap",
-        lambda fn: fn(pyne_lib.close, anchor=pyne_lib.bar_index == 0),
+        lambda fn: fn(
+            _pyne_value(source.iloc[pyne_lib.bar_index]),
+            anchor=bool(anchor.iloc[pyne_lib.bar_index]),
+            stdev_mult=stdev_mult,
+        ),
     )
+    if stdev_mult is not None:
+        return pd.DataFrame(
+            rows, index=close.index, columns=("vwap", "upper", "lower"), dtype=float
+        )
+    return pd.Series(rows, index=close.index, name="vwap", dtype=float)
 
 
 def _supertrend(
@@ -403,7 +527,9 @@ def _run_source_indicator(
 ) -> pd.Series:
     """Wrap one PyneCore output per source bar in a Series retaining index and name."""
     values = _run_source_values(source, name, call)
-    return pd.Series(values, index=pd.Series(source).index, name=getattr(source, "name", None))
+    return pd.Series(
+        values, index=pd.Series(source).index, name=getattr(source, "name", None), dtype=float
+    )
 
 
 def _run_source_frame(
@@ -414,9 +540,10 @@ def _run_source_frame(
 ) -> pd.DataFrame:
     """Wrap tuple-valued PyneCore outputs in named columns retaining the source index."""
     rows = _run_source_values(source, name, call)
-    return pd.DataFrame(rows, index=pd.Series(source).index, columns=list(columns))
+    return pd.DataFrame(rows, index=pd.Series(source).index, columns=list(columns), dtype=float)
 
 
+@_isolated_run
 def _run_source_values(
     source: pd.Series,
     name: str,
@@ -445,7 +572,7 @@ def _run_ohlcv_indicator(
 ) -> pd.Series:
     """Wrap scalar OHLCV replay results using the close index and indicator name."""
     values = _run_ohlcv_values(high, low, close, volume, name, call)
-    return pd.Series(values, index=pd.Series(close).index, name=name)
+    return pd.Series(values, index=pd.Series(close).index, name=name, dtype=float)
 
 
 def _run_ohlcv_frame(
@@ -459,9 +586,10 @@ def _run_ohlcv_frame(
 ) -> pd.DataFrame:
     """Wrap multi-output OHLCV replay results using named columns and the close index."""
     rows = _run_ohlcv_values(high, low, close, volume, name, call)
-    return pd.DataFrame(rows, index=pd.Series(close).index, columns=list(columns))
+    return pd.DataFrame(rows, index=pd.Series(close).index, columns=list(columns), dtype=float)
 
 
+@_isolated_run
 def _run_ohlcv_values(
     high: pd.Series,
     low: pd.Series,
@@ -469,23 +597,25 @@ def _run_ohlcv_values(
     volume: pd.Series | None,
     name: str,
     call: Callable[[Callable], object],
+    *,
+    open: pd.Series | None = None,
 ) -> list[object]:
     """Replay isolated OHLCV state, defaulting absent volume to one and aligning supplied volume."""
     high_series = pd.Series(high)
     low_series = pd.Series(low)
     close_series = pd.Series(close)
     volume_series = (
-        pd.Series(1.0, index=close_series.index)
-        if volume is None
-        else pd.Series(volume).reindex(close_series.index)
+        pd.Series(1.0, index=close_series.index) if volume is None else pd.Series(volume)
     )
+    open_series = close_series if open is None else pd.Series(open)
+    _aligned(close_series, high=high_series, low=low_series, volume=volume_series, open=open_series)
     reset_pyne_functions()
     fn = isolate_function(getattr(pyne_ta, name), name, f"tradelearn.tv.{name}")
     values: list[object] = []
-    for index, (high_value, low_value, close_value, volume_value) in enumerate(
-        zip(high_series, low_series, close_series, volume_series, strict=False)
+    for index, (high_value, low_value, close_value, volume_value, open_value) in enumerate(
+        zip(high_series, low_series, close_series, volume_series, open_series, strict=True)
     ):
-        _set_pyne_ohlcv(index, high_value, low_value, close_value, volume_value)
+        _set_pyne_ohlcv(index, high_value, low_value, close_value, volume_value, open_value)
         values.append(_to_pandas_value(call(fn)))
     return values
 
@@ -496,13 +626,15 @@ def _set_pyne_ohlcv(
     low: object,
     close: object,
     volume: object,
+    open: object,
 ) -> None:
-    """Set the current PyneCore bar and derived prices, substituting close for unavailable open."""
+    open_value = _pyne_value(open)
     high_value = _pyne_value(high)
     low_value = _pyne_value(low)
     close_value = _pyne_value(close)
     volume_value = _pyne_value(volume)
     pyne_lib.bar_index = index
+    pyne_lib.open = open_value
     pyne_lib.high = high_value
     pyne_lib.low = low_value
     pyne_lib.close = close_value
@@ -519,8 +651,11 @@ def _set_pyne_ohlcv(
     )
     pyne_lib.ohlc4 = (
         NA(float)
-        if isinstance(high_value, NA) or isinstance(low_value, NA) or isinstance(close_value, NA)
-        else (high_value + low_value + close_value + close_value) / 4
+        if isinstance(high_value, NA)
+        or isinstance(low_value, NA)
+        or isinstance(close_value, NA)
+        or isinstance(open_value, NA)
+        else (open_value + high_value + low_value + close_value) / 4
     )
 
 
@@ -535,12 +670,20 @@ def _to_pandas_value(value: object) -> object:
     """Recursively convert PyneCore NA values to None, including tuple-valued outputs."""
     if isinstance(value, NA):
         return None
+    if isinstance(value, list):
+        return [_to_pandas_value(item) for item in value]
     if isinstance(value, tuple):
         return tuple(_to_pandas_value(item) for item in value)
     return value
 
 
 __all__ = [
+    "_accdist",
+    "_pvt",
+    "_wpr",
+    "_vwma",
+    "_correlation",
+    "_pivot_point_levels",
     "_adx",
     "_alma",
     "_atr",

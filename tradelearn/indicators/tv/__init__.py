@@ -12,6 +12,7 @@ import pynecore.lib.ta as pyne_ta
 from tradelearn.indicators.base import FunctionIndicator
 
 from .pynecore_adapter import (
+    _accdist,
     _adx,
     _alma,
     _atr,
@@ -21,6 +22,7 @@ from .pynecore_adapter import (
     _cci,
     _change,
     _cmo,
+    _correlation,
     _cum,
     _dmi,
     _ema,
@@ -33,6 +35,8 @@ from .pynecore_adapter import (
     _mfi,
     _mom,
     _obv,
+    _pivot_point_levels,
+    _pvt,
     _rma,
     _roc,
     _rsi,
@@ -46,7 +50,9 @@ from .pynecore_adapter import (
     _tsi,
     _variance,
     _vwap,
+    _vwma,
     _wma,
+    _wpr,
 )
 from .pynecore_adapter import (
     _run_source_indicator as _run_source_indicator,
@@ -58,6 +64,12 @@ FALLBACKS = {
     "ichimoku": "pynecore.lib.ta does not expose ichimoku; implemented locally.",
 }
 COVERED_PYNECORE = {
+    "accdist",
+    "pvt",
+    "wpr",
+    "vwma",
+    "correlation",
+    "pivot_point_levels",
     "alma",
     "atr",
     "bb",
@@ -91,6 +103,15 @@ COVERED_PYNECORE = {
     "vwap",
     "wma",
 }
+
+accdist = FunctionIndicator("tv.accdist", _accdist, {})
+pvt = FunctionIndicator("tv.pvt", _pvt, {})
+wpr = FunctionIndicator("tv.wpr", _wpr, {"length": 14})
+vwma = FunctionIndicator("tv.vwma", _vwma, {"length": 20})
+correlation = FunctionIndicator("tv.correlation", _correlation, {"length": 20})
+pivot_point_levels = FunctionIndicator(
+    "tv.pivot_point_levels", _pivot_point_levels, {"type": "Traditional", "developing": False}
+)
 
 sma = FunctionIndicator("tv.sma", _sma, {"length": 20})
 ema = FunctionIndicator("tv.ema", _ema, {"length": 20})
@@ -132,6 +153,12 @@ vwap = FunctionIndicator("tv.vwap", _vwap, {})
 supertrend = FunctionIndicator("tv.supertrend", _supertrend, {"length": 10, "multiplier": 3.0})
 ichimoku = FunctionIndicator("tv.ichimoku", _ichimoku, {"tenkan": 9, "kijun": 26, "senkou": 52})
 
+ACCDIST = accdist
+PVT = pvt
+WPR = wpr
+VWMA = vwma
+CORRELATION = correlation
+PIVOT_POINT_LEVELS = pivot_point_levels
 SMA = sma
 EMA = ema
 WMA = wma
@@ -169,6 +196,18 @@ SUPERTREND = supertrend
 ICHIMOKU = ichimoku
 
 __all__ = [
+    "accdist",
+    "ACCDIST",
+    "pvt",
+    "PVT",
+    "wpr",
+    "WPR",
+    "vwma",
+    "VWMA",
+    "correlation",
+    "CORRELATION",
+    "pivot_point_levels",
+    "PIVOT_POINT_LEVELS",
     "ADX",
     "ALMA",
     "ATR",

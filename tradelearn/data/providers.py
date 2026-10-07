@@ -242,7 +242,7 @@ class TdxProvider:
 
 
 class TradingViewProvider:
-    """tvdatafeed-backed OHLCV provider."""
+    """TradeLearn TradingView transport with legacy tvDatafeed client injection."""
 
     def __init__(
         self,
@@ -294,13 +294,15 @@ class TradingViewProvider:
             for item in tqdm(
                 symbol, desc="TradingViewProvider.history_ohlc", leave=True, unit="symbol"
             ):
-                results.append(self.history_ohlc(
-                    item,
-                    start=start,
-                    end=end,
-                    freq=freq,
-                    exchange=exchange,
-                ))
+                results.append(
+                    self.history_ohlc(
+                        item,
+                        start=start,
+                        end=end,
+                        freq=freq,
+                        exchange=exchange,
+                    )
+                )
             return _combine_bars(results)
 
         exchange_name, tv_symbol = _split_tradingview_symbol(symbol, exchange=exchange)
@@ -314,12 +316,31 @@ class TradingViewProvider:
             freq,
         )
         client = self._make_client()
-        rows = client.get_hist(
+        from tradelearn.data.tradingview_transport import RESOLUTIONS, TradingViewTransport
+
+        kwargs = dict(
             symbol=tv_symbol,
             exchange=exchange_name,
-            interval=self._interval_value(freq),
+            interval=(
+                RESOLUTIONS[TRADINGVIEW_INTERVAL[freq]]
+                if isinstance(client, TradingViewTransport)
+                else self._interval_value(freq)
+            ),
             n_bars=self.n_bars,
         )
+        if isinstance(client, TradingViewTransport):
+            # The research Bars contract below promises unadjusted prices.
+            # Charting's separate history_window API defaults to split adjustment.
+            kwargs["adjustment"] = "none"
+        if isinstance(client, TradingViewTransport) and end is not None:
+            cutoff = pd.Timestamp(end)
+            cutoff = (
+                cutoff.tz_localize("UTC") if cutoff.tzinfo is None else cutoff.tz_convert("UTC")
+            )
+            if cutoff == cutoff.normalize():
+                cutoff += pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+            kwargs["to"] = int(cutoff.timestamp())
+        rows = client.get_hist(**kwargs)
         if rows is None or len(rows) == 0:
             raise ConnectionError(f"TradingView returned no rows for {symbol}")
         raw = _normalize_tradingview_columns(pd.DataFrame(rows), exchange_name, tv_symbol)
@@ -329,7 +350,9 @@ class TradingViewProvider:
             market="GLOBAL",
             freq=freq,
             engine="tradingview",
-            source="tvdatafeed",
+            source="tradelearn:tradingview"
+            if isinstance(client, TradingViewTransport)
+            else "tvdatafeed",
             adjust="none",
         )
         LOGGER.info(
@@ -345,14 +368,45 @@ class TradingViewProvider:
         if self._client_factory is not None:
             return self._client_factory()
 
-        from tvDatafeed import TvDatafeed
-        with self._suppress_stdout():
-            return TvDatafeed(username=self.username, password=self.password)
+        from tradelearn.data.tradingview_transport import TradingViewTransport
+
+        return TradingViewTransport(username=self.username, password=self.password)
+
+    def history_window(
+        self, symbol, resolution, count=300, to=None, forward=False, *, adjustment="splits"
+    ):
+        """Fetch chart bars with a server-side cutoff or forward replay anchor."""
+        from tradelearn.data.tradingview_transport import normalize_adjustment
+
+        adjustment = normalize_adjustment(adjustment)
+        return self._make_client().history_window(
+            symbol,
+            resolution,
+            count=count,
+            to=to,
+            forward=forward,
+            adjustment=adjustment,
+        )
+
+    def resolve_symbol(self, symbol, *, adjustment="splits"):
+        """Return TradingView chart symbol metadata."""
+        from tradelearn.data.tradingview_transport import normalize_adjustment
+
+        adjustment = normalize_adjustment(adjustment)
+        return self._make_client().resolve_symbol(symbol, adjustment=adjustment)
+
+    def search_symbols(self, query):
+        """Search TradingView markets through TradeLearn."""
+        return self._make_client().search_symbols(query)
 
     @staticmethod
     def _interval_value(freq: Frequency) -> object:
-        from tvDatafeed import Interval
-        return getattr(Interval, TRADINGVIEW_INTERVAL[freq])
+        try:
+            from tvDatafeed import Interval
+
+            return getattr(Interval, TRADINGVIEW_INTERVAL[freq])
+        except (ImportError, AttributeError):
+            return TRADINGVIEW_INTERVAL[freq]
 
 
 def infer_tdx_market(symbol: str) -> tuple[int, str]:

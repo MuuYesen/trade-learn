@@ -8,22 +8,13 @@ trading.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from tradelearn.core.broker_contracts import (
-    AccountSnapshot,
-    Fill,
-    OrderAck,
-    OrderRequest,
-    OrderStatusUpdate,
-    PositionSnapshot,
-)
 from tradelearn.core.errors import ContractError
 
 
@@ -53,62 +44,6 @@ class Experiment:
     artifacts: list[Path] = field(default_factory=list)
     run_id: str | None = None
     parent_run_id: str | None = None
-
-
-class Broker(Protocol):
-    """Broker-neutral target protocol for backtest, paper, and live adapters.
-
-    Backtest runtime brokers may keep richer internal state machines, but the
-    adapter boundary should translate into these neutral contracts.
-    """
-
-    def place(self, req: OrderRequest) -> OrderAck:
-        """Place an order and return its broker-specific order id."""
-        ...
-
-    def cancel(self, broker_oid: str) -> None:
-        """Cancel an existing order by id."""
-        ...
-
-    def modify(self, broker_oid: str, **kwargs: Any) -> None:
-        """Modify broker-supported order fields."""
-        ...
-
-    def positions(self) -> list[PositionSnapshot]:
-        """Return current broker positions."""
-        ...
-
-    def account(self) -> AccountSnapshot:
-        """Return current account state."""
-        ...
-
-    def order_status(self, broker_oid: str) -> OrderStatusUpdate:
-        """Return the current status for an order id."""
-        ...
-
-    def on_fill(self, cb: Callable[[Fill], None]) -> None:
-        """Register a fill callback."""
-        ...
-
-    def on_cancel(self, cb: Callable[[Any], None]) -> None:
-        """Register a cancellation callback."""
-        ...
-
-    def on_reject(self, cb: Callable[[Any, str], None]) -> None:
-        """Register a rejection callback."""
-        ...
-
-    def connect(self) -> None:
-        """Open broker connectivity."""
-        ...
-
-    def disconnect(self) -> None:
-        """Close broker connectivity."""
-        ...
-
-    def is_connected(self) -> bool:
-        """Return whether broker connectivity is active."""
-        ...
 
 
 REQUIRED_BAR_COLUMNS = ("open", "high", "low", "close", "volume")

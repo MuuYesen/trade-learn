@@ -6,6 +6,7 @@ import tradelearn.metrics as metrics
 def test_metrics_public_api_matches_documented_inventory() -> None:
     """The metrics facade exposes the documented returns/risk/factor/trade groups."""
     expected_returns = {
+        "cash_flow_return",
         "annual_return",
         "cum_returns",
         "excess_returns",
@@ -51,4 +52,4 @@ def test_metrics_public_api_matches_documented_inventory() -> None:
     expected = expected_returns | expected_risk | expected_factor | expected_trade
 
     assert set(metrics.__all__) == expected
-    assert len(metrics.__all__) == 34
+    assert len(metrics.__all__) == len(expected)

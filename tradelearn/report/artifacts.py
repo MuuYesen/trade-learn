@@ -23,6 +23,7 @@ def write_artifact_bundle(
     strategy: Any | None = None,
     market_data: pd.DataFrame | None = None,
     benchmark: pd.Series | None = None,
+    timeframe: str | None = None,
     log_report: bool = True,
     log_plot: bool = False,
 ) -> list[Path]:
@@ -30,13 +31,30 @@ def write_artifact_bundle(
 
     This helper owns artifact materialization for both HTML reports and
     MLflow logging. MLflow-specific code should only upload the returned files.
+    Pass the actual source-bar timeframe (minute count, 1D, 1W, or 1M) to
+    preserve it in metadata. Omitted periods remain unknown, never guessed.
     """
 
+    if timeframe is not None and timeframe not in {
+        "1",
+        "3",
+        "5",
+        "15",
+        "30",
+        "45",
+        "60",
+        "120",
+        "240",
+        "1D",
+        "1W",
+        "1M",
+    }:
+        raise ValueError("timeframe must be a supported bar period (minutes, 1D, 1W, 1M)")
     output_dir = Path(directory)
     output_dir.mkdir(parents=True, exist_ok=True)
     reporter = Reporter(stats, market_data=market_data)
 
-    _write_tables(output_dir, stats, strategy, benchmark=benchmark)
+    _write_tables(output_dir, stats, strategy, benchmark=benchmark, timeframe=timeframe)
 
     if log_report:
         reporter.report(output_dir / "report.html", benchmark=benchmark)
@@ -81,8 +99,9 @@ def _write_tables(
     strategy: Any | None,
     *,
     benchmark: pd.Series | None = None,
+    timeframe: str | None = None,
 ) -> None:
-    sheets = _artifact_sheets(stats, strategy, benchmark=benchmark)
+    sheets = _artifact_sheets(stats, strategy, benchmark=benchmark, timeframe=timeframe)
     if not sheets:
         return
     with pd.ExcelWriter(output_dir / "artifacts.xlsx") as writer:
@@ -101,6 +120,7 @@ def _artifact_sheets(
     strategy: Any | None,
     *,
     benchmark: pd.Series | None = None,
+    timeframe: str | None = None,
 ) -> dict[str, pd.DataFrame]:
     sheets: dict[str, pd.DataFrame] = {
         "metadata": pd.DataFrame(
@@ -110,6 +130,8 @@ def _artifact_sheets(
             ]
         )
     }
+    if timeframe is not None:
+        sheets["metadata"].loc[len(sheets["metadata"])] = {"key": "timeframe", "value": timeframe}
     reporter = Reporter(stats)
     summary = _stats_field(stats, "summary", {})
     if summary:

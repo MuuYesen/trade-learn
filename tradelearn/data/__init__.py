@@ -8,6 +8,7 @@ from tradelearn.data.providers import (
     TdxProvider,
     TradingViewProvider,
 )
+from tradelearn.data.tushare import TushareProvider
 
 __all__ = [
     "BarsCache",
@@ -18,5 +19,6 @@ __all__ = [
     "DataProvider",
     "DuckDBBarsBackend",
     "TdxProvider",
+    "TushareProvider",
     "TradingViewProvider",
 ]
