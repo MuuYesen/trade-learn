@@ -3,6 +3,7 @@
 Expiry interpretation and trailing-watermark policies intentionally remain in
 TradeLearn-specific tests; this oracle covers next-open stops, cancel, and OCO.
 """
+
 from __future__ import annotations
 
 import pandas as pd
@@ -15,22 +16,23 @@ bt = pytest.importorskip("backtrader")
 
 
 def _bars(scenario):
-    rows = [[100., 101., 99., 100.]] * 5
+    rows = [[100.0, 101.0, 99.0, 100.0]] * 5
     if scenario == "buy-stop-intrabar":
-        rows[1] = [100., 112., 99., 110.]
+        rows[1] = [100.0, 112.0, 99.0, 110.0]
     elif scenario == "buy-stop-gap":
-        rows[1] = [115., 116., 114., 115.]
+        rows[1] = [115.0, 116.0, 114.0, 115.0]
     elif scenario == "sell-stop-intrabar":
-        rows[1] = [100., 101., 88., 90.]
+        rows[1] = [100.0, 101.0, 88.0, 90.0]
     elif scenario == "sell-stop-gap":
-        rows[1] = [85., 86., 84., 85.]
+        rows[1] = [85.0, 86.0, 84.0, 85.0]
     elif scenario == "cancel":
-        rows[3] = [80., 85., 75., 80.]
+        rows[3] = [80.0, 85.0, 75.0, 80.0]
     elif scenario == "bracket":
-        rows[2] = [100., 112., 88., 100.]
-    frame = pd.DataFrame(rows, columns=["open", "high", "low", "close"],
-                         index=pd.date_range("2026-01-01", periods=5))
-    frame["volume"] = 1000.
+        rows[2] = [100.0, 112.0, 88.0, 100.0]
+    frame = pd.DataFrame(
+        rows, columns=["open", "high", "low", "close"], index=pd.date_range("2026-01-01", periods=5)
+    )
+    frame["volume"] = 1000.0
     return frame
 
 
@@ -60,9 +62,10 @@ def _run(scenario, *, backtrader):
                         size=2, price=90.0, exectype=order_type.Limit
                     )
                 else:
-                    orders = self.buy_bracket(size=2, exectype=order_type.Market,
-                                              stopprice=90., limitprice=110.)
-                    self.named_orders = dict(zip(("entry", "stop", "limit"), orders, strict=False))
+                    orders = self.buy_bracket(
+                        size=2, exectype=order_type.Market, stopprice=90.0, limitprice=110.0
+                    )
+                    self.named_orders = dict(zip(("entry", "stop", "limit"), orders, strict=True))
             elif self.bar == 2 and scenario == "cancel":
                 self.cancel(self.named_orders["entry"])
 
@@ -71,8 +74,9 @@ def _run(scenario, *, backtrader):
                 # TradeLearn exposes an unsigned executed quantity; normalize
                 # direction explicitly to compare the economic fill with BT.
                 quantity = abs(float(order.executed.size)) * (1 if order.isbuy() else -1)
-                self.terminals.append((order.ref, order.getstatusname(),
-                                       quantity, float(order.executed.price)))
+                self.terminals.append(
+                    (order.ref, order.getstatusname(), quantity, float(order.executed.price))
+                )
 
     if backtrader:
         cerebro = bt.Cerebro(stdstats=False)
@@ -80,28 +84,32 @@ def _run(scenario, *, backtrader):
     else:
         cerebro = Cerebro(match_mode="exact", trade_on_close=False, stdstats=False)
         cerebro.adddata(_bars(scenario))
-    cerebro.broker.setcash(10_000.)
-    cerebro.broker.setcommission(commission=0.)
+    cerebro.broker.setcash(10_000.0)
+    cerebro.broker.setcommission(commission=0.0)
     cerebro.addstrategy(OracleStrategy)
     [s] = cerebro.run()
     names = {order.ref: name for name, order in s.named_orders.items()}
     return {
         # OCO notification order differs between adapters. Sort without
         # deduplicating so missing or repeated terminal events still fail.
-        "terminals": sorted((names[ref], status, size, price)
-                            for ref, status, size, price in s.terminals),
+        "terminals": sorted(
+            (names[ref], status, size, price) for ref, status, size, price in s.terminals
+        ),
         "statuses": {name: order.getstatusname() for name, order in s.named_orders.items()},
         "position": float(s.position.size),
         "cash": float(cerebro.broker.getcash()),
     }
 
 
-@pytest.mark.parametrize("scenario,expected_price,expected_position", [
-    ("buy-stop-intrabar", 110., 2.),
-    ("buy-stop-gap", 115., 2.),
-    ("sell-stop-intrabar", 90., -2.),
-    ("sell-stop-gap", 85., -2.),
-])
+@pytest.mark.parametrize(
+    "scenario,expected_price,expected_position",
+    [
+        ("buy-stop-intrabar", 110.0, 2.0),
+        ("buy-stop-gap", 115.0, 2.0),
+        ("sell-stop-intrabar", 90.0, -2.0),
+        ("sell-stop-gap", 85.0, -2.0),
+    ],
+)
 def test_next_open_stop_execution_matches_backtrader(scenario, expected_price, expected_position):
     oracle = _run(scenario, backtrader=True)
     actual = _run(scenario, backtrader=False)
@@ -112,20 +120,22 @@ def test_next_open_stop_execution_matches_backtrader(scenario, expected_price, e
 def test_active_cancel_matches_backtrader_without_later_fill():
     oracle = _run("cancel", backtrader=True)
     actual = _run("cancel", backtrader=False)
-    assert oracle["terminals"] == [("entry", "Canceled", 0., 0.)]
+    assert oracle["terminals"] == [("entry", "Canceled", 0.0, 0.0)]
     assert oracle["position"] == 0
-    assert oracle["cash"] == 10_000.
+    assert oracle["cash"] == 10_000.0
     assert actual == oracle
 
 
 def test_bracket_both_touches_matches_backtrader_stop_first_oco():
     oracle = _run("bracket", backtrader=True)
     actual = _run("bracket", backtrader=False)
-    assert oracle["terminals"] == sorted([
-        ("entry", "Completed", 2., 100.),
-        ("stop", "Completed", -2., 90.),
-        ("limit", "Canceled", 0., 0.),
-    ])
+    assert oracle["terminals"] == sorted(
+        [
+            ("entry", "Completed", 2.0, 100.0),
+            ("stop", "Completed", -2.0, 90.0),
+            ("limit", "Canceled", 0.0, 0.0),
+        ]
+    )
     assert oracle["position"] == 0
-    assert oracle["cash"] == 9980.
+    assert oracle["cash"] == 9980.0
     assert actual == oracle

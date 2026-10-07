@@ -1,4 +1,5 @@
 """Orders created by lifecycle callbacks must wait for actual native matching."""
+
 import datetime as dt
 
 import pytest
@@ -32,8 +33,9 @@ def test_expiry_callback_can_submit_market_replacement(match_mode, feed_count, t
     class Replace(RecordingStrategy):
         def act(self):
             if self.bar == 1:
-                self.original = self.buy(size=1, price=9, exectype=Order.Limit,
-                                         valid=dt.timedelta(days=1))
+                self.original = self.buy(
+                    size=1, price=9, exectype=Order.Limit, valid=dt.timedelta(days=1)
+                )
 
         def notify_order(self, order):
             super().notify_order(order)
