@@ -204,3 +204,11 @@ zoo/
 
 # Frozen offline CI input; all other market archives remain local.
 !tests/golden/datasets/tv/AAPL_2020-01-01_2024-12-31_1d.parquet
+
+# Local production workflow captures and QMT-only diagnostic fixtures.
+/ops/n8n/*.applied.json
+/ops/n8n/*.dry-run.json
+/ops/n8n/*.before.json
+/ops/n8n/*.after.json
+/ops/sentinel-production/
+/tests/unit/strategy/fixtures/qmt_20260908_rejections.json
