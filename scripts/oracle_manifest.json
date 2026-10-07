@@ -1,0 +1,70 @@
+{
+  "commit": "e28ae1556d637975b95f1cd4952e9e090af8a461",
+  "files": [
+    {
+      "path": "reference/tradelearn_1x/query/__init__.py",
+      "git_blob": "9e18795d1b2e0fcd27d55508bc016a3215a2e0ad",
+      "sha256": "6a85aea205277bdd59aeb231e37e28910ffcd95c27c42dd9061bf1239d1bdf19"
+    },
+    {
+      "path": "reference/tradelearn_1x/query/alpha/alphas101.py",
+      "git_blob": "eefff7e5773950d8d36b106c4106d1139eab46ca",
+      "sha256": "3f8fbcc5e2d51ecf90c150a15fd5a6a68bff5216a41b19b3a8c03a4e4ec0b862"
+    },
+    {
+      "path": "reference/tradelearn_1x/query/alpha/alphas191.py",
+      "git_blob": "a3d4bdc94cd4604f548c8a3a9adf5da67420a05e",
+      "sha256": "1adf3ffe8ae7b7e7aef4567a0de3f642fdb53edabfe535d1edd3411c416962ee"
+    },
+    {
+      "path": "reference/tradelearn_1x/query/query.py",
+      "git_blob": "5705ddf216368d8b3f05c77cbdeaea43cde342a0",
+      "sha256": "4e948a7d82b96ce0d9540a59151dceb9617fc4fcc8b9d7f05e645882132a0092"
+    },
+    {
+      "path": "reference/tradelearn_1x/query/tec/mytt/tdx30.py",
+      "git_blob": "be788bbcc0119b50955cf3038d3a193bf369315d",
+      "sha256": "79cb05e6a2fd0732825bd49a8f3146e5517dd64a64cc6b6f2985c6df93a340d3"
+    },
+    {
+      "path": "reference/tradelearn_1x/strategy/evaluate/empyrical/__init__.py",
+      "git_blob": "a1ae51134a44b54bade62131f95aac2bc6460ce5",
+      "sha256": "75a125f0e82768442f6ace754aad63162ecbcd887f2b274651bd47a42c32d295"
+    },
+    {
+      "path": "reference/tradelearn_1x/strategy/evaluate/empyrical/deprecate.py",
+      "git_blob": "2e5700ec0f9cfc2b27598bdf17428fafab376fdc",
+      "sha256": "d4b2427573ba4697255fe8a4589345bddd416e7339a050ef71cf5ddb8e0f1fd3"
+    },
+    {
+      "path": "reference/tradelearn_1x/strategy/evaluate/empyrical/perf_attrib.py",
+      "git_blob": "f03bf97482ccf1e0967c6c5b85ee9b12d9d20052",
+      "sha256": "5d31f7cd8f597b28b32af71f330267e144db38e685e72176bfa30b5aefc03b98"
+    },
+    {
+      "path": "reference/tradelearn_1x/strategy/evaluate/empyrical/periods.py",
+      "git_blob": "32a9693c0e292a74a24e5e8a2f9d691bc32b5553",
+      "sha256": "a42ce8e71ac9412be36487d46b27e956c47fd1ba2c1bbdc27d28714b09f5b048"
+    },
+    {
+      "path": "reference/tradelearn_1x/strategy/evaluate/empyrical/stats.py",
+      "git_blob": "a5beedd2835faa0e01e6ae164d585c6e567d55b7",
+      "sha256": "9defb75e4b32a1a4164d27164c2ff3a4fb285e525c2d35ae8638a878bd818145"
+    },
+    {
+      "path": "reference/tradelearn_1x/strategy/evaluate/empyrical/utils.py",
+      "git_blob": "65e448fccb72cfce24581980ae4da394642064b2",
+      "sha256": "4913a0db96a3e845907ddd268362816b295df195b89af20363fa04c6528004e0"
+    },
+    {
+      "path": "reference/tradelearn_1x/strategy/examine/alphalens/performance.py",
+      "git_blob": "ae39db621909f1eaaa4ea5261d28de66b5e9835c",
+      "sha256": "715ef4bbb79de33d1657557c3360fbbb826fea114b4320b6cbe951d4a831ae7d"
+    },
+    {
+      "path": "reference/tradelearn_1x/strategy/examine/alphalens/utils.py",
+      "git_blob": "df703895f205948778198e4953de04c5ceb5f973",
+      "sha256": "f071fc576c9a13188631c3342c3be0bef9ca2b4f145268bb50e42e00f9752cfc"
+    }
+  ]
+}

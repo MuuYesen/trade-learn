@@ -433,3 +433,29 @@ def test_fetch_dataset_reports_opentdx_bridge_error(monkeypatch) -> None:
         assert "opentdx connection not established for 1.2.3.4:7709" in str(exc)
     else:
         raise AssertionError("expected GoldenDataError")
+
+
+def test_backtrader_expected_preserves_manifest_engine(tmp_path: Path) -> None:
+    dataset = {
+        "symbol": "000001",
+        "engine": "tdx",
+        "start": "2020-01-01",
+        "end": "2020-01-04",
+        "freq": "1d",
+    }
+    path = build_golden.dataset_path(dataset, tmp_path)
+    path.parent.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "open": [10.0, 11.0, 12.0, 13.0],
+            "high": [11.0, 12.0, 13.0, 14.0],
+            "low": [9.0, 10.0, 11.0, 12.0],
+            "close": [10.5, 11.5, 12.5, 13.5],
+            "volume": [1000.0] * 4,
+        },
+        index=pd.date_range("2020-01-01", periods=4),
+    ).to_parquet(path)
+    result = build_golden.run_backtrader_expected_job("sma_cross", dataset, tmp_path)
+    assert result["engine"] == "tdx"
+    assert result["source_engine"] == "backtrader"
+    assert result["dataset"] == "000001"

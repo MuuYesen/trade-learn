@@ -202,10 +202,7 @@ def load_reference_query(allow_provider_stubs: bool = False) -> Any:
 def provider_statuses() -> dict[str, bool]:
     """Return import availability for 1.x legacy optional provider modules."""
 
-    return {
-        engine: _module_available(module)
-        for engine, module in PROVIDER_MODULES.items()
-    }
+    return {engine: _module_available(module) for engine, module in PROVIDER_MODULES.items()}
 
 
 def validate_dataset_providers(manifest: dict[str, object]) -> None:
@@ -217,9 +214,7 @@ def validate_dataset_providers(manifest: dict[str, object]) -> None:
     if not missing:
         return
 
-    details = ", ".join(
-        f"{engine}:{PROVIDER_MODULES.get(engine, 'unknown')}" for engine in missing
-    )
+    details = ", ".join(f"{engine}:{PROVIDER_MODULES.get(engine, 'unknown')}" for engine in missing)
     raise GoldenDataError(
         "dataset provider unavailable: "
         f"{details}; install available providers before live access validation"
@@ -233,11 +228,7 @@ def filter_manifest_by_engine(manifest: dict[str, object], engine: str) -> dict[
         return manifest
     return {
         **manifest,
-        "datasets": [
-            dataset
-            for dataset in manifest["datasets"]
-            if dataset["engine"] == engine
-        ],
+        "datasets": [dataset for dataset in manifest["datasets"] if dataset["engine"] == engine],
     }
 
 
@@ -256,18 +247,14 @@ def fetch_dataset(query: Any, dataset: dict[str, str]) -> Any:
             end=dataset["end"],
         )
     except Exception as exc:
-        raise GoldenDataError(
-            f"{exc}"
-        ) from exc
+        raise GoldenDataError(f"{exc}") from exc
     if data is None:
         if dataset["engine"] == "tdx" and _LAST_REFERENCE_TDX_ERROR:
             raise GoldenDataError(
                 "reference Query returned no data for "
                 f"{dataset_label(dataset)}; {_LAST_REFERENCE_TDX_ERROR}"
             )
-        raise GoldenDataError(
-            f"reference Query returned no data for {dataset_label(dataset)}"
-        )
+        raise GoldenDataError(f"reference Query returned no data for {dataset_label(dataset)}")
     return data
 
 
@@ -431,13 +418,14 @@ def run_backtrader_expected_job(
 
     if strategy_name not in SUPPORTED_BACKTRADER_STRATEGIES:
         raise GoldenDataError(
-            "Backtrader oracle currently supports "
-            f"{', '.join(SUPPORTED_BACKTRADER_STRATEGIES)}"
+            f"Backtrader oracle currently supports {', '.join(SUPPORTED_BACKTRADER_STRATEGIES)}"
         )
     from scripts.run_backtrader_oracle import run_backtrader_oracle
 
     path = dataset_path(dataset, datasets_root)
-    return run_backtrader_oracle(strategy_name, path, dataset=dataset["symbol"])
+    return run_backtrader_oracle(
+        strategy_name, path, dataset=dataset["symbol"], engine=dataset["engine"]
+    )
 
 
 def expected_path(strategy: str, dataset: str, out: Path) -> Path:

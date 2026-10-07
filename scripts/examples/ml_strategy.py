@@ -26,9 +26,7 @@ def build_alpha101_features(bars: pd.DataFrame, max_features: int = 3) -> pd.Dat
     factor_input["date"] = dates.tz_localize(None)
     factor_input["symbol"] = "DEMO"
     factor_input["vwap"] = factor_input[["open", "high", "low", "close"]].mean(axis=1)
-    alpha_frame = alpha101(
-        factor_input, names=["alpha001", "alpha002", "alpha003"][:max_features]
-    )
+    alpha_frame = alpha101(factor_input, names=["alpha001", "alpha002", "alpha003"][:max_features])
     factors = alpha_frame.drop(columns=["symbol"]).set_index("date")
     factors = factors.reindex(dates.tz_localize(None))
     factors.index = bars.index
@@ -59,9 +57,13 @@ def _demo_bars() -> pd.DataFrame:
     close = 100.0 + np.cumsum(rng.normal(0.08, 1.0, 200))
     opening = close + rng.normal(0, 0.2, len(close))
     return pd.DataFrame(
-        {"open": opening, "high": np.maximum(opening, close) + 0.5,
-         "low": np.minimum(opening, close) - 0.5, "close": close,
-         "volume": rng.integers(1000, 10000, len(close)).astype(float)},
+        {
+            "open": opening,
+            "high": np.maximum(opening, close) + 0.5,
+            "low": np.minimum(opening, close) - 0.5,
+            "close": close,
+            "volume": rng.integers(1000, 10000, len(close)).astype(float),
+        },
         index=pd.date_range("2024-01-01", periods=len(close), tz="UTC"),
     )
 
@@ -84,12 +86,19 @@ def run_example(bars: pd.DataFrame | None = None) -> MLExampleResult:
     cerebro.addstrategy(
         Alpha101GBMStrategy,
         model=GradientBoostingRegressor(random_state=7, n_estimators=50, max_depth=3),
-        features=tuple(features), threshold=0.001, size=10, training_data=training,
+        features=tuple(features),
+        threshold=0.001,
+        size=10,
+        training_data=training,
     )
     [strategy] = cerebro.run()
     return MLExampleResult(
-        features, float(strategy.stats.summary["final_value"]), strategy.stats,
-        data.loc[:, candidates], training, strategy,
+        features,
+        float(strategy.stats.summary["final_value"]),
+        strategy.stats,
+        data.loc[:, candidates],
+        training,
+        strategy,
     )
 
 
