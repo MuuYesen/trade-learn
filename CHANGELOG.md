@@ -5,7 +5,10 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
-## [Unreleased]
+## [0.2.7] - 2026-10-09
+
+### 新增
+- 通用 `PositionSnapshot` 增加可选 `market_value` 和 `mark_price`，保留原有四参数构造方式；发布 wheel 增加接口验收。
 
 ### 修复
 - **文档契约审计**：稀疏行情按主时钟到期；普通止损限价只使用触发后价格并跨 bar 保持激活；卖空与后续买入统一检查保证金占用。

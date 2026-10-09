@@ -1,6 +1,9 @@
 """Smoke-test the installed native wheel, without importing project source files."""
 
+import pandas as pd
+
 from tradelearn import __version__, _rust
+from tradelearn.core.broker_contracts import PositionSnapshot
 
 
 def engine():
@@ -24,7 +27,12 @@ def engine():
     )
 
 
-assert __version__ == _rust.tradelearn_rust_version() == "0.2.6"
+assert __version__ == _rust.tradelearn_rust_version() == "0.2.7"
+position = PositionSnapshot(
+    symbol="600028.SH", qty=100.0, avg_price=5.0, ts=pd.Timestamp("2026-10-09T00:00:00Z"),
+    market_value=500.0, mark_price=5.0,
+)
+assert position.market_value == 500.0 and position.mark_price == 5.0
 e = engine()
 ref = e.submit_order("buy", "stop", 1.0, None, 11.0)
 assert e.step(0)[0][3] == 11.0
@@ -43,4 +51,4 @@ b = e.submit_order("sell", "limit", 1.0, 11.0)
 e.configure_order(b, None, a)
 assert len(e.step(0)) == 1
 assert e.step(1) == []
-print("trade-learn 0.2.6 native lifecycle smoke passed")
+print("trade-learn 0.2.7 native lifecycle smoke passed")

@@ -60,3 +60,19 @@ def test_core_broker_contracts_are_broker_neutral_data_shells() -> None:
 def test_broker_protocol_exposes_batch_order_status_lookup() -> None:
     assert hasattr(Broker, "order_status")
     assert hasattr(Broker, "order_statuses")
+
+
+def test_position_snapshot_accepts_optional_mark_and_market_value() -> None:
+    ts = pd.Timestamp("2026-10-09T00:00:00Z")
+    position = PositionSnapshot(
+        symbol="600028.SH",
+        qty=100.0,
+        avg_price=5.0,
+        ts=ts,
+        market_value=500.0,
+        mark_price=5.0,
+    )
+
+    assert position.market_value == 500.0
+    assert position.mark_price == 5.0
+    assert PositionSnapshot("600028.SH", 100.0, 5.0, ts).market_value is None
