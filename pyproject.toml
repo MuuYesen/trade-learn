@@ -25,12 +25,6 @@ classifiers = [
 dependencies = [
     "numpy>=1.26",
     "pandas>=2.1",
-    "scipy",
-    "scikit-learn",
-    "pyarrow",
-    "pandas-ta-classic",
-    "xlsxwriter",
-    "bokeh",
     "tqdm",
     "typer",
     "pyyaml",
@@ -66,7 +60,19 @@ talib = [
     "TA-Lib",
 ]
 ml = [
+    "scikit-learn",
     "causal-learn",
+]
+factor = [
+    "scipy",
+]
+parquet = [
+    "pyarrow",
+]
+report = [
+    "bokeh",
+    "xlsxwriter",
+    "jinja2",
 ]
 research = [
     "numba>=0.65.1",
@@ -75,12 +81,20 @@ duckdb = [
     "duckdb",
 ]
 indicators = [
+    "pandas-ta-classic",
     "opentdx; python_version >= '3.12'",
     "websocket-client>=1.8",
     "TA-Lib",
     "pynesys-pynecore; python_version >= '3.11'",
 ]
 all = [
+    "scipy",
+    "scikit-learn",
+    "pyarrow",
+    "pandas-ta-classic",
+    "bokeh",
+    "xlsxwriter",
+    "jinja2",
     "jupyterlab",
     "jupyterlab-git",
     "ipywidgets",

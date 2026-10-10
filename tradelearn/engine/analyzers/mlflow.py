@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from tradelearn.core.broker_events import BrokerEvent
-from tradelearn.report.artifacts import market_data_from_strategy, write_artifact_bundle
 from tradelearn.report.mlflow import build_run_metrics, build_run_params
 
 from ..analyzer import Analyzer
@@ -152,6 +151,8 @@ def _log_artifact_bundle(
 ) -> None:
     if not hasattr(mlflow, "log_artifact"):
         return
+
+    from tradelearn.report.artifacts import market_data_from_strategy, write_artifact_bundle
 
     with tempfile.TemporaryDirectory(prefix="tradelearn-mlflow-") as directory:
         artifacts = write_artifact_bundle(

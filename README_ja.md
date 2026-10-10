@@ -102,6 +102,9 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 | `[tv]` | TradingView datafeed と PyneCore ベースの TradingView 指標 |
 | `[talib]` | TA-Lib 指標名前空間 |
 | `[indicators]` | TDX + TradingView + TA-Lib 指標バックエンド |
+| `[factor]` | 因子統計分析（SciPy） |
+| `[parquet]` | Parquet 入出力（PyArrow） |
+| `[report]` | グラフと HTML / Excel レポート |
 | `[ml]` | 因果 ML 依存関係 |
 | `[research]` | Numba などのリサーチ高速化ユーティリティ |
 | `[duckdb]` | DuckDB bars backend |
@@ -110,13 +113,15 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 | `[all]` | 完全な研究環境 (Lab, MLflow, indicators, ML, DuckDB など) |
 
 > **💡 インストールのヒント**:
-> 標準インストールはコアエンジンのみです。JupyterLab と MLflow を含むフル体験には `[all]` を推奨します。
+> 標準インストールには NumPy、Pandas、tqdm、Typer、PyYAML などのコア依存関係のみが含まれます。因子分析、Parquet、指標、レポートには対応する extra が必要です。JupyterLab と MLflow を含むフル体験には `[all]` を推奨します。
 > ```bash
 > pip install "trade-learn[all]"
 > ```
 > `tradelearn lab` コマンドで起動し、8888 ポートで JupyterLab、5050 ポートで MLflow にアクセス可能です。
 
 ## クイックスタート
+
+以下の例では TradingView、TDX 指標、レポートを使用します。先に `pip install "trade-learn[tv,tdx,report]"` を実行してください。単一銘柄の時系列因子評価は [Research ガイド](./docs/guides/research.md) を参照してください。
 
 **Lite — 最短パス**（迅速な検証、教育、ターゲットウェイト戦略に最適）：
 

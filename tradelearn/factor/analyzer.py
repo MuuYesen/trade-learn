@@ -117,19 +117,12 @@ class FactorAnalyzer:
 
     def ic(self, by_group: bool = False) -> pd.Series | pd.DataFrame:
         """Return per-date Pearson information coefficient."""
-        # Fallback for single-asset: Use rolling correlation instead of cross-sectional
         if self.factor.index.get_level_values(1).nunique() <= 1:
-            # Single asset: calculate rolling 20-day correlation
-            res = (
-                self.factor
-                .rolling(window=20)
-                .corr(self._forward_returns())
-                .dropna()
+            raise ValueError(
+                "Single-symbol IC requires explicit time-series settings; "
+                "use tradelearn.research.temporal.assessment."
             )
-            res.index = res.index.get_level_values(0)
-            res.name = "ic"
-            return res
-        
+
         return factor_metrics.ic(
             self.factor,
             self._forward_returns(),
@@ -142,19 +135,12 @@ class FactorAnalyzer:
         by_group: bool = False,
     ) -> pd.Series | pd.DataFrame:
         """Return per-date Spearman rank information coefficient."""
-        # Fallback for single-asset: Use rolling rank correlation
         if self.factor.index.get_level_values(1).nunique() <= 1:
-            y = self._forward_returns()
-            res = (
-                self.factor
-                .rolling(window=20)
-                .apply(lambda x: x.rank().corr(y.loc[x.index].rank()))
-                .dropna()
+            raise ValueError(
+                "Single-symbol Rank IC requires explicit time-series settings; "
+                "use tradelearn.research.temporal.assessment."
             )
-            res.index = res.index.get_level_values(0)
-            res.name = "factor_information_coefficient"
-            return res
-            
+
         result = factor_metrics.rank_ic(
             self.factor,
             self._forward_returns(),

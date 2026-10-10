@@ -108,6 +108,9 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 | `[tv]` | TradingView 数据源与 PyneCore 指标后端 |
 | `[talib]` | TA-Lib 指标命名空间 |
 | `[indicators]` | TDX + TradingView + TA-Lib 指标后端 |
+| `[factor]` | 因子统计分析（SciPy） |
+| `[parquet]` | Parquet 数据读写（PyArrow） |
+| `[report]` | 图表与 HTML / Excel 报告 |
 | `[ml]` | 因果机器学习依赖 |
 | `[research]` | Numba 等投研加速工具 |
 | `[duckdb]` | DuckDB 行情存储后端 |
@@ -116,7 +119,7 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 | `[all]` | Lab、MLflow、指标后端、ML、DuckDB 等完整研究环境 |
 
 > **💡 安装建议**：
-> 默认安装仅包含核心回测引擎。若需开启包含 JupyterLab 与 MLflow 的全栈投研体验，请指定 `[all]` 扩展进行安装：
+> 默认安装只包含 NumPy、Pandas、tqdm、Typer 和 PyYAML 等核心依赖。因子分析、Parquet、指标后端和报表需要对应 extra。若需开启包含 JupyterLab 与 MLflow 的全栈投研体验，请指定 `[all]` 扩展进行安装：
 > ```bash
 > pip install "trade-learn[all]"
 > ```
@@ -125,6 +128,8 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 
 
 ## 快速上手
+
+以下快速上手示例调用 TradingView、TDX 指标和报表，请先安装 `pip install "trade-learn[tv,tdx,report]"`。单标的时间序列因子评估见 [Research 指南](./docs/guides/research.md)。
 
 **Lite——最短路径**（适合快速验证、教学、多资产目标权重）：
 

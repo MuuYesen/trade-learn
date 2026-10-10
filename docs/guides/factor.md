@@ -25,6 +25,8 @@ fa.report("factor_report.html")
 - 多因子会进入多因子对比分析。
 - 报告默认覆盖传入的多个 forward return period，不需要为每个周期单独生成报告。
 
+这里的 IC 与 Rank IC 按同一时间截面的多个标的计算。只有一个标的时，`FactorAnalyzer.ic()` 和 `factor_information_coefficient()` 会明确报错；单标的沿时间评估请使用 [研究指南](research.md)中的 `tradelearn.research.temporal.assessment`，并单独声明标签窗口和时间分块。
+
 ## Alpha101 缺失值修正
 
 `alpha002` 和 `alpha003` 在滚动窗口不足、输入缺失或序列方差为零时返回 `NaN`。

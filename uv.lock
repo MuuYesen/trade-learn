@@ -6754,30 +6754,24 @@ wheels = [
 
 [[package]]
 name = "trade-learn"
-version = "0.2.6"
+version = "0.2.7"
 source = { editable = "." }
 dependencies = [
-    { name = "bokeh" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pandas" },
-    { name = "pandas-ta-classic" },
-    { name = "pyarrow" },
     { name = "pyyaml" },
-    { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "tqdm" },
     { name = "typer" },
-    { name = "xlsxwriter" },
 ]
 
 [package.optional-dependencies]
 all = [
+    { name = "bokeh" },
     { name = "causal-learn" },
     { name = "duckdb" },
     { name = "ipywidgets" },
+    { name = "jinja2" },
     { name = "jupyter-ai" },
     { name = "jupyterlab" },
     { name = "jupyterlab-git" },
@@ -6786,12 +6780,19 @@ all = [
     { name = "numba" },
     { name = "opentdx", marker = "python_full_version >= '3.12'" },
     { name = "optuna" },
+    { name = "pandas-ta-classic" },
+    { name = "pyarrow" },
     { name = "pygwalker" },
     { name = "pynesys-pynecore", marker = "python_full_version >= '3.11'" },
     { name = "riskfolio-lib", version = "7.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "riskfolio-lib", version = "7.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "ta-lib" },
-    { name = "tradingview-datafeed" },
+    { name = "websocket-client" },
+    { name = "xlsxwriter" },
 ]
 dev = [
     { name = "cibuildwheel", version = "2.23.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -6810,11 +6811,16 @@ docs = [
 duckdb = [
     { name = "duckdb" },
 ]
+factor = [
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
 indicators = [
     { name = "opentdx", marker = "python_full_version >= '3.12'" },
+    { name = "pandas-ta-classic" },
     { name = "pynesys-pynecore", marker = "python_full_version >= '3.11'" },
     { name = "ta-lib" },
-    { name = "tradingview-datafeed" },
+    { name = "websocket-client" },
 ]
 lab = [
     { name = "ipywidgets" },
@@ -6826,9 +6832,19 @@ lab = [
 ]
 ml = [
     { name = "causal-learn" },
+    { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 mlflow = [
     { name = "mlflow" },
+]
+parquet = [
+    { name = "pyarrow" },
+]
+report = [
+    { name = "bokeh" },
+    { name = "jinja2" },
+    { name = "xlsxwriter" },
 ]
 research = [
     { name = "numba" },
@@ -6841,7 +6857,7 @@ tdx = [
 ]
 tv = [
     { name = "pynesys-pynecore", marker = "python_full_version >= '3.11'" },
-    { name = "tradingview-datafeed" },
+    { name = "websocket-client" },
 ]
 
 [package.dev-dependencies]
@@ -6853,7 +6869,8 @@ oracle = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bokeh" },
+    { name = "bokeh", marker = "extra == 'all'" },
+    { name = "bokeh", marker = "extra == 'report'" },
     { name = "causal-learn", marker = "extra == 'all'" },
     { name = "causal-learn", marker = "extra == 'ml'" },
     { name = "cibuildwheel", marker = "extra == 'dev'" },
@@ -6862,6 +6879,8 @@ requires-dist = [
     { name = "interrogate", marker = "extra == 'dev'" },
     { name = "ipywidgets", marker = "extra == 'all'" },
     { name = "ipywidgets", marker = "extra == 'lab'" },
+    { name = "jinja2", marker = "extra == 'all'" },
+    { name = "jinja2", marker = "extra == 'report'" },
     { name = "jupyter-ai", marker = "extra == 'all'" },
     { name = "jupyter-ai", marker = "extra == 'lab'" },
     { name = "jupyterlab", marker = "extra == 'all'" },
@@ -6883,8 +6902,10 @@ requires-dist = [
     { name = "opentdx", marker = "python_full_version >= '3.12' and extra == 'tdx'" },
     { name = "optuna", marker = "extra == 'all'" },
     { name = "pandas", specifier = ">=2.1" },
-    { name = "pandas-ta-classic" },
-    { name = "pyarrow" },
+    { name = "pandas-ta-classic", marker = "extra == 'all'" },
+    { name = "pandas-ta-classic", marker = "extra == 'indicators'" },
+    { name = "pyarrow", marker = "extra == 'all'" },
+    { name = "pyarrow", marker = "extra == 'parquet'" },
     { name = "pygwalker", marker = "extra == 'all'" },
     { name = "pygwalker", marker = "extra == 'lab'" },
     { name = "pynesys-pynecore", marker = "python_full_version >= '3.11' and extra == 'all'" },
@@ -6895,41 +6916,29 @@ requires-dist = [
     { name = "pyyaml" },
     { name = "riskfolio-lib", marker = "extra == 'all'" },
     { name = "ruff", marker = "extra == 'dev'" },
-    { name = "scikit-learn" },
-    { name = "scipy" },
+    { name = "scikit-learn", marker = "extra == 'all'" },
+    { name = "scikit-learn", marker = "extra == 'ml'" },
+    { name = "scipy", marker = "extra == 'all'" },
+    { name = "scipy", marker = "extra == 'factor'" },
     { name = "statsmodels", marker = "extra == 'dev'" },
     { name = "ta-lib", marker = "extra == 'all'" },
     { name = "ta-lib", marker = "extra == 'indicators'" },
     { name = "ta-lib", marker = "extra == 'talib'" },
     { name = "tqdm" },
-    { name = "tradingview-datafeed", marker = "extra == 'all'" },
-    { name = "tradingview-datafeed", marker = "extra == 'indicators'" },
-    { name = "tradingview-datafeed", marker = "extra == 'tv'" },
     { name = "typer" },
-    { name = "xlsxwriter" },
+    { name = "websocket-client", marker = "extra == 'all'", specifier = ">=1.8" },
+    { name = "websocket-client", marker = "extra == 'indicators'", specifier = ">=1.8" },
+    { name = "websocket-client", marker = "extra == 'tv'", specifier = ">=1.8" },
+    { name = "xlsxwriter", marker = "extra == 'all'" },
+    { name = "xlsxwriter", marker = "extra == 'report'" },
 ]
-provides-extras = ["lab", "mlflow", "tdx", "tv", "talib", "ml", "research", "duckdb", "indicators", "all", "dev", "docs"]
+provides-extras = ["lab", "mlflow", "tdx", "tv", "talib", "ml", "factor", "parquet", "report", "research", "duckdb", "indicators", "all", "dev", "docs"]
 
 [package.metadata.requires-dev]
 oracle = [
     { name = "backtesting", specifier = ">=0.6.5" },
     { name = "backtrader" },
     { name = "opentdx", marker = "python_full_version >= '3.12'" },
-]
-
-[[package]]
-name = "tradingview-datafeed"
-version = "2.1.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pandas" },
-    { name = "requests" },
-    { name = "setuptools" },
-    { name = "websocket-client" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a6/4e/c3bfda76da31ddd25985b539e72fb1c502d8390540036fefbe63d63b681a/tradingview-datafeed-2.1.1.tar.gz", hash = "sha256:875b8e537d7846f910a57eda754fa1192b94b6e75d0f7676ff34f84cbe2bfc8b", size = 16222 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/5b/1e/7e91de87db9ef194db8966860b3ec8b32d23bab2d8e3bf1481ef83064463/tradingview_datafeed-2.1.1-py3-none-any.whl", hash = "sha256:2d008dbccc2e98778c7f9825046243873e37e933be7c3f061db66efc0dba83d7", size = 17679 },
 ]
 
 [[package]]

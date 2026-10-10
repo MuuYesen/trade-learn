@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from tradelearn.report import Reporter
+if TYPE_CHECKING:
+    from tradelearn.report import Reporter
 
 
 def market_data_from_datas(datas: Sequence[Any] | None) -> Any | None:
@@ -29,6 +30,8 @@ def market_data_from_datas(datas: Sequence[Any] | None) -> Any | None:
 
 def reporter_from_stats(stats: Any, datas: Sequence[Any] | None) -> Reporter:
     """Build a Reporter from stats and facade data feeds."""
+
+    from tradelearn.report import Reporter
 
     return Reporter(stats, market_data=market_data_from_datas(datas))
 

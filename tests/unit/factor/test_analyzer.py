@@ -3,6 +3,7 @@
 import math
 
 import pandas as pd
+import pytest
 
 from tradelearn.factor import (
     FactorAnalyzer,
@@ -11,6 +12,18 @@ from tradelearn.factor import (
     clean_factor_and_forward_returns,
 )
 from tradelearn.metrics import factor as factor_metrics
+
+
+def test_single_symbol_ic_requires_explicit_temporal_assessment() -> None:
+    dates = pd.date_range("2026-01-01", periods=25, freq="D")
+    factor = pd.Series(range(25), index=dates, dtype=float)
+    forward = pd.Series(range(25, 0, -1), index=dates, dtype=float)
+    analyzer = FactorAnalyzer(factor, forward_returns=forward)
+
+    with pytest.raises(ValueError, match="tradelearn.research.temporal.assessment"):
+        analyzer.ic()
+    with pytest.raises(ValueError, match="tradelearn.research.temporal.assessment"):
+        analyzer.factor_information_coefficient()
 
 
 def test_factor_analyzer_delegates_core_metrics() -> None:

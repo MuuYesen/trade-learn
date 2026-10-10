@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
+import sys
 
 try:
     import tomllib
@@ -50,6 +52,41 @@ def test_optional_backends_are_not_required_for_core_install() -> None:
     assert any(dep.startswith("TA-Lib") for dep in extras["talib"])
     assert any(dep.startswith("causal-learn") for dep in extras["ml"])
     assert any(dep.startswith("numba") for dep in extras["research"])
+
+
+def test_default_dependencies_exclude_research_and_export_stacks() -> None:
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+    base = pyproject["project"]["dependencies"]
+    extras = pyproject["project"]["optional-dependencies"]
+    heavy = ("scipy", "scikit-learn", "pyarrow", "pandas-ta-classic", "bokeh", "xlsxwriter")
+
+    assert not any(dep.lower().startswith(heavy) for dep in base)
+    assert any(dep.startswith("scikit-learn") for dep in extras["ml"])
+    assert any(dep.startswith("scipy") for dep in extras["factor"])
+    assert any(dep.startswith("pyarrow") for dep in extras["parquet"])
+    assert any(dep.startswith("pandas-ta-classic") for dep in extras["indicators"])
+    assert any(dep.startswith("bokeh") for dep in extras["report"])
+    assert any(dep.startswith("xlsxwriter") for dep in extras["report"])
+
+
+def test_core_facades_import_without_optional_research_and_report_packages() -> None:
+    script = '''
+import importlib.abc
+import sys
+
+class BlockOptional(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in {'scipy', 'sklearn', 'pyarrow', 'pandas_ta_classic', 'bokeh', 'xlsxwriter', 'jinja2'}:
+            raise ImportError(f'optional package imported by core: {fullname}')
+
+sys.meta_path.insert(0, BlockOptional())
+import tradelearn.engine
+import tradelearn.lite
+'''
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=ROOT, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_cibuildwheel_smoke_test_imports_rust_extension() -> None:

@@ -102,6 +102,9 @@ Optional extras:
 | `[tv]` | TradingView datafeed and PyneCore-backed TradingView indicators |
 | `[talib]` | TA-Lib indicator namespace |
 | `[indicators]` | TDX + TradingView + TA-Lib indicator backends |
+| `[factor]` | Factor statistics (SciPy) |
+| `[parquet]` | Parquet I/O (PyArrow) |
+| `[report]` | Charts and HTML / Excel reports |
 | `[ml]` | Causal ML dependencies |
 | `[research]` | Research acceleration utilities such as Numba |
 | `[duckdb]` | DuckDB bars backend |
@@ -110,13 +113,15 @@ Optional extras:
 | `[all]` | Full environment (Lab, MLflow, indicators, ML, DuckDB, etc.) |
 
 > **💡 Installation Tip**:
-> The default install includes only the core engine. For the full research experience, use `[all]`:
+> The default install keeps only the core dependencies (NumPy, Pandas, tqdm, Typer, and PyYAML). Factor analysis, Parquet, indicators, and reports require their respective extras. For the full research experience, use `[all]`:
 > ```bash
 > pip install "trade-learn[all]"
 > ```
 > Launch with `tradelearn lab`. Access JupyterLab at port `8888` and MLflow at `5050`.
 
 ## Quick Start
+
+The quick-start examples use TradingView, TDX indicators, and reports. Install `pip install "trade-learn[tv,tdx,report]"` first. For single-symbol temporal factor assessment, see the [Research Guide](./docs/guides/research.md).
 
 **Lite — The Shortest Path** (Ideal for rapid validation, teaching, and target-weight portfolios):
 
