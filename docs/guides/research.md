@@ -2,6 +2,20 @@
 
 `tradelearn.research` 用来组织机器学习策略和指数增强研究里的固定流程。
 
+## 单标的时间序列与秒级标签
+
+新研究可使用 `tradelearn.research.temporal`。输入仍是按 UTC 排序、键唯一的 `MultiIndex(timestamp, symbol)`；单标的只有一个 symbol，不增加虚构的横截面。`forward_return` 支持两种窗口：`observations` 是每个标的后移 N 条，`seconds` 是精确查询 `t+N 秒`，缺秒时标签为空且不插值。结果同时给出 `label_end`。这只是收盘价预测标签，交易入场时点、点差、手续费与成交能力应在回测中独立定义。
+
+```python
+from tradelearn.research.temporal import forward_return, assessment, purged_splits
+
+labels = forward_return(bars, horizon=5, unit="seconds")
+report = assessment(factors, labels, factors=["alpha"], block="1H", min_pairs=30)
+sections = purged_splits(labels, train_end="2026-01-01", validation_end="2026-02-01")
+```
+
+时间序列 IC 是单个标的沿时间的 Pearson 相关，Rank IC 是沿时间的 Spearman 相关；它们不是原有的同一时刻跨标的 IC。分块 ICIR 为有效时间块 IC 均值除以样本标准差，不年化，块数不足或方差为零时为空。`purged_splits` 会剔除标签结束时间跨越下一段边界的样本；训练得到的标准化参数仍须只在训练段拟合。秒级数据可用 `1s`、`5s`、`10s`、`30s` 的 Bars 频率声明。多因子共同样本、显著性检验与可执行交易分析尚不由此模块自动完成。
+
 ## 典型流水线
 
 ```python
