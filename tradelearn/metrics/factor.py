@@ -56,9 +56,7 @@ def ic(
         result.index.name = _date_level_name(factor)
         result.columns.name = None
         return result
-    result = aligned.groupby(level=0).apply(
-        lambda frame: _pair_correlation(frame[["factor", "returns"]])
-    )
+    result = _date_correlation(aligned[["factor", "returns"]])
     result.index.name = _date_level_name(factor)
     result.name = "ic"
     return result
@@ -112,7 +110,8 @@ def rank_ic(
         result.index.name = _date_level_name(factor)
         result.columns.name = None
         return result
-    result = aligned.groupby(level=0).apply(_spearman)
+    ranked = aligned[["factor", "returns"]].groupby(level=0).rank()
+    result = _date_correlation(ranked)
     result.index.name = _date_level_name(factor)
     result.name = "rank_ic"
     return result
@@ -368,17 +367,7 @@ def quantile_returns(
             [aligned.index.get_level_values(0), "group"]
         )["returns"].transform(lambda values: values.mean(skipna=False))
 
-    def _assign_quantiles(frame: pd.DataFrame) -> pd.DataFrame:
-        frame = frame.copy()
-        frame["quantile"] = pd.qcut(
-            frame["factor"].rank(method="first"),
-            q=min(quantiles, len(frame)),
-            labels=False,
-        )
-        frame["quantile"] = frame["quantile"].astype(int) + 1
-        return frame
-
-    assigned = aligned.groupby(level=0, group_keys=False).apply(_assign_quantiles)
+    assigned = aligned.assign(quantile=_rank_quantiles_by_date(aligned["factor"], quantiles))
     grouped = assigned.groupby([assigned.index.get_level_values(0), "quantile"])["returns"].agg(
         lambda values: values.mean(skipna=False)
     )
@@ -702,3 +691,37 @@ def _pair_correlation(frame: pd.DataFrame) -> float:
     if frame.isna().to_numpy().any():
         return np.nan
     return float(frame.iloc[:, 0].corr(frame.iloc[:, 1]))
+
+
+def _date_correlation(frame: pd.DataFrame) -> pd.Series:
+    """Correlate all date groups with grouped reductions instead of Python callbacks."""
+    grouped = frame.groupby(level=0)
+    centered = frame - grouped.transform("mean")
+    products = pd.DataFrame(
+        {
+            "factor_sq": centered.iloc[:, 0].pow(2),
+            "returns_sq": centered.iloc[:, 1].pow(2),
+            "cross": centered.iloc[:, 0] * centered.iloc[:, 1],
+        }
+    ).groupby(level=0).sum()
+    denominator = np.sqrt(products["factor_sq"] * products["returns_sq"])
+    result = products["cross"] / denominator
+    invalid = frame.isna().any(axis=1).groupby(level=0).any()
+    return result.mask(invalid | (grouped.size() < 2) | (denominator == 0))
+
+
+def _rank_quantiles_by_date(factor: pd.Series, quantiles: int) -> pd.Series:
+    """Apply the exact daily rank/qcut rule, caching bins by daily sample size."""
+    if factor.empty:
+        return pd.Series(index=factor.index[:0], dtype="int64")
+    grouped = factor.groupby(level=0, sort=False)
+    ranks = grouped.rank(method="first").to_numpy(dtype="int64")
+    sizes = grouped.transform("size").to_numpy(dtype="int64")
+    labels = np.empty(len(factor), dtype="int64")
+    for size in np.unique(sizes):
+        mask = sizes == size
+        mapping = pd.qcut(
+            np.arange(1, size + 1), q=min(quantiles, size), labels=False
+        )
+        labels[mask] = mapping[ranks[mask] - 1] + 1
+    return pd.Series(labels, index=factor.index).sort_index()

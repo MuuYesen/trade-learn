@@ -54,6 +54,30 @@ def test_factor_analyzer_delegates_core_metrics() -> None:
     )
 
 
+def test_factor_summary_reuses_ic_and_quantile_returns(monkeypatch: pytest.MonkeyPatch) -> None:
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, periods=12, quantiles=2)
+    calls = {"ic": 0, "quantile_returns": 0}
+    original_ic = FactorAnalyzer.ic
+    original_quantile_returns = FactorAnalyzer.mean_return_by_quantile
+
+    def counted_ic(self: FactorAnalyzer, by_group: bool = False):
+        calls["ic"] += 1
+        return original_ic(self, by_group=by_group)
+
+    def counted_quantile_returns(self: FactorAnalyzer, group_neutral: bool = False):
+        calls["quantile_returns"] += 1
+        return original_quantile_returns(self, group_neutral=group_neutral)
+
+    monkeypatch.setattr(FactorAnalyzer, "ic", counted_ic)
+    monkeypatch.setattr(FactorAnalyzer, "mean_return_by_quantile", counted_quantile_returns)
+
+    result = analyzer.summary()
+
+    assert result["observations"] == len(factor)
+    assert calls == {"ic": 1, "quantile_returns": 1}
+
+
 def test_factor_analyzer_computes_returns_from_prices() -> None:
     """FactorAnalyzer can derive forward returns from aligned prices."""
     factor = _series(

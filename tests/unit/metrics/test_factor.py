@@ -5,6 +5,7 @@ import math
 import pandas as pd
 import pytest
 
+from tradelearn.metrics import factor as factor_metrics
 from tradelearn.metrics.factor import (
     autocorrelation,
     clean_factor_and_forward_returns,
@@ -36,6 +37,66 @@ def test_rank_ic_computes_spearman_correlation_by_date() -> None:
 
     expected = pd.Series([1.0, -1.0], index=pd.Index(_dates(), name="date"), name="rank_ic")
     pd.testing.assert_series_equal(result, expected)
+
+
+def test_ic_and_rank_ic_batch_dates_without_python_pair_callback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    factor = _series(
+        [
+            ("2024-01-01", "A", 1.0), ("2024-01-01", "B", 2.0),
+            ("2024-01-01", "C", 3.0), ("2024-01-01", "D", 4.0),
+            ("2024-01-02", "A", 1.0), ("2024-01-02", "B", 1.0),
+            ("2024-01-02", "C", 2.0), ("2024-01-02", "D", float("nan")),
+        ]
+    )
+    forward = _series(
+        [
+            ("2024-01-01", "A", 4.0), ("2024-01-01", "B", 2.0),
+            ("2024-01-01", "C", 3.0), ("2024-01-01", "D", 1.0),
+            ("2024-01-02", "A", 1.0), ("2024-01-02", "B", 2.0),
+            ("2024-01-02", "C", 3.0), ("2024-01-02", "D", 4.0),
+        ]
+    )
+    aligned = pd.concat({"factor": factor, "returns": forward}, axis=1).dropna()
+    expected_ic = aligned.groupby(level=0).apply(
+        lambda frame: frame["factor"].corr(frame["returns"])
+    ).rename("ic")
+    expected_rank_ic = aligned.groupby(level=0).apply(
+        lambda frame: frame["factor"].rank().corr(frame["returns"].rank())
+    ).rename("rank_ic")
+
+    def fail_per_date_callback(_frame: pd.DataFrame) -> float:
+        raise AssertionError("per-date Python correlation callback is still used")
+
+    monkeypatch.setattr(factor_metrics, "_pair_correlation", fail_per_date_callback)
+
+    pd.testing.assert_series_equal(ic(factor, forward), expected_ic)
+    pd.testing.assert_series_equal(rank_ic(factor, forward), expected_rank_ic)
+
+
+def test_rank_quantiles_batch_matches_daily_qcut_with_ties_and_small_groups() -> None:
+    rows = []
+    for day, size in enumerate((1, 2, 3, 7, 10), start=1):
+        rows.extend(
+            (f"2024-01-{day:02d}", f"S{symbol:02d}", float(symbol // 2))
+            for symbol in range(size)
+        )
+    factor = _series(rows).sample(frac=1, random_state=17)
+    expected = pd.concat(
+        [
+            pd.qcut(
+                group.rank(method="first"),
+                q=min(5, len(group)),
+                labels=False,
+            ).astype(int) + 1
+            for _, group in factor.groupby(level=0, sort=False)
+        ]
+    ).sort_index()
+
+    actual = factor_metrics._rank_quantiles_by_date(factor, 5)
+
+    pd.testing.assert_series_equal(actual, expected)
 
 
 def test_ic_ir_annualizes_mean_ic_by_sample_std() -> None:

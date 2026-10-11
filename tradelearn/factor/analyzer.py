@@ -391,14 +391,27 @@ class FactorAnalyzer:
             index=aligned.index,
         )
 
+    def monotonicity(self) -> dict[str, float]:
+        """Return monotonicity diagnostics for the factor quantile returns.
+
+        Checks whether mean returns increase monotonically from Q1 to Q(n).
+        Returns Spearman rank correlation between quantile rank and mean return,
+        and a boolean flag indicating perfect monotonicity.
+        """
+        return _monotonicity_from_quantile_returns(self.mean_return_by_quantile())
+
     def summary(self) -> dict[str, float]:
         """Return scalar factor diagnostics."""
         ic_values = self.ic()
         rank_ic_values = self.factor_information_coefficient()
         autocorrelation_values = self.factor_rank_autocorrelation()
-        mean_returns_spread_values = self.compute_mean_returns_spread()[0]
+        quantile_returns = self.mean_return_by_quantile()
+        bottom, top = quantile_returns.columns.min(), quantile_returns.columns.max()
+        mean_returns_spread_values = (
+            quantile_returns[top] - quantile_returns[bottom]
+        ).rename("mean_returns_spread")
         quantile_turnover_values = self.quantile_turnover()
-        monotonicity_values = self.monotonicity()
+        monotonicity = _monotonicity_from_quantile_returns(quantile_returns)
         aligned = pd.concat(
             {"factor": self.factor, "returns": self._forward_returns()},
             axis=1,
@@ -407,7 +420,7 @@ class FactorAnalyzer:
         return {
             "ic_mean": float(ic_values.mean()),
             "ic_std": float(ic_values.std(ddof=1)),
-            "ic_ir": self.ic_ir(),
+            "ic_ir": factor_metrics.ic_ir(ic_values, periods=self.periods),
             "rank_ic_mean": rank_ic_mean,
             "rank_ic_std": float(rank_ic_values.std(ddof=1)),
             "rank_ic_ir": factor_metrics.ic_ir(rank_ic_values, periods=self.periods),
@@ -418,31 +431,12 @@ class FactorAnalyzer:
             "mean_returns_spread_cumulative_return": float(
                 (1.0 + self._non_overlapping_returns(mean_returns_spread_values)).prod() - 1.0
             ),
-            "monotonicity": float(monotonicity_values["spearman_rho"]),
+            "monotonicity": float(monotonicity["spearman_rho"]),
             "quantile_turnover_mean": float(quantile_turnover_values.mean().mean()),
             "factor_rank_autocorrelation_mean": float(autocorrelation_values.mean()),
             "observations": int(len(aligned)),
             "ic_dates": int(rank_ic_values.count()),
         }
-
-    def monotonicity(self) -> dict[str, float]:
-        """Return monotonicity diagnostics for the factor quantile returns.
-
-        Checks whether mean returns increase monotonically from Q1 to Q(n).
-        Returns Spearman rank correlation between quantile rank and mean return,
-        and a boolean flag indicating perfect monotonicity.
-        """
-        qr = self.mean_return_by_quantile()
-        means = qr.mean()
-        n = len(means)
-        if n < 2:
-            return {"spearman_rho": float("nan"), "is_monotone": False}
-        ranks = pd.Series(range(1, n + 1), index=means.index, dtype="float64")
-        rho = float(means.rank().corr(ranks, method="spearman"))
-        diffs = means.diff().dropna()
-        is_monotone = bool((diffs > 0).all() or (diffs < 0).all())
-        return {"spearman_rho": rho, "is_monotone": is_monotone}
-
     def plot(self):
         """Return a Bokeh grid of factor diagnostic charts."""
         from bokeh.layouts import column as bk_column
@@ -1059,21 +1053,20 @@ def _clean_periods(clean: pd.DataFrame, periods: tuple[int, ...] | None) -> tupl
     return selected
 
 
+def _monotonicity_from_quantile_returns(returns: pd.DataFrame) -> dict[str, float]:
+    means = returns.mean()
+    if len(means) < 2:
+        return {"spearman_rho": float("nan"), "is_monotone": False}
+    ranks = pd.Series(range(1, len(means) + 1), index=means.index, dtype="float64")
+    rho = float(means.rank().corr(ranks, method="spearman"))
+    differences = means.diff().dropna()
+    is_monotone = bool((differences > 0).all() or (differences < 0).all())
+    return {"spearman_rho": rho, "is_monotone": is_monotone}
+
+
 def _rank_qcut_quantiles(factor: pd.Series, quantiles: int) -> pd.Series:
     """Return per-date qcut labels on first-ranked factor values."""
-    pieces = []
-    for _, frame in factor.groupby(level=0, sort=False):
-        labels = pd.qcut(
-            frame.rank(method="first"),
-            q=min(quantiles, len(frame)),
-            labels=False,
-        )
-        pieces.append(labels.astype(int) + 1)
-    if not pieces:
-        result = pd.Series(index=factor.index[:0], dtype="int64")
-    else:
-        result = pd.concat(pieces).sort_index()
-    return result
+    return factor_metrics._rank_quantiles_by_date(factor, quantiles)
 
 
 def _period_metric_frame(
