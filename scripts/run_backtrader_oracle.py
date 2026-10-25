@@ -88,7 +88,9 @@ def _prepare_backtrader_bars(bars: pd.DataFrame) -> pd.DataFrame:
     prepared = bars.copy()
     if isinstance(prepared.index, pd.MultiIndex):
         if "timestamp" not in prepared.index.names:
-            raise GoldenDataError("Backtrader oracle requires a timestamp level in Bars MultiIndex")
+            raise GoldenDataError(
+                "Backtrader oracle requires a timestamp level in Bars MultiIndex"
+            )
         symbols = (
             prepared.index.get_level_values("symbol").unique()
             if "symbol" in prepared.index.names
@@ -96,7 +98,8 @@ def _prepare_backtrader_bars(bars: pd.DataFrame) -> pd.DataFrame:
         )
         if len(symbols) > 1:
             raise GoldenDataError(
-                f"Backtrader oracle expects one symbol per parquet, got {len(symbols)} symbols"
+                "Backtrader oracle expects one symbol per parquet, "
+                f"got {len(symbols)} symbols"
             )
         prepared = prepared.reset_index("symbol", drop=True)
     if not isinstance(prepared.index, pd.DatetimeIndex):
@@ -175,7 +178,9 @@ def summarize_backtrader_metrics(
         "final_cash": float(final_cash),
         "final_value": float(final_value),
         "peak_value": float(clean_equity.max()) if not clean_equity.empty else float(final_value),
-        "total_return": (float(final_value) / float(initial_cash) - 1.0) if initial_cash else 0.0,
+        "total_return": (float(final_value) / float(initial_cash) - 1.0)
+        if initial_cash
+        else 0.0,
         "return_pct": (float(final_value) / float(initial_cash) - 1.0) * 100.0
         if initial_cash
         else 0.0,
@@ -302,8 +307,9 @@ def _strategy_class(strategy_name: str) -> type[Any]:
 
     class Alpha101Ml(GoldenBacktraderBase):
         def should_enter(self) -> bool:
-            return _momentum(self.data.close) > 0 and float(self.data.close[0]) > _range_midpoint(
-                self.data, 3
+            return (
+                _momentum(self.data.close) > 0
+                and float(self.data.close[0]) > _range_midpoint(self.data, 3)
             )
 
         def should_exit(self) -> bool:

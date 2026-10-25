@@ -158,6 +158,14 @@ def sortino(
     return float(adjusted.mean(skipna=False) / (downside / math.sqrt(periods)) * math.sqrt(periods))
 
 
+def drawdown_from_equity(equity: pd.Series, *, baseline: float | None = None) -> pd.Series:
+    """Return negative drawdowns from an observed equity curve."""
+    peak = equity.cummax(skipna=False)
+    if baseline is not None:
+        peak = peak.clip(lower=baseline)
+    return equity / peak - 1.0
+
+
 def drawdown_series(
     returns: pd.Series,
     nan_policy: NanPolicy = "zero",
@@ -184,8 +192,7 @@ def drawdown_series(
     """
     clean = apply_nan_policy(returns, nan_policy)
     equity = cum_returns(clean, starting_value=1.0, nan_policy="propagate")
-    running_max = equity.cummax(skipna=False).clip(lower=1.0)
-    return equity / running_max - 1.0
+    return drawdown_from_equity(equity, baseline=1.0)
 
 
 def max_drawdown(

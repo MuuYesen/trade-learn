@@ -6,6 +6,8 @@
 
 Generated from `tradelearn.engine` code signatures by `scripts/generate_api_reference.py`.
 
+> 2026-10-18 文档核对：下方 `valid` 的“仅元数据”来自过期的生成器说明，不能用于判断当前行为；现行有效期会在撮合前执行过期检查，见 [撮合规则](../internals/matching.md#订单生命周期)。本轮不修改程序或自动生成表，生成元数据的待同步证据见 [API 边界](../concepts/api-boundary.md#文档与实现核对2026-10-18)。
+
 ## `Cerebro.__init__`
 
 创建 Backtrader 风格的高级事件驱动回测运行器。

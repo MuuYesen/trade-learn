@@ -2,9 +2,9 @@
 
 import importlib
 import importlib.util
+from contextlib import contextmanager
 import sys
 import types
-from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -40,10 +40,7 @@ def _oracle_imports():
     with pytest.MonkeyPatch.context() as patch:
         if not hasattr(np, "NINF"):
             patch.setattr(np, "NINF", -np.inf, raising=False)
-        for name in (
-            "IPython", "IPython.display", "yfinance",
-            "pandas_datareader", "pandas_datareader.data",
-        ):
+        for name in ("IPython", "IPython.display", "yfinance", "pandas_datareader", "pandas_datareader.data"):
             if name not in sys.modules:
                 module = types.ModuleType(name)
                 if name == "IPython.display":

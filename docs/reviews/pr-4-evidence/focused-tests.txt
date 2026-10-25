@@ -1,0 +1,33 @@
+..FF......................FF............................................ [ 96%]
+...                                                                      [100%]
+=================================== FAILURES ===================================
+_______________ test_rust_match_order_fill_uses_exact_bar_rules ________________
+tests/unit/backtest/test_rust_exact_matching.py:58: in test_rust_match_order_fill_uses_exact_bar_rules
+    assert _match("buy", "stop", stop_price=11.5) == (2.0, 10.0, 0.0, 0.0)
+E   assert (2.0, 11.5, 0.0, 0.0) == (2.0, 10.0, 0.0, 0.0)
+E     
+E     At index 1 diff: 11.5 != 10.0
+E     Use -v to get more diff
+__________ test_exact_broker_routes_order_prices_to_rust_exact_engine __________
+tests/unit/backtest/test_rust_exact_matching.py:102: in test_exact_broker_routes_order_prices_to_rust_exact_engine
+    assert strategy.filled_prices == [10.0]
+E   assert [11.5] == [10.0]
+E     
+E     At index 0 diff: 11.5 != 10.0
+E     Use -v to get more diff
+----------------------------- Captured stderr call -----------------------------
+Backtest.run:   0%|          | 0/3 [00:00<?, ?bar/s]Backtest.run: 100%|██████████| 3/3 [00:00<00:00, 6608.67bar/s]Backtest.run: 100%|██████████| 3/3 [00:00<00:00, 3932.16bar/s]
+_______ test_rust_bar_loop_submits_drained_orders_after_python_callback ________
+tests/unit/backtest/test_rust_exact_matching.py:764: in test_rust_bar_loop_submits_drained_orders_after_python_callback
+    engine.run_bar_loop(broker, on_bar, 0, 2)
+E   AttributeError: 'BrokerRefSink' object has no attribute 'drain_cancel_buffer'
+__________ test_rust_bar_loop_allows_none_when_callback_has_no_orders __________
+tests/unit/backtest/test_rust_exact_matching.py:811: in test_rust_bar_loop_allows_none_when_callback_has_no_orders
+    engine.run_bar_loop(BrokerRefSink(), on_bar, 0, 2)
+E   AttributeError: 'BrokerRefSink' object has no attribute 'drain_cancel_buffer'
+=========================== short test summary info ============================
+FAILED tests/unit/backtest/test_rust_exact_matching.py::test_rust_match_order_fill_uses_exact_bar_rules
+FAILED tests/unit/backtest/test_rust_exact_matching.py::test_exact_broker_routes_order_prices_to_rust_exact_engine
+FAILED tests/unit/backtest/test_rust_exact_matching.py::test_rust_bar_loop_submits_drained_orders_after_python_callback
+FAILED tests/unit/backtest/test_rust_exact_matching.py::test_rust_bar_loop_allows_none_when_callback_has_no_orders
+4 failed, 71 passed in 2.14s

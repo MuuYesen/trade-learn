@@ -28,10 +28,8 @@ def bars():
 def test_catalog_smoke_and_causality(bars, entry):
     result = calculate(bars, entry["id"], secondary=bars)
     json.dumps(result, allow_nan=False)
-    assert (
-        result.get("profile")
-        or result.get("drawings")
-        or any(any(v is not None for v in s["values"]) for s in result["series"])
+    assert result.get("profile") or result.get("drawings") or any(
+        any(v is not None for v in s["values"]) for s in result["series"]
     ), entry["id"]
     assert [s["id"] for s in result["series"]] == [p["id"] for p in entry["plots"]]
     for s in result["series"]:

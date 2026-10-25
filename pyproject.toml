@@ -113,10 +113,8 @@ all = [
     "numba>=0.65.1",
 ]
 dev = [
-    "mcp>=1.8.0",
     "pytest",
     "pytest-cov",
-    "statsmodels",
     "ruff",
     "interrogate",
     "cibuildwheel",
@@ -162,7 +160,7 @@ archs = ["x86_64", "arm64"]
 archs = ["AMD64"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/unit", "tests/golden", "tests/consistency"]
+testpaths = ["tests"]
 addopts = "-ra --import-mode=importlib"
 pythonpath = ["."]
 

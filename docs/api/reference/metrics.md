@@ -28,12 +28,3 @@ Drawdown values in this API are nonpositive; dashboards showing loss magnitudes 
       show_signature_annotations: true
       separate_signature: true
       members_order: source
-
-## Missing evidence
-
-`simple_returns` and factor forward returns do not fill missing prices. Under
-`nan_policy="propagate"`, missing returns remain unknown: scalar statistics
-return NaN and cumulative curves stay unknown after the first gap. `drop` and
-`zero` remain explicit alternatives; infinite observations are rejected rather
-than silently interpreted as valid returns. Annualization requires a positive
-integer period count.

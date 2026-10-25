@@ -20,31 +20,21 @@ def drawings(frame, depth):
     output = dict(levels=[], bosLL=[], bosHH=[], zoneD=[], zoneS=[], impLL=[], impHH=[])
     for index, price in result.lev:
         confirmed = result.confirmations.get(int(index))
-        output["levels"].append(
-            dict(
-                time=time_at(index),
-                price=float(price),
-                confirmedAt=time_at(confirmed) if confirmed is not None else None,
-                provisional=confirmed is None,
-            )
-        )
-    for key, values in [("bosLL", result.bos_ll), ("bosHH", result.bos_hh)]:
-        output[key] = [
-            dict(timeA=time_at(a), price=float(price), timeB=time_at(b))
-            for a, price, b, _ in values
-        ]
+        output['levels'].append(dict(
+            time=time_at(index), price=float(price),
+            confirmedAt=time_at(confirmed) if confirmed is not None else None,
+            provisional=confirmed is None,
+        ))
+    for key, values in [('bosLL', result.bos_ll), ('bosHH', result.bos_hh)]:
+        output[key] = [dict(timeA=time_at(a), price=float(price), timeB=time_at(b))
+                       for a, price, b, _ in values]
     for key, values, fields in [
-        ("zoneD", result.demand_zone_values, ("priceA", "priceB")),
-        ("zoneS", result.supply_zone_values, ("priceA", "priceB")),
-        ("impHH", result.imp_hh, ("valueA", "valueB")),
-        ("impLL", result.imp_ll, ("valueA", "valueB")),
+        ('zoneD', result.demand_zone_values, ('priceA', 'priceB')),
+        ('zoneS', result.supply_zone_values, ('priceA', 'priceB')),
+        ('impHH', result.imp_hh, ('valueA', 'valueB')),
+        ('impLL', result.imp_ll, ('valueA', 'valueB')),
     ]:
-        output[key] = [
-            dict(
-                timeA=time_at(a),
-                timeB=time_at(b),
-                **{fields[0]: float(price), fields[1]: float(other)},
-            )
-            for a, price, b, other in values
-        ]
+        output[key] = [dict(timeA=time_at(a), timeB=time_at(b),
+                            **{fields[0]: float(price), fields[1]: float(other)})
+                       for a, price, b, other in values]
     return output

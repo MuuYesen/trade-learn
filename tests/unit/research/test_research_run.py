@@ -307,6 +307,18 @@ def test_preprocess_grouped_by_multiindex_date() -> None:
     assert means.tolist() == [0.0, 0.0]
 
 
+def test_standard_scaler_treats_near_zero_group_std_as_constant() -> None:
+    index = pd.MultiIndex.from_product(
+        [pd.to_datetime(["2026-01-01"]), ["AAA", "BBB", "CCC"]],
+        names=["date", "symbol"],
+    )
+    features = pd.DataFrame({"alpha": [1e-15, 2e-15, 3e-15]}, index=index)
+
+    standardized = StandardScaler(columns=["alpha"], by="date").fit_transform(features)
+
+    assert standardized["alpha"].abs().max() < 1e-12
+
+
 def test_preprocess_migrates_1x_group_fill_mad_winsorize_and_quantile_labels() -> None:
     features = pd.DataFrame(
         {

@@ -4,9 +4,9 @@
 
 <p align="center">
   <a href="https://muuyesen.github.io/trade-learn/"><b>Documentation</b></a> |
-  <a href="./CHANGELOG.md"><b>Changelog</b></a> |
-  <a href="./README.md"><b>中文简体</b></a> |
-  <a href="./README_ja.md"><b>日本語</b></a>
+  <a href="CHANGELOG.md"><b>Changelog</b></a> |
+  <a href="README_zh.md"><b>中文简体</b></a> |
+  <a href="README_ja.md"><b>日本語</b></a>
 </p>
 
 <p align="center">
@@ -56,7 +56,7 @@ In terms of ecosystem, **trade-learn** provides comprehensive indicator support,
 - **Full-Link Pipeline**: Seamlessly couples feature engineering, causal screening, scoring models, portfolio weights, and backtest reports into a reproducible experimental loop.
 
 #### 📦 Modular Platform: Lightweight Core, On-Demand Expansion
-- **Decoupled Core**: The default installation includes only the high-performance backtest kernel with minimal dependencies, making it easy to integrate into servers or automated trading systems.
+- **Decoupled Core**: The default installation includes Engine, Lite, and basic data handling; reports, factors, Parquet, ML, and indicator backends are optional extras.
 - **Elastic Expansion**: One-click activation of the integrated research environment (**JupyterLab + MLflow + AI Assistant**) via `[lab]` or `[all]` extras.
 
 #### 🌍 Global Vision: Multi-Standard Indicators & Modern Ecosystem
@@ -101,11 +101,11 @@ Optional extras:
 | `[tdx]` | OpenTDX data / China-market indicator dependencies |
 | `[tv]` | TradingView datafeed and PyneCore-backed TradingView indicators |
 | `[talib]` | TA-Lib indicator namespace |
-| `[indicators]` | TDX + TradingView + TA-Lib indicator backends |
-| `[factor]` | Factor statistics (SciPy) |
-| `[parquet]` | Parquet I/O (PyArrow) |
-| `[report]` | Charts and HTML / Excel reports |
-| `[ml]` | Causal ML dependencies |
+| `[indicators]` | Pandas-TA, TDX, TradingView, and TA-Lib indicator backends |
+| `[factor]` | SciPy for Alpha101/Alpha191 |
+| `[parquet]` | PyArrow for Parquet caches |
+| `[report]` | Bokeh charts, HTML, and Excel export |
+| `[ml]` | scikit-learn and causal ML dependencies |
 | `[research]` | Research acceleration utilities such as Numba |
 | `[duckdb]` | DuckDB bars backend |
 | `[lab]` | JupyterLab / Jupyter AI / MCP / Pygwalker environment |
@@ -113,7 +113,7 @@ Optional extras:
 | `[all]` | Full environment (Lab, MLflow, indicators, ML, DuckDB, etc.) |
 
 > **💡 Installation Tip**:
-> The default install keeps only the core dependencies (NumPy, Pandas, tqdm, Typer, and PyYAML). Factor analysis, Parquet, indicators, and reports require their respective extras. For the full research experience, use `[all]`:
+> The default install supports basic backtesting. Add `[report]` for charts and exports or `[indicators]` for built-in indicators. For the full research environment, use `[all]`:
 > ```bash
 > pip install "trade-learn[all]"
 > ```
@@ -198,7 +198,7 @@ cerebro.report("report.html")
 
 ## Research Pipeline Example
 
-The README keeps the shortest readable version. Full scripts are available at [`examples/research/index_enhance_lite_pipeline.py`](./examples/research/index_enhance_lite_pipeline.py) and [`examples/research/index_enhance_engine_pipeline.py`](./examples/research/index_enhance_engine_pipeline.py).
+The README keeps the shortest readable version. Full scripts are available at [`examples/research/index_enhance_lite_pipeline.py`](examples/research/index_enhance_lite_pipeline.py) and [`examples/research/index_enhance_engine_pipeline.py`](examples/research/index_enhance_engine_pipeline.py).
 
 **1. Research: build features from raw bars and split train/test data**
 
@@ -287,16 +287,16 @@ Full versions:
 
 | Goal | Full script |
 |---|---|
-| Lite research + backtest + report + MLflow | [`examples/research/index_enhance_lite_pipeline.py`](./examples/research/index_enhance_lite_pipeline.py) |
-| Engine research + backtest + report + MLflow | [`examples/research/index_enhance_engine_pipeline.py`](./examples/research/index_enhance_engine_pipeline.py) |
-| Lite live-style current-window inference | [`examples/research/index_enhance_lite_live.py`](./examples/research/index_enhance_lite_live.py) |
-| Engine live-style current-window inference | [`examples/research/index_enhance_engine_live.py`](./examples/research/index_enhance_engine_live.py) |
-| Engine Backtrader-style portfolio rebalancing | [`examples/engine/11_target_percent_portfolio.py`](./examples/engine/11_target_percent_portfolio.py) |
-| Asset-class portfolio strategy | [`examples/engine/12_asset_class_portfolios.py`](./examples/engine/12_asset_class_portfolios.py) |
+| Lite research + backtest + report + MLflow | [`examples/research/index_enhance_lite_pipeline.py`](examples/research/index_enhance_lite_pipeline.py) |
+| Engine research + backtest + report + MLflow | [`examples/research/index_enhance_engine_pipeline.py`](examples/research/index_enhance_engine_pipeline.py) |
+| Lite live-style current-window inference | [`examples/research/index_enhance_lite_live.py`](examples/research/index_enhance_lite_live.py) |
+| Engine live-style current-window inference | [`examples/research/index_enhance_engine_live.py`](examples/research/index_enhance_engine_live.py) |
+| Engine Backtrader-style portfolio rebalancing | [`examples/engine/11_target_percent_portfolio.py`](examples/engine/11_target_percent_portfolio.py) |
+| Asset-class portfolio strategy | [`examples/engine/12_asset_class_portfolios.py`](examples/engine/12_asset_class_portfolios.py) |
 
 ## Alignment & Performance
 
-Local baselines focus on two core checks: **whether results align** and **whether throughput is meaningfully faster than Backtrader**. Full reproduction commands are available in [benchmarks](./docs/benchmarks.md).
+Local baselines focus on two core checks: **whether results align** and **whether throughput is meaningfully faster than Backtrader**. Full reproduction commands are available in [benchmarks](docs/benchmarks.md).
 
 #### 1. Single-Asset High-Frequency: SMA Cross (550k Bars)
 * **Strategy idea**: Run a standard dual moving average crossover. This stresses Rust's event-driven state maintenance and single-stream throughput over a long sequence.
@@ -335,18 +335,18 @@ Local baselines focus on two core checks: **whether results align** and **whethe
 ## Full Documentation
 
 *   **Official online docs**: [**https://muuyesen.github.io/trade-learn/**](https://muuyesen.github.io/trade-learn/)
-*   **Local technical manual**: [`docs/`](./docs/README.md)
+*   **Local technical manual**: [`docs/`](docs/README.md)
 
 | Topic | Entry |
 |---|---|
-| First backtest in 30 lines | [Quickstart](./docs/quickstart.md) |
-| Lite / Engine usage | [Lite Guide](./docs/guides/lite.md) · [Engine Guide](./docs/guides/engine.md) |
-| Architecture and boundaries | [Architecture](./docs/concepts/architecture.md) |
-| Factor / ML / weight research pipeline | [Research Guide](./docs/guides/research.md) |
-| Dual-standard indicators (`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`) | [Indicators Guide](./docs/guides/indicators.md) |
-| Performance baseline | [Benchmarks](./docs/benchmarks.md) |
-| Kernel internals (contracts / matching / portfolio / event loop) | [Design Notes](./docs/internals/contracts.md) |
-| Full API | [API Reference](./docs/api/reference.md) |
+| First backtest in 30 lines | [Quickstart](docs/quickstart.md) |
+| Lite / Engine usage | [Lite Guide](docs/guides/lite.md) · [Engine Guide](docs/guides/engine.md) |
+| Architecture and boundaries | [Architecture](docs/concepts/architecture.md) |
+| Factor / ML / weight research pipeline | [Research Guide](docs/guides/research.md) |
+| Dual-standard indicators (`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`) | [Indicators Guide](docs/guides/indicators.md) |
+| Performance baseline | [Benchmarks](docs/benchmarks.md) |
+| Kernel internals (contracts / matching / portfolio / event loop) | [Design Notes](docs/internals/contracts.md) |
+| Full API | [API Reference](docs/api/reference.md) |
 
 ## 🚀 Roadmap
 
@@ -390,3 +390,5 @@ This project is for academic research and technical exchange only and does not c
 ## Contact
 
 WeChat: 知守溪的收纳屋 · Email: muyes88@gmail.com
+
+The quick-start examples require `pip install "trade-learn[tv,tdx,report]"`; the default package contains only core dependencies. Single-symbol time-series factor evaluation uses the [Research guide](docs/guides/research.md).

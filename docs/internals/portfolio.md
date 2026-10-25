@@ -29,7 +29,7 @@ Account
    - 增加既有方向 → 重新计算 average price
    - 减少既有方向 → 确认这部分的 realized PnL（average price 不变）
    - 关闭 → 全量 realized
-   - 反转 → 先 close leg 再 open leg（详见 [撮合 → 反转持仓的 trade 拆分](matching.md#trade)）
+   - 反转 → 先 close leg 再 open leg（详见 [撮合 → 反转持仓的 trade 拆分](matching.md#反转持仓的-trade-拆分)）
 
 ## 每次 Bar Mark 的处理流程
 
@@ -79,7 +79,7 @@ self.position.price         # 当前持仓均价
 
 以下行为在 2.0 已冻结，更改需走 breaking change 流程：
 
-- **现金不足 / 保证金不足 → `Rejected`**，不允许负现金，不做 partial fill
+- **现金不足 / 保证金不足 → `Margin`**，本次整笔不成交；`Rejected` 不是这项资金检查的终态。具体减仓例外与资金定义见 [撮合规则](matching.md#现金--保证金不足)，不在本页另立口径。
 - **单笔反转 fill** → 拆成 close + open 两段 trade（commission 按比例分摊）
 - **做空** → 1:1 保证金，不计算融券利息
 

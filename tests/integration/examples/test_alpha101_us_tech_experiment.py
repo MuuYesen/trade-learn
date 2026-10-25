@@ -1,22 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
-import os
 from pathlib import Path
 
-import pytest
-
-_configured_root = os.environ.get("TRADELEARN_STRATEGY_EXAMPLES_ROOT")
-if not _configured_root:
-    pytest.skip(
-        "External strategy examples require TRADELEARN_STRATEGY_EXAMPLES_ROOT",
-        allow_module_level=True,
-    )
-ROOT = Path(_configured_root).expanduser()
-if not ROOT.is_dir():
-    raise FileNotFoundError(f"Configured external strategy examples root does not exist: {ROOT}")
+ROOT = Path(__file__).resolve().parents[3]
 EXAMPLE = (
-    ROOT
+    ROOT.parent
+    / "文章编写"
     / "wechat_docs"
     / "articles"
     / "alpha101-us-tech"
@@ -24,9 +14,6 @@ EXAMPLE = (
     / "examples"
     / "alpha101_us_tech_experiment.py"
 )
-for _required_path in (EXAMPLE,):
-    if not _required_path.is_file():
-        raise FileNotFoundError(f"Missing configured external strategy example: {_required_path}")
 
 
 def _load_example_module():

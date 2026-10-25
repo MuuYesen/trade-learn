@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 """Restore the minimal frozen 1.x test oracle from verified local Git blobs."""
-
 from __future__ import annotations
 
 import argparse

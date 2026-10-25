@@ -338,7 +338,7 @@ risk:
 
 execution:
   adapter: qmt
-  account_id: "40705983"
+  account_id: "<QMT_ACCOUNT_ID>"
   order_type: market
 ```
 

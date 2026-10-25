@@ -141,3 +141,19 @@ def _stats() -> SimpleNamespace:
         analyzers={},
         config={"strategy": "artifact-demo"},
     )
+
+
+def test_export_preserves_explicit_bar_period_in_workbook_and_csv(tmp_path):
+    write_artifact_bundle(_stats(), tmp_path, timeframe="1D", log_report=False)
+    for frame in (pd.read_excel(tmp_path / "artifacts.xlsx", sheet_name="metadata"),
+                  pd.read_csv(tmp_path / "metadata.csv")):
+        metadata = frame.set_index("key")["value"].to_dict()
+        assert metadata["timeframe"] == "1D"
+        assert metadata["artifact_kind"] == "backtest"
+
+
+def test_export_rejects_invalid_period_before_writing(tmp_path):
+    import pytest
+    with pytest.raises(ValueError, match="timeframe"):
+        write_artifact_bundle(_stats(), tmp_path, timeframe="garbage", log_report=False)
+    assert not (tmp_path / "artifacts.xlsx").exists()

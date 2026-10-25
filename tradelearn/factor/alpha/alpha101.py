@@ -526,7 +526,7 @@ class Alpha101Factors:
         """Return Alpha#66."""
         numerator = ((self.low * 0.96633) + (self.low * (1 - 0.96633))) - self.vwap
         denominator = self.open - ((self.high + self.low) / 2)
-        term = (numerator / denominator).replace([np.inf, -np.inf], np.nan)
+        term = numerator / denominator
         return (
             _rank(_decay_linear(_delta(self.vwap, 4), 7))
             + _ts_rank(_decay_linear(term, 11), 7)

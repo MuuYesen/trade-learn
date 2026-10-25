@@ -64,6 +64,19 @@ side = bt.Order.Sell
 
 ## 维护规则
 
+### 文档与实现核对（2026-10-18）
+
+本次只更正文档，不改变公开 API 或交易规则。四项已核对差异如下：
+
+| 项目 | 现行实现依据 | 文档归属 |
+|---|---|---|
+| `callback_batch` | `Cerebro` 保存参数，`backtest/engine.py` 逐 bar 调用；没有每 N-bar 才回调的路径 | [事件循环](../internals/event-loop.md) |
+| `valid` | `backtest/broker.py` 归一化 UTC 截止时刻，原生与 fallback 撮合前检查过期；`tests/unit/backtest/test_order_lifecycle.py` 与独立 oracle 覆盖 | [撮合与成交](../internals/matching.md#订单生命周期) |
+| 资金不足终态 | `backtest/broker.py` 映射 `margin` 为 `Order.Margin`；`test_audit_margin_contracts.py` / `test_deferred_order_lifecycle.py` 约束 | [资金与保证金](../internals/matching.md#现金--保证金不足) |
+| 返回值 | `Cerebro.run()` 默认返回策略列表，`_format_run_results` 可返回 OptReturn；Stats 在策略结果或 Lite API 获取 | [Stats](stats.md) |
+
+**生成文档待同步项：**`scripts/generate_api_reference.py` 的 `valid` 生成元数据仍写“仅元数据”。本轮只允许 Markdown 修改，因此不改生成器，也不将它作为有效期行为依据；生成 [Engine API 签名](../guides/engine-api.md) 前须另行同步元数据并检查此项，避免重新引入旧说明。签名与业务语义分别验证，生成成功不等于描述正确。
+
 - 新的用户能力放到公开 facade 或由公开 facade 转发。
 - `backtest` 和 `core` 可以被框架内部子模块导入，但不通过包顶层导出。
 - 示例和文档中的用户代码不得从 `tradelearn.backtest` 或 `tradelearn.core` 导入。

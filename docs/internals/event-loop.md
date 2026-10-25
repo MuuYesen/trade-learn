@@ -20,13 +20,13 @@ sequenceDiagram
     R->>B: 2. 撮合 T-1 提交的遗留订单
     B-->>P: 3. 发送订单通知 (notify_order/notify_fill)
     R->>B: 4. Mark-to-Market (按 Bar T 更新市值)
-    
+
     rect rgb(240, 240, 240)
     Note over R,P: 若 warmup 期已结束
     R->>P: 5. 触发 Strategy.next()
     P->>B: 6. 提交新订单 (buy/sell)
     end
-    
+
     R->>A: 7. 触发 Analyzer/Observer 回调
     R->>R: 8. 时钟推进至 T+1
 ```
@@ -57,11 +57,9 @@ sequenceDiagram
 - **最新可见原则 (Latest-at-or-before)**：当主时钟走到时间 $T$ 时，副数据源通过 Line 协议返回其在 $T$ 时刻或 $T$ 之前最新的那一根 Bar。
 - **防止窥视**：绝不会返回 $T$ 之后的数据。
 
-### 4. 批处理模式 (`callback_batch`)
-对于机器学习大规模回测，可以将 `callback_batch` 设置为 $N$：
-- 引擎会静默推进 $N$ 根 Bar 并在内存中累积。
-- 到达第 $N$ 根 Bar 时，一次性触发 `next()`。
-- **注意**：这会引入 $N$ 个 Bar 的撮合延迟，主要用于特定周期的高频因子验证场景。
+### 4. 保留参数 (`callback_batch`)
+
+`callback_batch` 当前保存在 `Cerebro` 及回测配置中，正式事件路径仍逐 bar 调用策略；它不会每 N 根 bar 才调用一次 `next()`，也没有由此引入的 N-bar 撮合延迟。2026-10-18 对照 `tradelearn/engine/cerebro.py` 与 `tradelearn/backtest/engine.py` 的 `on_bar`/Rust callback 路径修正文档，未修改实现。将它变成实际批处理属于另行设计的行为变化，不能从参数名推定。
 
 ---
 

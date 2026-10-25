@@ -21,7 +21,7 @@
 ```python
 {
     "market":  "CN" | "US" | "HK" | "CRYPTO",
-    "freq":    "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1w" | "1M",
+    "freq":    "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1w",
     "adjust":  "pre" | "post" | "none",   # 默认 "pre"
     "engine":  "tv" | "tdx" | ...,
     "source":  "<URL 或标识>",
@@ -71,7 +71,7 @@ bars.xs("GOOG", level="symbol")
 
 `pd.Series`，`DatetimeIndex(tz-aware UTC)`，`float64`。
 
-- **简单收益** `r_t = (p_t / p_{t-1}) - 1`
+- **简单收益**：价格序列可用 `r_t = (p_t / p_{t-1}) - 1`；账户权益必须先处理资金流、估值时点和币种，不能机械套用。
 - 对数收益**不作为契约形态**，需在入口转换
 
 `attrs`：
@@ -103,7 +103,7 @@ class StreamBar:
 
 ## 6. Stats（回测结果）
 
-`cerebro.run()` 的返回值，不是独立契约对象，结构如下：
+默认 `cerebro.run()` 返回策略实例列表，从 `strategy.stats` 读取回测结果；Lite 的 `Backtest.run()` 直接返回 Stats。优化路径的 `optreturn=True` 返回轻量 `OptReturn`，不能当作 Stats。以下是 Stats 的内容示意，完整接口与获取方式以 [Stats 结果对象](../concepts/stats.md) 为准：
 
 ```python
 @dataclass
@@ -217,7 +217,7 @@ class DataFeed(Protocol):
 
 ## 9. 验证函数（严入宽出）
 
-每个契约对应一个 `validate_xxx` 函数，**只在模块边界做一次校验**，模块内部输出不再验证（信任自家代码）：
+现有 core 验证器包括 `validate_bars` 与 `validate_returns`；在模块输入边界调用。业务层仍须验证资金流、日历、产品等额外证据：
 
 ```python
 from tradelearn.core.contracts import validate_bars
@@ -227,18 +227,21 @@ bars = validate_bars(df)   # 校验 MultiIndex、必填列、tz-awareness，违�
 
 ## 10. 类型落地位置
 
-```
+```text
 tradelearn/core/
-├── bars.py          # validate_bars
-├── factor.py        # validate_factor
-├── signal.py        # validate_signal
-├── returns.py       # validate_returns
-├── events.py        # StreamBar / OrderEvent / FillEvent
-├── broker.py        # Broker / DataFeed Protocol + Order / Fill / Position / Account
-└── types.py         # Literal / TypeAlias 集中（OrderId / OrderStatus）
+├── contracts.py          # StreamBar / Experiment、validate_bars / validate_returns；重导出 Broker 类型
+├── broker_contracts.py   # 唯一 Broker Protocol 与 Order/Fill/Position/Account 数据类型
+├── broker_events.py      # Broker 事件适配
+└── errors.py             # 契约异常
 ```
 
+Factor/Signal 的形态是模块输入约定，不代表 core 已存在对应 validate_* 函数。
+`contracts.Broker` 与 `broker_contracts.Broker` 是同一对象，兼容旧导入路径。
+
 `tradelearn.core` 不依赖任何上层模块，是依赖图最底层。
+
+跨项目通用指标复用 `tradelearn.metrics`；模块只做输入适配、证据检查和方法选择。
+简单计数/单位转换与 CTA/HFT 专属执行分析留在消费项目。框架不自动推断调用方的年化频率或资金流。
 
 ## 11. 契约稳定性
 

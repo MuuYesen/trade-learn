@@ -1,8 +1,7 @@
 """Bounded, JSON-safe Charting catalog: 104 studies plus Smart Money Concepts.
 
-Input bars must be chronological, unique, UTC indexed OHLCV. Series event
-studies emit at confirmation time. SMC returns snapshot geometry with explicit
-pivot confirmation metadata. Profiles distribute OHLCV uniformly across each bar.
+Input bars must be chronological, unique, UTC indexed OHLCV. Series event studies emit at confirmation time. SMC returns snapshot geometry
+with explicit pivot confirmation metadata. Profiles distribute OHLCV uniformly across each bar.
 """
 
 import json

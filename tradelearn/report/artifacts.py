@@ -35,20 +35,7 @@ def write_artifact_bundle(
     preserve it in metadata. Omitted periods remain unknown, never guessed.
     """
 
-    if timeframe is not None and timeframe not in {
-        "1",
-        "3",
-        "5",
-        "15",
-        "30",
-        "45",
-        "60",
-        "120",
-        "240",
-        "1D",
-        "1W",
-        "1M",
-    }:
+    if timeframe is not None and timeframe not in {"1", "3", "5", "15", "30", "45", "60", "120", "240", "1D", "1W", "1M"}:
         raise ValueError("timeframe must be a supported bar period (minutes, 1D, 1W, 1M)")
     output_dir = Path(directory)
     output_dir.mkdir(parents=True, exist_ok=True)

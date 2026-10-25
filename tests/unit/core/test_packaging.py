@@ -43,7 +43,9 @@ def test_optional_backends_are_not_required_for_core_install() -> None:
     )
 
     assert not any(
-        dep.startswith(prefix) for dep in dependencies for prefix in optional_runtime_prefixes
+        dep.startswith(prefix)
+        for dep in dependencies
+        for prefix in optional_runtime_prefixes
     )
     assert any(dep.startswith("opentdx") for dep in extras["tdx"])
     # TradingView transport is maintained in-tree and uses websocket-client.

@@ -189,8 +189,7 @@ worktrees/
 tests/golden/datasets/**/*.parquet
 tests/golden/expected/**/*.json
 tests/golden/indicators/**/*.parquet
-/reference/*
-!/reference/tradelearn_1x/
+reference/
 
 # Local debugging scratch files. Existing tracked scratch checkpoints remain
 # tracked, but new ad-hoc probes should stay local unless promoted explicitly.
@@ -201,9 +200,6 @@ examples/output/
 design/
 benchmarks/output/
 zoo/
-
-# Frozen offline CI input; all other market archives remain local.
-!tests/golden/datasets/tv/AAPL_2020-01-01_2024-12-31_1d.parquet
 
 # Local production workflow captures and QMT-only diagnostic fixtures.
 /ops/n8n/*.applied.json

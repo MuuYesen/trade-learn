@@ -35,9 +35,7 @@ def fill_missing(
         fill_values = getattr(result[target_columns], method)()
     else:
         keys = _group_keys(result, by)
-        fill_values = result.groupby(keys, sort=False, dropna=False)[target_columns].transform(
-            method
-        )
+        fill_values = result.groupby(keys, sort=False, dropna=False)[target_columns].transform(method)
     result[target_columns] = result[target_columns].fillna(fill_values)
     return restore(result)
 
@@ -171,8 +169,12 @@ class Winsorizer:
         frame, _ = _as_frame(data)
         self.columns_ = _columns(frame, self.columns)
         lower_q, upper_q = self.limits
-        self.lower_ = {column: float(frame[column].quantile(lower_q)) for column in self.columns_}
-        self.upper_ = {column: float(frame[column].quantile(upper_q)) for column in self.columns_}
+        self.lower_ = {
+            column: float(frame[column].quantile(lower_q)) for column in self.columns_
+        }
+        self.upper_ = {
+            column: float(frame[column].quantile(upper_q)) for column in self.columns_
+        }
         if self.by is not None:
             self.group_lower_ = {}
             self.group_upper_ = {}

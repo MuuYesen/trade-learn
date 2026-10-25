@@ -6798,11 +6798,9 @@ dev = [
     { name = "cibuildwheel", version = "2.23.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "cibuildwheel", version = "3.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "interrogate" },
-    { name = "mcp" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
-    { name = "statsmodels" },
 ]
 docs = [
     { name = "mkdocs-material" },
@@ -6888,7 +6886,6 @@ requires-dist = [
     { name = "jupyterlab-git", marker = "extra == 'all'" },
     { name = "jupyterlab-git", marker = "extra == 'lab'" },
     { name = "mcp", marker = "extra == 'all'", specifier = ">=1.8.0" },
-    { name = "mcp", marker = "extra == 'dev'", specifier = ">=1.8.0" },
     { name = "mcp", marker = "extra == 'lab'", specifier = ">=1.8.0" },
     { name = "mkdocs-material", marker = "extra == 'docs'" },
     { name = "mkdocstrings-python", marker = "extra == 'docs'" },

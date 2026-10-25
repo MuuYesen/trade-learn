@@ -4,9 +4,9 @@
 
 <p align="center">
   <a href="https://muuyesen.github.io/trade-learn/"><b>公式ドキュメント</b></a> |
-  <a href="./CHANGELOG.md"><b>更新履歴</b></a> |
-  <a href="./README.md"><b>中文简体</b></a> |
-  <a href="./README_en.md"><b>English</b></a>
+  <a href="CHANGELOG.md"><b>更新履歴</b></a> |
+  <a href="README_zh.md"><b>中文简体</b></a> |
+  <a href="README.md"><b>English</b></a>
 </p>
 
 <p align="center">
@@ -56,7 +56,7 @@
 - **フルリンク・パイプライン**：特徴量エンジニアリング、因果スクリーニング、スコアリングモデル、ポートフォリオウェイト、レポート生成を再現可能なループとして結合。
 
 #### 📦 モジュール化プラットフォーム：軽量コアと柔軟な拡張
-- **デカップリングされたコア**：デフォルトでは最小限の依存関係で高性能カーネルのみをインストール。サーバーや自動取引システムへの統合が容易です。
+- **デカップリングされたコア**：標準インストールは Engine、Lite と基本データ処理を提供します。レポート、因子、Parquet、ML、指標バックエンドは追加オプションです。
 - **弾力的な拡張**：`[lab]` または `[all]` オプションにより、投資研究環境（**JupyterLab + MLflow + AI アシスタント**）を一括で有効化。
 
 #### 🌍 グローバルな視点：多基準指標とモダンなエコシステム
@@ -101,11 +101,11 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 | `[tdx]` | OpenTDX データ / 中国市場向け指標依存関係 |
 | `[tv]` | TradingView datafeed と PyneCore ベースの TradingView 指標 |
 | `[talib]` | TA-Lib 指標名前空間 |
-| `[indicators]` | TDX + TradingView + TA-Lib 指標バックエンド |
-| `[factor]` | 因子統計分析（SciPy） |
-| `[parquet]` | Parquet 入出力（PyArrow） |
-| `[report]` | グラフと HTML / Excel レポート |
-| `[ml]` | 因果 ML 依存関係 |
+| `[indicators]` | Pandas-TA、TDX、TradingView、TA-Lib 指標バックエンド |
+| `[factor]` | Alpha101/Alpha191 用 SciPy |
+| `[parquet]` | Parquet キャッシュ用 PyArrow |
+| `[report]` | Bokeh チャート、HTML、Excel 出力 |
+| `[ml]` | scikit-learn と因果 ML 依存関係 |
 | `[research]` | Numba などのリサーチ高速化ユーティリティ |
 | `[duckdb]` | DuckDB bars backend |
 | `[lab]` | JupyterLab / Jupyter AI / MCP / Pygwalker 投資研究環境 |
@@ -113,7 +113,7 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 | `[all]` | 完全な研究環境 (Lab, MLflow, indicators, ML, DuckDB など) |
 
 > **💡 インストールのヒント**:
-> 標準インストールには NumPy、Pandas、tqdm、Typer、PyYAML などのコア依存関係のみが含まれます。因子分析、Parquet、指標、レポートには対応する extra が必要です。JupyterLab と MLflow を含むフル体験には `[all]` を推奨します。
+> 標準インストールは基本的なバックテストに対応します。チャートや出力には `[report]`、組み込み指標には `[indicators]` を追加してください。JupyterLab と MLflow を含む全機能には `[all]` を推奨します。
 > ```bash
 > pip install "trade-learn[all]"
 > ```
@@ -198,7 +198,7 @@ cerebro.report("report.html")
 
 ## 投資研究パイプライン例
 
-README には最短で読める版のみを載せています。完全なスクリプトは [`examples/research/index_enhance_lite_pipeline.py`](./examples/research/index_enhance_lite_pipeline.py) と [`examples/research/index_enhance_engine_pipeline.py`](./examples/research/index_enhance_engine_pipeline.py) を参照してください。
+README には最短で読める版のみを載せています。完全なスクリプトは [`examples/research/index_enhance_lite_pipeline.py`](examples/research/index_enhance_lite_pipeline.py) と [`examples/research/index_enhance_engine_pipeline.py`](examples/research/index_enhance_engine_pipeline.py) を参照してください。
 
 **1. Research：生の行情データから特徴量を生成し、訓練 / テストに分割**
 
@@ -287,16 +287,16 @@ class LiveStylePortfolio(tl.Strategy):
 
 | 目的 | 完全なスクリプト |
 |---|---|
-| Lite 投資研究 + バックテスト + report + MLflow | [`examples/research/index_enhance_lite_pipeline.py`](./examples/research/index_enhance_lite_pipeline.py) |
-| Engine 投資研究 + バックテスト + report + MLflow | [`examples/research/index_enhance_engine_pipeline.py`](./examples/research/index_enhance_engine_pipeline.py) |
-| Lite live-style 現在ウィンドウ推論 | [`examples/research/index_enhance_lite_live.py`](./examples/research/index_enhance_lite_live.py) |
-| Engine live-style 現在ウィンドウ推論 | [`examples/research/index_enhance_engine_live.py`](./examples/research/index_enhance_engine_live.py) |
-| Engine Backtrader スタイルのポートフォリオ調整 | [`examples/engine/11_target_percent_portfolio.py`](./examples/engine/11_target_percent_portfolio.py) |
-| 資産クラス別ポートフォリオ戦略 | [`examples/engine/12_asset_class_portfolios.py`](./examples/engine/12_asset_class_portfolios.py) |
+| Lite 投資研究 + バックテスト + report + MLflow | [`examples/research/index_enhance_lite_pipeline.py`](examples/research/index_enhance_lite_pipeline.py) |
+| Engine 投資研究 + バックテスト + report + MLflow | [`examples/research/index_enhance_engine_pipeline.py`](examples/research/index_enhance_engine_pipeline.py) |
+| Lite live-style 現在ウィンドウ推論 | [`examples/research/index_enhance_lite_live.py`](examples/research/index_enhance_lite_live.py) |
+| Engine live-style 現在ウィンドウ推論 | [`examples/research/index_enhance_engine_live.py`](examples/research/index_enhance_engine_live.py) |
+| Engine Backtrader スタイルのポートフォリオ調整 | [`examples/engine/11_target_percent_portfolio.py`](examples/engine/11_target_percent_portfolio.py) |
+| 資産クラス別ポートフォリオ戦略 | [`examples/engine/12_asset_class_portfolios.py`](examples/engine/12_asset_class_portfolios.py) |
 
 ## 同期とパフォーマンス
 
-ローカル基準では、**結果が一致しているか**、そして Backtrader と比較して**スループットが明確に速いか**という 2 点を重視しています。完全な再現コマンドは [性能基準](./docs/benchmarks.md) を参照してください。
+ローカル基準では、**結果が一致しているか**、そして Backtrader と比較して**スループットが明確に速いか**という 2 点を重視しています。完全な再現コマンドは [性能基準](docs/benchmarks.md) を参照してください。
 
 #### 1. 単一資産高頻度：SMA 交差 (55万 Bar)
 * **戦略原理**：標準的な二重移動平均クロスを実行します。長い単一データストリームに対する Rust のイベント駆動性能と状態管理効率を測り、単一コア推進の限界を確認します。
@@ -335,18 +335,18 @@ class LiveStylePortfolio(tl.Strategy):
 ## 完全ドキュメント
 
 *   **公式オンラインドキュメント**：[**https://muuyesen.github.io/trade-learn/**](https://muuyesen.github.io/trade-learn/)
-*   **ローカル技術マニュアル**：[`docs/`](./docs/README.md)
+*   **ローカル技術マニュアル**：[`docs/`](docs/README.md)
 
 | テーマ | 入口 |
 |---|---|
-| 30 行で最初のバックテスト | [クイックスタート](./docs/quickstart.md) |
-| Lite / Engine の使い方 | [Lite ガイド](./docs/guides/lite.md) · [Engine ガイド](./docs/guides/engine.md) |
-| アーキテクチャと境界 | [アーキテクチャ](./docs/concepts/architecture.md) |
-| Factor / ML / Weight 研究パイプライン | [Research ガイド](./docs/guides/research.md) |
-| 二重基準指標（`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`） | [Indicators ガイド](./docs/guides/indicators.md) |
-| 性能基準 | [Benchmarks](./docs/benchmarks.md) |
-| カーネル内部（契約 / マッチング / portfolio / イベントループ） | [設計ノート](./docs/internals/contracts.md) |
-| 完全 API | [API リファレンス](./docs/api/reference.md) |
+| 30 行で最初のバックテスト | [クイックスタート](docs/quickstart.md) |
+| Lite / Engine の使い方 | [Lite ガイド](docs/guides/lite.md) · [Engine ガイド](docs/guides/engine.md) |
+| アーキテクチャと境界 | [アーキテクチャ](docs/concepts/architecture.md) |
+| Factor / ML / Weight 研究パイプライン | [Research ガイド](docs/guides/research.md) |
+| 二重基準指標（`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`） | [Indicators ガイド](docs/guides/indicators.md) |
+| 性能基準 | [Benchmarks](docs/benchmarks.md) |
+| カーネル内部（契約 / マッチング / portfolio / イベントループ） | [設計ノート](docs/internals/contracts.md) |
+| 完全 API | [API リファレンス](docs/api/reference.md) |
 
 ## 🚀 ロードマップ (Roadmap)
 
@@ -390,3 +390,5 @@ class LiveStylePortfolio(tl.Strategy):
 ## お問い合わせ
 
 WeChat: 知守溪の收纳屋 · Email: muyes88@gmail.com
+
+The quick-start examples require `pip install "trade-learn[tv,tdx,report]"`; the default package contains only core dependencies. Single-symbol time-series factor evaluation uses the [Research guide](docs/guides/research.md).

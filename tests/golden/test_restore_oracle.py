@@ -1,5 +1,4 @@
 """The frozen oracle must be reproducible without replacing local changes."""
-
 import hashlib
 from pathlib import Path
 

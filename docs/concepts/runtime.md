@@ -12,6 +12,8 @@ trade-learn 是事件驱动回测框架，不是纯向量化回测器。策略�
 
 用户不需要显式选择 runner。Engine 和 Lite 都通过 `tradelearn.backtest` runtime 进入同一套内核。
 
+Python runner fallback 不等于 `RustBroker` 撮合降级：默认 `RustBroker` 缺少 Rust 扩展时会明确报错，不会静默改用 Python 撮合，也不会继续调用策略 `next()`。
+
 触发条件的具体口径：
 
 - **single-data runner**：只有一个数据源时使用。它保留单标的最短路径，不引入多标的 active symbol、clock plan 或 cross-section 组装开销。

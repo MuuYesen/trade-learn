@@ -71,11 +71,12 @@ Readiness currently checks artifact existence; it is not itself a provenance,
 coverage, or numerical-comparison check. Full manifest readiness remains
 `datasets=5/10`, `expected=50/100` until the missing TDX evidence exists.
 
-The default pytest `testpaths` cover `unit`, `golden`, and `consistency`.
-Run `python -m pytest tests` to include top-level provider/transport tests and
-the Charting review/indicator tests. The two `tests/smoke/test_*.py` files
-contain runnable helpers rather than test functions; unit example tests invoke
-their quickstart, migration, and tutorial entry points.
+The default pytest `testpaths` now include all of `tests`, including top-level
+provider/transport tests and the Charting review/indicator tests. Previously the
+three selected directories (`unit`, `golden`, `consistency`) omitted those files.
+The two `tests/smoke/test_*.py` files contain runnable helpers rather than test
+functions; unit example tests invoke their quickstart, migration, and tutorial
+entry points. Run `python -m pytest` for the complete default collection.
 
 Seven unconditional future-stage consistency placeholders remain skips. Existing
 indicator, factor, report, and Backtrader tests cover portions of those goals, but

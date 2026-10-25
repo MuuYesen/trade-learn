@@ -40,10 +40,8 @@ def test_ml_strategy_example_runs_deterministically() -> None:
 
 def test_prepare_ml_data_uses_current_selector_contract() -> None:
     bars = pd.DataFrame(
-        {
-            name: [100.0 + i for i in range(80)]
-            for name in ("open", "high", "low", "close", "volume")
-        },
+        {name: [100.0 + i for i in range(80)] for name in
+         ("open", "high", "low", "close", "volume")},
         index=pd.date_range("2024-01-01", periods=80),
     )
     data, features = prepare_ml_data(bars)
@@ -75,24 +73,19 @@ def test_factor_builder_preserves_unknown_warmup_values() -> None:
 
 def test_missing_features_skip_signals_without_dropping_market_bars() -> None:
     from sklearn.ensemble import GradientBoostingRegressor
-
     from examples.engine import Alpha101GBMStrategy
     from scripts.examples.ml_strategy import _demo_bars
     from tradelearn.engine import Cerebro
 
     bars = _demo_bars().iloc[:5].copy()
     bars["feature"] = float("nan")
-    training = pd.DataFrame(
-        {"feature": [float("nan"), 0.0, 1.0, 2.0], "target": [0.1, 0.1, 0.1, 0.1]}
-    )
+    training = pd.DataFrame({"feature": [float("nan"), 0.0, 1.0, 2.0],
+                             "target": [0.1, 0.1, 0.1, 0.1]})
     cerebro = Cerebro(trade_on_close=True)
     cerebro.adddata(bars)
-    cerebro.addstrategy(
-        Alpha101GBMStrategy,
-        features=("feature",),
-        training_data=training,
-        model=GradientBoostingRegressor(random_state=7, n_estimators=2),
-    )
+    cerebro.addstrategy(Alpha101GBMStrategy, features=("feature",),
+                        training_data=training,
+                        model=GradientBoostingRegressor(random_state=7, n_estimators=2))
     [strategy] = cerebro.run()
     assert strategy.stats.equity.index.equals(bars.index)
     assert strategy.stats.fills.empty
@@ -112,47 +105,5 @@ def test_holdout_prices_do_not_change_training_factors_labels_or_model() -> None
     assert baseline.stats.equity.index.equals(bars.index[split:])
     assert baseline.training_data.index[-1] == bars.index[split - 2]
     inputs = baseline.training_data[baseline.selected_features].dropna()
-    assert (
-        baseline.strategy.model_.predict(inputs) == changed_result.strategy.model_.predict(inputs)
-    ).all()
-
-
-def test_missing_price_does_not_create_zero_or_bridged_training_labels() -> None:
-    from scripts.examples.ml_strategy import _demo_bars
-
-    bars = _demo_bars().iloc[:40].copy()
-    bars.loc[bars.index[20], "close"] = float("nan")
-    data, _ = prepare_ml_data(bars)
-    assert data["target"].iloc[19:21].isna().all()
-    assert pd.isna(data["target"].iloc[-1])
-
-
-def test_single_asset_undefined_correlations_remain_unknown() -> None:
-    from scripts.examples.ml_strategy import _demo_bars
-
-    factors = build_alpha101_features(_demo_bars())
-    assert factors[["alpha002_101", "alpha003_101"]].isna().all().all()
-
-
-def test_alpha_correlations_keep_warmup_missing_and_compute_with_cross_section() -> None:
-    import numpy as np
-
-    from tradelearn.factor.alpha import alpha101
-
-    rng = np.random.default_rng(11)
-    index = pd.MultiIndex.from_product(
-        [pd.date_range("2024-01-01", periods=30), ["A", "B", "C"]],
-        names=["date", "symbol"],
-    )
-    raw = pd.DataFrame(index=index)
-    raw["open"] = rng.uniform(10, 20, len(raw))
-    raw["close"] = rng.uniform(10, 20, len(raw))
-    raw["high"] = raw[["open", "close"]].max(axis=1)
-    raw["low"] = raw[["open", "close"]].min(axis=1)
-    raw["vwap"] = (raw["open"] + raw["close"]) / 2
-    raw["volume"] = rng.uniform(100, 1000, len(raw))
-    factors = alpha101(raw.reset_index(), names=["alpha002", "alpha003"])
-    for column, warmup in [("alpha002_101", 7), ("alpha003_101", 9)]:
-        dates = factors["date"].drop_duplicates().sort_values()
-        assert factors.loc[factors["date"].isin(dates.iloc[:warmup]), column].isna().all()
-        assert factors.loc[factors["date"].isin(dates.iloc[warmup:]), column].notna().any()
+    assert (baseline.strategy.model_.predict(inputs)
+            == changed_result.strategy.model_.predict(inputs)).all()

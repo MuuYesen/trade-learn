@@ -8,8 +8,8 @@ import pytest
 
 
 PIPELINE_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "zoo"
+    Path(__file__).resolve().parents[3]
+    / "交易策略"
     / "backtest"
     / "tushare_sw_hs300"
     / "hs300_pipeline_tushare_sw.py"

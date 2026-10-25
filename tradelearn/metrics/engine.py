@@ -1,7 +1,9 @@
 from typing import Any
 
-import numpy as np
 import pandas as pd
+
+from tradelearn.metrics.returns import cum_returns
+from tradelearn.metrics.risk import drawdown_from_equity
 
 
 class MetricsEngine:
@@ -36,8 +38,7 @@ class MetricsEngine:
         base_cache: dict[str, Any] = {}
 
         if not clean_equity.empty:
-            peak = clean_equity.cummax()
-            base_cache["drawdowns"] = (peak - clean_equity) / peak
+            base_cache["drawdowns"] = -drawdown_from_equity(clean_equity)
 
         # --- Instance Computations (Tier 3) ---
         for inst_id, req in self.requested_instances.items():
@@ -45,8 +46,8 @@ class MetricsEngine:
             params_raw = req["raw_params"]
 
             if metric == "returns":
-                total = float(np.prod(1.0 + clean_rets) - 1.0) if not clean_rets.empty else 0.0
-                average = float(np.mean(clean_rets)) if not clean_rets.empty else 0.0
+                total = float(cum_returns(clean_rets).iloc[-1]) if not clean_rets.empty else 0.0
+                average = float(clean_rets.mean()) if not clean_rets.empty else 0.0
                 self.results[inst_id] = {"total": total, "average": average}
 
             elif metric == "sharpe":

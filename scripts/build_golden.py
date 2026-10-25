@@ -105,9 +105,7 @@ def ensure_reference_path() -> None:
 def _install_reference_tdx_bridge() -> None:
     """Bridge the frozen 1.x TDX import to the current opentdx provider."""
 
-    # Never mutate a pre-existing provider package while installing the bridge.
-    package = types.ModuleType(REFERENCE_TDX_PACKAGE)
-    sys.modules[REFERENCE_TDX_PACKAGE] = package
+    package = sys.modules.setdefault(REFERENCE_TDX_PACKAGE, types.ModuleType(REFERENCE_TDX_PACKAGE))
     quotes = types.ModuleType(REFERENCE_TDX_MODULE)
 
     class Quotes:
@@ -164,23 +162,20 @@ def load_reference_query(allow_provider_stubs: bool = False) -> Any:
     """Load Query from the frozen 1.x oracle."""
 
     validate_reference()
-    before_path = list(sys.path)
-    roots = ("tradelearn", "yfinance", "tvDatafeed", REFERENCE_TDX_PACKAGE)
-
-    def scoped(name: str) -> bool:
-        return any(name == root or name.startswith(root + ".") for root in roots)
-
-    saved = {name: module for name, module in list(sys.modules.items()) if scoped(name)}
+    ensure_reference_path()
+    if allow_provider_stubs:
+        _install_provider_stubs()
+    saved = {
+        name: module
+        for name, module in list(sys.modules.items())
+        if name == "tradelearn" or name.startswith("tradelearn.")
+    }
+    for name in saved:
+        sys.modules.pop(name, None)
+    reference_pkg = types.ModuleType("tradelearn")
+    reference_pkg.__path__ = [str(REFERENCE)]
+    sys.modules["tradelearn"] = reference_pkg
     try:
-        ensure_reference_path()
-        if allow_provider_stubs:
-            _install_provider_stubs()
-        for name in saved:
-            if name == "tradelearn" or name.startswith("tradelearn."):
-                sys.modules.pop(name, None)
-        reference_pkg = types.ModuleType("tradelearn")
-        reference_pkg.__path__ = [str(REFERENCE)]
-        sys.modules["tradelearn"] = reference_pkg
         query_module = importlib.import_module("tradelearn.query")
         Query = query_module.Query
     except ModuleNotFoundError as exc:
@@ -191,10 +186,13 @@ def load_reference_query(allow_provider_stubs: bool = False) -> Any:
         message = f"failed to import reference Query: {type(exc).__name__}: {exc}"
         raise GoldenDataError(message) from exc
     finally:
-        sys.path[:] = before_path
-        for name in list(sys.modules):
-            if scoped(name):
-                sys.modules.pop(name, None)
+        loaded_reference_modules = [
+            name
+            for name in sys.modules
+            if name == "tradelearn" or name.startswith("tradelearn.")
+        ]
+        for name in loaded_reference_modules:
+            sys.modules.pop(name, None)
         sys.modules.update(saved)
     return Query
 
@@ -202,7 +200,10 @@ def load_reference_query(allow_provider_stubs: bool = False) -> Any:
 def provider_statuses() -> dict[str, bool]:
     """Return import availability for 1.x legacy optional provider modules."""
 
-    return {engine: _module_available(module) for engine, module in PROVIDER_MODULES.items()}
+    return {
+        engine: _module_available(module)
+        for engine, module in PROVIDER_MODULES.items()
+    }
 
 
 def validate_dataset_providers(manifest: dict[str, object]) -> None:
@@ -214,7 +215,9 @@ def validate_dataset_providers(manifest: dict[str, object]) -> None:
     if not missing:
         return
 
-    details = ", ".join(f"{engine}:{PROVIDER_MODULES.get(engine, 'unknown')}" for engine in missing)
+    details = ", ".join(
+        f"{engine}:{PROVIDER_MODULES.get(engine, 'unknown')}" for engine in missing
+    )
     raise GoldenDataError(
         "dataset provider unavailable: "
         f"{details}; install available providers before live access validation"
@@ -228,7 +231,11 @@ def filter_manifest_by_engine(manifest: dict[str, object], engine: str) -> dict[
         return manifest
     return {
         **manifest,
-        "datasets": [dataset for dataset in manifest["datasets"] if dataset["engine"] == engine],
+        "datasets": [
+            dataset
+            for dataset in manifest["datasets"]
+            if dataset["engine"] == engine
+        ],
     }
 
 
@@ -247,14 +254,18 @@ def fetch_dataset(query: Any, dataset: dict[str, str]) -> Any:
             end=dataset["end"],
         )
     except Exception as exc:
-        raise GoldenDataError(f"{exc}") from exc
+        raise GoldenDataError(
+            f"{exc}"
+        ) from exc
     if data is None:
         if dataset["engine"] == "tdx" and _LAST_REFERENCE_TDX_ERROR:
             raise GoldenDataError(
                 "reference Query returned no data for "
                 f"{dataset_label(dataset)}; {_LAST_REFERENCE_TDX_ERROR}"
             )
-        raise GoldenDataError(f"reference Query returned no data for {dataset_label(dataset)}")
+        raise GoldenDataError(
+            f"reference Query returned no data for {dataset_label(dataset)}"
+        )
     return data
 
 
@@ -418,7 +429,8 @@ def run_backtrader_expected_job(
 
     if strategy_name not in SUPPORTED_BACKTRADER_STRATEGIES:
         raise GoldenDataError(
-            f"Backtrader oracle currently supports {', '.join(SUPPORTED_BACKTRADER_STRATEGIES)}"
+            "Backtrader oracle currently supports "
+            f"{', '.join(SUPPORTED_BACKTRADER_STRATEGIES)}"
         )
     from scripts.run_backtrader_oracle import run_backtrader_oracle
 
