@@ -22,6 +22,7 @@ def test_load_config_merges_user_project_and_environment(tmp_path, monkeypatch) 
         encoding="utf-8",
     )
     monkeypatch.setenv("HOME", str(user_home))
+    monkeypatch.setenv("USERPROFILE", str(user_home))
     monkeypatch.setenv("TRADELEARN_DATA_CACHE_DIR", "env-cache")
     monkeypatch.setenv("TRADELEARN_LOG_LEVEL", "DEBUG")
 
