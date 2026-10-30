@@ -5,8 +5,8 @@
 <p align="center">
   <a href="https://muuyesen.github.io/trade-learn/"><b>Documentation</b></a> |
   <a href="CHANGELOG.md"><b>Changelog</b></a> |
-  <a href="README_zh.md"><b>中文简体</b></a> |
-  <a href="README_ja.md"><b>日本語</b></a>
+  <a href="./README_zh.md"><b>中文简体</b></a> |
+  <a href="./README_ja.md"><b>日本語</b></a>
 </p>
 
 <p align="center">
@@ -14,12 +14,25 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/pypi-v0.2.5-orange?style=flat-square" alt="PyPI version">
+  <img src="https://img.shields.io/pypi/v/trade-learn?style=flat-square" alt="PyPI version">
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
   <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/Changelog-v0.2.5-blue?style=flat-square" alt="Changelog">
+  <img src="https://img.shields.io/badge/source-0.2.9_unreleased-blue?style=flat-square" alt="Source version">
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
+
+## Current source: 0.2.9 (unreleased)
+
+The source tree provides a broker-neutral `engine.StrategyRuntime` shared by default Cerebro/Backtest research, event replay, and externally driven paper/live execution. It coordinates strategy construction, lifecycle, market history, indicator advancement, and business callbacks. Rust matching and batch precomputation remain backtest optimizations.
+
+- **Engine** exposes Backtrader-style strategy APIs and the incremental Runtime. The caller supplies scheduling, market events, and authoritative broker reports; the Runtime starts no background loop.
+- **Lite** remains a batch research interface. Its shared lifecycle does not imply full incremental/live support for `Lite.I`.
+- **Observers** provide read-only strategy events for external integrations. Durable logging, transport, broker adapters, credentials, and production strategies are external components.
+- **Independent library**: no Nautilus or commercial monitoring SDK dependency is required. NautilusTrader itself is public; deployments that use it must install its package and adapters. This repository does not yet ship a standalone Nautilus bridge.
+
+Source version 0.2.9 is not a PyPI release announcement. `pip install trade-learn` installs the published package, which may differ from this tree. Native backtests require matching Python and Rust versions and a wheel for your platform/Python ABI. Historical benchmark figures below apply to their documented inputs and environments, not every strategy or the new observer path.
+
+See [architecture](docs/concepts/architecture.md), [Runtime contracts](docs/concepts/runtime.md), [observers](docs/guides/strategy-observers.md), and [paper/live integration](docs/guides/live.md).
 
 **trade-learn** aims to eliminate the long-standing friction between quantitative research ("Learn") and backtest execution ("Trade"). By adopting a hybrid architecture of "Python for strategy logic + Rust for native backtest core," it achieves a **110x+ performance leap** in multi-asset backtesting while ensuring **100% rigorous semantic alignment** with Backtrader. It compresses large-scale strategy validation from hours to seconds, providing truly iterative research efficiency for index enhancement and machine learning strategies.
 
@@ -121,8 +134,6 @@ Optional extras:
 
 ## Quick Start
 
-The quick-start examples use TradingView, TDX indicators, and reports. Install `pip install "trade-learn[tv,tdx,report]"` first. For single-symbol temporal factor assessment, see the [Research Guide](./docs/guides/research.md).
-
 **Lite — The Shortest Path** (Ideal for rapid validation, teaching, and target-weight portfolios):
 
 ```python
@@ -158,7 +169,7 @@ bt.report("report.html")
 > [!TIP]
 > **Multi-asset logic:** In multi-asset backtests, the strategy binds to `self.data` by default (the primary data feed). The example above therefore makes decisions from the first asset even if multiple assets are provided. To trade multiple assets independently, iterate over `self.datas` in `init` and create indicators for each feed.
 
-**Engine — Backtrader Style** (Ideal for complex portfolios and future paper/live modes):
+**Engine — Backtrader Style** (For complex portfolios; external hosts drive paper/live execution):
 
 ```python
 import tradelearn.engine as bt
@@ -375,8 +386,8 @@ Based on the current engineering plan, **trade-learn** evolves along these core 
 - [ ] **Distributed Parameter Optimization**: Multi-machine parameter search and Monte Carlo simulation via Ray / Optuna.
 
 #### Live Trading & Ecosystem Vision
-- [x] **Universal Live Event Link**: Completed `EventRunner` semantics, enabling 100% code reuse between backtest and live trading.
-- [ ] **Live Trading Connectivity**: Integrate `QMT`, `IBKR`, and other brokers to complete the last mile from research to execution.
+- [x] **Universal Live Event Link**: Shared `StrategyRuntime` lifecycle for default research, event replay, and external paper/live hosts; execution outcomes depend on the broker and input schedule.
+- [ ] **Live Trading Connectivity**: Validate external broker/host integrations independently; production adapters and credentials are outside this repository.
 - [ ] **Agentic Quant Platform**: Evolve into a natural-language-driven automation foundation for end-to-end quantitative research.
 
 ## Disclaimer
@@ -390,5 +401,3 @@ This project is for academic research and technical exchange only and does not c
 ## Contact
 
 WeChat: 知守溪的收纳屋 · Email: muyes88@gmail.com
-
-The quick-start examples require `pip install "trade-learn[tv,tdx,report]"`; the default package contains only core dependencies. Single-symbol time-series factor evaluation uses the [Research guide](docs/guides/research.md).

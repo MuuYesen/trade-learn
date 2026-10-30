@@ -6,8 +6,9 @@ from typing import Any
 from tradelearn.backtest.feed import is_panel_ohlcv_frame, panel_symbol_level
 from tradelearn.backtest.reporting import reporter_from_results
 from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
-from tradelearn.core.logging import get_logger
 from tradelearn.core.costs import FixedCommission, FixedSlippage
+from tradelearn.core.logging import get_logger
+from tradelearn.core.strategy_events import invoke_component
 from tradelearn.engine.analyzer import AnalyzerCollection
 from tradelearn.engine.base import TimeFrame
 from tradelearn.engine.datafeed import DataFeed
@@ -426,10 +427,10 @@ class Cerebro:
         for analyzer in getattr(strategy, "analyzers", {}).values():
             on_start = getattr(analyzer, "on_start", None)
             if callable(on_start):
-                on_start()
+                invoke_component(strategy, on_start)
             start = getattr(analyzer, "start", None)
             if callable(start):
-                start()
+                invoke_component(strategy, start)
 
     def _finish_event_analyzers(self, strategy: Any, snapshots: list[Any]) -> None:
         stats = {
@@ -440,9 +441,9 @@ class Cerebro:
         for analyzer in getattr(strategy, "analyzers", {}).values():
             on_end = getattr(analyzer, "on_end", None)
             if callable(on_end):
-                on_end(stats)
+                invoke_component(strategy, on_end, stats)
         analyzer_results = {
-            name: analyzer.get_analysis()
+            name: invoke_component(strategy, analyzer.get_analysis)
             for name, analyzer in getattr(strategy, "analyzers", {}).items()
         }
         strategy.analyzer_results = analyzer_results
@@ -450,7 +451,7 @@ class Cerebro:
         for analyzer in getattr(strategy, "analyzers", {}).values():
             stop = getattr(analyzer, "stop", None)
             if callable(stop):
-                stop()
+                invoke_component(strategy, stop)
 
     def _prepare_strategy_context(self) -> None:
         from tradelearn.engine.base import engine_context
@@ -482,44 +483,68 @@ class Cerebro:
         set_current_datas([])
 
     def _run_event_mode(self) -> list[Strategy]:
-        from tradelearn.backtest.event_runner import EventRunner, LiveDriver, PaperDriver
+        from itertools import chain
+
+        from tradelearn.backtest.event_runner import (
+            EventRunner,
+            LiveDriver,
+            PaperDriver,
+            _coerce_stream_bar,
+        )
         from tradelearn.core.broker_events import BrokerEventPump
+        from tradelearn.backtest.event_runtime import StrategyRuntime
 
-        self._prepare_strategy_context()
-        strategy_cls, args, kwargs = self.strats[0]
+        if self.mode == "paper":
+            def source():
+                return self.kwargs.get("event_bars", ())
+        else:
+            source = self.kwargs.get("live_poller")
+            if source is None:
+                raise ValueError("live mode requires live_poller")
+        feeds = {
+            str(getattr(data, "_name", None) or f"data{index}"): "bar"
+            for index, data in enumerate(self.datas)
+        }
+        prefetched = None
+        if not feeds:
+            bars = iter(source())
+            first = next(bars, None)
+            feeds = {_coerce_stream_bar(first).symbol if first is not None else "data0": "bar"}
+            prefetched = chain((), bars) if first is None else chain((first,), bars)
+        strategy_cls, args, kwargs = (self.strats or [(Strategy, (), {})])[0]
+        runtime = StrategyRuntime(
+            strategy_cls,
+            strategy_args=args,
+            parameters=kwargs,
+            feeds=feeds,
+            broker=self.broker,
+            capacity=int(self.kwargs.get("buffer_capacity", 512)),
+        )
+        strategy = runtime.strategy
+        sizer_cls, sizer_kwargs = self._sizer_spec
+        strategy.setsizer(sizer_cls(**sizer_kwargs))
+        self._attach_analyzers(strategy)
         try:
-            strategy = strategy_cls(*args, **kwargs)
-            self._bind_strategy_context(strategy)
-            strategy.broker = self.broker
-            sizer_cls, sizer_kwargs = self._sizer_spec
-            strategy.setsizer(sizer_cls(**sizer_kwargs))
-            self._attach_analyzers(strategy)
             self._start_analyzers(strategy)
-            strategy.start()
-
             pump = self.kwargs.get("broker_event_pump")
             if pump is None:
-                poller = self.kwargs.get("broker_event_poller", lambda: ())
-                pump = BrokerEventPump(poller)
+                pump = BrokerEventPump(self.kwargs.get("broker_event_poller", lambda: ()))
             for analyzer in strategy.analyzers.values():
                 on_broker_event = getattr(analyzer, "on_broker_event", None)
                 if callable(on_broker_event):
-                    pump.on_event(on_broker_event)
-            runner = EventRunner(
-                strategy=strategy,
-                broker_event_pump=pump,
-                buffer_capacity=int(self.kwargs.get("buffer_capacity", 512)),
-            )
+                    pump.on_event(lambda event, callback=on_broker_event: runtime.invoke_component(callback, event))
+            runner = EventRunner(runtime=runtime, broker_event_pump=pump)
+            runtime.start()
+            remaining = prefetched if prefetched is not None else source()
             if self.mode == "paper":
-                bars = self.kwargs.get("event_bars", ())
-                snapshots = PaperDriver(runner, bars).run_once()
+                snapshots = PaperDriver(runner, remaining).run_once()
             else:
-                poller = self.kwargs.get("live_poller")
-                if poller is None:
-                    raise ValueError("live mode requires live_poller")
-                snapshots = LiveDriver(runner, poller).poll_once()
-            strategy.stop()
-            self._finish_event_analyzers(strategy, snapshots)
-            return [strategy]
-        finally:
-            self._reset_strategy_context()
+                snapshots = LiveDriver(runner, lambda: remaining).poll_once()
+        except BaseException as error:
+            runtime.cleanup(error)
+            raise
+        else:
+            runner.stop()
+        self._finish_event_analyzers(strategy, snapshots)
+        self._last_results = [strategy]
+        return [strategy]

@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 from typing import Any
 
+from tradelearn.core.strategy_events import observer_mutation_guard
 from tradelearn.engine.base import Params, collect_param_defaults, split_param_kwargs
 
 
@@ -28,7 +29,16 @@ class MetaSimple(type):
         instance.datas = [arg for arg in args if hasattr(arg, "lines") or hasattr(arg, "_values")]
         for idx, item in enumerate(instance.datas):
             setattr(instance, f"data{idx}", item)
-        instance.l = instance.lines = Params({line: None for line in instance.lines_def})
+        runtime = getattr(instance.data, "runtime", None) or getattr(
+            instance.data, "_runtime", None
+        )
+        instance._runtime = runtime
+        instance.l = instance.lines = Params(
+            {
+                line: (runtime.output_line(instance.data) if runtime is not None else None)
+                for line in instance.lines_def
+            }
+        )
 
         sig = inspect.signature(cls.__init__)
         real_params = list(sig.parameters.values())[1:]
@@ -45,6 +55,9 @@ class MetaSimple(type):
         else:
             instance.__init__(*args, **other_kwargs)
 
+        if runtime is not None:
+            runtime.normalize_indicator(instance)
+
         if _G.current_strategy is not None:
             _G.current_strategy._register_indicator(instance)
 
@@ -59,6 +72,13 @@ class Indicator(metaclass=MetaSimple):
     subclass this class for strategy-specific custom indicators.
     """
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for name in ("__init__", "next", "prenext", "_advance"):
+            callback = vars(cls).get(name)
+            if callable(callback):
+                setattr(cls, name, observer_mutation_guard(callback))
+
     lines = ()
     params = ()
 
@@ -67,13 +87,18 @@ class Indicator(metaclass=MetaSimple):
 
     @property
     def min_period(self) -> int:
-        period = 0
+        period = max(getattr(self, "_manual_min_period", 0), getattr(self.data, "min_period", 0))
         for name in self.lines_def:
             line = getattr(self.lines, name)
             if hasattr(line, "min_period"):
                 period = max(period, line.min_period)
         return period
 
+    @observer_mutation_guard
+    def addminperiod(self, period: int) -> None:
+        self._manual_min_period = max(int(period), getattr(self, "_manual_min_period", 0))
+
+    @observer_mutation_guard
     def _advance(self, i: int) -> None:
         for line_name in self.lines_def:
             line = getattr(self.lines, line_name)

@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from tradelearn.core.contracts import StreamBar
+from tradelearn.core.strategy_events import observer_mutation_guard
 
 
 class SharedBarBuffer:
@@ -162,6 +163,7 @@ class DataContainer:
     def buflen(self) -> int:
         return len(self._close)
 
+    @observer_mutation_guard
     def _advance(self, cursor: int) -> None:
         self._cursor = cursor
 

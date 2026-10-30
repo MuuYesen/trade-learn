@@ -7,7 +7,6 @@ from typing import Any
 import pandas as pd
 
 from tradelearn.backtest.data import RollingBarBuffer
-from tradelearn.backtest.lines import LineSeries
 from tradelearn.core.broker_events import BrokerEvent, BrokerEventPump
 from tradelearn.core.contracts import StreamBar
 
@@ -23,79 +22,97 @@ class EventSnapshot:
     orders: tuple[Any, ...] = ()
 
 
-class _BufferDataFeed:
-    """Minimal live data facade exposing Backtrader-style OHLCV lines."""
-
-    def __init__(self, buffer: RollingBarBuffer) -> None:
-        self._buffer = buffer
-        self._name = "data0"
-        self.datetime = LineSeries(
-            buffer.arrays["datetime"],
-            is_datetime=True,
-            buffer=buffer,
-            buffer_name="datetime",
-        )
-        self.open = LineSeries(buffer.arrays["open"], buffer=buffer, buffer_name="open")
-        self.high = LineSeries(buffer.arrays["high"], buffer=buffer, buffer_name="high")
-        self.low = LineSeries(buffer.arrays["low"], buffer=buffer, buffer_name="low")
-        self.close = LineSeries(buffer.arrays["close"], buffer=buffer, buffer_name="close")
-        self.volume = LineSeries(buffer.arrays["volume"], buffer=buffer, buffer_name="volume")
-
-    def __len__(self) -> int:
-        return self._buffer.cursor + 1
-
-    def _advance(self, cursor: int) -> None:
-        for line in (self.datetime, self.open, self.high, self.low, self.close, self.volume):
-            line._advance(cursor)
-
-
 class EventRunner:
-    """Single-event runner shared by backtest, paper, and live drivers."""
+    """Market-event driver delegating strategy execution to StrategyRuntime."""
 
     def __init__(
         self,
-        strategy: Any,
+        strategy: Any = None,
         *,
         broker_event_pump: BrokerEventPump | None = None,
         buffer: RollingBarBuffer | None = None,
         buffer_capacity: int = 512,
+        feeds: dict[str, str] | None = None,
+        runtime: Any = None,
     ) -> None:
-        self.strategy = strategy
-        self.buffer = buffer or RollingBarBuffer(buffer_capacity)
-        self.data = _BufferDataFeed(self.buffer)
+        if runtime is not None and strategy is not None and runtime.strategy is not strategy:
+            raise ValueError("strategy must match runtime.strategy")
+        if runtime is None and strategy is None:
+            raise ValueError("strategy or runtime is required")
+        if feeds is not None and not feeds:
+            raise ValueError("feeds must contain at least one symbol")
+        self.strategy = runtime.strategy if runtime is not None else strategy
+        self.runtime = runtime
         self.broker_event_pump = broker_event_pump
-        self._bind_strategy_data()
+        self._feeds = feeds
+        self._buffer = buffer if buffer is not None else RollingBarBuffer(buffer_capacity)
+        self._capacity = buffer_capacity
+        self._stopped = False
+        if runtime is None and feeds is not None:
+            self._ensure_runtime(next(iter(feeds)))
+
+    def _ensure_runtime(self, symbol: str) -> None:
+        if self._stopped:
+            raise RuntimeError("EventRunner has stopped")
+        if self.runtime is None:
+            from tradelearn.backtest.event_runtime import StrategyRuntime
+
+            self.runtime = StrategyRuntime(
+                strategy=self.strategy,
+                feeds=self._feeds or {symbol: "bar"},
+                capacity=self._capacity,
+                buffers={symbol: self._buffer} if self._buffer is not None else None,
+            )
+
+    @property
+    def data(self) -> Any:
+        return next(iter(self.runtime.feeds.values())) if self.runtime is not None else None
+
+    @property
+    def buffer(self) -> RollingBarBuffer | None:
+        return self.data._buffer if self.data is not None else self._buffer
 
     def on_bar(self, bar: StreamBar | dict[str, Any]) -> EventSnapshot:
         stream_bar = _coerce_stream_bar(bar)
-        self.buffer.append(stream_bar)
-        cursor = self.buffer.cursor
-        self.data._name = stream_bar.symbol
-        self.data._advance(cursor)
+        self._ensure_runtime(stream_bar.symbol)
+        self.runtime.start()
         events = self.poll_broker_events()
-        self.strategy._pre_next(cursor)
-        self.strategy.next()
+        self.runtime.step_market(stream_bar.symbol, stream_bar, kind="bar")
+        feed = self.runtime.feeds[stream_bar.symbol]
         return EventSnapshot(
-            cursor=cursor,
+            cursor=feed._buffer.cursor,
             dispatched_events=len(events),
             events=events,
             bar=stream_bar,
         )
 
     def on_broker_event(self, event: BrokerEvent | dict[str, Any]) -> None:
+        event = BrokerEvent.coerce(event)
+        symbol = getattr(getattr(self.strategy, "data", None), "_name", None) or "data0"
+        self._ensure_runtime(symbol)
+        self.runtime.start()
         if self.broker_event_pump is not None:
-            self.broker_event_pump.dispatch(BrokerEvent.coerce(event))
+            self.broker_event_pump.dispatch(event)
+        self.runtime.step_broker(event)
 
     def poll_broker_events(self) -> tuple[BrokerEvent, ...]:
+        if self._stopped:
+            raise RuntimeError("EventRunner has stopped")
         if self.broker_event_pump is None:
             return ()
-        return self.broker_event_pump.poll_events()
+        events = self.broker_event_pump.poll_events()
+        if events:
+            symbol = getattr(getattr(self.strategy, "data", None), "_name", None) or "data0"
+            self._ensure_runtime(symbol)
+            self.runtime.start()
+        for event in events:
+            self.runtime.step_broker(event)
+        return events
 
-    def _bind_strategy_data(self) -> None:
-        self.strategy.datas = [self.data]
-        self.strategy.data = self.data
-        if hasattr(self.strategy, "_set_bar_advancers"):
-            self.strategy._set_bar_advancers(())
+    def stop(self) -> None:
+        if self.runtime is not None:
+            self.runtime.stop()
+        self._stopped = True
 
 
 class HistoricalDriver:

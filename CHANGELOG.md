@@ -5,6 +5,13 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
+## [Unreleased] — 0.2.9 source
+
+### 新增与调整
+- 公开券商无关的 `engine.StrategyRuntime`：统一默认 Cerebro/Backtest（含 Lite 批量 profile）、事件回放和外部驱动 paper/live 的策略构造、生命周期、指标推进与业务通知。Rust 撮合和批量预计算保留；Lite 增量 profile 仍明确拒绝。
+- 提供通用只读 strategy observer capability 1，以及显式同时间戳市场批次与异常清理契约；不包含商业 SDK、可靠日志投递或生产适配器。
+- 同步多语言首页及公共架构、接入边界说明。0.2.9 为本地源码候选，不表示 PyPI、GitHub Release 或跨平台 wheel 已发布。详见 [Runtime](docs/concepts/runtime.md) 与 [observers](docs/guides/strategy-observers.md)。
+
 ## [0.2.7] - 2026-10-09
 
 ### 新增

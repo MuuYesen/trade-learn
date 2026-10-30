@@ -391,7 +391,7 @@ def test_cerebro_event_mode_dispatches_broker_events_to_analyzers() -> None:
             ts=pd.Timestamp("2026-01-01", tz="UTC"),
             symbol="AAPL",
             open=1.0,
-            high=1.0,
+            high=1.5,
             low=1.0,
             close=1.5,
             volume=1.0,

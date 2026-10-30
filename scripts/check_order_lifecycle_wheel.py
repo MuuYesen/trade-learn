@@ -27,7 +27,7 @@ def engine():
     )
 
 
-assert __version__ == _rust.tradelearn_rust_version() == "0.2.7"
+assert __version__ == _rust.tradelearn_rust_version() == "0.2.9"
 position = PositionSnapshot(
     symbol="600028.SH", qty=100.0, avg_price=5.0, ts=pd.Timestamp("2026-10-09T00:00:00Z"),
     market_value=500.0, mark_price=5.0,
@@ -51,4 +51,4 @@ b = e.submit_order("sell", "limit", 1.0, 11.0)
 e.configure_order(b, None, a)
 assert len(e.step(0)) == 1
 assert e.step(1) == []
-print("trade-learn 0.2.7 native lifecycle smoke passed")
+print("trade-learn 0.2.9 native lifecycle smoke passed")

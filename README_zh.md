@@ -5,8 +5,8 @@
 <p align="center">
   <a href="https://muuyesen.github.io/trade-learn/"><b>官方文档</b></a> |
   <a href="CHANGELOG.md"><b>更新日志</b></a> |
-  <a href="README.md"><b>English</b></a> |
-  <a href="README_ja.md"><b>日本語</b></a>
+  <a href="./README.md"><b>English</b></a> |
+  <a href="./README_ja.md"><b>日本語</b></a>
 </p>
 
 <p align="center">
@@ -14,16 +14,29 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/pypi-v0.2.5-orange?style=flat-square" alt="PyPI version">
+  <img src="https://img.shields.io/pypi/v/trade-learn?style=flat-square" alt="PyPI version">
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
   <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/Changelog-v0.2.5-blue?style=flat-square" alt="Changelog">
+  <img src="https://img.shields.io/badge/source-0.2.9_unreleased-blue?style=flat-square" alt="Source version">
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
+## 当前源码：0.2.9（尚未发布）
+
+默认 Cerebro/Backtest 研究、事件回放和外部驱动的 paper/live 共用券商无关的 `engine.StrategyRuntime`，由它协调策略构造、生命周期、行情历史、指标推进与业务回调；Rust 撮合及批量预计算继续作为回测优化后端。
+
+- **Engine** 提供 Backtrader 风格策略 API 与增量 Runtime。调用方提供调度、行情及权威券商回报；Runtime 不启动后台循环。
+- **Lite** 保留批量研究定位，共享生命周期不代表 `Lite.I` 已支持完整增量实盘。
+- **Observers** 提供只读策略事件；持久日志、网络投递、券商适配器、凭据及生产策略由外部组件负责。
+- **独立公共库**：不要求安装 Nautilus 或商业监控 SDK，NautilusTrader 本身是公开项目；使用它的部署必须安装其工具包与适配器。本仓库尚未交付独立 Nautilus 桥接包。
+
+源码版本 0.2.9 不代表已发布到 PyPI；普通 `pip install trade-learn` 获取已发行版本。原生回测需要 Python/Rust 版本一致且平台和 Python ABI 匹配的 wheel。下文历史性能数字仅适用于所列基准输入及环境，不能外推所有策略或新增 observer 路径。
+
+详见[架构](docs/concepts/architecture.md)、[Runtime 契约](docs/concepts/runtime.md)、[观察接口](docs/guides/strategy-observers.md)和[paper/live 接入](docs/guides/live.md)。
+
 **trade-learn** 旨在解决量化投研中「研究（Learn）」与「回测（Trade）」长期脱节的问题。它采用「Python 表达策略逻辑 + Rust 原生回测内核」的混合架构，在与 Backtrader **100% 严格语义对齐** 的前提下，实现多资产回测 **110x+ 的性能提升**，将大规模策略验证从小时级压缩至秒级，为指数增强与机器学习策略提供真正可迭代的研究效率。
 
-在高性能之外，**trade-learn** 同时提供一套完整的投研基础设施。框架内置 **JupyterLab** 与 **MLflow**，将因子挖掘、策略验证与实验审计无缝串联，构建出一条**可复现、可追踪、可审计**的全生命周期投研流水线，使研究过程从“结果导向”升级为可系统化管理的工程流程，让研究员专注于策略逻辑本身。。
+在高性能之外，**trade-learn** 同时提供一套完整的投研基础设施。框架内置 **JupyterLab** 与 **MLflow**，将因子挖掘、策略验证与实验审计无缝串联，构建出一条**可复现、可追踪、可审计**的全生命周期投研流水线，使研究过程从“结果导向”升级为可系统化管理的工程流程，让研究员专注于策略逻辑本身。
 
 <p align="center">
   <img src="docs/research-flow.png" alt="trade-learn research flow" width="100%" />
@@ -129,8 +142,6 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 
 ## 快速上手
 
-以下快速上手示例调用 TradingView、TDX 指标和报表，请先安装 `pip install "trade-learn[tv,tdx,report]"`。单标的时间序列因子评估见 [Research 指南](./docs/guides/research.md)。
-
 **Lite——最短路径**（适合快速验证、教学、多资产目标权重）：
 
 ```python
@@ -168,7 +179,7 @@ bt.report("report.html")
 > [!TIP]
 > **关于多标的逻辑：** 在多标的回测场景下，策略默认会绑定到 `self.data`（主数据源）。这意味着上述代码即使传入了多个标的，也仅会根据第一个标的的信号进行决策。若要实现多标的独立并行交易，需在策略 `init` 中遍历 `self.datas` 为每个标的建立指标。
 
-**Engine——Backtrader 风格**（适合复杂 / 组合策略与未来 paper / live 模式）：
+**Engine——Backtrader 风格**（适合复杂 / 组合策略；paper/live 由外部宿主驱动）：
 
 ```python
 import tradelearn.engine as bt
@@ -388,8 +399,8 @@ class LiveStylePortfolio(tl.Strategy):
 - [ ] **分布式参数优化**：基于 Ray / Optuna 扩展多机并行的参数搜索与蒙特卡洛模拟。
 
 #### 实盘与生态愿景
-- [x] **通用实盘事件链路**：完成 `EventRunner` 语义，支持回测与实盘代码 100% 复用。
-- [ ] **实盘交易打通**：对接 `QMT`, `IBKR` 等券商接口，完成从研究到执行的最后一公里。
+- [x] **通用实盘事件链路**：默认研究、事件回放和外部 paper/live 宿主共用 `StrategyRuntime` 生命周期；成交结果取决于券商及输入调度。
+- [ ] **实盘交易打通**：逐项验收外部券商及宿主集成；生产适配器和凭据不随本仓库交付。
 - [ ] **Agentic Quant 平台**：最终演进为支持自然语言驱动的全流程投研自动化底座。
 
 ## 免责声明 (Disclaimer)
@@ -405,5 +416,3 @@ class LiveStylePortfolio(tl.Strategy):
 ## 联系方式
 
 微信公众号：知守溪的收纳屋 · 邮箱：muyes88@gmail.com
-
-The quick-start examples require `pip install "trade-learn[tv,tdx,report]"`; the default package contains only core dependencies. Single-symbol time-series factor evaluation uses the [Research guide](docs/guides/research.md).

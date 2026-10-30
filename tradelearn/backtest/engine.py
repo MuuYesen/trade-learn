@@ -35,9 +35,9 @@ def _build_observer_nexts(strategy: Any) -> tuple[Any, ...]:
     )
 
 
-def _observer_step(observer_nexts: tuple[Any, ...]) -> None:
+def _observer_step(runtime: Any, observer_nexts: tuple[Any, ...]) -> None:
     for observer_next in observer_nexts:
-        observer_next()
+        runtime.invoke_component(observer_next)
 
 
 def _current_bar(data: Any) -> BarSnapshot:
@@ -71,7 +71,7 @@ def _analyzer_bar_step(strategy: Any, analyzer_bar_callbacks: tuple[Any, ...]) -
         return
     bar = _current_bar(strategy.data)
     for on_bar in analyzer_bar_callbacks:
-        on_bar(bar)
+        strategy._runtime.invoke_component(on_bar, bar)
 
 
 def _orders_frame(broker: Any) -> pd.DataFrame:
@@ -1055,7 +1055,18 @@ def run_backtest(cerebro: Any) -> list[Any]:
     cerebro.runtime_config = runtime_config
     strategy_cls, args, kwargs = cerebro.strats[0]
     bind_strategy_context = getattr(cerebro, "_bind_strategy_context", None)
-    strategy = strategy_cls(*args, **kwargs)
+    from .event_runtime import StrategyRuntime
+    runtime = StrategyRuntime(strategy_cls, strategy_args=args, parameters=kwargs,
+                              profile="batch", data_feeds=cerebro.datas, broker=cerebro.broker)
+    try:
+        return _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_context)
+    except BaseException as error:
+        runtime.cleanup(error)
+        raise
+
+
+def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_context):
+    strategy = runtime.strategy
     strategy.cerebro = cerebro
     if callable(bind_strategy_context):
         bind_strategy_context(strategy)
@@ -1151,39 +1162,21 @@ def run_backtest(cerebro: Any) -> list[Any]:
         attach_observers(strategy)
 
     # 3. Lifecycle Start
-    if hasattr(strategy, "_setup"):
-        strategy._setup()
-    strategy.init()
-    strategy.start()
+    runtime.start()
     for ana in strategy.analyzers.values():
         on_start = getattr(ana, "on_start", None)
         if callable(on_start):
-            on_start()
+            runtime.invoke_component(on_start)
         if hasattr(ana, "start"):
-            ana.start()
+            runtime.invoke_component(ana.start)
     for observer in getattr(strategy, "observers", {}).values():
-        observer.start()
+        runtime.invoke_component(observer.start)
     analyzer_bar_callbacks = _build_analyzer_bar_callbacks(strategy)
     observer_nexts = _build_observer_nexts(strategy)
     has_analyzer_bar_callbacks = bool(analyzer_bar_callbacks)
     has_observer_nexts = bool(observer_nexts)
 
     limit = cerebro.datas[0].buflen()
-    # Calculate min_period from all indicators (mostly for BT facade)
-    strategy_min_period = getattr(type(strategy), "min_period", 0)
-    if callable(strategy_min_period):
-        strategy_min_period = strategy_min_period(strategy)
-    explicit_strategy_min_period = int(strategy_min_period or 0)
-    min_period = int(getattr(strategy, "_manual_min_period", 0))
-    for ind in indicators + indicators_bt:
-        if hasattr(ind, "min_period"):
-            m = ind.min_period
-            if callable(m):
-                m = m()
-            min_period = max(min_period, int(m))
-    if min_period == 0:
-        min_period = 1
-
     broker = cerebro.broker
     use_clocked_multi_data_runner = (
         isinstance(broker, RustBroker)
@@ -1221,28 +1214,12 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 else:
                     advance_data(-1)
 
-    if hasattr(strategy, "_set_bar_advancers"):
-        if data_advance_plan is None:
-            strategy._set_bar_advancers(bar_advancers)
-        else:
-
-            def advance_bar(i: int) -> None:
-                advance_datas(i)
-                for advance in bar_advancers:
-                    advance(i)
-
-            strategy._set_bar_advancers((advance_bar,))
-        strategy_pre_next = strategy._pre_next
-    else:
-
-        def strategy_pre_next(cursor: int) -> None:
-            advance_datas(cursor)
-            for advance in bar_advancers:
-                advance(cursor)
+    runtime.configure_bound(bar_advancers, advance_datas if data_advance_plan is not None else None)
+    strategy_pre_next = runtime.advance_bound
 
     notify_cashvalue = None
     if type(strategy).notify_cashvalue is not CoreStrategy.notify_cashvalue:
-        notify_cashvalue = strategy.notify_cashvalue
+        notify_cashvalue = lambda *args: runtime.invoke_business("notify_cashvalue", *args)
     broker_step = broker.step if broker else None
     broker_process_fills = broker.process_fills if broker else None
     broker_getcash = broker.getcash if broker else None
@@ -1256,7 +1233,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
     end_terminal_order_suppression = (
         getattr(broker, "end_terminal_order_suppression", None) if broker else None
     )
-    strategy_next = strategy.next
+    strategy_next = lambda name: runtime.invoke_business(name)
 
     use_rust_bar_loop = (
         isinstance(broker, RustBroker)
@@ -1265,7 +1242,6 @@ def run_backtest(cerebro: Any) -> list[Any]:
         and len(cerebro.datas) <= 1
         and not bool(getattr(cerebro, "trade_on_close", False))
     )
-    min_start = max(min_period - 1, explicit_strategy_min_period)
 
     class _RunStopped(Exception):
         """Internal sentinel used to break out of Rust callback-driven loops."""
@@ -1277,11 +1253,11 @@ def run_backtest(cerebro: Any) -> list[Any]:
     def terminal_bar(i: int) -> bool:
         return i >= limit - 1
 
-    def run_strategy_next_python(i: int) -> None:
+    def run_strategy_next_python(i: int, callback_name: str) -> None:
         if terminal_bar(i) and begin_terminal_order_suppression is not None:
             begin_terminal_order_suppression()
             try:
-                strategy_next()
+                strategy_next(callback_name)
             finally:
                 if end_terminal_order_suppression is not None:
                     end_terminal_order_suppression()
@@ -1290,25 +1266,25 @@ def run_backtest(cerebro: Any) -> list[Any]:
             return
         if begin_order_buffering is not None:
             begin_order_buffering()
-            strategy_next()
+            strategy_next(callback_name)
             flush_order_buffer()
             if getattr(broker, "_trade_on_close", False):
                 broker_process_fills(strategy, i)
         else:
-            strategy_next()
+            strategy_next(callback_name)
 
-    def run_strategy_next_drained(i: int) -> list[Any] | None:
+    def run_strategy_next_drained(i: int, callback_name: str) -> list[Any] | None:
         if terminal_bar(i) and begin_terminal_order_suppression is not None:
             begin_terminal_order_suppression()
             try:
-                strategy_next()
+                strategy_next(callback_name)
             finally:
                 if end_terminal_order_suppression is not None:
                     end_terminal_order_suppression()
             orders = drain_order_buffer()
             return orders if orders else None
         begin_order_buffering()
-        strategy_next()
+        strategy_next(callback_name)
         orders = drain_order_buffer()
         return orders if orders else None
 
@@ -1325,178 +1301,171 @@ def run_backtest(cerebro: Any) -> list[Any]:
                 notify_cashvalue(broker_getcash(), broker_getvalue())
 
         # Strategy Next
-        if i >= min_start:
-            run_strategy_next_python(i)
+        ready, _ = runtime.step_bound(i, run_strategy_next_python)
+        if ready:
             if bool(getattr(cerebro, "_runstop", False)):
                 return []
             if has_analyzer_bar_callbacks:
                 _analyzer_bar_step(strategy, analyzer_bar_callbacks)
             if has_observer_nexts:
-                _observer_step(observer_nexts)
+                _observer_step(runtime, observer_nexts)
         return []
 
     use_multi_data_rust_runner = clocked_multi_data_runner is not None
     _show_pbar = bool(getattr(strategy, "verbose", True) and not bool(os.environ.get("TQDM_DISABLE")))
     pbar = tqdm(total=limit, desc="Backtest.run", unit="bar", leave=True, delay=0, disable=not _show_pbar)
-    if use_multi_data_rust_runner:
-        if getattr(broker, "_trade_on_close", False):
+    try:
+        if use_multi_data_rust_runner:
+            if getattr(broker, "_trade_on_close", False):
 
-            def on_rust_bar_multi(
-                i: int,
-                data_cursors: list[int],
-                fills: list[Any],
-                cash: float,
-                size: float,
-                price: float,
-            ) -> list[Any] | None:
-                pbar.update(1)
-                for advance_data, cursor in zip(data_advance_methods, data_cursors, strict=False):
-                    advance_data(cursor if cursor >= 0 else -1)
-                for advance in bar_advancers:
-                    advance(i)
-                broker._curr_idx = i
-                begin_order_buffering()
-                broker._step_fills_from_collect = fills if fills is not None else []
-                broker._rust_state_cache = (i, cash, size, price)
-                broker_process_fills(strategy, i)
-                if notify_cashvalue is not None:
+                def on_rust_bar_multi(
+                    i: int,
+                    data_cursors: list[int],
+                    fills: list[Any],
+                    cash: float,
+                    size: float,
+                    price: float,
+                ) -> list[Any] | None:
+                    pbar.update(1)
+                    runtime.advance_bound(i, data_cursors)
+                    broker._curr_idx = i
+                    begin_order_buffering()
+                    broker._step_fills_from_collect = fills if fills is not None else []
+                    broker._rust_state_cache = (i, cash, size, price)
+                    broker_process_fills(strategy, i)
+                    if notify_cashvalue is not None:
+                        notify_cashvalue(broker_getcash(), broker_getvalue())
+                    ready, _ = runtime.step_bound(i, run_strategy_next_python)
+                    raise_if_runstopped()
+                    if ready:
+                        if has_analyzer_bar_callbacks:
+                            _analyzer_bar_step(strategy, analyzer_bar_callbacks)
+                        if has_observer_nexts:
+                            _observer_step(runtime, observer_nexts)
+                    return None
+            elif notify_cashvalue is None:
+
+                def on_rust_bar_multi(
+                    i: int,
+                    data_cursors: list[int],
+                    fills: list[Any],
+                    cash: float,
+                    size: float,
+                    price: float,
+                ) -> list[Any] | None:
+                    pbar.update(1)
+                    runtime.advance_bound(i, data_cursors)
+                    broker._curr_idx = i
+                    begin_order_buffering()
+                    broker._step_fills_from_collect = fills if fills is not None else []
+                    broker._rust_state_cache = (i, cash, size, price)
+                    broker_process_fills(strategy, i)
+                    ready, orders = runtime.step_bound(i, run_strategy_next_drained)
+                    raise_if_runstopped()
+                    if ready:
+                        if has_analyzer_bar_callbacks:
+                            _analyzer_bar_step(strategy, analyzer_bar_callbacks)
+                        if has_observer_nexts:
+                            _observer_step(runtime, observer_nexts)
+                        return orders
+                    orders = orders or drain_order_buffer()
+                    return orders if orders else None
+            else:
+
+                def on_rust_bar_multi(
+                    i: int,
+                    data_cursors: list[int],
+                    fills: list[Any],
+                    cash: float,
+                    size: float,
+                    price: float,
+                ) -> list[Any] | None:
+                    pbar.update(1)
+                    runtime.advance_bound(i, data_cursors)
+                    broker._curr_idx = i
+                    begin_order_buffering()
+                    broker._step_fills_from_collect = fills if fills is not None else []
+                    broker._rust_state_cache = (i, cash, size, price)
+                    broker_process_fills(strategy, i)
                     notify_cashvalue(broker_getcash(), broker_getvalue())
-                if i >= min_start:
-                    run_strategy_next_python(i)
+                    ready, orders = runtime.step_bound(i, run_strategy_next_drained)
                     raise_if_runstopped()
-                    if has_analyzer_bar_callbacks:
-                        _analyzer_bar_step(strategy, analyzer_bar_callbacks)
-                    if has_observer_nexts:
-                        _observer_step(observer_nexts)
-                return None
-        elif notify_cashvalue is None:
+                    if ready:
+                        if has_analyzer_bar_callbacks:
+                            _analyzer_bar_step(strategy, analyzer_bar_callbacks)
+                        if has_observer_nexts:
+                            _observer_step(runtime, observer_nexts)
+                        return orders
+                    orders = orders or drain_order_buffer()
+                    return orders if orders else None
 
-            def on_rust_bar_multi(
-                i: int,
-                data_cursors: list[int],
-                fills: list[Any],
-                cash: float,
-                size: float,
-                price: float,
-            ) -> list[Any] | None:
-                pbar.update(1)
-                for advance_data, cursor in zip(data_advance_methods, data_cursors, strict=False):
-                    advance_data(cursor if cursor >= 0 else -1)
-                for advance in bar_advancers:
-                    advance(i)
-                broker._curr_idx = i
-                begin_order_buffering()
-                broker._step_fills_from_collect = fills if fills is not None else []
-                broker._rust_state_cache = (i, cash, size, price)
-                broker_process_fills(strategy, i)
-                if i >= min_start:
-                    orders = run_strategy_next_drained(i)
+            try:
+                clocked_multi_data_runner.run(broker._engine, broker, on_rust_bar_multi, 0, limit)
+            except _RunStopped:
+                pass
+        elif use_rust_bar_loop:
+            if notify_cashvalue is None:
+
+                def on_rust_bar(
+                    i: int, fills: list[Any], cash: float, size: float, price: float
+                ) -> list[Any] | None:
+                    pbar.update(1)
+                    strategy_pre_next(i)
+                    broker._curr_idx = i
+                    begin_order_buffering()
+                    broker._step_fills_from_collect = fills if fills is not None else []
+                    broker._rust_state_cache = (i, cash, size, price)
+                    broker_process_fills(strategy, i)
+                    ready, orders = runtime.step_bound(i, run_strategy_next_drained)
                     raise_if_runstopped()
-                    if has_analyzer_bar_callbacks:
-                        _analyzer_bar_step(strategy, analyzer_bar_callbacks)
-                    if has_observer_nexts:
-                        _observer_step(observer_nexts)
-                    return orders
-                orders = drain_order_buffer()
-                return orders if orders else None
+                    if ready:
+                        if has_analyzer_bar_callbacks:
+                            _analyzer_bar_step(strategy, analyzer_bar_callbacks)
+                        if has_observer_nexts:
+                            _observer_step(runtime, observer_nexts)
+                        return orders
+                    orders = orders or drain_order_buffer()
+                    return orders if orders else None
+            else:
+
+                def on_rust_bar(
+                    i: int, fills: list[Any], cash: float, size: float, price: float
+                ) -> list[Any] | None:
+                    pbar.update(1)
+                    strategy_pre_next(i)
+                    broker._curr_idx = i
+                    begin_order_buffering()
+                    broker._step_fills_from_collect = fills if fills is not None else []
+                    broker._rust_state_cache = (i, cash, size, price)
+                    broker_process_fills(strategy, i)
+                    notify_cashvalue(broker_getcash(), broker_getvalue())
+                    ready, orders = runtime.step_bound(i, run_strategy_next_drained)
+                    raise_if_runstopped()
+                    if ready:
+                        if has_analyzer_bar_callbacks:
+                            _analyzer_bar_step(strategy, analyzer_bar_callbacks)
+                        if has_observer_nexts:
+                            _observer_step(runtime, observer_nexts)
+                        return orders
+                    orders = orders or drain_order_buffer()
+                    return orders if orders else None
+
+            try:
+                broker._engine.run_bar_loop(broker, on_rust_bar, 0, limit)
+            except _RunStopped:
+                pass
         else:
-
-            def on_rust_bar_multi(
-                i: int,
-                data_cursors: list[int],
-                fills: list[Any],
-                cash: float,
-                size: float,
-                price: float,
-            ) -> list[Any] | None:
+            for i in range(limit):
+                on_bar(i)
                 pbar.update(1)
-                for advance_data, cursor in zip(data_advance_methods, data_cursors, strict=False):
-                    advance_data(cursor if cursor >= 0 else -1)
-                for advance in bar_advancers:
-                    advance(i)
-                broker._curr_idx = i
-                begin_order_buffering()
-                broker._step_fills_from_collect = fills if fills is not None else []
-                broker._rust_state_cache = (i, cash, size, price)
-                broker_process_fills(strategy, i)
-                notify_cashvalue(broker_getcash(), broker_getvalue())
-                if i >= min_start:
-                    orders = run_strategy_next_drained(i)
-                    raise_if_runstopped()
-                    if has_analyzer_bar_callbacks:
-                        _analyzer_bar_step(strategy, analyzer_bar_callbacks)
-                    if has_observer_nexts:
-                        _observer_step(observer_nexts)
-                    return orders
-                orders = drain_order_buffer()
-                return orders if orders else None
+                if bool(getattr(cerebro, "_runstop", False)):
+                    break
 
-        try:
-            clocked_multi_data_runner.run(broker._engine, broker, on_rust_bar_multi, 0, limit)
-        except _RunStopped:
-            pass
-    elif use_rust_bar_loop:
-        if notify_cashvalue is None:
-
-            def on_rust_bar(
-                i: int, fills: list[Any], cash: float, size: float, price: float
-            ) -> list[Any] | None:
-                pbar.update(1)
-                strategy_pre_next(i)
-                broker._curr_idx = i
-                begin_order_buffering()
-                broker._step_fills_from_collect = fills if fills is not None else []
-                broker._rust_state_cache = (i, cash, size, price)
-                broker_process_fills(strategy, i)
-                if i >= min_start:
-                    orders = run_strategy_next_drained(i)
-                    raise_if_runstopped()
-                    if has_analyzer_bar_callbacks:
-                        _analyzer_bar_step(strategy, analyzer_bar_callbacks)
-                    if has_observer_nexts:
-                        _observer_step(observer_nexts)
-                    return orders
-                orders = drain_order_buffer()
-                return orders if orders else None
-        else:
-
-            def on_rust_bar(
-                i: int, fills: list[Any], cash: float, size: float, price: float
-            ) -> list[Any] | None:
-                pbar.update(1)
-                strategy_pre_next(i)
-                broker._curr_idx = i
-                begin_order_buffering()
-                broker._step_fills_from_collect = fills if fills is not None else []
-                broker._rust_state_cache = (i, cash, size, price)
-                broker_process_fills(strategy, i)
-                notify_cashvalue(broker_getcash(), broker_getvalue())
-                if i >= min_start:
-                    orders = run_strategy_next_drained(i)
-                    raise_if_runstopped()
-                    if has_analyzer_bar_callbacks:
-                        _analyzer_bar_step(strategy, analyzer_bar_callbacks)
-                    if has_observer_nexts:
-                        _observer_step(observer_nexts)
-                    return orders
-                orders = drain_order_buffer()
-                return orders if orders else None
-
-        try:
-            broker._engine.run_bar_loop(broker, on_rust_bar, 0, limit)
-        except _RunStopped:
-            pass
-    else:
-        for i in range(limit):
-            on_bar(i)
-            pbar.update(1)
-            if bool(getattr(cerebro, "_runstop", False)):
-                break
-
-    pbar.close()
+    finally:
+        pbar.close()
 
     # 4. Lifecycle Stop
-    strategy.stop()
+    runtime.stop()
     metrics_engine = getattr(strategy, "metrics_engine", None)
     lazy_stats = (
         getattr(cerebro, "stats_mode", "full") == "lazy"
@@ -1509,7 +1478,7 @@ def run_backtest(cerebro: Any) -> list[Any]:
     for ana in strategy.analyzers.values():
         on_end = getattr(ana, "on_end", None)
         if callable(on_end):
-            on_end(stats)
+            runtime.invoke_component(on_end, stats)
     analyzer_results = {name: ana.get_analysis() for name, ana in strategy.analyzers.items()}
     stats.analyzers = analyzer_results
     strategy.stats = stats
@@ -1518,8 +1487,8 @@ def run_backtest(cerebro: Any) -> list[Any]:
     cerebro.analyzer_results = analyzer_results
     for ana in strategy.analyzers.values():
         if hasattr(ana, "stop"):
-            ana.stop()
+            runtime.invoke_component(ana.stop)
     for observer in getattr(strategy, "observers", {}).values():
-        observer.stop()
+        runtime.invoke_component(observer.stop)
 
     return [strategy]

@@ -5,11 +5,42 @@ from typing import Any
 
 from tradelearn.backtest.models import Order, Position
 from tradelearn.backtest.targets import TargetWeightSnapshot, build_target_weight_intents
+from tradelearn.core.strategy_events import (
+    add_observer,
+    assert_observer_allows_mutation,
+    dispatch_callback,
+    emit_domain,
+    observation_failures,
+    observer_mutation_guard,
+    remove_observer,
+)
 
 
 class Strategy:
     """Minimalist strategy base class for core execution."""
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # Declarative framework guard, not runtime monkeypatching or SDK wrapping.
+        names = (
+            "__init__",
+            "_setup",
+            "init",
+            "start",
+            "stop",
+            "prenext",
+            "next",
+            "notify_order",
+            "notify_trade",
+            "notify_cashvalue",
+            "_pre_next",
+        )
+        for name in names:
+            callback = vars(cls).get(name)
+            if callable(callback):
+                setattr(cls, name, observer_mutation_guard(callback))
+
+    @observer_mutation_guard
     def __init__(self, *args, **kwargs) -> None:
         if not hasattr(self, "_sizers"):
             self._sizers = {}
@@ -55,18 +86,32 @@ class Strategy:
         """
         return result
 
+    def add_observer(self, observer, **options):
+        return add_observer(self, observer, **options)
+
+    def remove_observer(self, subscription):
+        return remove_observer(self, subscription)
+
+    def observation_failures(self):
+        return observation_failures(self)
+
+    @observer_mutation_guard
     def start(self):
         pass
 
+    @observer_mutation_guard
     def init(self):
         pass
 
+    @observer_mutation_guard
     def prenext(self):
         pass
 
+    @observer_mutation_guard
     def next(self):
         pass
 
+    @observer_mutation_guard
     def stop(self):
         pass
 
@@ -82,15 +127,19 @@ class Strategy:
             self.research_results_history = history
         history.append(result)
 
+    @observer_mutation_guard
     def notify_order(self, order: Any):
         pass
 
+    @observer_mutation_guard
     def notify_trade(self, trade: Any):
         pass
 
+    @observer_mutation_guard
     def notify_cashvalue(self, cash: float, value: float):
         pass
 
+    @observer_mutation_guard
     def _set_bar_advancers(self, advancers: tuple[Any, ...]) -> None:
         """Install the internal per-bar cursor advance plan."""
         self._bar_advancers = advancers
@@ -130,6 +179,7 @@ class Strategy:
     def getpositionbyname(self, name: str) -> Position:
         return self.getposition(self.getdatabyname(name))
 
+    @observer_mutation_guard
     def setsizer(self, sizer: Any, name: Any = None) -> Any:
         if name is None:
             self._sizer = sizer
@@ -159,6 +209,10 @@ class Strategy:
         **kwargs,
     ):
         """Submit a shared event-driven order through the bound broker."""
+        assert_observer_allows_mutation()
+        runtime = getattr(self, "_runtime", None)
+        if runtime is not None:
+            runtime.assert_can_submit()
         data = self._resolve_data(data)
         if self.broker is None:
             raise RuntimeError("strategy has no broker bound")
@@ -168,9 +222,16 @@ class Strategy:
         actual_size = float(abs(size))
         pending_delta = actual_size if isbuy else -actual_size
         self._pending_size[data] = self._pending_size.get(data, 0.0) + pending_delta
+        details = dict(
+            side=side, data=data, size=actual_size, price=price, exectype=exectype, controls=kwargs
+        )
+        emit_domain(self, "intent.submit_order", "before", details)
         try:
-            return self.broker._submit(self, data, side, actual_size, price, exectype, **kwargs)
-        except Exception:
+            order = self.broker._submit(self, data, side, actual_size, price, exectype, **kwargs)
+            emit_domain(self, "intent.submit_order", "after", dict(details, order=order))
+            return order
+        except Exception as error:
+            emit_domain(self, "intent.submit_order", "error", details, error=error)
             pending_size = self._pending_size.get(data, 0.0) - pending_delta
             if abs(pending_size) < 1e-12:
                 self._pending_size.pop(data, None)
@@ -229,7 +290,15 @@ class Strategy:
         return None
 
     def cancel(self, order: Any):
-        return self.broker.cancel(order)
+        assert_observer_allows_mutation()
+        emit_domain(self, "intent.cancel_order", "before", {"order": order})
+        try:
+            result = self.broker.cancel(order)
+        except BaseException as error:
+            emit_domain(self, "intent.cancel_order", "error", {"order": order}, error=error)
+            raise
+        emit_domain(self, "intent.cancel_order", "after", {"order": order})
+        return result
 
     def _current_price(self, data: Any) -> float:
         close = getattr(data, "close", None)
@@ -464,6 +533,7 @@ class Strategy:
             )
         return [main, stop, limit]
 
+    @observer_mutation_guard
     def _on_fill(self, data: Any, signed_size: float, price: float) -> None:
         """Handle fills produced by the Python fallback path.
 
@@ -490,7 +560,7 @@ class Strategy:
             trade.pnl = 0.0
             trade.pnlcomm = 0.0
             trade.isopen = True
-            self.notify_trade(trade)
+            dispatch_callback(self, "notify_trade", trade)
         elif old_size != 0 and (old_size * new_size <= 0):
             # Trade closed or flipped
             from tradelearn.backtest.models import Trade
@@ -499,12 +569,17 @@ class Strategy:
             trade.pnl = (price - old_price) * old_size * getattr(self.broker, "_mult", 1.0)
             trade.pnlcomm = trade.pnl  # Simplified
             trade.isclosed = True
-            self.notify_trade(trade)
+            dispatch_callback(self, "notify_trade", trade)
 
+    @observer_mutation_guard
     def _register_indicator(self, indicator: Any):
         if not any(existing is indicator for existing in self._indicators):
             self._indicators.append(indicator)
+        runtime = getattr(self, "_runtime", None)
+        if runtime is not None:
+            runtime._register_indicator(indicator)
 
+    @observer_mutation_guard
     def addminperiod(self, minperiod: int) -> None:
         """Extend the strategy warmup period used before calling ``next``."""
         self._manual_min_period = max(int(minperiod), int(self._manual_min_period))

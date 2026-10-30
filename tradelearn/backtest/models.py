@@ -383,6 +383,6 @@ class Trade:
 
 
 def _notify_order(strategy: Any, order: Order) -> None:
-    notify_order = getattr(strategy, "notify_order", None)
-    if callable(notify_order):
-        notify_order(order)
+    from tradelearn.core.strategy_events import dispatch_callback
+    if callable(getattr(strategy,"notify_order",None)):
+        dispatch_callback(strategy,"notify_order",order)

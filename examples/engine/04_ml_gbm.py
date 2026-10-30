@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 import pandas as pd
+
 from sklearn.ensemble import GradientBoostingRegressor
 
 import tradelearn.engine as bt

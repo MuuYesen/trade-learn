@@ -64,6 +64,11 @@ class LineSeries:
 
     def to_series(self) -> pd.Series:
         """Return the full line as a pandas Series for vector indicators."""
+        runtime = getattr(self, "_runtime", None)
+        if runtime is not None and runtime._started:
+            feed = runtime._feed_for(self)
+            if feed is not None:
+                return pd.Series(self._values[:feed.received].copy())
         cached = self._series_cache
         if cached is None:
             cached = pd.Series(self._values)
@@ -77,6 +82,9 @@ class LineSeries:
         returns a trailing window ending at the addressed cursor.
         Missing leading values are omitted.
         """
+        runtime = getattr(self, "_runtime", None)
+        if runtime is not None and runtime._started and ago > 0:
+            raise ValueError("runtime lines cannot address future observations")
         cursor_source = getattr(self, "_cursor_source", None)
         cursor = cursor_source._cursor if cursor_source is not None else self._cursor
         end = cursor + int(ago) + 1
@@ -84,6 +92,36 @@ class LineSeries:
         if end <= 0:
             return np.asarray([], dtype=np.float64)
         return self._values[start:end]
+
+    def _runtime_function(self, function, args, kwargs, *, history="full"):
+        runtime = getattr(self, "_runtime", None)
+        from tradelearn.backtest.event_runtime import RuntimeLine
+        def target(value):
+            return value.lines[0] if hasattr(value, "lines") else value
+        incremental = any(isinstance(target(value), RuntimeLine)
+                          for value in (*args, *kwargs.values()))
+        if runtime is not None and (runtime._started or incremental):
+            def causal(value):
+                target = value.lines[0] if hasattr(value, "lines") else value
+                return runtime.causal_line(target) if isinstance(target, LineSeries) else target
+            owner = runtime.causal_line(self)
+            return owner._runtime_function(function, tuple(causal(v) for v in args),
+                                           {k: causal(v) for k, v in kwargs.items()},
+                                           history=history)
+        from tradelearn.indicators.base import _to_indicator_arg
+        result = function.compute(*(_to_indicator_arg(v) for v in args),
+                                  **{k: _to_indicator_arg(v) for k, v in kwargs.items()})
+        wrapped = self.wrap_indicator(result, name=function.name)
+        if runtime is not None:
+            from tradelearn.backtest.event_runtime import _function_minimum
+            minimum = _function_minimum(function, args, kwargs)
+            if isinstance(wrapped, LineSeries):
+                runtime._register_precomputed(wrapped, minimum)
+            else:
+                for line in wrapped.values():
+                    runtime._register_precomputed(line, minimum)
+                wrapped.min_period = minimum
+        return wrapped
 
     def wrap_indicator(self, values: Any, name: str | None = None) -> Any:
         """Wrap vector indicator output back into Engine line objects."""
@@ -105,6 +143,10 @@ class LineSeries:
         if cursor_source is not None:
             line._cursor_source = cursor_source
         line.min_period = getattr(self, "min_period", 0)
+        runtime = getattr(self, "_runtime", None)
+        if runtime is not None:
+            line._runtime = runtime
+            line._bound_feed = runtime._feed_for(self)
         return line
 
     def __len__(self) -> int:
@@ -115,6 +157,14 @@ class LineSeries:
 
     def __getitem__(self, ago: Any) -> Any:
         values = self._values
+        runtime = getattr(self, "_runtime", None)
+        if runtime is not None and runtime._started:
+            if isinstance(ago, (int, np.integer)) and ago > 0:
+                raise ValueError("runtime lines cannot address future observations")
+            if isinstance(ago, slice):
+                feed = runtime._feed_for(self)
+                if feed is not None:
+                    return values[:feed.received][ago].copy()
         buffer = self._buffer
         if ago == 0:
             if not self._is_datetime:
@@ -166,6 +216,9 @@ class LineSeries:
         return pd.to_datetime(value, unit="s" if abs(value) < 1e11 else "ms", utc=True)
 
     def __call__(self, ago: int = 0) -> LineSeries:
+        runtime = getattr(self, "_runtime", None)
+        if runtime is not None and runtime._started:
+            return runtime.causal_line(self)(ago)
         return DelayedLine(self, ago)
 
     def datetime(self, ago: int = 0) -> Any:
@@ -208,6 +261,12 @@ class LineSeries:
         return self._math_op(other, np.divide)
 
     def _math_op(self, other, op):
+        runtime = getattr(self, "_runtime", None)
+        target = other.lines[0] if hasattr(other, "lines") else other
+        from tradelearn.backtest.event_runtime import RuntimeLine
+        if runtime is not None and (runtime._started or isinstance(target, RuntimeLine)):
+            target = runtime.causal_line(target) if isinstance(target, LineSeries) else target
+            return runtime.causal_line(self)._math_op(target, op)
         v1 = self._values
         target = other.lines[0] if hasattr(other, "lines") else other
         res = None
@@ -229,6 +288,9 @@ class LineSeries:
         source = getattr(self, "_cursor_source", None)
         if source is not None:
             res._cursor_source = source
+        if runtime is not None:
+            res._runtime, res._bound_feed = runtime, runtime._feed_for(self)
+            runtime._register_precomputed(res, res.min_period)
         return res
 
 
@@ -243,8 +305,16 @@ class DelayedLine(LineSeries):
         if cursor_source is not None:
             self._cursor_source = cursor_source
         self.min_period = source.min_period + abs(ago)
+        runtime = getattr(source, "_runtime", None)
+        if runtime is not None:
+            self._runtime, self._bound_feed = runtime, runtime._feed_for(source)
+            runtime._register_precomputed(self, self.min_period)
 
 
 class IndicatorLine(LineSeries):
     def __init__(self, source: LineSeries, shift: int):
         super().__init__(pd.Series(source._values).shift(-shift).values)
+        runtime = getattr(source, "_runtime", None)
+        if runtime is not None:
+            self._runtime, self._bound_feed = runtime, runtime._feed_for(source)
+            self._cursor_source = getattr(source, "_cursor_source", None)

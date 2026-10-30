@@ -155,6 +155,7 @@ def test_backtest_runtime_modules_are_flattened() -> None:
         "data.py",
         "engine.py",
         "event_runner.py",
+        "event_runtime.py",
         "feed.py",
         "history.py",
         "indicator_cache.py",

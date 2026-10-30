@@ -6754,7 +6754,7 @@ wheels = [
 
 [[package]]
 name = "trade-learn"
-version = "0.2.7"
+version = "0.2.9"
 source = { editable = "." }
 dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -6917,7 +6917,6 @@ requires-dist = [
     { name = "scikit-learn", marker = "extra == 'ml'" },
     { name = "scipy", marker = "extra == 'all'" },
     { name = "scipy", marker = "extra == 'factor'" },
-    { name = "statsmodels", marker = "extra == 'dev'" },
     { name = "ta-lib", marker = "extra == 'all'" },
     { name = "ta-lib", marker = "extra == 'indicators'" },
     { name = "ta-lib", marker = "extra == 'talib'" },

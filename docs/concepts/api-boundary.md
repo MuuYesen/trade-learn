@@ -8,7 +8,7 @@ Tradelearn 的用户 API 通过 facade 模块暴露；实现层和基础设施�
 
 | 模块 | 角色 |
 |---|---|
-| `tradelearn.engine` | Backtrader 风格事件驱动策略、回测、成本模型 |
+| `tradelearn.engine` | Backtrader 风格策略、回测、成本模型及正式 StrategyRuntime |
 | `tradelearn.lite` | 轻量策略与快速回测 |
 | `tradelearn.data` | 数据源、缓存、数据探索 |
 | `tradelearn.factor` | 因子分析、Alpha101/Alpha191 |
@@ -23,6 +23,19 @@ import tradelearn.engine as bt
 
 commission = bt.CNAStockCommission()
 ```
+
+## 标量资金流计算
+
+`from tradelearn.metrics import cash_flow_return` 与
+`from tradelearn.metrics.cash_flows import cash_flow_return` 使用同一公开函数；
+此标量入口仅依赖标准库。`metrics` 延迟加载未使用的向量指标，访问这些指标时仍须满足其 NumPy/pandas 依赖；不提供缺依赖时的替代公式。
+
+```python
+cash_flow_return(begin, finish, *, net_flow=None, events=(), start=None, end=None,
+                 method="end_of_day", allow_insolvency=False)
+```
+
+调用方核验账户、币种和流水覆盖，再选择 `end_of_day` 或 `modified_dietz`；函数不会依据额外估值字段自动换方法。普通投资收益默认拒绝低于 −100% 的结果。已明确用于杠杆账户风险观测时，可显式传 `allow_insolvency=True` 保留有限的亏穿结果；此项不放宽正投入资本分母或有限数检查。后续窗口的投入资本不再为正时仍拒绝，不能把它解释成恢复或另起基线。来源完整性、告警阈值和事故状态由消费项目维护，不进入通用公式。
 
 ## 内部实现
 
@@ -43,6 +56,8 @@ commission = bt.CNAStockCommission()
 ## 实盘适配器边界
 
 实盘 broker / data 适配器不作为稳定用户 facade。QMT、IB、CTP 等适配器建议放在私有扩展或 `deploy` 项目里维护，只通过 `tradelearn.engine` / `tradelearn.lite` 的策略意图和内部 broker-neutral 契约对接。
+
+增量 paper/live 策略使用 `tradelearn.engine`；Lite 保留批量研究定位。Nautilus 等公开外部宿主的依赖由集成层声明；当前公共包未交付完整 Nautilus 桥接。具体范围见[接入指南](../guides/live.md)。
 
 用户策略仍应只调用公开策略 API，例如 `buy`、`sell`、`order_target_percent`、`target_weights`。具体账户、行情、成交回报、批量状态查询由部署侧适配器负责。
 

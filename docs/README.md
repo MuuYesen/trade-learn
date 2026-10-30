@@ -5,6 +5,8 @@
 </p>
 
 欢迎来到 **trade-learn** 官方文档。
+
+本源码树对应 **0.2.9 未发布候选**。默认研究与外部 paper/live 共享策略协调，实际安装版本、平台支持和发行状态须另行核对。先阅读[架构与边界](concepts/architecture.md)，再按需选择研究或[外部执行接入](guides/live.md)。
 本手册旨在帮助您从零开始，构建、测试并优化工业级的量化交易系统。
 
 ---
@@ -52,7 +54,8 @@
 *   **[实验追踪](guides/mlflow-lab-mcp.md)**：集成 MLflow 管理海量实验。
 
 ### 3. 底层内幕 (Internals)
-*   **[Runtime 与 Runner](concepts/runtime.md)**：了解 Rust 是如何调度计算任务的。
+*   **[Runtime 与 Runner](concepts/runtime.md)**：了解公共策略协调、行情分组、指标与匹配后端的责任。
+*   **[Strategy observers](guides/strategy-observers.md)**：0.2.9本地候选的中性只读domain观察与外部装配接口；不含SDK产品/发送器。
 *   **[撮合机制](internals/matching.md)**：深入探讨撮合精度与事件循环。
 *   **[API 参考](api/reference.md)**：详尽的函数签名与类定义。
 

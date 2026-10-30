@@ -238,3 +238,26 @@ Strategy.order_target_percent(self, data: 'Any' = None, target: 'float' = 0.0, *
 | `Strategy.buy_bracket` | method | `(self, data=None, size=None, price=None, plimit=None, exectype=2, valid=None, trailamount=None, trailpercent=None, oargs=None, stopprice=None, stopexec=3, stopargs=None, limitprice=None, limitexec=2, limitargs=None, **kwargs)` |  |
 | `Strategy.sell_bracket` | method | `(self, data=None, size=None, price=None, plimit=None, exectype=2, valid=None, trailamount=None, trailpercent=None, oargs=None, stopprice=None, stopexec=3, stopargs=None, limitprice=None, limitexec=2, limitargs=None, **kwargs)` |  |
 | `Strategy.addminperiod` | method | `(self, minperiod: 'int') -> 'None'` | Extend the strategy warmup period used before calling ``next``. |
+
+## `StrategyRuntime`
+
+0.2.8公开同步增量入口：
+
+```python
+StrategyRuntime(strategy_cls=None, *, strategy=None, strategy_args=(),
+                feeds, broker=None, parameters=None, capacity=4096,
+                buffers=None, prefix_history_limit=100000, max_indicators=1024, max_plans=4096)
+runtime.start()
+runtime.step_market(symbol, event, kind='bar')
+runtime.step_market_batch([(symbol_a, bar_a), (symbol_b, bar_b)])  # explicit same-time group
+runtime.step_broker(event, kind='order', owner=None)
+runtime.stop()
+```
+
+构造eager创建策略；feeds显式映射symbol→bar/tick。`buffers`允许现有RollingBarBuffer注入，供EventRunner复用；不设置第二撮合器。`.strategy/.feeds/.context`公开，完整生命周期、逐事件时钟、有限窗口与完整指标历史、Lite边界及错误语义见[正式Runtime契约](../concepts/runtime.md#正式增量策略runtime)。函数指标默认完整prefix批量计算，不承诺常数开销；逐bar`Indicator.next`可保持自己的增量状态。
+
+### 0.2.9默认研究与观察扩展
+
+默认Cerebro/Backtest及Lite批量profile使用同一Runtime协调；增量profile不接受Lite。批量同时间戳合步与逐到达消费是不同输入，显式分组和异常清理见[观察API](strategy-observers.md#市场批次与异常结束)。`cleanup(primary_error=None)`负责部分启动后的stop/closed恰一次；主业务异常不被清理/观察诊断替换。正常结束stop失败仍可见。
+
+通用`ObserverSpec`、add/remove和类声明`strategy_observer_factories`入口、过滤/快照/只读及外部错误政策见[Strategy observers](strategy-observers.md)。这是平台中性domain接口，TL不依赖SDK/执行引擎、不生成wire身份或第二成交。

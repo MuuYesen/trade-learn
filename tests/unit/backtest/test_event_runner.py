@@ -84,7 +84,7 @@ def test_historical_driver_replays_bars_through_event_runner() -> None:
     bars = pd.DataFrame(
         {
             "open": [1.0, 2.0],
-            "high": [1.0, 2.0],
+            "high": [1.5, 2.5],
             "low": [1.0, 2.0],
             "close": [1.5, 2.5],
             "volume": [10.0, 20.0],
@@ -142,7 +142,7 @@ def test_cerebro_paper_and_live_modes_run_through_event_runner() -> None:
             ts=pd.Timestamp("2026-01-01", tz="UTC"),
             symbol="AAPL",
             open=1.0,
-            high=1.0,
+            high=1.5,
             low=1.0,
             close=1.5,
             volume=1.0,

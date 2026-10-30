@@ -1,6 +1,6 @@
 # 实盘协议
 
-trade-learn 2.0 的主能力是事件驱动回测；paper / live 的边界已经通过 `tradelearn.core` 预留。理解这页可以帮助你写不会被回测语义绑死的策略和 broker 适配器。
+当前 0.2.9 源码候选通过公开 `engine.StrategyRuntime` 协调默认研究、事件回放和外部驱动 paper/live 的策略生命周期。接入方负责事件调度、行情、权威订单/账户事实和执行保护；Runtime 不启动后台循环。完整调用与限制见 [Runtime](../concepts/runtime.md#正式增量策略runtime)。
 
 ## 回测 broker 与实盘 broker 的区别
 
@@ -14,7 +14,7 @@ trade-learn 2.0 的主能力是事件驱动回测；paper / live 的边界已经
 
 因此，为了加快回测而优化 RustBroker，不会自动改变实盘 broker；但策略层必须只依赖共同的“意图 + 事件”语义。
 
-trade-learn 不公开 `tradelearn.live` 包。具体 QMT / IB / CTP 适配器应在私有扩展或部署目录中维护，用户策略只依赖 `tradelearn.engine` / `tradelearn.lite` 的公开策略 API。
+trade-learn 不公开 `tradelearn.live` 包。具体券商适配器由独立扩展或部署项目提供。增量策略使用 `tradelearn.engine` 的公开 API；Lite 仍用于批量研究，不能因共享生命周期就推定 `Lite.I` 已支持完整实盘。
 
 ## 中性订单协议
 
@@ -31,7 +31,7 @@ trade-learn 不公开 `tradelearn.live` 包。具体 QMT / IB / CTP 适配器应
 
 这些类型只描述跨运行时共同语义，不携带 Backtrader bracket 字段，也不携带某个券商私有状态机。
 
-实盘适配器应同时支持单笔 `order_status(...)` 和批量 `order_statuses(...)`。执行器需要等待委托反馈时，优先批量查询，减少 QMT / REST proxy 的请求次数和下单后确认延迟。
+实盘适配器应同时支持单笔 `order_status(...)` 和批量 `order_statuses(...)`。执行器需要等待委托反馈时，优先批量查询，减少来源查询或 REST proxy 的请求次数。
 
 ## BrokerEventPump
 
@@ -46,9 +46,9 @@ trade-learn 不公开 `tradelearn.live` 包。具体 QMT / IB / CTP 适配器应
 3. 通过 `notify_order`、`notify_trade`、Stats 或 broker 事件观察成交结果。
 4. 多资产目标权重策略应表达“目标组合”，不要在策略里手写 broker 状态同步。
 
-## QMT / 私有适配器
+## 外部适配器与 Nautilus 依赖
 
-QMT、IB、CTP、Binance 等适配器应作为独立扩展实现：
+券商与执行宿主适配器应作为独立扩展实现：
 
 - 输入：`OrderRequest` / 策略意图。
 - 输出：`Fill` / `OrderStatusUpdate` / `PositionSnapshot` / `AccountSnapshot`。
@@ -56,12 +56,17 @@ QMT、IB、CTP、Binance 等适配器应作为独立扩展实现：
 
 这样可以保持 `tradelearn.backtest` 的 Rust 性能优化和实盘 broker 的连接逻辑互不污染。
 
-## 当前状态
+[NautilusTrader](https://github.com/nautechsystems/nautilus_trader) 是公开的外部交易引擎。选择它作为执行宿主时，集成层必须安装并导入 `nautilus_trader` 及所需适配器；业务策略可以继续使用 TL API。公共 TL 本身不强制依赖 Nautilus。
 
-| 能力 | 2.0 状态 |
+本仓库尚未交付可独立安装的通用 Nautilus 桥接包。内部桥接包含商业监控 SDK 依赖，不能把它当成安装公开上游包后自动具备的功能。本地自研适配器也须独立核对是否存在于目标上游版本。接入方应声明并验证支持的版本、平台、订单能力、恢复语义和报告顺序。
+
+## 当前源码状态
+
+| 能力 | 状态与限制 |
 |---|---|
-| Rust 事件驱动回测 | 稳定 |
-| Engine / Lite 策略入口 | 稳定 |
-| Broker 中性契约 | 稳定 |
-| 内部 broker 事件泵 | 可用，不作为公开 facade |
-| 具体 QMT / live broker 包 | 不公开，外部扩展或私有部署 |
+| 原生回测、Engine / Lite 研究 | 已有实现；原生回测需匹配的 Rust 扩展 |
+| 正式 StrategyRuntime | 0.2.9 候选覆盖默认研究与增量事件协调；不启动内部 loop |
+| Broker 中性契约、内部事件泵 | 接入基础设施；内部类型不是策略 facade |
+| 通用只读 observers | capability 1；不含持久传输或商业 SDK |
+| Nautilus / 具体券商接入 | 外部扩展；本公共包未交付完整桥接、账户配置或生产策略 |
+| 发行与实盘验收 | 单独核验；源码存在不表示已发布或已通过真实券商验收 |

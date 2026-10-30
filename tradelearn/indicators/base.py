@@ -72,11 +72,16 @@ class FunctionIndicator:
 
     def __call__(self, *args: Any, **kwargs: Any) -> pd.Series | pd.DataFrame:
         """Compute the indicator over a batch of data."""
-        owner = _line_owner(args)
+        owner = _line_owner((*args, *kwargs.values()))
         if owner is None:
             return self.compute(*args, **kwargs)
+        runtime_function = getattr(owner, "_runtime_function", None)
+        if callable(runtime_function):
+            return runtime_function(self, args, kwargs)
         resolved_args = tuple(_to_indicator_arg(arg) for arg in args)
-        result = self.compute(*resolved_args, **kwargs)
+        result = self.compute(
+            *resolved_args, **{k: _to_indicator_arg(v) for k, v in kwargs.items()}
+        )
         return owner.wrap_indicator(result, name=self.name)
 
     def compute(self, *args: Any, **kwargs: Any) -> pd.Series | pd.DataFrame:

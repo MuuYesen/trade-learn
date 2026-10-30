@@ -9,6 +9,9 @@ from typing import TYPE_CHECKING, Any
 from tradelearn.backtest.models import ExecutedInfo, Order, Position, Trade, _notify_order
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
 from tradelearn.core.broker_events import BrokerEventPump
+from tradelearn.core.strategy_events import (
+    dispatch_callback, has_observers, invoke_component, observer_mutation_guard,
+)
 
 if TYPE_CHECKING:
     from tradelearn.backtest.strategy import Strategy
@@ -104,6 +107,7 @@ class RustBroker:
         self._commission_model: Any = None
         self._storage: dict[str, Any] | None = None
 
+    @observer_mutation_guard
     def configure_matching(
         self,
         *,
@@ -119,6 +123,7 @@ class RustBroker:
         if commission is not None:
             self._commission_model = commission
 
+    @observer_mutation_guard
     def set_storage(self, storage: dict[str, Any] | None) -> None:
         """Attach facade-level run storage without exposing broker internals."""
         self._storage = storage
@@ -130,6 +135,7 @@ class RustBroker:
     def _uses_rust_matching(self) -> bool:
         return self._engine is not None
 
+    @observer_mutation_guard
     def bind_engine(self, engine: Any) -> None:
         """Bind a Rust engine and cache optional FFI methods once."""
         self._engine = engine
@@ -143,19 +149,23 @@ class RustBroker:
         self._get_new_fills_compact = getattr(engine, "get_new_fills_compact", None)
         self._clear_state_caches()
 
+    @observer_mutation_guard
     def setcash(self, cash: float) -> None:
         self._cash = float(cash)
         self._active_cash = float(cash)
 
+    @observer_mutation_guard
     def set_cash(self, cash: float) -> None:
         self.setcash(cash)
 
+    @observer_mutation_guard
     def setcommission(
         self, commission: float = 0.0, margin: float = 0.0, mult: float = 1.0
     ) -> None:
         self.commission_ratio = float(commission)
         self._mult = float(mult)
 
+    @observer_mutation_guard
     def set_comminfo(self, comminfo: Any) -> None:
         self._comminfo = comminfo
         if hasattr(comminfo, "p") and hasattr(comminfo.p, "mult"):
@@ -163,6 +173,7 @@ class RustBroker:
         if hasattr(comminfo, "p") and hasattr(comminfo.p, "commission"):
             self.commission_ratio = comminfo.p.commission
 
+    @observer_mutation_guard
     def addcommissioninfo(self, comminfo: Any, name: str | None = None) -> None:
         self.set_comminfo(comminfo)
 
@@ -282,6 +293,7 @@ class RustBroker:
     def current_position_size(self) -> float:
         return self.get_position_size()
 
+    @observer_mutation_guard
     def bind_datas(self, datas: list[Any]) -> None:
         self._active_datas = list(datas)
 
@@ -331,6 +343,7 @@ class RustBroker:
             volumes.append(float(data._volume[cursor]))
         return symbols, timestamps, opens, highs, lows, closes, volumes
 
+    @observer_mutation_guard
     def drain_proxy_events(self) -> list[Any]:
         events = self._proxy_events
         self._proxy_events = []
@@ -399,12 +412,13 @@ class RustBroker:
         )
 
     def _notify_order_event(self, owner: Strategy, order: Order) -> None:
-        if getattr(type(owner), "notify_order", None) is not CoreStrategy.notify_order:
+        if (getattr(type(owner), "notify_order", None) is not CoreStrategy.notify_order
+                or has_observers(owner,"business.notify_order")):
             _notify_order(owner, order)
         for analyzer in getattr(owner, "analyzers", {}).values():
             on_order = getattr(analyzer, "on_order", None)
             if callable(on_order):
-                on_order(order)
+                invoke_component(owner,on_order,order)
 
     def _notify_fill_event(
         self, owner: Strategy, order: Order, signed_size: float, price: float, comm: float
@@ -425,14 +439,14 @@ class RustBroker:
             commission=comm,
         )
         for on_fill in callbacks:
-            on_fill(fill)
+            invoke_component(owner,on_fill,fill)
 
     def _notify_trade_event(self, owner: Strategy, trade: Trade) -> None:
         notify_trade = getattr(owner, "notify_trade", None)
         if callable(notify_trade):
-            notify_trade(trade)
+            dispatch_callback(owner,"notify_trade",trade)
         for on_trade in self._trade_callbacks(owner):
-            on_trade(trade)
+            invoke_component(owner,on_trade,trade)
 
     @staticmethod
     def _trade_callbacks(owner: Strategy) -> tuple[Any, ...]:
@@ -446,7 +460,8 @@ class RustBroker:
     @staticmethod
     def _strategy_wants_trade(owner: Strategy) -> bool:
         notify_trade = getattr(type(owner), "notify_trade", None)
-        return notify_trade is not None and notify_trade is not CoreStrategy.notify_trade
+        return ((notify_trade is not None and notify_trade is not CoreStrategy.notify_trade)
+                or has_observers(owner,"business.notify_trade"))
 
     def _wants_trade_event(self, owner: Strategy) -> bool:
         return self._strategy_wants_trade(owner) or bool(self._trade_callbacks(owner))
@@ -493,6 +508,7 @@ class RustBroker:
         """Restore normal order routing after a terminal-bar strategy callback."""
         self._terminal_order_suppression = False
 
+    @observer_mutation_guard
     def flush_order_buffer(self) -> None:
         """Submit buffered orders to Rust and update Python order refs."""
         submitted = False
@@ -542,6 +558,7 @@ class RustBroker:
         if drain_events is not None:
             self.receive_order_events(drain_events())
 
+    @observer_mutation_guard
     def drain_order_buffer(self) -> list[OrderPayload] | tuple[()]:
         """Return buffered order payloads without calling back into Rust.
 
@@ -586,6 +603,7 @@ class RustBroker:
             if order.oco is not None and id(order) in self._bound_orders:
                 self._control_updates[id(order)] = order
 
+    @observer_mutation_guard
     def submit_drained_order(
         self,
         provisional_ref: int,
@@ -710,6 +728,7 @@ class RustBroker:
             return order.trailamount, order.trailpercent
         return None, None
 
+    @observer_mutation_guard
     def _submit(
         self,
         owner: Strategy,
@@ -747,6 +766,7 @@ class RustBroker:
 
         return order
 
+    @observer_mutation_guard
     def _submit_basic(
         self,
         owner: Strategy,
@@ -776,6 +796,7 @@ class RustBroker:
 
         return order
 
+    @observer_mutation_guard
     def submit_basic(
         self,
         owner: Strategy,
@@ -847,6 +868,7 @@ class RustBroker:
             order.status = Order.Accepted
             self._pending_orders.append(order)
 
+    @observer_mutation_guard
     def cancel(self, order: Order) -> None:
         """Cancel an intent, including children that have not reached the kernel."""
         if order.ref in self._authoritative_terminal_refs:
@@ -899,6 +921,7 @@ class RustBroker:
         if valid is None:
             return None
         import numbers
+
         import pandas as pd
         if isinstance(valid, (datetime.timedelta, numbers.Real)):
             # The primary runtime clock defines submission time, not the last
@@ -993,6 +1016,7 @@ class RustBroker:
     ) -> Order:
         return self._submit(owner, data, Order.Sell, size, price, exectype, **kwargs)
 
+    @observer_mutation_guard
     def step(self, i: int) -> None:
         self._curr_idx = i
         self._clear_state_caches()
@@ -1036,6 +1060,7 @@ class RustBroker:
     def _is_compact_fill_batch(fills: Any) -> bool:
         return isinstance(fills, tuple) and len(fills) == 6
 
+    @observer_mutation_guard
     def process_fills(self, strategy: Strategy, i: int) -> None:
         """Synchronize a native batch without permitting retroactive cancellation."""
         new_fills = []

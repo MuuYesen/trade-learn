@@ -11,6 +11,7 @@ from tradelearn.engine.base import TimeFrame
 from tradelearn.engine.cerebro import Cerebro, OptReturn
 from tradelearn.engine.grid import GridSearchResult, grid_search
 from tradelearn.engine.indicators import Indicator
+from tradelearn.backtest.event_runtime import StrategyRuntime, RuntimeContext
 from tradelearn.engine.observers import Observer
 from tradelearn.core.costs import (
     BarRangeSlippage,
@@ -85,6 +86,8 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module 'tradelearn.engine' has no attribute {name!r}")
 
 __all__ = [
+    "StrategyRuntime",
+    "RuntimeContext",
     "Cerebro",
     "OptReturn",
     "DataFeed",
