@@ -1,10 +1,29 @@
 from __future__ import annotations
 
+import re
+
+import pytest
 from typer.testing import CliRunner
 
 from tradelearn.cli import app
 
 runner = CliRunner()
+
+
+def plain_output(output: str) -> str:
+    return re.sub(r"\x1b\[[0-9;]*m", "", output)
+
+
+@pytest.mark.parametrize(
+    ("command", "option"),
+    [("lab", "--mlflow-port"), ("mcp", "--transport"), ("mlflow", "--backend-store-uri")],
+)
+def test_cli_help_options_with_color(monkeypatch, command: str, option: str) -> None:
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    result = runner.invoke(app, [command, "--help"])
+
+    assert result.exit_code == 0
+    assert option in plain_output(result.output)
 
 
 def test_cli_version_option() -> None:
@@ -52,17 +71,19 @@ def test_cli_lab_help_has_no_preview_option() -> None:
     result = runner.invoke(app, ["lab", "--help"])
 
     assert result.exit_code == 0
-    assert "--dry" + "-run" not in result.output
-    assert "--skip-dependency-check" not in result.output
-    assert "--mlflow-port" in result.output
+    output = plain_output(result.output)
+    assert "--dry" + "-run" not in output
+    assert "--skip-dependency-check" not in output
+    assert "--mlflow-port" in output
 
 
 def test_cli_mcp_help_has_no_preview_option() -> None:
     result = runner.invoke(app, ["mcp", "--help"])
 
     assert result.exit_code == 0
-    assert "--dry" + "-run" not in result.output
-    assert "--transport" in result.output
+    output = plain_output(result.output)
+    assert "--dry" + "-run" not in output
+    assert "--transport" in output
 
 
 def test_cli_lab_dependency_check_prevents_starting_when_missing(tmp_path, monkeypatch) -> None:
@@ -105,9 +126,10 @@ def test_cli_mlflow_help_has_no_preview_option() -> None:
     )
 
     assert result.exit_code == 0
-    assert "--dry" + "-run" not in result.output
-    assert "--skip-dependency-check" not in result.output
-    assert "--backend-store-uri" in result.output
+    output = plain_output(result.output)
+    assert "--dry" + "-run" not in output
+    assert "--skip-dependency-check" not in output
+    assert "--backend-store-uri" in output
 
 
 def test_cli_doctor_reports_lab_dependency_status(tmp_path) -> None:
