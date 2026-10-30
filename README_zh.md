@@ -4,8 +4,8 @@
 
 <p align="center">
   <a href="https://muuyesen.github.io/trade-learn/"><b>官方文档</b></a> |
-  <a href="CHANGELOG.md"><b>更新日志</b></a> |
-  <a href="./README.md"><b>English</b></a> |
+  <a href="./CHANGELOG.md"><b>更新日志</b></a> |
+  <a href="./README_en.md"><b>English</b></a> |
   <a href="./README_ja.md"><b>日本語</b></a>
 </p>
 
@@ -20,19 +20,6 @@
   <img src="https://img.shields.io/badge/source-0.2.9_unreleased-blue?style=flat-square" alt="Source version">
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
-
-## 当前源码：0.2.9（尚未发布）
-
-默认 Cerebro/Backtest 研究、事件回放和外部驱动的 paper/live 共用券商无关的 `engine.StrategyRuntime`，由它协调策略构造、生命周期、行情历史、指标推进与业务回调；Rust 撮合及批量预计算继续作为回测优化后端。
-
-- **Engine** 提供 Backtrader 风格策略 API 与增量 Runtime。调用方提供调度、行情及权威券商回报；Runtime 不启动后台循环。
-- **Lite** 保留批量研究定位，共享生命周期不代表 `Lite.I` 已支持完整增量实盘。
-- **Observers** 提供只读策略事件；持久日志、网络投递、券商适配器、凭据及生产策略由外部组件负责。
-- **独立公共库**：不要求安装 Nautilus 或商业监控 SDK，NautilusTrader 本身是公开项目；使用它的部署必须安装其工具包与适配器。本仓库尚未交付独立 Nautilus 桥接包。
-
-源码版本 0.2.9 不代表已发布到 PyPI；普通 `pip install trade-learn` 获取已发行版本。原生回测需要 Python/Rust 版本一致且平台和 Python ABI 匹配的 wheel。下文历史性能数字仅适用于所列基准输入及环境，不能外推所有策略或新增 observer 路径。
-
-详见[架构](docs/concepts/architecture.md)、[Runtime 契约](docs/concepts/runtime.md)、[观察接口](docs/guides/strategy-observers.md)和[paper/live 接入](docs/guides/live.md)。
 
 **trade-learn** 旨在解决量化投研中「研究（Learn）」与「回测（Trade）」长期脱节的问题。它采用「Python 表达策略逻辑 + Rust 原生回测内核」的混合架构，在与 Backtrader **100% 严格语义对齐** 的前提下，实现多资产回测 **110x+ 的性能提升**，将大规模策略验证从小时级压缩至秒级，为指数增强与机器学习策略提供真正可迭代的研究效率。
 
@@ -54,6 +41,8 @@
 
 在生态层面，**trade-learn** 提供完善的指标支持。框架兼容 TA-Lib、Pandas-TA-Classic、TDX、TradingView 等主流指标库，并支持灵活扩展自定义指标与数据源，满足不同研究场景的需求。
 
+当前 0.2.9 源码由公共 `engine.StrategyRuntime` 统一协调默认回测、事件回放及外部 paper/live 的策略生命周期；Rust 撮合与 Lite 批量研究保留。实盘宿主、券商适配器及其依赖由接入层提供，Lite 不承诺完整增量实盘。详见[架构与边界](./docs/concepts/architecture.md)和 [Runtime](./docs/concepts/runtime.md)。
+
 ## 核心亮点
 
 #### ⚡️ 高能内核：Rust 驱动的极致性能
@@ -69,7 +58,7 @@
 - **Pipeline 全链路流水线**：将特征工程、因果筛选、评分模型、组合权重与回测报告无缝耦合，形成可复现的实验闭环。
 
 #### 📦 模块化平台：轻量核心，按需扩展
-- **核心解耦**：默认安装包含 Engine、Lite 与基础数据处理；报告、因子库、Parquet、机器学习和指标后端按需安装。
+- **核心解耦**：默认安装包含 Engine、Lite 与基础数据处理；报告、因子、Parquet、机器学习和指标后端按需安装。
 - **弹性扩展**：通过 `[lab]` 或 `[all]` 扩展，可一键激活 **JupyterLab + MLflow + AI 助手** 组成的集成投研环境，实现“按需加载、随处运行”。
 
 
@@ -103,6 +92,8 @@
 
 ## 安装
 
+> 当前仓库源码为 **0.2.9（尚未发布）**；以下普通安装命令获取 PyPI 已发行版本。源码、原生扩展与目标平台须匹配，详见[安装说明](./docs/concepts/runtime.md#029候选安装)。
+
 ```bash
 pip install trade-learn
 ```
@@ -120,11 +111,11 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 | `[tdx]` | OpenTDX 数据源与国内指标依赖 |
 | `[tv]` | TradingView 数据源与 PyneCore 指标后端 |
 | `[talib]` | TA-Lib 指标命名空间 |
-| `[indicators]` | Pandas-TA、TDX、TradingView 与 TA-Lib 指标后端 |
-| `[factor]` | Alpha101/Alpha191 所需 SciPy |
-| `[parquet]` | Parquet 缓存所需 PyArrow |
-| `[report]` | Bokeh 图表、HTML 与 Excel 导出 |
-| `[ml]` | scikit-learn 与因果机器学习依赖 |
+| `[indicators]` | TDX + TradingView + TA-Lib 指标后端 |
+| `[factor]` | 因子统计分析（SciPy） |
+| `[parquet]` | Parquet 数据读写（PyArrow） |
+| `[report]` | 图表与 HTML / Excel 报告 |
+| `[ml]` | 因果机器学习依赖 |
 | `[research]` | Numba 等投研加速工具 |
 | `[duckdb]` | DuckDB 行情存储后端 |
 | `[lab]` | JupyterLab / Jupyter AI / MCP / Pygwalker 交互研究环境 |
@@ -132,7 +123,7 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 | `[all]` | Lab、MLflow、指标后端、ML、DuckDB 等完整研究环境 |
 
 > **💡 安装建议**：
-> 默认安装提供基础回测；使用图表和报告可安装 `[report]`，使用内置指标可安装 `[indicators]`。包含 JupyterLab 与 MLflow 的全套功能使用 `[all]`：
+> 默认安装只包含 NumPy、Pandas、tqdm、Typer 和 PyYAML 等核心依赖。因子分析、Parquet、指标后端和报表需要对应 extra。若需开启包含 JupyterLab 与 MLflow 的全栈投研体验，请指定 `[all]` 扩展进行安装：
 > ```bash
 > pip install "trade-learn[all]"
 > ```
@@ -141,6 +132,8 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 
 
 ## 快速上手
+
+以下快速上手示例调用 TradingView、TDX 指标和报表，请先安装 `pip install "trade-learn[indicators,report]"`。单标的时间序列因子评估见 [Research 指南](./docs/guides/research.md)。
 
 **Lite——最短路径**（适合快速验证、教学、多资产目标权重）：
 
@@ -221,7 +214,7 @@ cerebro.report("report.html")
 
 ## 投研流水线示例
 
-README 只放最短可读版本，完整脚本见 [`examples/research/index_enhance_lite_pipeline.py`](examples/research/index_enhance_lite_pipeline.py) 和 [`examples/research/index_enhance_engine_pipeline.py`](examples/research/index_enhance_engine_pipeline.py)。
+README 只放最短可读版本，完整脚本见 [`examples/research/index_enhance_lite_pipeline.py`](./examples/research/index_enhance_lite_pipeline.py) 和 [`examples/research/index_enhance_engine_pipeline.py`](./examples/research/index_enhance_engine_pipeline.py)。
 
 **1. Research：从原始行情生成特征、切分训练集 / 测试集**
 
@@ -310,17 +303,17 @@ class LiveStylePortfolio(tl.Strategy):
 
 | 目标 | 完整脚本 |
 |---|---|
-| Lite 投研 + 回测 + report + MLflow | [`examples/research/index_enhance_lite_pipeline.py`](examples/research/index_enhance_lite_pipeline.py) |
-| Engine 投研 + 回测 + report + MLflow | [`examples/research/index_enhance_engine_pipeline.py`](examples/research/index_enhance_engine_pipeline.py) |
-| Lite live-style 当前窗口推理 | [`examples/research/index_enhance_lite_live.py`](examples/research/index_enhance_lite_live.py) |
-| Engine live-style 当前窗口推理 | [`examples/research/index_enhance_engine_live.py`](examples/research/index_enhance_engine_live.py) |
-| Engine Backtrader 风格组合调仓 | [`examples/engine/11_target_percent_portfolio.py`](examples/engine/11_target_percent_portfolio.py) |
-| 资产类别组合策略 | [`examples/engine/12_asset_class_portfolios.py`](examples/engine/12_asset_class_portfolios.py) |
+| Lite 投研 + 回测 + report + MLflow | [`examples/research/index_enhance_lite_pipeline.py`](./examples/research/index_enhance_lite_pipeline.py) |
+| Engine 投研 + 回测 + report + MLflow | [`examples/research/index_enhance_engine_pipeline.py`](./examples/research/index_enhance_engine_pipeline.py) |
+| Lite live-style 当前窗口推理 | [`examples/research/index_enhance_lite_live.py`](./examples/research/index_enhance_lite_live.py) |
+| Engine live-style 当前窗口推理 | [`examples/research/index_enhance_engine_live.py`](./examples/research/index_enhance_engine_live.py) |
+| Engine Backtrader 风格组合调仓 | [`examples/engine/11_target_percent_portfolio.py`](./examples/engine/11_target_percent_portfolio.py) |
+| 资产类别组合策略 | [`examples/engine/12_asset_class_portfolios.py`](./examples/engine/12_asset_class_portfolios.py) |
 
 
 ## 对齐与性能
 
-本机基线关注两个核心：**结果是否对齐**、**吞吐是否明显快于 Backtrader**。完整复现命令见 [性能基准](docs/benchmarks.md)。
+以下数字为对应历史输入与环境下的基准，不代表所有策略或新增 observer 路径的性能。本机基线关注两个核心：**结果是否对齐**、**吞吐是否明显快于 Backtrader**。完整复现命令见 [性能基准](./docs/benchmarks.md)。
 
 #### 1. 单标的高频压测：双均线交叉 (55 万 Bar)
 * **策略原理**：执行标准的双均线交叉逻辑。旨在压测 Rust 在处理长序列、单数据流时的事件驱动性能与状态维护效率，挑战单核推进极限。
@@ -359,18 +352,18 @@ class LiveStylePortfolio(tl.Strategy):
 ## 完整文档
 
 *   **官方在线文档**：[**https://muuyesen.github.io/trade-learn/**](https://muuyesen.github.io/trade-learn/)
-*   **本地技术手册**：[`docs/`](docs/README.md)
+*   **本地技术手册**：[`docs/`](./docs/README.md)
 
 | 主题 | 入口                                                                      |
 |---|-------------------------------------------------------------------------|
-| 30 行走通第一个回测 | [快速开始](docs/quickstart.md)                                            |
-| Lite / Engine 用法 | [Lite 指南](docs/guides/lite.md) · [Engine 指南](docs/guides/engine.md) |
-| 架构与边界 | [架构](docs/concepts/architecture.md)                                   |
-| 因子 / ML / 权重研究流水线 | [Research 指南](docs/guides/research.md)                                |
-| 双口径指标（`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`） | [Indicators 指南](docs/guides/indicators.md)                            |
-| 性能基线 | [性能基准](docs/benchmarks.md)                                            |
-| 内核（契约 / 撮合 / portfolio / 事件循环） | [设计笔记](docs/internals/contracts.md)                                   |
-| 完整 API | [API 参考](docs/api/reference.md)                                       |
+| 30 行走通第一个回测 | [快速开始](./docs/quickstart.md)                                            |
+| Lite / Engine 用法 | [Lite 指南](./docs/guides/lite.md) · [Engine 指南](./docs/guides/engine.md) |
+| 架构与边界 | [架构](./docs/concepts/architecture.md)                                   |
+| 因子 / ML / 权重研究流水线 | [Research 指南](./docs/guides/research.md)                                |
+| 双口径指标（`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`） | [Indicators 指南](./docs/guides/indicators.md)                            |
+| 性能基线 | [性能基准](./docs/benchmarks.md)                                            |
+| 内核（契约 / 撮合 / portfolio / 事件循环） | [设计笔记](./docs/internals/contracts.md)                                   |
+| 完整 API | [API 参考](./docs/api/reference.md)                                       |
 
 ## 🚀 路线图 (Roadmap)
 
@@ -399,8 +392,8 @@ class LiveStylePortfolio(tl.Strategy):
 - [ ] **分布式参数优化**：基于 Ray / Optuna 扩展多机并行的参数搜索与蒙特卡洛模拟。
 
 #### 实盘与生态愿景
-- [x] **通用实盘事件链路**：默认研究、事件回放和外部 paper/live 宿主共用 `StrategyRuntime` 生命周期；成交结果取决于券商及输入调度。
-- [ ] **实盘交易打通**：逐项验收外部券商及宿主集成；生产适配器和凭据不随本仓库交付。
+- [x] **通用实盘事件链路**：默认研究、事件回放和外部 paper/live 共用策略生命周期；成交结果取决于券商及输入调度。
+- [ ] **实盘交易打通**：按需接入外部执行宿主及券商适配器，并逐项验收；生产凭据不随公共包交付。
 - [ ] **Agentic Quant 平台**：最终演进为支持自然语言驱动的全流程投研自动化底座。
 
 ## 免责声明 (Disclaimer)

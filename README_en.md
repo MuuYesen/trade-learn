@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://muuyesen.github.io/trade-learn/"><b>Documentation</b></a> |
   <a href="CHANGELOG.md"><b>Changelog</b></a> |
-  <a href="./README_zh.md"><b>中文简体</b></a> |
+  <a href="./README.md"><b>中文简体</b></a> |
   <a href="./README_ja.md"><b>日本語</b></a>
 </p>
 
@@ -20,19 +20,6 @@
   <img src="https://img.shields.io/badge/source-0.2.9_unreleased-blue?style=flat-square" alt="Source version">
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
-
-## Current source: 0.2.9 (unreleased)
-
-The source tree provides a broker-neutral `engine.StrategyRuntime` shared by default Cerebro/Backtest research, event replay, and externally driven paper/live execution. It coordinates strategy construction, lifecycle, market history, indicator advancement, and business callbacks. Rust matching and batch precomputation remain backtest optimizations.
-
-- **Engine** exposes Backtrader-style strategy APIs and the incremental Runtime. The caller supplies scheduling, market events, and authoritative broker reports; the Runtime starts no background loop.
-- **Lite** remains a batch research interface. Its shared lifecycle does not imply full incremental/live support for `Lite.I`.
-- **Observers** provide read-only strategy events for external integrations. Durable logging, transport, broker adapters, credentials, and production strategies are external components.
-- **Independent library**: no Nautilus or commercial monitoring SDK dependency is required. NautilusTrader itself is public; deployments that use it must install its package and adapters. This repository does not yet ship a standalone Nautilus bridge.
-
-Source version 0.2.9 is not a PyPI release announcement. `pip install trade-learn` installs the published package, which may differ from this tree. Native backtests require matching Python and Rust versions and a wheel for your platform/Python ABI. Historical benchmark figures below apply to their documented inputs and environments, not every strategy or the new observer path.
-
-See [architecture](docs/concepts/architecture.md), [Runtime contracts](docs/concepts/runtime.md), [observers](docs/guides/strategy-observers.md), and [paper/live integration](docs/guides/live.md).
 
 **trade-learn** aims to eliminate the long-standing friction between quantitative research ("Learn") and backtest execution ("Trade"). By adopting a hybrid architecture of "Python for strategy logic + Rust for native backtest core," it achieves a **110x+ performance leap** in multi-asset backtesting while ensuring **100% rigorous semantic alignment** with Backtrader. It compresses large-scale strategy validation from hours to seconds, providing truly iterative research efficiency for index enhancement and machine learning strategies.
 
@@ -53,6 +40,8 @@ You can define the depth of your strategy based on the research stage:
 - **Lite Mode (Agile Validation)**: Follows the minimalism of `backtesting.py`, supporting direct connection to model weights. Perfect for high-frequency iteration and prototype validation during the factor mining stage.
 
 In terms of ecosystem, **trade-learn** provides comprehensive indicator support, compatible with TA-Lib, Pandas-TA-Classic, TDX, and TradingView, while allowing flexible expansion of custom indicators and data sources.
+
+Source 0.2.9 shares `engine.StrategyRuntime` across default research, event replay, and externally driven paper/live. Rust matching and Lite batch research remain; full incremental Lite/live support is not implied. Host integrations and broker dependencies are supplied separately. See [architecture](docs/concepts/architecture.md) and [Runtime](docs/concepts/runtime.md).
 
 ## Core Highlights
 
@@ -96,6 +85,8 @@ Most quantitative research stops at **Correlation**, which often leads to factor
 *   **Causal Inference Explorers**: Bring causal graph methods into factor selection to remove pseudo-correlations and build more explainable, robust quantitative systems.
 
 ## Installation
+
+> This source tree is **0.2.9 (unreleased)**. The command below installs the published PyPI package; native extensions must match the package version, platform, and Python ABI. See [installation details](docs/concepts/runtime.md#029候选安装).
 
 ```bash
 pip install trade-learn

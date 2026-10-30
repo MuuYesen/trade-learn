@@ -5,8 +5,8 @@
 <p align="center">
   <a href="https://muuyesen.github.io/trade-learn/"><b>公式ドキュメント</b></a> |
   <a href="CHANGELOG.md"><b>更新履歴</b></a> |
-  <a href="./README_zh.md"><b>中文简体</b></a> |
-  <a href="./README.md"><b>English</b></a>
+  <a href="./README.md"><b>中文简体</b></a> |
+  <a href="./README_en.md"><b>English</b></a>
 </p>
 
 <p align="center">
@@ -20,19 +20,6 @@
   <img src="https://img.shields.io/badge/source-0.2.9_unreleased-blue?style=flat-square" alt="Source version">
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
-
-## 現在のソース：0.2.9（未リリース）
-
-デフォルトの Cerebro/Backtest、イベント再生、外部駆動の paper/live は、ブローカーに依存しない `engine.StrategyRuntime` を共有します。戦略の構築、ライフサイクル、市場履歴、指標更新、業務コールバックを統括し、Rust の約定シミュレーションと一括事前計算はバックテストの最適化として維持します。
-
-- **Engine**：Backtrader 形式の戦略 API と増分 Runtime。呼び出し側がスケジュール、市場イベント、確定したブローカー報告を供給します。内部の常駐ループはありません。
-- **Lite**：一括研究用の API。ライフサイクルの共有は `Lite.I` の完全な増分・実運用対応を意味しません。
-- **Observers**：読み取り専用の戦略イベント。永続ログ、送信、ブローカー接続、認証情報、実運用戦略は外部コンポーネントが担当します。
-- **独立ライブラリ**：Nautilus や商用監視 SDK は必須ではありません。NautilusTrader 自体は公開プロジェクトですが、利用する実行環境にはそのパッケージとアダプターが必要です。本リポジトリには独立した Nautilus ブリッジはまだ含まれません。
-
-0.2.9 はソースのバージョンであり、PyPI 公開の告知ではありません。通常の `pip install trade-learn` は公開済みのパッケージを取得します。ネイティブバックテストには Python/Rust のバージョンおよび対象プラットフォーム・Python ABI の一致が必要です。以下の過去の性能値は記載されたベンチマーク条件に限定され、新しい observer 経路の性能を保証しません。
-
-[構成](docs/concepts/architecture.md)、[Runtime](docs/concepts/runtime.md)、[Observers](docs/guides/strategy-observers.md)、[paper/live 接続](docs/guides/live.md)を参照してください。
 
 **trade-learn** は、投資研究（Learn）とバックテスト実行（Trade）の間の摩擦を解消することを目指しています。「Python 戦略ロジック + Rust ネイティブコア」のハイブリッドアーキテクチャにより、Backtrader との **100% 厳格なロジック同期** を維持しながら、多資産バックテストで **110倍以上** のパフォーマンス向上を実現しました。大規模な検証時間を「時間単位」から「秒単位」に短縮し、インデックス強化や機械学習戦略に極速の反復体験を提供します。
 
@@ -53,6 +40,8 @@
 - **Lite モード (迅速な検証)**：`backtesting.py` のミニマリズムを継承し、モデルのウェイト直結をサポート。ファクターマイニング段階での高頻度な反復とプロトタイプ検証に最適です。
 
 エコシステム面では、TA-Lib、Pandas-TA-Classic、TDX、TradingView の主要指標をサポートし、カスタム指標やデータソースの柔軟な拡張が可能です。
+
+0.2.9 のソースでは、デフォルト研究・イベント再生・外部 paper/live が `engine.StrategyRuntime` を共有します。Rust の約定シミュレーションと Lite の一括研究は維持し、完全な増分 Lite/live 対応は保証しません。実行ホストとブローカー依存関係は別途提供します。[構成](docs/concepts/architecture.md)と [Runtime](docs/concepts/runtime.md)を参照してください。
 
 ## コアハイライト
 
@@ -96,6 +85,8 @@
 *   **因果推論の探求者**：ファクター選択に因果グラフ技術を導入し、「偽の相関」を取り除くことで、説明性と頑健性の高いクオンツシステムを構築できます。
 
 ## インストール
+
+> 現在のソースは **0.2.9（未リリース）** です。以下のコマンドは PyPI 公開版を取得します。ネイティブ拡張のバージョン・プラットフォーム・Python ABI を一致させてください。[インストール詳細](docs/concepts/runtime.md#029候选安装)。
 
 ```bash
 pip install trade-learn

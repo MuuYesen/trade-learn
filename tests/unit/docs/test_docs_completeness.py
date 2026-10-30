@@ -28,24 +28,27 @@ def test_docs_navigation_keeps_lite_before_engine() -> None:
     )
 
 
-def test_root_readme_is_english_default_and_links_to_translations() -> None:
+def test_root_readme_is_chinese_default_and_keeps_product_sections() -> None:
     text = Path("README.md").read_text(encoding="utf-8")
 
-    assert "./README_zh.md" in text
-    assert "./README_ja.md" in text
-    assert "Python for Strategy & Research, Rust for Event-Driven Backtest Engine" in text
-    assert "Core Highlights" in text
-    assert "Lite Mode (Agile Validation)" in text
-    assert "Engine Mode (Deep Research)" in text
-    assert "MLflow" in text and "JupyterLab/MCP" in text
-
-
-def test_chinese_readme_links_back_to_english_default() -> None:
-    text = Path("README_zh.md").read_text(encoding="utf-8")
-
-    assert "./README.md" in text
-    assert "English" in text
+    assert './README_en.md' in text
+    assert './README_ja.md' in text
     assert "Python 写策略与投研流程，Rust 扛事件驱动回测内核" in text
+    sections = ("## 实现路径", "## 核心亮点", "## 快速上手", "## 投研流水线示例")
+    positions = [text.index(section) for section in sections]
+    assert positions == sorted(positions)
+    assert "MLflow" in text and "JupyterLab" in text
+
+
+def test_readme_language_links_use_chinese_default_and_separate_english() -> None:
+    chinese = Path("README_zh.md").read_text(encoding="utf-8")
+    english = Path("README_en.md").read_text(encoding="utf-8")
+    japanese = Path("README_ja.md").read_text(encoding="utf-8")
+
+    assert './README_en.md' in chinese
+    assert "Python 写策略与投研流程，Rust 扛事件驱动回测内核" in chinese
+    assert './README.md' in english and "Core Highlights" in english
+    assert './README_en.md' in japanese
 
 
 def test_quickstart_is_compatible_with_homepage_positioning() -> None:
