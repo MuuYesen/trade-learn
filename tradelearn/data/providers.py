@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any, Protocol
-
 import logging
 import os
 import sys
+from collections.abc import Callable
 from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Any, Protocol
 
 import pandas as pd
-from tradelearn.utils.console import smart_tqdm as tqdm
 
 from tradelearn.core.logging import get_logger
 from tradelearn.data.bars import Frequency, normalize_bars
+from tradelearn.utils.console import smart_tqdm as tqdm
 
 LOGGER = get_logger("data.providers")
 
@@ -26,7 +25,8 @@ TDX_PERIOD: dict[str, str] = {
     "1h": "MIN_60",
     "1d": "DAILY",
     "1w": "WEEKLY",
-    "1m": "MONTHLY",
+    "1m": "MIN_1",
+    "1M": "MONTHLY",
 }
 
 TRADINGVIEW_INTERVAL: dict[str, str] = {
@@ -44,6 +44,11 @@ TRADINGVIEW_INTERVAL: dict[str, str] = {
     "1w": "in_weekly",
     "1M": "in_monthly",
 }
+
+
+def _canonical_frequency(freq: str) -> str:
+    """Preserve minute/month case and normalize supported month aliases."""
+    return "1M" if freq in {"M", "monthly"} else freq
 
 
 @dataclass(frozen=True)
@@ -99,6 +104,7 @@ class TdxProvider:
         freq: Frequency = "1d",
     ) -> pd.DataFrame:
         """Fetch A-share OHLCV data and return contract-valid Bars."""
+        freq = _canonical_frequency(freq)
         if freq not in TDX_PERIOD:
             raise ValueError(f"Unsupported TDX frequency: {freq}")
         if _is_symbol_collection(symbol):
@@ -227,6 +233,7 @@ class TdxProvider:
             from opentdx.tdxClient import PERIOD
         except ModuleNotFoundError:
             period_values = {
+                "MIN_1": 7,
                 "MIN_5": 0,
                 "MIN_15": 1,
                 "MIN_30": 2,
@@ -277,6 +284,7 @@ class TradingViewProvider:
         exchange: str | None = None,
     ) -> pd.DataFrame:
         """Fetch TradingView OHLCV data and return contract-valid Bars."""
+        freq = _canonical_frequency(freq)
         if freq not in TRADINGVIEW_INTERVAL:
             raise ValueError(f"Unsupported TradingView frequency: {freq}")
         if _is_symbol_collection(symbol):
@@ -288,14 +296,18 @@ class TradingViewProvider:
                 freq,
             )
             results = []
-            for item in tqdm(symbol, desc="TradingViewProvider.history_ohlc", leave=True, unit="symbol"):
-                results.append(self.history_ohlc(
-                    item,
-                    start=start,
-                    end=end,
-                    freq=freq,
-                    exchange=exchange,
-                ))
+            for item in tqdm(
+                symbol, desc="TradingViewProvider.history_ohlc", leave=True, unit="symbol"
+            ):
+                results.append(
+                    self.history_ohlc(
+                        item,
+                        start=start,
+                        end=end,
+                        freq=freq,
+                        exchange=exchange,
+                    )
+                )
             return _combine_bars(results)
 
         exchange_name, tv_symbol = _split_tradingview_symbol(symbol, exchange=exchange)
@@ -309,12 +321,16 @@ class TradingViewProvider:
             freq,
         )
         client = self._make_client()
-        from tradelearn.data.tradingview_transport import TradingViewTransport, RESOLUTIONS
+        from tradelearn.data.tradingview_transport import RESOLUTIONS, TradingViewTransport
 
         kwargs = dict(
-            symbol=tv_symbol, exchange=exchange_name,
-            interval=(RESOLUTIONS[TRADINGVIEW_INTERVAL[freq]]
-                      if isinstance(client, TradingViewTransport) else self._interval_value(freq)),
+            symbol=tv_symbol,
+            exchange=exchange_name,
+            interval=(
+                RESOLUTIONS[TRADINGVIEW_INTERVAL[freq]]
+                if isinstance(client, TradingViewTransport)
+                else self._interval_value(freq)
+            ),
             n_bars=self.n_bars,
         )
         if isinstance(client, TradingViewTransport):
@@ -323,7 +339,9 @@ class TradingViewProvider:
             kwargs["adjustment"] = "none"
         if isinstance(client, TradingViewTransport) and end is not None:
             cutoff = pd.Timestamp(end)
-            cutoff = cutoff.tz_localize("UTC") if cutoff.tzinfo is None else cutoff.tz_convert("UTC")
+            cutoff = (
+                cutoff.tz_localize("UTC") if cutoff.tzinfo is None else cutoff.tz_convert("UTC")
+            )
             if cutoff == cutoff.normalize():
                 cutoff += pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
             kwargs["to"] = int(cutoff.timestamp())
@@ -337,7 +355,9 @@ class TradingViewProvider:
             market="GLOBAL",
             freq=freq,
             engine="tradingview",
-            source="tradelearn:tradingview" if isinstance(client, TradingViewTransport) else "tvdatafeed",
+            source="tradelearn:tradingview"
+            if isinstance(client, TradingViewTransport)
+            else "tvdatafeed",
             adjust="none",
         )
         LOGGER.info(
@@ -354,19 +374,29 @@ class TradingViewProvider:
             return self._client_factory()
 
         from tradelearn.data.tradingview_transport import TradingViewTransport
+
         return TradingViewTransport(username=self.username, password=self.password)
 
-    def history_window(self, symbol, resolution, count=300, to=None, forward=False, *, adjustment="splits"):
+    def history_window(
+        self, symbol, resolution, count=300, to=None, forward=False, *, adjustment="splits"
+    ):
         """Fetch chart bars with a server-side cutoff or forward replay anchor."""
         from tradelearn.data.tradingview_transport import normalize_adjustment
+
         adjustment = normalize_adjustment(adjustment)
         return self._make_client().history_window(
-            symbol, resolution, count=count, to=to, forward=forward, adjustment=adjustment,
+            symbol,
+            resolution,
+            count=count,
+            to=to,
+            forward=forward,
+            adjustment=adjustment,
         )
 
     def resolve_symbol(self, symbol, *, adjustment="splits"):
         """Return TradingView chart symbol metadata."""
         from tradelearn.data.tradingview_transport import normalize_adjustment
+
         adjustment = normalize_adjustment(adjustment)
         return self._make_client().resolve_symbol(symbol, adjustment=adjustment)
 
@@ -378,6 +408,7 @@ class TradingViewProvider:
     def _interval_value(freq: Frequency) -> object:
         try:
             from tvDatafeed import Interval
+
             return getattr(Interval, TRADINGVIEW_INTERVAL[freq])
         except (ImportError, AttributeError):
             return TRADINGVIEW_INTERVAL[freq]

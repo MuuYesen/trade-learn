@@ -35,7 +35,20 @@ def write_artifact_bundle(
     preserve it in metadata. Omitted periods remain unknown, never guessed.
     """
 
-    if timeframe is not None and timeframe not in {"1", "3", "5", "15", "30", "45", "60", "120", "240", "1D", "1W", "1M"}:
+    if timeframe is not None and timeframe not in {
+        "1",
+        "3",
+        "5",
+        "15",
+        "30",
+        "45",
+        "60",
+        "120",
+        "240",
+        "1D",
+        "1W",
+        "1M",
+    }:
         raise ValueError("timeframe must be a supported bar period (minutes, 1D, 1W, 1M)")
     output_dir = Path(directory)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -67,6 +80,7 @@ def market_data_from_strategy(strategy: Any) -> pd.DataFrame | None:
 
 
 def _remove_report_sidecars(output_dir: Path) -> None:
+    """Remove obsolete report sidecars while retaining core report files."""
     keep = {"artifacts.xlsx", "report.html", "plot.html"}
     keep.update(path.name for path in output_dir.glob("*.csv"))
     for path in output_dir.iterdir():
@@ -77,6 +91,7 @@ def _remove_report_sidecars(output_dir: Path) -> None:
 
 
 def _write_core_tables(output_dir: Path, stats: Any) -> None:
+    """Write the core result tables without strategy metadata."""
     _write_tables(output_dir, stats, strategy=None)
 
 
@@ -88,6 +103,7 @@ def _write_tables(
     benchmark: pd.Series | None = None,
     timeframe: str | None = None,
 ) -> None:
+    """Export available result tables to workbook and CSV files."""
     sheets = _artifact_sheets(stats, strategy, benchmark=benchmark, timeframe=timeframe)
     if not sheets:
         return
@@ -99,6 +115,7 @@ def _write_tables(
 
 
 def _csv_name(name: str) -> str:
+    """Convert a worksheet name into a safe CSV filename."""
     return "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in name)
 
 
@@ -109,6 +126,7 @@ def _artifact_sheets(
     benchmark: pd.Series | None = None,
     timeframe: str | None = None,
 ) -> dict[str, pd.DataFrame]:
+    """Assemble result, metadata, and optional research tables."""
     sheets: dict[str, pd.DataFrame] = {
         "metadata": pd.DataFrame(
             [
@@ -158,6 +176,7 @@ def _artifact_sheets(
 
 
 def _research_weights(strategy: Any | None) -> pd.Series | None:
+    """Retrieve research weights from a strategy result when present."""
     result = _first_attr(
         strategy,
         ("research_result", "research_result_"),
@@ -173,6 +192,7 @@ def _research_weights(strategy: Any | None) -> pd.Series | None:
 
 
 def _research_payload(strategy: Any | None) -> dict[str, Any]:
+    """Extract serializable research metadata from a strategy."""
     result = _first_attr(strategy, ("research_result", "research_result_"))
     if result is None or not hasattr(result, "to_dict"):
         return {}
@@ -192,6 +212,7 @@ def _research_payload(strategy: Any | None) -> dict[str, Any]:
 
 
 def _flatten_mapping(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
+    """Flatten nested mappings into report metadata keys."""
     flattened: dict[str, Any] = {}
     for key, value in values.items():
         name = f"{prefix}.{key}"
@@ -203,24 +224,28 @@ def _flatten_mapping(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
 
 
 def _display_value(value: Any) -> Any:
+    """Convert a value into a display-friendly report value."""
     if isinstance(value, list | tuple):
         return ",".join(str(item) for item in value)
     return value
 
 
 def _coerce_series(values: Any) -> pd.Series:
+    """Normalize a result value to a pandas Series."""
     if isinstance(values, pd.Series):
         return values.copy()
     return pd.Series(values)
 
 
 def _series_frame(values: pd.Series, *, index_name: str, value_name: str) -> pd.DataFrame:
+    """Convert a named series into an indexed export table."""
     frame = values.rename(value_name).to_frame()
     frame.index.name = frame.index.name or index_name
     return frame.reset_index()
 
 
 def _excel_safe_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    """Convert table values into formats supported by Excel export."""
     safe = pd.DataFrame(frame).copy()
     for column in safe.columns:
         series = safe[column]
@@ -232,18 +257,21 @@ def _excel_safe_frame(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def _excel_safe_value(value: Any) -> Any:
+    """Convert one value into an Excel-compatible representation."""
     if isinstance(value, pd.Timestamp) and value.tzinfo is not None:
         return value.tz_convert(None)
     return value
 
 
 def _stats_field(stats: Any, name: str, default: Any) -> Any:
+    """Read a named statistics field with a supplied default."""
     if isinstance(stats, dict):
         return stats.get(name, default)
     return getattr(stats, name, default)
 
 
 def _first_attr(obj: Any, names: tuple[str, ...]) -> Any:
+    """Return the first available attribute from the candidate names."""
     if obj is None:
         return None
     for name in names:

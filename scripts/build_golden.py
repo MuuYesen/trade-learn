@@ -162,38 +162,52 @@ def load_reference_query(allow_provider_stubs: bool = False) -> Any:
     """Load Query from the frozen 1.x oracle."""
 
     validate_reference()
-    ensure_reference_path()
-    if allow_provider_stubs:
-        _install_provider_stubs()
+    saved_path = list(sys.path)
+    provider_names = ("yfinance", "tvDatafeed", REFERENCE_TDX_PACKAGE, REFERENCE_TDX_MODULE)
+    missing = object()
+    providers = {name: sys.modules.get(name, missing) for name in provider_names}
+    package = providers[REFERENCE_TDX_PACKAGE]
+    old_quotes = getattr(package, "quotes", missing) if package is not missing else missing
     saved = {
         name: module
         for name, module in list(sys.modules.items())
         if name == "tradelearn" or name.startswith("tradelearn.")
     }
-    for name in saved:
-        sys.modules.pop(name, None)
-    reference_pkg = types.ModuleType("tradelearn")
-    reference_pkg.__path__ = [str(REFERENCE)]
-    sys.modules["tradelearn"] = reference_pkg
     try:
+        ensure_reference_path()
+        if allow_provider_stubs:
+            _install_provider_stubs()
+        for name in saved:
+            sys.modules.pop(name, None)
+        reference_pkg = types.ModuleType("tradelearn")
+        reference_pkg.__path__ = [str(REFERENCE)]
+        sys.modules["tradelearn"] = reference_pkg
         query_module = importlib.import_module("tradelearn.query")
         Query = query_module.Query
     except ModuleNotFoundError as exc:
-        missing = exc.name or str(exc)
-        message = f"failed to import reference Query; missing module: {missing}"
+        missing_name = exc.name or str(exc)
+        message = f"failed to import reference Query; missing module: {missing_name}"
         raise GoldenDataError(message) from exc
     except Exception as exc:
         message = f"failed to import reference Query: {type(exc).__name__}: {exc}"
         raise GoldenDataError(message) from exc
     finally:
-        loaded_reference_modules = [
-            name
-            for name in sys.modules
-            if name == "tradelearn" or name.startswith("tradelearn.")
-        ]
-        for name in loaded_reference_modules:
-            sys.modules.pop(name, None)
+        for name in list(sys.modules):
+            if name == "tradelearn" or name.startswith("tradelearn."):
+                sys.modules.pop(name, None)
         sys.modules.update(saved)
+        sys.path[:] = saved_path
+        for name, module in providers.items():
+            if module is missing:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+        if package is not missing:
+            if old_quotes is missing:
+                package.__dict__.pop("quotes", None)
+            else:
+                package.quotes = old_quotes
+
     return Query
 
 

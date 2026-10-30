@@ -88,16 +88,19 @@ _OBJECT_FIELDS = frozenset(
 
 
 def assert_observer_allows_mutation():
+    """Reject framework mutations while an observer callback is active."""
     if _ACTIVE_OBSERVER.get():
         raise RuntimeError("strategy observer cannot invoke state-changing framework APIs")
 
 
 def observer_mutation_guard(callback):
+    """Wrap a callback with the observer mutation guard once."""
     if getattr(callback, "__tl_observer_guard__", False):
         return callback
 
     @wraps(callback)
     def guarded(*args, **kwargs):
+        """Check observer context before calling the wrapped callback."""
         assert_observer_allows_mutation()
         return callback(*args, **kwargs)
 
@@ -106,6 +109,7 @@ def observer_mutation_guard(callback):
 
 
 def _freeze(value, depth=0):
+    """Convert supported domain values into bounded immutable snapshots."""
     if value is None or isinstance(value, (str, bytes, bool, date, datetime, timedelta)):
         return value
     if isinstance(value, Integral):
@@ -147,6 +151,7 @@ def _freeze(value, depth=0):
 
 @dataclass(frozen=True)
 class StrategyEvent:
+    """Describe one read-only lifecycle, business, or intent observation."""
     name: str
     phase: str
     details: Mapping[str, Any]
@@ -157,6 +162,7 @@ class StrategyEvent:
 
 @dataclass(frozen=True)
 class ObserverSpec:
+    """Configure an observer, event filters, context, and error handler."""
     observer: Callable[[StrategyEvent], None]
     events: frozenset[str] | None = None
     phases: tuple[str, ...] = ("after", "error")
@@ -166,6 +172,7 @@ class ObserverSpec:
 
 @dataclass(frozen=True)
 class ObservationFailure:
+    """Record an observer or snapshot failure for diagnostics."""
     event: StrategyEvent
     observer: str
     error_type: str
@@ -175,6 +182,7 @@ class ObservationFailure:
 
 @dataclass(frozen=True)
 class ObservationFailures:
+    """Summarize retained and omitted observation failures."""
     total: int
     omitted: int
     retained: tuple[ObservationFailure, ...]
@@ -182,11 +190,13 @@ class ObservationFailures:
 
 @dataclass(eq=False)
 class _Subscription:
+    """Hold a registered observer specification and warning state."""
     spec: ObserverSpec
     warned: bool = False
 
 
 class _State:
+    """Track observer subscriptions and bounded failure diagnostics."""
     def __init__(self):
         self.subscriptions = []
         self.failures = deque(maxlen=64)
@@ -195,6 +205,7 @@ class _State:
 
 
 def _state(strategy, create=False):
+    """Retrieve or initialize observation state for a strategy."""
     state = getattr(strategy, "_strategy_observation_state", None)
     if state is None and create:
         state = _State()
@@ -205,6 +216,7 @@ def _state(strategy, create=False):
 def add_observer(
     strategy, observer, *, events=None, phases=("after", "error"), context=None, error_handler=None
 ):
+    """Validate and register a synchronous observer on a strategy."""
     assert_observer_allows_mutation()
     if inspect.iscoroutinefunction(observer) or inspect.iscoroutinefunction(
         inspect.getattr_static(type(observer), "__call__", None)
@@ -230,6 +242,7 @@ def add_observer(
 
 
 def remove_observer(strategy, subscription):
+    """Remove a subscription by identity and report whether it existed."""
     assert_observer_allows_mutation()
     state = _state(strategy)
     if state is None:
@@ -242,6 +255,7 @@ def remove_observer(strategy, subscription):
 
 
 def has_observers(strategy, name=None):
+    """Report whether an observer is interested in a domain event."""
     state = _state(strategy)
     return bool(
         state
@@ -253,6 +267,7 @@ def has_observers(strategy, name=None):
 
 
 def invoke_component(strategy, callback, *args, **kwargs):
+    """Invoke a component through its runtime when one is bound."""
     runtime = getattr(strategy, "_runtime", None)
     if runtime is not None:
         return runtime.invoke_component(callback, *args, **kwargs)
@@ -261,6 +276,7 @@ def invoke_component(strategy, callback, *args, **kwargs):
 
 
 def observation_failures(strategy):
+    """Return bounded diagnostic failures and cumulative counts."""
     state = _state(strategy)
     if state is None:
         return ObservationFailures(0, 0, ())
@@ -268,6 +284,7 @@ def observation_failures(strategy):
 
 
 def _error_message(error):
+    """Render an exception without letting rendering mask the original failure."""
     try:
         return str(error)
     except BaseException:
@@ -275,9 +292,12 @@ def _error_message(error):
 
 
 def _record_failure(state, subscription, event, error, source="observer"):
+    """Retain one observer failure and warn at most once per subscription."""
     try:
         name = getattr(
-            subscription.spec.observer, "__qualname__", type(subscription.spec.observer).__qualname__
+            subscription.spec.observer,
+            "__qualname__",
+            type(subscription.spec.observer).__qualname__,
         )
     except BaseException:
         name = "observer"
@@ -301,6 +321,7 @@ def _record_failure(state, subscription, event, error, source="observer"):
 
 
 def emit_domain(strategy, name, phase, details=None, *, error=None):
+    """Dispatch an immutable domain snapshot to matching observers."""
     assert_observer_allows_mutation()
     if not isinstance(name, str) or not name.startswith(("lifecycle.", "business.", "intent.")):
         raise ValueError("TL observations are lifecycle/business/intent, never execution authority")
@@ -363,6 +384,7 @@ def emit_domain(strategy, name, phase, details=None, *, error=None):
 
 
 def invoke_callback(strategy, callback_name, *args, **kwargs):
+    """Invoke a callback while reporting its observation phases."""
     assert_observer_allows_mutation()
     callback = getattr(strategy, callback_name)
     state = _state(strategy)
@@ -384,6 +406,7 @@ def invoke_callback(strategy, callback_name, *args, **kwargs):
 
 
 def dispatch_callback(strategy, callback_name, *args, **kwargs):
+    """Dispatch a named strategy callback through the observation boundary."""
     runtime = getattr(strategy, "_runtime", None)
     if runtime is not None:
         return runtime.invoke_business(callback_name, *args, **kwargs)

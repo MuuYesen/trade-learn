@@ -74,8 +74,16 @@ def run_example(bars: pd.DataFrame | None = None) -> MLExampleResult:
     split = int(len(data) * 0.7)
     # Purge the boundary label: its next-bar price belongs to the evaluation set.
     training = data.iloc[: split - 1].dropna(subset=["target"])
-    selector = CausalSelector(target="target", features=candidates, max_features=3)
+    # Select on training data only; unavailable cross-sectional factors are not zero-filled.
+    eligible = [name for name in candidates if training[name].notna().any()]
+    if not eligible:
+        raise ValueError("no training features have observed values")
+    selector = CausalSelector(target="target", features=eligible, max_features=3)
     features = selector.select(training)
+    while features and training.dropna(subset=[*features, "target"]).empty:
+        features.pop()
+    if not features:
+        raise ValueError("no complete training rows for selected features")
     cerebro = Cerebro()
     cerebro.adddata(data.iloc[split:], name="DEMO")
     cerebro.addstrategy(

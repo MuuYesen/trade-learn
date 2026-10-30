@@ -4,6 +4,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -18,6 +20,8 @@ EXAMPLES = (
 )
 EXAMPLE = EXAMPLES / "alpha101_us_tech_lite_backtest.py"
 
+
+pytestmark = pytest.mark.skipif(not EXAMPLE.exists(), reason="internal research source is not part of the public repository")
 
 def _load_example_module():
     sys.path.insert(0, str(EXAMPLES))

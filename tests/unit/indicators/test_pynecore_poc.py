@@ -4,6 +4,10 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("pynecore", reason="PyneCore requires Python 3.11+")
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = ROOT / "scripts" / "check_pynecore_poc.py"
 

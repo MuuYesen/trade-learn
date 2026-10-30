@@ -2,9 +2,9 @@
 
 import importlib
 import importlib.util
-from contextlib import contextmanager
 import sys
 import types
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -40,7 +40,13 @@ def _oracle_imports():
     with pytest.MonkeyPatch.context() as patch:
         if not hasattr(np, "NINF"):
             patch.setattr(np, "NINF", -np.inf, raising=False)
-        for name in ("IPython", "IPython.display", "yfinance", "pandas_datareader", "pandas_datareader.data"):
+        for name in (
+            "IPython",
+            "IPython.display",
+            "yfinance",
+            "pandas_datareader",
+            "pandas_datareader.data",
+        ):
             if name not in sys.modules:
                 module = types.ModuleType(name)
                 if name == "IPython.display":
@@ -85,30 +91,54 @@ def test_risk_metrics_match_vendored_empyrical(empyrical) -> None:
     returns = pd.Series([-0.10, 0.05, -0.03, 0.08, -0.02, 0.04])
 
     assert np.isclose(max_drawdown(returns), empyrical.max_drawdown(returns), rtol=1e-10)
-    assert np.isclose(volatility(returns, periods=252), empyrical.annual_volatility(
-        returns,
-        annualization=252,
-    ), rtol=1e-10)
-    assert np.isclose(sharpe(returns, periods=252), empyrical.sharpe_ratio(
-        returns,
-        annualization=252,
-    ), rtol=1e-10)
-    assert np.isclose(sortino(returns, periods=252), empyrical.sortino_ratio(
-        returns,
-        annualization=252,
-    ), rtol=1e-10)
-    assert np.isclose(downside_risk(returns, periods=252), empyrical.downside_risk(
-        returns,
-        annualization=252,
-    ), rtol=1e-10)
-    assert np.isclose(calmar(returns, periods=252), empyrical.calmar_ratio(
-        returns,
-        annualization=252,
-    ), rtol=1e-10)
-    assert np.isclose(omega(returns, threshold=0.0, periods=252), empyrical.omega_ratio(
-        returns,
-        annualization=252,
-    ), rtol=1e-10)
+    assert np.isclose(
+        volatility(returns, periods=252),
+        empyrical.annual_volatility(
+            returns,
+            annualization=252,
+        ),
+        rtol=1e-10,
+    )
+    assert np.isclose(
+        sharpe(returns, periods=252),
+        empyrical.sharpe_ratio(
+            returns,
+            annualization=252,
+        ),
+        rtol=1e-10,
+    )
+    assert np.isclose(
+        sortino(returns, periods=252),
+        empyrical.sortino_ratio(
+            returns,
+            annualization=252,
+        ),
+        rtol=1e-10,
+    )
+    assert np.isclose(
+        downside_risk(returns, periods=252),
+        empyrical.downside_risk(
+            returns,
+            annualization=252,
+        ),
+        rtol=1e-10,
+    )
+    assert np.isclose(
+        calmar(returns, periods=252),
+        empyrical.calmar_ratio(
+            returns,
+            annualization=252,
+        ),
+        rtol=1e-10,
+    )
+    assert np.isclose(
+        omega(returns, threshold=0.0, periods=252),
+        empyrical.omega_ratio(
+            returns,
+            annualization=252,
+        ),
+        rtol=1e-10,
+    )
     assert np.isclose(tail_ratio(returns), empyrical.tail_ratio(returns), rtol=1e-10)
     assert np.isclose(var(returns), empyrical.value_at_risk(returns), rtol=1e-10)
     assert np.isclose(
@@ -185,9 +215,7 @@ def _load_legacy_alphalens_performance_isolated() -> types.ModuleType:
     )
     try:
         for module_name in ["utils", "performance"]:
-            module_path = (
-                LEGACY_ROOT / "strategy" / "examine" / "alphalens" / f"{module_name}.py"
-            )
+            module_path = LEGACY_ROOT / "strategy" / "examine" / "alphalens" / f"{module_name}.py"
             spec = importlib.util.spec_from_file_location(
                 f"{package_name}.{module_name}",
                 module_path,

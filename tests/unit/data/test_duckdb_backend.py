@@ -113,7 +113,7 @@ def test_duckdb_backend_requires_duckdb_when_connection_not_injected(
 
     monkeypatch.setattr(builtins, "__import__", guarded_import)
 
-    with pytest.raises(ImportError, match="pip install trade-learn\\[all\\]"):
+    with pytest.raises(ImportError, match="pip install trade-learn\\[duckdb\\]"):
         DuckDBBarsBackend("stage11.duckdb")
 
 

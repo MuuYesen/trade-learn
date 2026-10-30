@@ -28,6 +28,7 @@ dependencies = [
     "tqdm",
     "typer",
     "pyyaml",
+    "requests>=2.31",
 ]
 
 [project.urls]
@@ -44,7 +45,7 @@ lab = [
     "ipywidgets",
     "jupyter-ai",
     "pygwalker",
-    "mcp>=1.8.0",
+    "mcp>=1.8.0,<2",
 ]
 mlflow = [
     "mlflow",
@@ -100,7 +101,7 @@ all = [
     "ipywidgets",
     "jupyter-ai",
     "pygwalker",
-    "mcp>=1.8.0",
+    "mcp>=1.8.0,<2",
     "mlflow",
     "Riskfolio-Lib",
     "optuna",
@@ -125,6 +126,12 @@ docs = [
 ]
 
 [dependency-groups]
+ci = [
+    "mcp>=1.8,<2",
+    "openpyxl",
+    "statsmodels",
+    "tomli; python_version < '3.11'",
+]
 oracle = [
     "backtesting>=0.6.5",
     "backtrader",

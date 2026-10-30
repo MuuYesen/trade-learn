@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
 
 from scripts.build_golden import run_expected_job
 from scripts.run_backtrader_oracle import (

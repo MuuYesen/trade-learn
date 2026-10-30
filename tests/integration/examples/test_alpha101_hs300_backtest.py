@@ -10,10 +10,12 @@ import pandas as pd
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-SCRIPT = ROOT.parent / "交易策略" / "backtest" / "tushare_sw_hs300" / "alpha101_hs300_backtest.py"
-STRATEGY = ROOT.parent / "交易策略" / "backtest" / "tushare_sw_hs300" / "hs300_alpha101_strategy.py"
+SCRIPT = ROOT.parent / "交易策略" / "research" / "tushare_sw_hs300" / "alpha101_hs300_backtest.py"
+STRATEGY = ROOT.parent / "交易策略" / "research" / "tushare_sw_hs300" / "hs300_alpha101_strategy.py"
 
 
+
+pytestmark = pytest.mark.skipif(not SCRIPT.exists(), reason="internal research source is not part of the public repository")
 
 @pytest.fixture(autouse=True)
 def isolate_backtest_example_imports():

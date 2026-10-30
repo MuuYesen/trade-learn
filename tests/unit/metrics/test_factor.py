@@ -302,3 +302,30 @@ def _series(rows: list[tuple[str, str, float]]) -> pd.Series:
     values = [row[2] for row in rows]
     index = pd.MultiIndex.from_arrays([dates, symbols], names=["date", "symbol"])
     return pd.Series(values, index=index, dtype="float64")
+
+
+def test_factor_helpers_reject_wrong_input_and_preserve_empty_index() -> None:
+    with pytest.raises(TypeError, match="DataFrame"):
+        factor_metrics._factor_column(pd.Series([1.0]), "alpha")
+    index = pd.MultiIndex.from_arrays([[], []], names=["date", "symbol"])
+    empty = pd.Series([], index=index, dtype=float)
+    quantiles = factor_metrics._rank_quantiles_by_date(empty, 5)
+    assert quantiles.empty
+    assert quantiles.index.names == ["date", "symbol"]
+
+
+def test_event_returns_skips_ambiguous_event_dates(monkeypatch: pytest.MonkeyPatch) -> None:
+    dates = pd.date_range("2024-01-01", periods=3)
+    index = pd.MultiIndex.from_product([dates, ["AAA"]], names=["date", "symbol"])
+    prices = pd.Series([10.0, 11.0, 12.0], index=index)
+    events = pd.MultiIndex.from_tuples([(dates[1], "AAA")], names=index.names)
+    original = pd.DatetimeIndex.get_loc
+
+    def ambiguous(self, key):
+        if isinstance(key, pd.Timestamp) and key == dates[1]:
+            return slice(1, 2)
+        return original(self, key)
+
+    monkeypatch.setattr(pd.DatetimeIndex, "get_loc", ambiguous)
+    result = factor_metrics.event_returns(prices, events, before=0, after=0)
+    assert result.loc[0, "count"] is None or pd.isna(result.loc[0, "count"])

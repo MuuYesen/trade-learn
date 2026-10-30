@@ -35,8 +35,7 @@ class FactorAnalyzer:
             if val is not None and not isinstance(val.index, pd.MultiIndex):
                 # Add a dummy level to trick multi-index validation
                 new_idx = pd.MultiIndex.from_arrays(
-                    [val.index, ["ASSET"] * len(val)],
-                    names=[val.index.name or "date", "symbol"]
+                    [val.index, ["ASSET"] * len(val)], names=[val.index.name or "date", "symbol"]
                 )
                 object.__setattr__(self, attr, val.copy().set_axis(new_idx))
 
@@ -70,9 +69,7 @@ class FactorAnalyzer:
         selected = _clean_periods(clean, periods)
         factor = pd.Series(clean["factor"], index=clean.index, name="factor")
         groups = (
-            pd.Series(clean["group"], index=clean.index, name="group")
-            if "group" in clean
-            else None
+            pd.Series(clean["group"], index=clean.index, name="group") if "group" in clean else None
         )
         factor_quantiles = (
             pd.Series(clean["factor_quantile"], index=clean.index, name="factor_quantile")
@@ -122,7 +119,7 @@ class FactorAnalyzer:
                 "Single-symbol IC requires explicit time-series settings; "
                 "use tradelearn.research.temporal.assessment."
             )
-        
+
         return factor_metrics.ic(
             self.factor,
             self._forward_returns(),
@@ -140,7 +137,7 @@ class FactorAnalyzer:
                 "Single-symbol Rank IC requires explicit time-series settings; "
                 "use tradelearn.research.temporal.assessment."
             )
-            
+
         result = factor_metrics.rank_ic(
             self.factor,
             self._forward_returns(),
@@ -167,9 +164,9 @@ class FactorAnalyzer:
         """Return mean forward returns by factor quantile."""
         if self.factor_quantiles is not None and not group_neutral:
             aligned, quantiles = self._aligned_quantiles()
-            grouped = aligned["returns"].groupby(
-                [aligned.index.get_level_values(0), quantiles]
-            ).mean()
+            grouped = (
+                aligned["returns"].groupby([aligned.index.get_level_values(0), quantiles]).mean()
+            )
             result = grouped.unstack().sort_index(axis=1)
             result.index.name = self.factor.index.names[0]
             result.columns.name = None
@@ -302,7 +299,6 @@ class FactorAnalyzer:
         result.name = "factor_cumulative_returns"
         return result
 
-
     def average_cumulative_return_by_quantile(
         self,
         returns: pd.DataFrame,
@@ -407,9 +403,9 @@ class FactorAnalyzer:
         autocorrelation_values = self.factor_rank_autocorrelation()
         quantile_returns = self.mean_return_by_quantile()
         bottom, top = quantile_returns.columns.min(), quantile_returns.columns.max()
-        mean_returns_spread_values = (
-            quantile_returns[top] - quantile_returns[bottom]
-        ).rename("mean_returns_spread")
+        mean_returns_spread_values = (quantile_returns[top] - quantile_returns[bottom]).rename(
+            "mean_returns_spread"
+        )
         quantile_turnover_values = self.quantile_turnover()
         monotonicity = _monotonicity_from_quantile_returns(quantile_returns)
         aligned = pd.concat(
@@ -437,6 +433,7 @@ class FactorAnalyzer:
             "observations": int(len(aligned)),
             "ic_dates": int(rank_ic_values.count()),
         }
+
     def plot(self):
         """Return a Bokeh grid of factor diagnostic charts."""
         from bokeh.layouts import column as bk_column
@@ -479,7 +476,9 @@ class FactorAnalyzer:
         t = self.quantile_turnover()
         ac = self.factor_rank_autocorrelation()
         if not t.empty or not ac.empty:
-            turnover_series = t.mean(axis=1).rename("turnover") if isinstance(t, pd.DataFrame) else t
+            turnover_series = (
+                t.mean(axis=1).rename("turnover") if isinstance(t, pd.DataFrame) else t
+            )
             items.append(charts.factor_turnover(turnover_series, ac))
         return bk_column(*items, sizing_mode="stretch_width") if items else None
 
@@ -549,9 +548,13 @@ class FactorAnalyzer:
         quantiles = _rank_qcut_quantiles(aligned["factor"], self.quantiles)
         return aligned, quantiles
 
-    def _non_overlapping_returns(self, returns: pd.Series | pd.DataFrame) -> pd.Series | pd.DataFrame:
+    def _non_overlapping_returns(
+        self, returns: pd.Series | pd.DataFrame
+    ) -> pd.Series | pd.DataFrame:
         """Sample forward returns on non-overlapping horizons before compounding."""
-        values = returns.dropna(how="all") if isinstance(returns, pd.DataFrame) else returns.dropna()
+        values = (
+            returns.dropna(how="all") if isinstance(returns, pd.DataFrame) else returns.dropna()
+        )
         if self.return_period == 1 or values.empty:
             return values
         return values.sort_index().iloc[:: self.return_period]
@@ -595,10 +598,7 @@ class MultiPeriodFactorAnalyzer:
     def ic(self, by_group: bool = False) -> pd.Series | pd.DataFrame:
         """Return IC series for every prediction horizon."""
         return _period_metric_frame(
-            {
-                period: analyzer.ic(by_group=by_group)
-                for period, analyzer in self.analyzers.items()
-            }
+            {period: analyzer.ic(by_group=by_group) for period, analyzer in self.analyzers.items()}
         )
 
     def factor_information_coefficient(
@@ -620,10 +620,7 @@ class MultiPeriodFactorAnalyzer:
         """Return mean returns by quantile for one or all prediction horizons."""
         if period is not None:
             return self.analyzers[period].mean_return_by_quantile()
-        return {
-            key: analyzer.mean_return_by_quantile()
-            for key, analyzer in self.analyzers.items()
-        }
+        return {key: analyzer.mean_return_by_quantile() for key, analyzer in self.analyzers.items()}
 
     def plot(self, period: int | None = None):
         """Return factor diagnostic charts for a selected prediction horizon."""
@@ -735,10 +732,7 @@ class MultiFactorAnalyzer:
     def ic(self, by_group: bool = False) -> pd.DataFrame:
         """Return IC series with ``(factor, period)`` columns."""
         result = pd.concat(
-            {
-                factor: analyzer.ic(by_group=by_group)
-                for factor, analyzer in self.analyzers.items()
-            },
+            {factor: analyzer.ic(by_group=by_group) for factor, analyzer in self.analyzers.items()},
             axis=1,
         )
         result.columns.names = ["factor", "period"]
@@ -983,7 +977,7 @@ def _render_factor_html(
     {script}
   </main>
 </body>
-</html>"""
+</html>"""  # noqa: E501 - preserve the HTML/CSS template verbatim
 
 
 def _dict_table(values: dict[str, float], *, class_name: str = "") -> str:
@@ -1001,9 +995,7 @@ def _frame_table(frame: pd.DataFrame) -> str:
     display = frame.reset_index()
     headers = "".join(f"<th>{escape(str(column))}</th>" for column in display.columns)
     rows = "".join(
-        "<tr>"
-        + "".join(f"<td>{escape(_format_html_value(value))}</td>" for value in row)
-        + "</tr>"
+        "<tr>" + "".join(f"<td>{escape(_format_html_value(value))}</td>" for value in row) + "</tr>"
         for row in display.itertuples(index=False, name=None)
     )
     return f"<table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>"
@@ -1011,6 +1003,7 @@ def _frame_table(frame: pd.DataFrame) -> str:
 
 def _format_html_value(value: object) -> str:
     import numpy as np
+
     if pd.isna(value):
         return "—"
     if isinstance(value, (float, np.floating)):

@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[3]
 EXAMPLE = (
     ROOT.parent
@@ -15,6 +17,8 @@ EXAMPLE = (
     / "alpha101_us_tech_experiment.py"
 )
 
+
+pytestmark = pytest.mark.skipif(not EXAMPLE.exists(), reason="internal research source is not part of the public repository")
 
 def _load_example_module():
     spec = importlib.util.spec_from_file_location("alpha101_us_tech_experiment", EXAMPLE)

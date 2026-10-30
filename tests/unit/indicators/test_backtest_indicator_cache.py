@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import importlib.util
+
 import pandas as pd
+import pytest
 
 from tradelearn import ta
 from tradelearn.backtest.indicator_cache import (
@@ -10,6 +13,9 @@ from tradelearn.backtest.indicator_cache import (
 )
 
 
+@pytest.mark.skipif(
+    importlib.util.find_spec("pynecore") is None, reason="PyneCore requires Python 3.11+"
+)
 def test_indicator_cache_precomputes_core_tdx_and_tv_namespaces() -> None:
     frame = pd.DataFrame(
         {

@@ -83,6 +83,8 @@ runtime.stop()
 
 ### 指标计算契约
 
+TA-Lib 的 SMA/EMA 按 `timeperiod` 暖机，RSI/ATR 使用 `timeperiod + 1` 根，MACD 使用较长均线周期加信号周期减一。默认批量路径与增量单输出路径共享此资格判断；TA-Lib 的多输出仍遵守增量单Series接口限制。
+
 真实`engine.Indicator`支持声明lines/params、`next()`逐bar更新、`addminperiod()`、嵌套依赖及在策略init/start/next动态创建。指标在策略next前按依赖构造顺序每相关bar至多更新一次；未暖机调用prenext。晚创建的增量输出对既有可见prefix填NaN，当前事件计算一次，不回放过去的用户副作用。常量标量可作输出/参数；不可追踪的静态历史数组、Series或普通批量LineSeries不能冒充动态数据线，构造时明确拒绝。
 
 `FunctionIndicator`（包括`pta.SMA/EMA`）接受位置或关键字runtime lines并保存函数图。默认用完整已接收因果prefix重算，保留递归EMA/累计函数的初始种子，不能在窗口滚动时静默重置；同一行情版本重复读取共享计算缓存。该通用批量函数路径每次可能O(N)时间、O(N)历史内存，不是固定低延迟保证。只有使用完整图才启用独立输入历史；`prefix_history_limit`默认100000条/相关feed，必须不小于capacity，达到限额会在接收下一bar及执行策略前failclosed，既不截断种子也不部分推进。调用方须停止/持久化与恢复；增量stateful实现适用于长期低延迟需求，Runtime不会自动证明或转换任意函数。

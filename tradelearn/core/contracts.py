@@ -16,13 +16,25 @@ import numpy as np
 import pandas as pd
 
 from tradelearn.core.broker_contracts import (
-    AccountSnapshot,
-    Broker,
-    Fill,
-    OrderAck,
-    OrderRequest,
-    OrderStatusUpdate,
-    PositionSnapshot,
+    AccountSnapshot as AccountSnapshot,
+)
+from tradelearn.core.broker_contracts import (
+    Broker as Broker,
+)
+from tradelearn.core.broker_contracts import (
+    Fill as Fill,
+)
+from tradelearn.core.broker_contracts import (
+    OrderAck as OrderAck,
+)
+from tradelearn.core.broker_contracts import (
+    OrderRequest as OrderRequest,
+)
+from tradelearn.core.broker_contracts import (
+    OrderStatusUpdate as OrderStatusUpdate,
+)
+from tradelearn.core.broker_contracts import (
+    PositionSnapshot as PositionSnapshot,
 )
 from tradelearn.core.errors import ContractError
 
@@ -75,6 +87,9 @@ def validate_bars(bars: pd.DataFrame) -> pd.DataFrame:
     missing = [col for col in REQUIRED_BAR_COLUMNS if col not in bars.columns]
     if missing:
         raise ContractError(f"Bars missing required columns: {missing}")
+
+    if bars.index.has_duplicates:
+        raise ContractError("Bars index contains duplicate timestamp/symbol rows")
 
     timestamps = bars.index.get_level_values(0)
     if not isinstance(timestamps, pd.DatetimeIndex):

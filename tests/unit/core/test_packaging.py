@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 try:
     import tomllib
@@ -43,9 +43,7 @@ def test_optional_backends_are_not_required_for_core_install() -> None:
     )
 
     assert not any(
-        dep.startswith(prefix)
-        for dep in dependencies
-        for prefix in optional_runtime_prefixes
+        dep.startswith(prefix) for dep in dependencies for prefix in optional_runtime_prefixes
     )
     assert any(dep.startswith("opentdx") for dep in extras["tdx"])
     # TradingView transport is maintained in-tree and uses websocket-client.
@@ -72,19 +70,21 @@ def test_default_dependencies_exclude_research_and_export_stacks() -> None:
 
 
 def test_core_facades_import_without_optional_research_and_report_packages() -> None:
-    script = '''
+    script = """
 import importlib.abc
 import sys
 
 class BlockOptional(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.')[0] in {'scipy', 'sklearn', 'pyarrow', 'pandas_ta_classic', 'bokeh', 'xlsxwriter', 'jinja2'}:
+        optional = {'scipy', 'sklearn', 'pyarrow', 'pandas_ta_classic',
+                    'bokeh', 'xlsxwriter', 'jinja2'}
+        if fullname.split('.')[0] in optional:
             raise ImportError(f'optional package imported by core: {fullname}')
 
 sys.meta_path.insert(0, BlockOptional())
 import tradelearn.engine
 import tradelearn.lite
-'''
+"""
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, capture_output=True, text=True, check=False
     )

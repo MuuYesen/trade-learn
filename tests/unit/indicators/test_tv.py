@@ -1,9 +1,11 @@
 """Tests for TradingView-style indicator namespace bootstrap."""
 
 import pandas as pd
-import pynecore.lib.ta as pyne_ta
+import pytest
 
 from tradelearn import ta
+
+pyne_ta = pytest.importorskip("pynecore.lib.ta", reason="PyneCore requires Python 3.11+")
 
 
 def test_tv_sma_rsi_macd_are_batch_callable() -> None:

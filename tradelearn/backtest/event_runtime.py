@@ -59,8 +59,16 @@ def _function_minimum(function, args, kwargs):
     bound = inspect.signature(function._func).bind_partial(*args, **kwargs)
     bound.apply_defaults()
     lookback = max([1] + [int(bound.arguments[k])
-        for k in ("period", "length", "window")
+        for k in ("period", "length", "window", "timeperiod")
         if isinstance(bound.arguments.get(k), int)])
+    name = getattr(function, "name", "")
+    if name == "talib.MACD":
+        fast = int(bound.arguments["fastperiod"])
+        slow = int(bound.arguments["slowperiod"])
+        signal = int(bound.arguments["signalperiod"])
+        lookback = max(fast, slow) + signal - 1
+    elif name in {"talib.RSI", "talib.ATR"}:
+        lookback = int(bound.arguments["timeperiod"]) + 1
     dependency = max([0] + [int(getattr(value, "min_period", 0))
                            for value in (*args, *kwargs.values())])
     return max(1, dependency) + lookback - 1

@@ -4,6 +4,7 @@ Geometric pivot indices describe where a swing happened, not when it became
 known. Entries absent from confirmations are provisional terminal points.
 Run on an already truncated, closed-bar prefix for historical replay.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -126,7 +127,12 @@ class SMCAnalyzer:
             for i in range(j + 1, len(candle_set)):
                 if candle_set["High"][bcslow_index] > candle_set["Low"][i] and brcheck != 1:
                     self.demand_zone_values.append(
-                        (bcslow_index, candle_set["High"][bcslow_index], i - 1, candle_set["Low"][bcslow_index])
+                        (
+                            bcslow_index,
+                            candle_set["High"][bcslow_index],
+                            i - 1,
+                            candle_set["Low"][bcslow_index],
+                        )
                     )
                     brcheck = 1
                     break
@@ -170,7 +176,12 @@ class SMCAnalyzer:
             for i in range(j + 1, len(candle_set)):
                 if candle_set["High"][bcslow_index] > candle_set["Low"][i] and brcheck != 1:
                     self.demand_zone_values.append(
-                        (bcslow_index, candle_set["High"][bcslow_index], i - 1, candle_set["Low"][bcslow_index])
+                        (
+                            bcslow_index,
+                            candle_set["High"][bcslow_index],
+                            i - 1,
+                            candle_set["Low"][bcslow_index],
+                        )
                     )
                     brcheck = 1
                     break
@@ -296,9 +307,15 @@ class SMCAnalyzer:
                         last5_high = np.max(last5_high_candles)
                         last5_high_index = np.where(last5_high_candles == last5_high)[0][0]
                         if last5_high != self.lev[-1][1]:
-                            self.lev.append((len(candle_set) - self.depth + last5_high_index, last5_high))
+                            self.lev.append(
+                                (len(candle_set) - self.depth + last5_high_index, last5_high)
+                            )
                             self.test_array.append(
-                                (len(candle_set) - self.depth + last5_high_index, last5_high, "HIGH")
+                                (
+                                    len(candle_set) - self.depth + last5_high_index,
+                                    last5_high,
+                                    "HIGH",
+                                )
                             )
                         runs = "L"
                     else:
@@ -306,7 +323,9 @@ class SMCAnalyzer:
                         last5_low = np.min(last5_low_candles)
                         last5_low_index = np.where(last5_low_candles == last5_low)[0][0]
                         if last5_low != self.lev[-1][1]:
-                            self.lev.append((len(candle_set) - self.depth + last5_low_index, last5_low))
+                            self.lev.append(
+                                (len(candle_set) - self.depth + last5_low_index, last5_low)
+                            )
                             self.test_array.append(
                                 (len(candle_set) - self.depth + last5_low_index, last5_low, "LOW")
                             )

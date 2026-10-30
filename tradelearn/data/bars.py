@@ -12,7 +12,9 @@ from tradelearn.core.contracts import validate_bars
 from tradelearn.core.errors import ContractError
 
 Market = Literal["CN", "US", "HK", "CRYPTO"]
-Frequency = Literal["1s", "5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
+Frequency = Literal[
+    "1s", "5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"
+]
 Adjustment = Literal["pre", "post", "none"]
 
 REQUIRED_COLUMNS = ("open", "high", "low", "close", "volume")
@@ -36,7 +38,7 @@ def normalize_bars(
         DataFrame with timestamp, symbol, OHLCV columns.
     market : {"CN", "US", "HK", "CRYPTO"}
         Market identifier.
-    freq : {"1s", "5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"}
+    freq : {"1s", "5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"}
         Bar frequency.
     engine : str
         Data provider identifier.
@@ -95,10 +97,7 @@ def bars_fingerprint(bars: pd.DataFrame) -> str:
     validate_bars(bars)
     payload = {
         "attrs": dict(sorted(bars.attrs.items())),
-        "index": [
-            [str(timestamp), symbol]
-            for timestamp, symbol in bars.index.to_flat_index()
-        ],
+        "index": [[str(timestamp), symbol] for timestamp, symbol in bars.index.to_flat_index()],
         "columns": list(bars.columns),
         "values": bars.astype("float64", errors="ignore").to_json(
             orient="split",

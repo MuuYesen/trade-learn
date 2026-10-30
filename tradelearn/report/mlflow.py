@@ -51,6 +51,7 @@ def build_run_metrics(stats: Any) -> dict[str, float]:
 
 
 def _broker_params(stats: Any, strategy: Any) -> dict[str, Any]:
+    """Extract serializable broker configuration for experiment tracking."""
     summary = _stats_summary(stats)
     config = _stats_field(stats, "config", {}) or {}
     broker_config = config.get("broker", {}) if isinstance(config, dict) else {}
@@ -87,6 +88,7 @@ def _broker_params(stats: Any, strategy: Any) -> dict[str, Any]:
 
 
 def _strategy_params(values: dict[str, Any]) -> dict[str, Any]:
+    """Flatten non-research strategy parameters for experiment tracking."""
     payload: dict[str, Any] = {}
     for key, value in values.items():
         if key in _RESEARCH_PARAM_KEYS:
@@ -96,6 +98,7 @@ def _strategy_params(values: dict[str, Any]) -> dict[str, Any]:
 
 
 def _research_params(strategy: Any) -> dict[str, Any]:
+    """Extract research metadata from a strategy result."""
     result = _first_attr(strategy, ("research_result", "research_result_"))
     if result is None:
         return {}
@@ -122,6 +125,7 @@ def _research_params(strategy: Any) -> dict[str, Any]:
 
 
 def _normalize_research_params(values: dict[str, Any]) -> dict[str, Any]:
+    """Normalize research parameter names and values for logging."""
     normalized: dict[str, Any] = {}
     for key, value in values.items():
         key_text = str(key)
@@ -146,6 +150,7 @@ def _normalize_research_params(values: dict[str, Any]) -> dict[str, Any]:
 
 
 def _compact_artifact_params(values: dict[str, Any]) -> dict[str, Any]:
+    """Summarize research artifact metadata for parameter logging."""
     compact: dict[str, Any] = {}
     for key, value in values.items():
         if isinstance(value, dict):
@@ -155,6 +160,7 @@ def _compact_artifact_params(values: dict[str, Any]) -> dict[str, Any]:
 
 
 def _flatten_params(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
+    """Flatten nested parameter mappings into scalar entries."""
     payload: dict[str, Any] = {}
     for key, value in values.items():
         name = f"{prefix}.{_mlflow_param_key(key)}"
@@ -168,12 +174,14 @@ def _flatten_params(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
 
 
 def _mlflow_param_key(value: Any) -> str:
+    """Normalize a parameter name for the MLflow key format."""
     text = str(value).replace("%", "pct")
     text = _MLFLOW_PARAM_KEY_RE.sub("_", text).strip("._ ")
     return text or "value"
 
 
 def _json_scalar(value: Any) -> Any:
+    """Convert a parameter value into a JSON-compatible scalar."""
     if hasattr(value, "item"):
         return value.item()
     if isinstance(value, tuple):
@@ -182,18 +190,21 @@ def _json_scalar(value: Any) -> Any:
 
 
 def _stats_summary(stats: Any) -> dict[str, Any]:
+    """Extract the summary mapping from a statistics result."""
     if isinstance(stats, dict):
         return dict(stats)
     return dict(_stats_field(stats, "summary", {}) or {})
 
 
 def _stats_field(stats: Any, name: str, default: Any) -> Any:
+    """Read a statistics field with a supplied default."""
     if isinstance(stats, dict):
         return stats.get(name, default)
     return getattr(stats, name, default)
 
 
 def _first_attr(obj: Any, names: tuple[str, ...]) -> Any:
+    """Return the first present attribute from the candidate names."""
     if obj is None:
         return None
     for name in names:
@@ -203,6 +214,7 @@ def _first_attr(obj: Any, names: tuple[str, ...]) -> Any:
 
 
 def _first_not_none(*values: Any) -> Any:
+    """Return the first non-None value from the inputs."""
     for value in values:
         if value is not None:
             return value
@@ -210,6 +222,7 @@ def _first_not_none(*values: Any) -> Any:
 
 
 def _call_or_none(obj: Any, name: str) -> Any:
+    """Call a named callable attribute, or return None when it is not callable."""
     func = getattr(obj, name, None)
     if callable(func):
         return func()

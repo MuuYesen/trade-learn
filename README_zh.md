@@ -121,7 +121,7 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 | `[all]` | Lab、MLflow、指标后端、ML、DuckDB 等完整研究环境 |
 
 > **💡 安装建议**：
-> 默认安装只包含 NumPy、Pandas、tqdm、Typer 和 PyYAML 等核心依赖。因子分析、Parquet、指标后端和报表需要对应 extra。若需开启包含 JupyterLab 与 MLflow 的全栈投研体验，请指定 `[all]` 扩展进行安装：
+> 默认安装只包含 NumPy、Pandas、tqdm、Typer、PyYAML 和 Requests 等核心依赖。因子分析、Parquet、指标后端和报表需要对应 extra。若需开启包含 JupyterLab 与 MLflow 的全栈投研体验，请指定 `[all]` 扩展进行安装：
 > ```bash
 > pip install "trade-learn[all]"
 > ```

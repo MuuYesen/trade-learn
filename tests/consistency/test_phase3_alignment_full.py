@@ -39,6 +39,7 @@ class AlignmentStrategy(bt.Strategy):
         self.prenext_count = 0
         self.next_count = 0
         self.notified_cash = []
+        self.first_macd = None
 
     def notify_cashvalue(self, cash, value):
         self.notified_cash.append(value)
@@ -67,6 +68,7 @@ class AlignmentStrategy(bt.Strategy):
 
         # Debug prints
         if self.next_count == 1:
+            self.first_macd = (macd_line, signal_line)
             print(f"First next() at bar {len(self.data)}")
             print(f"MACD[0]: {macd_line:.4f}, Signal[0]: {signal_line:.4f}")
 
@@ -95,8 +97,10 @@ def test_full_alignment():
     print(f"Prenext count: {strat.prenext_count}")
     print(f"Next count: {strat.next_count}")
     
-    assert strat.prenext_count == 0
-    assert strat.next_count == 100, f"Expected 100 next calls, got {strat.next_count}"
+    # Independent Backtrader/TA-Lib MACD(12, 26, 9) first becomes valid at bar 34.
+    assert strat.prenext_count == 33
+    assert strat.next_count == 67
+    assert all(np.isfinite(value) for value in strat.first_macd)
     assert len(strat.notified_cash) == 100, "notify_cashvalue should be called every bar"
     
     # Analyzer Tests

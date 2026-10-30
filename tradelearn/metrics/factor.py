@@ -105,10 +105,7 @@ def rank_ic(
     if by_group:
         group_keys = [aligned.index.get_level_values(0), aligned["group"]]
         result = (
-            aligned[["factor", "returns"]]
-            .groupby(group_keys)
-            .apply(_spearman)
-            .unstack(level=-1)
+            aligned[["factor", "returns"]].groupby(group_keys).apply(_spearman).unstack(level=-1)
         )
         result.index.name = _date_level_name(factor)
         result.columns.name = None
@@ -355,10 +352,13 @@ def quantile_returns(
     dates = aligned.index.get_level_values(0).unique().sort_values()
     if nan_policy == "propagate":
         missing_dates = aligned["factor"].isna().groupby(level=0).any()
-        aligned = aligned.loc[~aligned.index.get_level_values(0).isin(missing_dates[missing_dates].index)]
+        aligned = aligned.loc[
+            ~aligned.index.get_level_values(0).isin(missing_dates[missing_dates].index)
+        ]
     if aligned.empty:
-        return pd.DataFrame(np.nan, index=dates.rename(_date_level_name(factor)),
-                            columns=range(1, quantiles + 1))
+        return pd.DataFrame(
+            np.nan, index=dates.rename(_date_level_name(factor)), columns=range(1, quantiles + 1)
+        )
     if group_neutral:
         if "group" not in aligned.columns:
             raise ValueError("group_neutral=True requires groupby")
@@ -367,10 +367,10 @@ def quantile_returns(
             [aligned.index.get_level_values(0), "group"]
         )["returns"].transform(lambda values: values.mean(skipna=False))
 
-    assigned = aligned.assign(
-        quantile=_rank_quantiles_by_date(aligned["factor"], quantiles)
+    assigned = aligned.assign(quantile=_rank_quantiles_by_date(aligned["factor"], quantiles))
+    grouped = assigned.groupby([assigned.index.get_level_values(0), "quantile"])["returns"].agg(
+        lambda values: values.mean(skipna=False)
     )
-    grouped = assigned.groupby([assigned.index.get_level_values(0), "quantile"])["returns"].agg(lambda values: values.mean(skipna=False))
     result = grouped.unstack("quantile").sort_index(axis=1).reindex(dates)
     result.index.name = _date_level_name(factor)
     result.columns.name = None
@@ -492,9 +492,7 @@ def quantile_turnover(
     shifted = name_sets.shift(periods=period)
     new_names = name_sets.combine(
         shifted,
-        lambda current, previous: np.nan
-        if not isinstance(previous, set)
-        else current - previous,
+        lambda current, previous: np.nan if not isinstance(previous, set) else current - previous,
     ).dropna()
 
     result = new_names.apply(len) / name_sets.loc[new_names.index].apply(len)
@@ -617,10 +615,10 @@ def _price_series(prices: pd.Series | pd.DataFrame) -> pd.Series:
 
 def _canonical_price_index(prices: pd.Series) -> pd.Series:
     """Return prices with provider Bars index names aligned to factor metrics."""
-    if (
-        isinstance(prices.index, pd.MultiIndex)
-        and prices.index.names[:2] == ["timestamp", "symbol"]
-    ):
+    if isinstance(prices.index, pd.MultiIndex) and prices.index.names[:2] == [
+        "timestamp",
+        "symbol",
+    ]:
         return prices.copy().set_axis(prices.index.set_names(["date", "symbol"]))
     return prices
 
@@ -702,13 +700,17 @@ def _date_correlation(frame: pd.DataFrame) -> pd.Series:
     """Correlate all date groups with grouped reductions instead of Python callbacks."""
     grouped = frame.groupby(level=0)
     centered = frame - grouped.transform("mean")
-    products = pd.DataFrame(
-        {
-            "factor_sq": centered.iloc[:, 0].pow(2),
-            "returns_sq": centered.iloc[:, 1].pow(2),
-            "cross": centered.iloc[:, 0] * centered.iloc[:, 1],
-        }
-    ).groupby(level=0).sum()
+    products = (
+        pd.DataFrame(
+            {
+                "factor_sq": centered.iloc[:, 0].pow(2),
+                "returns_sq": centered.iloc[:, 1].pow(2),
+                "cross": centered.iloc[:, 0] * centered.iloc[:, 1],
+            }
+        )
+        .groupby(level=0)
+        .sum()
+    )
     denominator = np.sqrt(products["factor_sq"] * products["returns_sq"])
     result = products["cross"] / denominator
     invalid = frame.isna().any(axis=1).groupby(level=0).any()
@@ -725,8 +727,6 @@ def _rank_quantiles_by_date(factor: pd.Series, quantiles: int) -> pd.Series:
     labels = np.empty(len(factor), dtype="int64")
     for size in np.unique(sizes):
         mask = sizes == size
-        mapping = pd.qcut(
-            np.arange(1, size + 1), q=min(quantiles, size), labels=False
-        )
+        mapping = pd.qcut(np.arange(1, size + 1), q=min(quantiles, size), labels=False)
         labels[mask] = mapping[ranks[mask] - 1] + 1
     return pd.Series(labels, index=factor.index).sort_index()

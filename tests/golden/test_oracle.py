@@ -88,9 +88,7 @@ def test_current_provider_source_uses_opentdx_not_retired_names() -> None:
 
 
 def test_build_golden_default_failure_writes_no_expected_json(tmp_path: Path) -> None:
-    existing_dataset = (
-        ROOT / "tests" / "golden" / "datasets" / "tv" / "EXISTING_TEST.parquet"
-    )
+    existing_dataset = ROOT / "tests" / "golden" / "datasets" / "tv" / "EXISTING_TEST.parquet"
     existing_dataset.parent.mkdir(parents=True, exist_ok=True)
     existing_dataset.write_bytes(b"existing")
     try:
@@ -150,9 +148,7 @@ def test_build_golden_datasets_only_uses_provider_stubs(monkeypatch, tmp_path: P
     monkeypatch.setattr(build_golden, "load_reference_query", fake_load_reference_query)
     monkeypatch.setattr(build_golden, "provider_statuses", lambda: {"tdx": True, "tv": True})
 
-    result = build_golden.main(
-        ["--version", "1.x", "--out", str(tmp_path), "--datasets-only"]
-    )
+    result = build_golden.main(["--version", "1.x", "--out", str(tmp_path), "--datasets-only"])
 
     assert result == 2
     assert calls == [True]
@@ -199,9 +195,7 @@ def test_build_golden_datasets_only_attempts_every_dataset(
     monkeypatch.setattr(build_golden, "load_reference_query", lambda **_: query)
     monkeypatch.setattr(build_golden, "provider_statuses", lambda: {"tdx": True, "tv": True})
 
-    result = build_golden.main(
-        ["--version", "1.x", "--out", str(tmp_path), "--datasets-only"]
-    )
+    result = build_golden.main(["--version", "1.x", "--out", str(tmp_path), "--datasets-only"])
 
     captured = capsys.readouterr()
     assert result == 2
@@ -273,9 +267,7 @@ def test_build_golden_datasets_only_can_generate_tv_subset_without_tdx(
     assert query.history_ohlc.call_args.kwargs["engine"] == "tv"
     assert "dataset=tv:NASDAQ:GOOG status=ok" in captured.out
     assert "datasets=1/1" in captured.out
-    assert (
-        datasets_root / "tv" / "GOOG_2020-01-01_2020-01-02_1d.parquet"
-    ).exists()
+    assert (datasets_root / "tv" / "GOOG_2020-01-01_2020-01-02_1d.parquet").exists()
 
 
 def test_build_golden_expected_can_generate_tv_subset_from_strategy_adapter(
@@ -411,9 +403,7 @@ def test_build_golden_datasets_only_reports_unavailable_opentdx(
 ) -> None:
     monkeypatch.setattr(build_golden, "provider_statuses", lambda: {"tdx": False, "tv": True})
 
-    result = build_golden.main(
-        ["--version", "1.x", "--out", str(tmp_path), "--datasets-only"]
-    )
+    result = build_golden.main(["--version", "1.x", "--out", str(tmp_path), "--datasets-only"])
 
     assert result == 2
     assert "dataset provider unavailable: tdx:opentdx.tdxClient" in capsys.readouterr().err
@@ -422,6 +412,7 @@ def test_build_golden_datasets_only_reports_unavailable_opentdx(
 def test_fetch_dataset_reports_opentdx_bridge_error(monkeypatch) -> None:
     """TDX oracle failures preserve the underlying opentdx diagnostics."""
     query = Mock()
+
     def fail_with_recorded_bridge_error(**_: object) -> None:
         build_golden._LAST_REFERENCE_TDX_ERROR = (
             "opentdx connection not established for 1.2.3.4:7709"
@@ -445,13 +436,23 @@ def test_fetch_dataset_reports_opentdx_bridge_error(monkeypatch) -> None:
 
 
 def test_backtrader_expected_preserves_manifest_engine(tmp_path: Path) -> None:
-    dataset = {"symbol": "000001", "engine": "tdx", "start": "2020-01-01", "end": "2020-01-04", "freq": "1d"}
+    dataset = {
+        "symbol": "000001",
+        "engine": "tdx",
+        "start": "2020-01-01",
+        "end": "2020-01-04",
+        "freq": "1d",
+    }
     path = build_golden.dataset_path(dataset, tmp_path)
     path.parent.mkdir(parents=True)
     pd.DataFrame(
-        {"open": [10.0, 11.0, 12.0, 13.0], "high": [11.0, 12.0, 13.0, 14.0],
-         "low": [9.0, 10.0, 11.0, 12.0], "close": [10.5, 11.5, 12.5, 13.5],
-         "volume": [1000.0] * 4},
+        {
+            "open": [10.0, 11.0, 12.0, 13.0],
+            "high": [11.0, 12.0, 13.0, 14.0],
+            "low": [9.0, 10.0, 11.0, 12.0],
+            "close": [10.5, 11.5, 12.5, 13.5],
+            "volume": [1000.0] * 4,
+        },
         index=pd.date_range("2020-01-01", periods=4),
     ).to_parquet(path)
     result = build_golden.run_backtrader_expected_job("sma_cross", dataset, tmp_path)

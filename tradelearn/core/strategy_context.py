@@ -6,6 +6,7 @@ from typing import Any
 
 # Centralized context to avoid import-time shadowing
 class _GlobalContext(local):
+    """Hold the current strategy and feed bindings for engine construction."""
     def __init__(self):
         self.current_data = None
         self.current_datas = []
@@ -15,12 +16,15 @@ _G = _GlobalContext()
 _MISSING = object()
 
 def set_current_data(data: Any) -> None:
+    """Bind the current primary data feed."""
     _G.current_data = data
 
 def set_current_datas(datas: list[Any]) -> None:
+    """Bind the current ordered data feeds."""
     _G.current_datas = datas
 
 def set_current_strategy(strategy: Any) -> None:
+    """Bind the current strategy instance."""
     _G.current_strategy = strategy
 
 

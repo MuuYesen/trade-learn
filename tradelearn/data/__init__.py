@@ -3,12 +3,12 @@
 from tradelearn.data.cache import BarsCache, CacheEntry, CacheExpiredError, CacheMissError
 from tradelearn.data.duckdb_backend import DuckDBBarsBackend
 from tradelearn.data.explorer import DataExplorer
-from tradelearn.data.tushare import TushareProvider
 from tradelearn.data.providers import (
     DataProvider,
     TdxProvider,
     TradingViewProvider,
 )
+from tradelearn.data.tushare import TushareProvider
 
 __all__ = [
     "BarsCache",

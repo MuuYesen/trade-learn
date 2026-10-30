@@ -3,6 +3,7 @@
 TradingView's chart protocol is unofficial. Anonymous access has the same
 symbol/history entitlement limits as TradingView's public chart.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -14,10 +15,9 @@ import threading
 import time
 import uuid
 from urllib.parse import urlencode
-from urllib.request import Request, HTTPHandler, HTTPSHandler, build_opener
+from urllib.request import HTTPHandler, HTTPSHandler, Request, build_opener
 
 import pandas as pd
-
 
 # A timed-out OS DNS lookup cannot be cancelled by Python. Bound these daemon
 # workers globally; abandoned requests retain their slot until cleanup finishes.
@@ -39,6 +39,7 @@ class _TrackedHTTPMixin:
             conn = http_class(*args, **options)
             self._state["connection"] = conn
             return conn
+
         return super().do_open(connection, request, **kwargs)
 
 
@@ -51,10 +52,19 @@ class _TrackedHTTPSHandler(_TrackedHTTPMixin, HTTPSHandler):
 
 
 RESOLUTIONS = {
-    "in_1_minute": "1", "in_3_minute": "3", "in_5_minute": "5",
-    "in_15_minute": "15", "in_30_minute": "30", "in_45_minute": "45",
-    "in_1_hour": "60", "in_2_hour": "120", "in_3_hour": "180",
-    "in_4_hour": "240", "in_daily": "1D", "in_weekly": "1W", "in_monthly": "1M",
+    "in_1_minute": "1",
+    "in_3_minute": "3",
+    "in_5_minute": "5",
+    "in_15_minute": "15",
+    "in_30_minute": "30",
+    "in_45_minute": "45",
+    "in_1_hour": "60",
+    "in_2_hour": "120",
+    "in_3_hour": "180",
+    "in_4_hour": "240",
+    "in_daily": "1D",
+    "in_weekly": "1W",
+    "in_monthly": "1M",
 }
 
 
@@ -90,7 +100,8 @@ class TradingViewTransport:
     def _open_http(request, timeout, state):
         # Preserve urllib's proxy, TLS verification, and redirect handling.
         return build_opener(_TrackedHTTPHandler(state), _TrackedHTTPSHandler(state)).open(
-            request, timeout=timeout,
+            request,
+            timeout=timeout,
         )
 
     @staticmethod
@@ -109,16 +120,21 @@ class TradingViewTransport:
                     pass
 
     def _http_json(self, url, *, deadline, data=None):
-        request = Request(url, data=data, headers={
-            "Origin": "https://www.tradingview.com",
-            "Referer": "https://www.tradingview.com/",
-            "User-Agent": "Mozilla/5.0",
-        })
+        request = Request(
+            url,
+            data=data,
+            headers={
+                "Origin": "https://www.tradingview.com",
+                "Referer": "https://www.tradingview.com/",
+                "User-Agent": "Mozilla/5.0",
+            },
+        )
         slots = _HTTP_WORKERS
         if not slots.acquire(timeout=self._remaining(deadline)):
             raise TimeoutError("TradingView request timed out")
         state = {"cancelled": threading.Event()}
         finished = threading.Event()
+
         def run():
             response = None
             try:
@@ -138,6 +154,7 @@ class TradingViewTransport:
                             pass
                 slots.release()
                 finished.set()
+
         worker = threading.Thread(target=run, name="tradelearn-tv-http", daemon=True)
         try:
             worker.start()
@@ -169,8 +186,11 @@ class TradingViewTransport:
             if key in _TOKEN_CACHE:
                 return _TOKEN_CACHE[key][0]
             result = self._http_json(
-                "https://www.tradingview.com/accounts/signin/", deadline=deadline,
-                data=urlencode({"username": self.username, "password": self.password, "remember": "on"}).encode(),
+                "https://www.tradingview.com/accounts/signin/",
+                deadline=deadline,
+                data=urlencode(
+                    {"username": self.username, "password": self.password, "remember": "on"}
+                ).encode(),
             )
             token = result.get("user", {}).get("auth_token")
             if not token:
@@ -183,36 +203,62 @@ class TradingViewTransport:
         finally:
             _TOKEN_LOCK.release()
 
-    def _request(self, symbol, *, resolution=None, count=300, to=None, forward=False, adjustment="splits"):
+    def _request(
+        self, symbol, *, resolution=None, count=300, to=None, forward=False, adjustment="splits"
+    ):
         adjustment = normalize_adjustment(adjustment)
         if not isinstance(symbol, str) or not symbol.strip() or len(symbol) > 200:
             raise ValueError("TradingView symbol is required")
         deadline = time.monotonic() + self.timeout
         ws = None
         try:
-            from websocket import create_connection, WebSocketTimeoutException
+            from websocket import WebSocketTimeoutException, create_connection
         except ImportError:
             raise ConnectionError("TradingView websocket-client dependency is required") from None
         try:
             token = self._token(deadline)
             ws = (self._connection_factory or create_connection)(
                 "wss://data.tradingview.com/socket.io/websocket",
-                origin="https://www.tradingview.com", timeout=self._remaining(deadline),
+                origin="https://www.tradingview.com",
+                timeout=self._remaining(deadline),
             )
             session = "cs_" + uuid.uuid4().hex[:12]
+
             def send(method, params):
                 ws.settimeout(self._remaining(deadline))
-                ws.send(_frame(json.dumps({"m": method, "p": params}, separators=(",", ":"), ensure_ascii=True)))
+                ws.send(
+                    _frame(
+                        json.dumps(
+                            {"m": method, "p": params}, separators=(",", ":"), ensure_ascii=True
+                        )
+                    )
+                )
+
             send("set_auth_token", [token])
             send("chart_create_session", [session, ""])
-            send("resolve_symbol", [session, "symbol_1", "=" + json.dumps({
-                "symbol": symbol, "adjustment": adjustment, "session": "regular",
-            }, separators=(",", ":"))])
+            send(
+                "resolve_symbol",
+                [
+                    session,
+                    "symbol_1",
+                    "="
+                    + json.dumps(
+                        {
+                            "symbol": symbol,
+                            "adjustment": adjustment,
+                            "session": "regular",
+                        },
+                        separators=(",", ":"),
+                    ),
+                ],
+            )
             if resolution is not None:
                 # Negative bar_count includes an exact anchor; advance one second
                 # so replay always starts with the subsequent candle.
                 anchor = to + 1 if forward else to
-                window = count if to is None else ["bar_count", anchor, -count if forward else count]
+                window = (
+                    count if to is None else ["bar_count", anchor, -count if forward else count]
+                )
                 send("create_series", [session, "s1", "s1", "symbol_1", resolution, window])
                 send("switch_timezone", [session, "Etc/UTC"])
             buffer, bars = "", {}
@@ -227,14 +273,16 @@ class TradingViewTransport:
                 while buffer:
                     match = re.match(r"~m~(\d+)~m~", buffer)
                     if match is None:
-                        if len(buffer) < 24 and ("~m~".startswith(buffer) or buffer.startswith("~m~")):
+                        if len(buffer) < 24 and (
+                            "~m~".startswith(buffer) or buffer.startswith("~m~")
+                        ):
                             break
                         raise ConnectionError("TradingView malformed response")
                     length = int(match[1])
                     end = match.end() + length
                     if len(buffer) < end:
                         break
-                    payload, buffer = buffer[match.end():end], buffer[end:]
+                    payload, buffer = buffer[match.end() : end], buffer[end:]
                     if payload.startswith("~h~"):
                         ws.settimeout(self._remaining(deadline))
                         ws.send(_frame(payload))
@@ -243,24 +291,35 @@ class TradingViewTransport:
                     if not isinstance(packet, dict):
                         continue  # Initial socket session identifier.
                     method, params = packet.get("m"), packet.get("p", [])
-                    if method in {"symbol_error", "series_error", "critical_error", "protocol_error", "error"}:
+                    if method in {
+                        "symbol_error",
+                        "series_error",
+                        "critical_error",
+                        "protocol_error",
+                        "error",
+                    }:
                         raise ConnectionError("TradingView request failed")
                     if method == "symbol_resolved" and resolution is None:
                         return {"series_id": params[1], **params[2]}
                     if method in {"timescale_update", "du"}:
                         for item in params[1].get("s1", {}).get("s", []):
                             values = item.get("v", [])
-                            if len(values) < 5 or any(v is None or not math.isfinite(float(v)) for v in values[:5]):
+                            if len(values) < 5 or any(
+                                v is None or not math.isfinite(float(v)) for v in values[:5]
+                            ):
                                 continue
                             timestamp = int(values[0])
                             volume = values[5] if len(values) > 5 else None
                             volume = float(volume) if volume is not None else None
                             if volume is not None and (not math.isfinite(volume) or volume < 0):
                                 volume = None
-                            bars[timestamp] = dict(zip(
-                                ("time", "open", "high", "low", "close", "volume"),
-                                (timestamp, *map(float, values[1:5]), volume),
-                            ))
+                            bars[timestamp] = dict(
+                                zip(
+                                    ("time", "open", "high", "low", "close", "volume"),
+                                    (timestamp, *map(float, values[1:5]), volume),
+                                    strict=False,
+                                )
+                            )
                     if method == "series_completed":
                         return [bars[key] for key in sorted(bars)]
         except (TimeoutError, WebSocketTimeoutException):
@@ -274,7 +333,9 @@ class TradingViewTransport:
                 except Exception:
                     pass
 
-    def history_window(self, symbol, resolution, count=300, to=None, forward=False, *, adjustment="splits"):
+    def history_window(
+        self, symbol, resolution, count=300, to=None, forward=False, *, adjustment="splits"
+    ):
         """Return ascending epoch-second OHLCV rows; forward excludes its anchor."""
         if isinstance(count, bool) or int(count) != count or not 1 <= count <= 5000:
             raise ValueError("TradingView count must be an integer from 1 to 5000")
@@ -287,9 +348,20 @@ class TradingViewTransport:
         resolution = str(resolution)
         if not re.fullmatch(r"(?:[1-9]\d{0,3}|[1-9]\d{0,2}[DWM]|[DWM])", resolution):
             raise ValueError("Unsupported TradingView resolution")
-        rows = self._request(symbol, resolution=resolution, count=int(count), to=to, forward=forward, adjustment=adjustment)
+        rows = self._request(
+            symbol,
+            resolution=resolution,
+            count=int(count),
+            to=to,
+            forward=forward,
+            adjustment=adjustment,
+        )
         if to is not None:
-            rows = [row for row in rows if row["time"] > to] if forward else [row for row in rows if row["time"] <= to]
+            rows = (
+                [row for row in rows if row["time"] > to]
+                if forward
+                else [row for row in rows if row["time"] <= to]
+            )
         return rows[:count] if forward else rows[-count:]
 
     def resolve_symbol(self, symbol, *, adjustment="splits"):
@@ -302,31 +374,46 @@ class TradingViewTransport:
             raise ValueError("TradingView search query is required")
         try:
             rows = self._http_json(
-                "https://symbol-search.tradingview.com/symbol_search?" + urlencode({"text": query, "type": ""}),
+                "https://symbol-search.tradingview.com/symbol_search?"
+                + urlencode({"text": query, "type": ""}),
                 deadline=time.monotonic() + self.timeout,
             )
             results = []
             for row in rows:
                 # exchange is a display label (e.g. ICE); prefix/source_id is
                 # the resolvable namespace (FX_IDC). Keep the two separate.
-                source = (row.get("prefix") or row.get("source_id")
-                          or (row.get("source2") or {}).get("id")
-                          or row["exchange"].split(" ")[0])
-                results.append({
-                    "id": source + ":" + row["symbol"],
-                    "exchange": source, "fullExchange": row["exchange"],
-                    "symbol": row["symbol"], "description": row.get("description", ""), "type": row.get("type", ""),
-                })
+                source = (
+                    row.get("prefix")
+                    or row.get("source_id")
+                    or (row.get("source2") or {}).get("id")
+                    or row["exchange"].split(" ")[0]
+                )
+                results.append(
+                    {
+                        "id": source + ":" + row["symbol"],
+                        "exchange": source,
+                        "fullExchange": row["exchange"],
+                        "symbol": row["symbol"],
+                        "description": row.get("description", ""),
+                        "type": row.get("type", ""),
+                    }
+                )
             return results
         except TimeoutError:
             raise TimeoutError("TradingView search timed out") from None
         except Exception:
             raise ConnectionError("TradingView search failed") from None
 
-    def get_hist(self, symbol, exchange, interval="1D", n_bars=5000, *, to=None, adjustment="splits"):
+    def get_hist(
+        self, symbol, exchange, interval="1D", n_bars=5000, *, to=None, adjustment="splits"
+    ):
         """tvDatafeed-compatible DataFrame, including a real server-side cutoff."""
-        resolution = RESOLUTIONS.get(getattr(interval, "name", interval), getattr(interval, "value", interval))
-        rows = self.history_window(f"{exchange}:{symbol}", resolution, count=n_bars, to=to, adjustment=adjustment)
+        resolution = RESOLUTIONS.get(
+            getattr(interval, "name", interval), getattr(interval, "value", interval)
+        )
+        rows = self.history_window(
+            f"{exchange}:{symbol}", resolution, count=n_bars, to=to, adjustment=adjustment
+        )
         frame = pd.DataFrame(rows, columns=["time", "open", "high", "low", "close", "volume"])
         frame["datetime"] = pd.to_datetime(frame.pop("time"), unit="s", utc=True)
         return frame.set_index("datetime")

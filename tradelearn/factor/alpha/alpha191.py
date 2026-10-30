@@ -1897,7 +1897,7 @@ def _sequence(size: int) -> np.ndarray:
 
 def _regbeta(frame: pd.DataFrame, x_values: np.ndarray) -> pd.DataFrame:
     """Return rolling linear-regression slope against ``x_values``."""
-    window = len(x_values)
+    _ = len(x_values)
     values = frame.to_numpy(dtype=float, copy=False)
     slopes = _rolling_regression_slope_2d(values, np.asarray(x_values, dtype=float))
     return pd.DataFrame(slopes, index=frame.index, columns=frame.columns)

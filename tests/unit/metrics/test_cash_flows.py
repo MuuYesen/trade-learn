@@ -1,8 +1,10 @@
-from datetime import datetime, timezone
-from pathlib import Path
 import subprocess
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
 import pytest
+
 from tradelearn import metrics
 
 
@@ -74,3 +76,29 @@ def test_modified_dietz_rejects_nonfinite_invested_capital():
             1.5e308, 1.5e308, events=[(event, 1e308)], start=start, end=end,
             method='modified_dietz', allow_insolvency=True
         )
+
+
+def test_cash_flow_rejects_incomplete_and_inconsistent_inputs():
+    start = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    end = datetime(2026, 9, 2, tzinfo=timezone.utc)
+    midday = datetime(2026, 9, 1, 12, tzinfo=timezone.utc)
+    cases = [
+        ({"begin": True, "finish": 100, "net_flow": 0}, "boolean is not an amount"),
+        ({"begin": 100, "finish": 100, "net_flow": 0, "allow_insolvency": 1}, "boolean"),
+        ({"begin": 100, "finish": 100, "net_flow": 0, "method": "unknown"}, "unsupported"),
+        ({"begin": 100, "finish": 100, "events": [(end, 1)]}, "aware valuation"),
+        ({"begin": 100, "finish": 100, "events": [(midday, 1)],
+          "start": start, "end": end}, "intraday"),
+        ({"begin": 100, "finish": 100, "events": [(end, 1)], "net_flow": 2,
+          "start": start, "end": end}, "disagrees"),
+        ({"begin": 100, "finish": 100, "net_flow": 1,
+          "method": "modified_dietz"}, "timed events"),
+        ({"begin": 100, "finish": 100}, "explicit cash flow"),
+    ]
+    for kwargs, message in cases:
+        with pytest.raises(ValueError, match=message):
+            metrics.cash_flow_return(**kwargs)
+
+
+def test_metrics_public_names_are_discoverable():
+    assert "cash_flow_return" in dir(metrics)

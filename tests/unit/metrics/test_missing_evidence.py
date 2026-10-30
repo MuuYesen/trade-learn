@@ -1,8 +1,10 @@
 """Missing observations must not silently become complete financial evidence."""
 import math
+
 import numpy as np
 import pandas as pd
 import pytest
+
 from tradelearn import metrics
 
 

@@ -54,18 +54,23 @@ class BrokerEventPump:
     _event_callbacks: list[Callable[[BrokerEvent], None]] = field(default_factory=list)
 
     def on_fill(self, cb: Callable[[Any], None]) -> None:
+        """Register a callback for normalized fill events."""
         self._fill_callbacks.append(cb)
 
     def on_cancel(self, cb: Callable[[Any], None]) -> None:
+        """Register a callback for cancellation events."""
         self._cancel_callbacks.append(cb)
 
     def on_reject(self, cb: Callable[[Any, str], None]) -> None:
+        """Register a callback for rejection events."""
         self._reject_callbacks.append(cb)
 
     def on_status(self, cb: Callable[[Any, str, bool], None]) -> None:
+        """Register a callback for order status changes."""
         self._status_callbacks.append(cb)
 
     def on_partial(self, cb: Callable[[Any], None]) -> None:
+        """Register a callback for partial-fill events."""
         self._partial_callbacks.append(cb)
 
     def on_event(self, cb: Callable[[BrokerEvent], None]) -> None:
@@ -84,6 +89,7 @@ class BrokerEventPump:
         return events
 
     def dispatch(self, event: BrokerEvent) -> None:
+        """Dispatch a normalized event to its registered callbacks."""
         for cb in self._event_callbacks:
             cb(event)
         if event.kind == "fill":
@@ -110,4 +116,5 @@ class BrokerEventPump:
 
     @staticmethod
     def _coerce_event(raw_event: BrokerEvent | dict[str, Any]) -> BrokerEvent:
+        """Normalize a raw broker event into the event contract."""
         return BrokerEvent.coerce(raw_event)

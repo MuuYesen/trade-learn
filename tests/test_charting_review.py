@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytest.importorskip("pynecore", reason="Charting requires PyneCore on Python 3.11+")
+
 from tradelearn.indicators import tv
 from tradelearn.indicators.charting import calculate
 

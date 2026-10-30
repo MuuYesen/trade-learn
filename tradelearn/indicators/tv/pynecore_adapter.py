@@ -22,6 +22,7 @@ def _isolated_run(func):
 
     @wraps(func)
     def run(*args, **kwargs):
+        """Run one adapter while restoring PyneCore's shared state."""
         with _PYNE_LOCK:
             fields = ("bar_index", "open", "high", "low", "close", "volume", "hl2", "hlc3", "ohlc4")
             previous = {key: getattr(pyne_lib, key) for key in fields}
@@ -35,12 +36,14 @@ def _isolated_run(func):
 
 
 def _aligned(reference: pd.Series, **inputs: pd.Series) -> None:
+    """Require each input series to share the reference index."""
     for name, value in inputs.items():
         if not pd.Series(value).index.equals(reference.index):
             raise ValueError(f"{name} index must exactly match the reference index")
 
 
 def _anchor_series(reference: pd.Series, anchor: pd.Series | None) -> pd.Series:
+    """Validate an anchor series or construct its default initial anchor."""
     if anchor is None:
         return (
             pd.Series([True] + [False] * (len(reference) - 1), index=reference.index, dtype=bool)
@@ -55,24 +58,29 @@ def _anchor_series(reference: pd.Series, anchor: pd.Series | None) -> pd.Series:
 
 
 def _accdist(high: pd.Series, low: pd.Series, close: pd.Series, volume: pd.Series) -> pd.Series:
+    """Compute the accumulation/distribution line from OHLCV inputs."""
     return _run_ohlcv_indicator(high, low, close, volume, "accdist", lambda fn: fn())
 
 
 def _pvt(close: pd.Series, volume: pd.Series) -> pd.Series:
+    """Compute price-volume trend from close and volume inputs."""
     return _run_ohlcv_indicator(close, close, close, volume, "pvt", lambda fn: fn())
 
 
 def _wpr(high: pd.Series, low: pd.Series, close: pd.Series, length: int = 14) -> pd.Series:
+    """Compute Williams percent range for the requested window."""
     return _run_ohlcv_indicator(high, low, close, None, "wpr", lambda fn: fn(length))
 
 
 def _vwma(close: pd.Series, volume: pd.Series, length: int = 20) -> pd.Series:
+    """Compute the volume-weighted moving average."""
     return _run_ohlcv_indicator(
         close, close, close, volume, "vwma", lambda fn: fn(pyne_lib.close, length)
     )
 
 
 def _correlation(source1: pd.Series, source2: pd.Series, length: int = 20) -> pd.Series:
+    """Compute rolling correlation for two aligned input series."""
     source1, source2 = pd.Series(source1), pd.Series(source2)
     _aligned(source1, source2=source2)
     return _run_source_indicator(
@@ -118,26 +126,32 @@ def _pivot_point_levels(
 
 
 def _sma(close: pd.Series, length: int = 20) -> pd.Series:
+    """Compute a simple moving average for the source series."""
     return _run_source_indicator(close, "sma", lambda source, fn: fn(source, length))
 
 
 def _ema(close: pd.Series, length: int = 20) -> pd.Series:
+    """Compute an exponential moving average for the source series."""
     return _run_source_indicator(close, "ema", lambda source, fn: fn(source, length))
 
 
 def _wma(close: pd.Series, length: int = 20) -> pd.Series:
+    """Compute a weighted moving average for the source series."""
     return _run_source_indicator(close, "wma", lambda source, fn: fn(source, length))
 
 
 def _rma(close: pd.Series, length: int = 14) -> pd.Series:
+    """Compute a running moving average for the source series."""
     return _run_source_indicator(close, "rma", lambda source, fn: fn(source, length))
 
 
 def _hma(close: pd.Series, length: int = 20) -> pd.Series:
+    """Compute a Hull moving average for the source series."""
     return _run_source_indicator(close, "hma", lambda source, fn: fn(source, length))
 
 
 def _swma(close: pd.Series) -> pd.Series:
+    """Compute a symmetrically weighted moving average."""
     return _run_source_indicator(close, "swma", lambda source, fn: fn(source))
 
 
@@ -148,6 +162,7 @@ def _alma(
     sigma: float = 6.0,
     floor: bool = False,
 ) -> pd.Series:
+    """Compute an Arnaud Legoux moving average with the supplied parameters."""
     return _run_source_indicator(
         close,
         "alma",
@@ -156,26 +171,32 @@ def _alma(
 
 
 def _stdev(close: pd.Series, length: int = 20, biased: bool = True) -> pd.Series:
+    """Compute rolling standard deviation for the source series."""
     return _run_source_indicator(close, "stdev", lambda source, fn: fn(source, length, biased))
 
 
 def _variance(close: pd.Series, length: int = 20, biased: bool = True) -> pd.Series:
+    """Compute rolling variance for the source series."""
     return _run_source_indicator(close, "variance", lambda source, fn: fn(source, length, biased))
 
 
 def _roc(close: pd.Series, length: int = 10) -> pd.Series:
+    """Compute rate of change over the requested lookback."""
     return _run_source_indicator(close, "roc", lambda source, fn: fn(source, length))
 
 
 def _mom(close: pd.Series, length: int = 10) -> pd.Series:
+    """Compute momentum over the requested lookback."""
     return _run_source_indicator(close, "mom", lambda source, fn: fn(source, length))
 
 
 def _cmo(close: pd.Series, length: int = 14) -> pd.Series:
+    """Compute the Chande momentum oscillator."""
     return _run_source_indicator(close, "cmo", lambda source, fn: fn(source, length))
 
 
 def _tsi(close: pd.Series, short_length: int = 13, long_length: int = 25) -> pd.Series:
+    """Compute the true strength index for the source series."""
     return _run_source_indicator(
         close,
         "tsi",
@@ -184,18 +205,22 @@ def _tsi(close: pd.Series, short_length: int = 13, long_length: int = 25) -> pd.
 
 
 def _change(close: pd.Series, length: int = 1) -> pd.Series:
+    """Compute the source change over the requested lookback."""
     return _run_source_indicator(close, "change", lambda source, fn: fn(source, length))
 
 
 def _cum(close: pd.Series) -> pd.Series:
+    """Compute the cumulative total of the source series."""
     return _run_source_indicator(close, "cum", lambda source, fn: fn(source))
 
 
 def _linreg(close: pd.Series, length: int = 14, offset: int = 0) -> pd.Series:
+    """Compute a rolling linear-regression estimate."""
     return _run_source_indicator(close, "linreg", lambda source, fn: fn(source, length, offset))
 
 
 def _bbands(close: pd.Series, length: int = 20, std: float = 2.0) -> pd.DataFrame:
+    """Compute Bollinger band values for the source series."""
     frame = _run_source_frame(
         close,
         "bb",
@@ -206,6 +231,7 @@ def _bbands(close: pd.Series, length: int = 20, std: float = 2.0) -> pd.DataFram
 
 
 def _bb(close: pd.Series, length: int = 20, mult: float = 2.0) -> pd.DataFrame:
+    """Return Bollinger band values using the requested parameters."""
     return _run_source_frame(
         close,
         "bb",
@@ -215,10 +241,12 @@ def _bb(close: pd.Series, length: int = 20, mult: float = 2.0) -> pd.DataFrame:
 
 
 def _bbw(close: pd.Series, length: int = 20, mult: float = 2.0) -> pd.Series:
+    """Compute Bollinger band width for the source series."""
     return _run_source_indicator(close, "bbw", lambda source, fn: fn(source, length, mult))
 
 
 def _rsi(close: pd.Series, length: int = 14) -> pd.Series:
+    """Compute relative strength index for the source series."""
     return _run_source_indicator(close, "rsi", lambda source, fn: fn(source, length))
 
 
@@ -228,6 +256,7 @@ def _macd(
     slow: int = 26,
     signal: int = 9,
 ) -> pd.DataFrame:
+    """Compute MACD, signal, and histogram series."""
     return _run_source_frame(
         close,
         "macd",
@@ -242,6 +271,7 @@ def _atr(
     close: pd.Series,
     length: int = 14,
 ) -> pd.Series:
+    """Compute average true range from aligned price inputs."""
     return _run_ohlcv_indicator(high, low, close, None, "atr", lambda fn: fn(length))
 
 
@@ -251,6 +281,7 @@ def _adx(
     close: pd.Series,
     length: int = 14,
 ) -> pd.DataFrame:
+    """Compute average directional movement strength."""
     frame = _run_ohlcv_frame(
         high,
         low,
@@ -270,6 +301,7 @@ def _dmi(
     length: int = 14,
     smoothing: int = 14,
 ) -> pd.DataFrame:
+    """Compute directional movement and ADX outputs."""
     return _run_ohlcv_frame(
         high,
         low,
@@ -287,10 +319,12 @@ def _tr(
     close: pd.Series,
     handle_na: bool = False,
 ) -> pd.Series:
+    """Compute true range from aligned high, low, and close inputs."""
     return _run_ohlcv_indicator(high, low, close, None, "tr", lambda fn: fn(handle_na))
 
 
 def _obv(close: pd.Series, volume: pd.Series) -> pd.Series:
+    """Compute on-balance volume from price and volume inputs."""
     close_series = pd.Series(close)
     return _run_ohlcv_indicator(
         close_series,
@@ -310,6 +344,7 @@ def _sar(
     inc: float = 0.02,
     max: float = 0.2,
 ) -> pd.Series:
+    """Compute parabolic stop-and-reverse values."""
     return _run_ohlcv_indicator(high, low, close, None, "sar", lambda fn: fn(start, inc, max))
 
 
@@ -319,6 +354,7 @@ def _stoch(
     close: pd.Series,
     length: int = 14,
 ) -> pd.Series:
+    """Compute the stochastic oscillator from price inputs."""
     return _run_ohlcv_indicator(
         high,
         low,
@@ -337,6 +373,7 @@ def _kc(
     mult: float = 2.0,
     use_true_range: bool = True,
 ) -> pd.DataFrame:
+    """Compute Keltner channel bands from price inputs."""
     return _run_ohlcv_frame(
         high,
         low,
@@ -356,6 +393,7 @@ def _kcw(
     mult: float = 2.0,
     use_true_range: bool = True,
 ) -> pd.Series:
+    """Compute Keltner channel width from price inputs."""
     return _run_ohlcv_indicator(
         high,
         low,
@@ -372,6 +410,7 @@ def _cci(
     close: pd.Series,
     length: int = 20,
 ) -> pd.Series:
+    """Compute commodity channel index from aligned price inputs."""
     return _run_ohlcv_indicator(
         high,
         low,
@@ -389,6 +428,7 @@ def _mfi(
     volume: pd.Series,
     length: int = 14,
 ) -> pd.Series:
+    """Compute money flow index from aligned OHLCV inputs."""
     return _run_ohlcv_indicator(
         high,
         low,
@@ -443,6 +483,7 @@ def _supertrend(
     length: int = 10,
     multiplier: float = 3.0,
 ) -> pd.DataFrame:
+    """Compute supertrend values and direction from price inputs."""
     frame = _run_ohlcv_frame(
         high,
         low,
@@ -466,6 +507,7 @@ def _ichimoku(
     kijun: int = 26,
     senkou: int = 52,
 ) -> pd.DataFrame:
+    """Compute the supported Ichimoku indicator outputs."""
     high = pd.Series(high)
     low = pd.Series(low)
     close = pd.Series(close)
@@ -491,6 +533,7 @@ def _run_source_indicator(
     name: str,
     call: Callable[[object, Callable], object],
 ) -> pd.Series:
+    """Run a source-series indicator and return its primary output."""
     values = _run_source_values(source, name, call)
     return pd.Series(
         values, index=pd.Series(source).index, name=getattr(source, "name", None), dtype=float
@@ -503,6 +546,7 @@ def _run_source_frame(
     call: Callable[[object, Callable], object],
     columns: tuple[str, ...],
 ) -> pd.DataFrame:
+    """Run a source-series indicator and return aligned output columns."""
     rows = _run_source_values(source, name, call)
     return pd.DataFrame(rows, index=pd.Series(source).index, columns=list(columns), dtype=float)
 
@@ -513,6 +557,7 @@ def _run_source_values(
     name: str,
     call: Callable[[object, Callable], object],
 ) -> list[object]:
+    """Execute a source-series indicator over successive input bars."""
     series = pd.Series(source)
     reset_pyne_functions()
     fn = isolate_function(getattr(pyne_ta, name), name, f"tradelearn.tv.{name}")
@@ -533,6 +578,7 @@ def _run_ohlcv_indicator(
     name: str,
     call: Callable[[Callable], object],
 ) -> pd.Series:
+    """Run an OHLCV indicator and return its primary output."""
     values = _run_ohlcv_values(high, low, close, volume, name, call)
     return pd.Series(values, index=pd.Series(close).index, name=name, dtype=float)
 
@@ -546,6 +592,7 @@ def _run_ohlcv_frame(
     call: Callable[[Callable], object],
     columns: tuple[str, ...],
 ) -> pd.DataFrame:
+    """Run an OHLCV indicator and return aligned output columns."""
     rows = _run_ohlcv_values(high, low, close, volume, name, call)
     return pd.DataFrame(rows, index=pd.Series(close).index, columns=list(columns), dtype=float)
 
@@ -561,6 +608,7 @@ def _run_ohlcv_values(
     *,
     open: pd.Series | None = None,
 ) -> list[object]:
+    """Execute an OHLCV indicator over successive input bars."""
     high_series, low_series, close_series = pd.Series(high), pd.Series(low), pd.Series(close)
     volume_series = (
         pd.Series(1.0, index=close_series.index) if volume is None else pd.Series(volume)
@@ -586,6 +634,7 @@ def _set_pyne_ohlcv(
     volume: object,
     open: object,
 ) -> None:
+    """Set PyneCore's current bar fields from aligned input values."""
     open_value = _pyne_value(open)
     high_value = _pyne_value(high)
     low_value = _pyne_value(low)
@@ -618,12 +667,14 @@ def _set_pyne_ohlcv(
 
 
 def _pyne_value(value: object) -> float | NA:
+    """Convert a missing input to PyneCore's missing-value representation."""
     if pd.isna(value):
         return NA(float)
     return float(value)
 
 
 def _to_pandas_value(value: object) -> object:
+    """Convert a PyneCore output to a pandas-compatible value."""
     if isinstance(value, NA):
         return None
     if isinstance(value, list):
