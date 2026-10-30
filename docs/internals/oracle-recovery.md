@@ -9,6 +9,10 @@ restore them with `python scripts/restore_oracle.py` from the verified historica
 Git blobs; the restore refuses to overwrite modified files. A shallow checkout
 without those blobs must first fetch the required history.
 
+CI keeps a shallow checkout and fetches the exact historical commit declared in
+`scripts/oracle_manifest.json` before tests that exercise restoration from Git.
+It does not fetch unrelated repository history or replace the frozen files.
+
 CI installs the dedicated `ci` and `oracle` dependency groups plus the documented
 indicator, factor, Parquet, report, ML, DuckDB and research extras before running
 `python scripts/check_oracle.py`, the consistency suite and the full tests. Tests
