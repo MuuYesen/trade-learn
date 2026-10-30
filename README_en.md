@@ -41,8 +41,6 @@ You can define the depth of your strategy based on the research stage:
 
 In terms of ecosystem, **trade-learn** provides comprehensive indicator support, compatible with TA-Lib, Pandas-TA-Classic, TDX, and TradingView, while allowing flexible expansion of custom indicators and data sources.
 
-Source 0.2.9 shares `engine.StrategyRuntime` across default research, event replay, and externally driven paper/live. Rust matching and Lite batch research remain; full incremental Lite/live support is not implied. Host integrations and broker dependencies are supplied separately. See [architecture](docs/concepts/architecture.md) and [Runtime](docs/concepts/runtime.md).
-
 ## Core Highlights
 
 #### ⚡️ High-Performance Core: Rust-Driven Velocity

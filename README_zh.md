@@ -41,8 +41,6 @@
 
 在生态层面，**trade-learn** 提供完善的指标支持。框架兼容 TA-Lib、Pandas-TA-Classic、TDX、TradingView 等主流指标库，并支持灵活扩展自定义指标与数据源，满足不同研究场景的需求。
 
-当前 0.2.9 源码由公共 `engine.StrategyRuntime` 统一协调默认回测、事件回放及外部 paper/live 的策略生命周期；Rust 撮合与 Lite 批量研究保留。实盘宿主、券商适配器及其依赖由接入层提供，Lite 不承诺完整增量实盘。详见[架构与边界](./docs/concepts/architecture.md)和 [Runtime](./docs/concepts/runtime.md)。
-
 ## 核心亮点
 
 #### ⚡️ 高能内核：Rust 驱动的极致性能

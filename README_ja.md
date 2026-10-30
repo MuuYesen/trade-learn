@@ -41,8 +41,6 @@
 
 エコシステム面では、TA-Lib、Pandas-TA-Classic、TDX、TradingView の主要指標をサポートし、カスタム指標やデータソースの柔軟な拡張が可能です。
 
-0.2.9 のソースでは、デフォルト研究・イベント再生・外部 paper/live が `engine.StrategyRuntime` を共有します。Rust の約定シミュレーションと Lite の一括研究は維持し、完全な増分 Lite/live 対応は保証しません。実行ホストとブローカー依存関係は別途提供します。[構成](docs/concepts/architecture.md)と [Runtime](docs/concepts/runtime.md)を参照してください。
-
 ## コアハイライト
 
 #### ⚡️ 高性能カーネル：Rust 駆動の極速
