@@ -94,7 +94,10 @@ import tradelearn.lite
 def test_cibuildwheel_smoke_test_imports_rust_extension() -> None:
     pyproject = PYPROJECT.read_text(encoding="utf-8")
 
-    assert "scripts/check_order_lifecycle_wheel.py" in pyproject
+    assert "scripts/check_preview_wheel.py" in pyproject
+    checks = (ROOT / "scripts/check_preview_wheel.py").read_text()
+    assert "check_order_lifecycle_wheel.py" in checks
+    assert "check_public_runtime_wheel.py" in checks
     smoke = (PYPROJECT.parent / "scripts/check_order_lifecycle_wheel.py").read_text()
     assert "tradelearn_rust_version" in smoke
     assert "cancel_order" in smoke

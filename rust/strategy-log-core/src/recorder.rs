@@ -210,6 +210,9 @@ impl Recorder {
         Self::open(state_dir, capacity, segment_bytes, max_disk_bytes, false, Some(window))
     }
     fn open(state_dir: String, capacity: usize, segment_bytes: usize, max_disk_bytes: u64, native_text: bool, window: Option<Duration>) -> Result<Self, RecorderError> {
+        if !cfg!(unix) {
+            return Err(runtime_error("durable Recorder is unsupported on this platform; verified Unix filesystem semantics required"));
+        }
         if capacity == 0 || segment_bytes < 3 || max_disk_bytes == 0 {
             return Err(invalid(
                 "positive capacity/disk and segment_bytes >= 3 required",

@@ -201,6 +201,7 @@ def test_rust_core_is_split_by_runtime_responsibility() -> None:
     expected_modules = {
         "engine.rs",
         "lib.rs",
+        "logging.rs",
         "matching.rs",
         "resampler.rs",
         "runner.rs",

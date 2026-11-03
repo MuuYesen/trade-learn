@@ -32,7 +32,7 @@ def test_maturin_build_backend_points_to_tradelearn_rust_extension() -> None:
 def test_cargo_workspace_declares_tradelearn_rust_member() -> None:
     cargo = load_toml(ROOT / "Cargo.toml")
 
-    assert cargo["workspace"]["members"] == ["rust/tradelearn-rust"]
+    assert cargo["workspace"]["members"] == ["rust/tradelearn-rust", "rust/strategy-log-core"]
     assert cargo["workspace"]["resolver"] == "2"
 
 
