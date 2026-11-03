@@ -1,13 +1,16 @@
 //! Recorder filesystem primitives. Windows is not a Unix directory-fsync emulation.
 //!
-//! Windows publishes same-directory names with MoveFileExW(WRITE_THROUGH), never
-//! COPY_ALLOWED, after FlushFileBuffers (File::sync_all) on WRITE_THROUGH files.
+//! Windows creates names with MoveFileExW(WRITE_THROUGH), never COPY_ALLOWED.
+//! Replacement uses FileRenameInfoEx POSIX semantics so pinned readers remain
+//! valid; the WRITE_THROUGH source handle is flushed before and after rename.
 //! This supports the tested process-crash contract; storage controllers and
 //! filesystems can impose additional limits under sudden power loss.
 //! https://learn.microsoft.com/windows/win32/api/winbase/nf-winbase-movefileexw
 //! https://learn.microsoft.com/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers
 //! https://learn.microsoft.com/windows/win32/api/bcrypt/nf-bcrypt-bcryptgenrandom
 //! https://learn.microsoft.com/windows/win32/api/fileapi/nf-fileapi-getfileinformationbyhandle
+//! https://learn.microsoft.com/windows/win32/api/winbase/ns-winbase-file_rename_info
+//! https://learn.microsoft.com/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information
 use std::{fs::{self, File, OpenOptions}, io, path::Path};
 
 pub(super) fn create_new(path: &Path) -> io::Result<File> {
@@ -54,10 +57,33 @@ pub(super) fn move_file(source: &Path, destination: &Path, replace: bool) -> io:
         let src: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
         let dst: Vec<u16> = destination.as_os_str().encode_wide().chain(Some(0)).collect();
         if src[..src.len()-1].contains(&0) || dst[..dst.len()-1].contains(&0) { return Err(io::Error::other("embedded NUL in recorder path")); }
+        if replace { return replace_open_file(source, &dst[..dst.len()-1]); }
         // WRITE_THROUGH | optional REPLACE_EXISTING. COPY_ALLOWED is absent.
         if unsafe { MoveFileExW(src.as_ptr(), dst.as_ptr(), 8 | u32::from(replace)) } == 0 { return Err(io::Error::last_os_error()); }
         Ok(())
     }
+}
+
+#[cfg(windows)]
+fn replace_open_file(source: &Path, destination: &[u16]) -> io::Result<()> {
+    use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
+    // DELETE is required for FileRenameInfoEx; no permission/readonly bypass.
+    let file=OpenOptions::new().read(true).write(true).access_mode(0xc0010000)
+        .share_mode(7).custom_flags(0x80000000).open(source)?;
+    file.sync_all()?;
+    let offset=std::mem::offset_of!(RenameInformation,name);
+    let name_bytes=u32::try_from(std::mem::size_of_val(destination)).map_err(|_|io::Error::other("Windows publication path is too long"))?;
+    let bytes=std::mem::size_of::<RenameInformation>()+name_bytes as usize;
+    let mut storage=vec![0usize;bytes.div_ceil(std::mem::size_of::<usize>())];
+    let information=storage.as_mut_ptr().cast::<RenameInformation>();
+    unsafe {
+        std::ptr::addr_of_mut!((*information).flags).write(1|2); // REPLACE_IF_EXISTS | POSIX_SEMANTICS.
+        std::ptr::addr_of_mut!((*information).root).write(std::ptr::null_mut());
+        std::ptr::addr_of_mut!((*information).length).write(name_bytes);
+        std::ptr::copy_nonoverlapping(destination.as_ptr(),storage.as_mut_ptr().cast::<u8>().add(offset).cast(),destination.len());
+        if SetFileInformationByHandle(file.as_raw_handle(),22,information.cast(),bytes as u32)==0 { return Err(io::Error::last_os_error()); }
+    }
+    file.sync_all()
 }
 
 pub(super) fn identity(file: &File) -> io::Result<(u64, u64, u64)> {
@@ -67,7 +93,13 @@ pub(super) fn identity(file: &File) -> io::Result<(u64, u64, u64)> {
         let mut info = std::mem::MaybeUninit::<FileInformation>::uninit();
         if unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) } == 0 { return Err(io::Error::last_os_error()); }
         let info=unsafe { info.assume_init() };
-        Ok((u64::from(info.volume_serial), (u64::from(info.index_high)<<32)|u64::from(info.index_low), u64::from(info.links)))
+        // Match CPython's os.stat identity (FILE_ID_INFO), including the full
+        // 64-bit volume serial. BY_HANDLE_FILE_INFORMATION truncates that ID.
+        let mut id=std::mem::MaybeUninit::<FileIdInformation>::uninit();
+        if unsafe { GetFileInformationByHandleEx(file.as_raw_handle(),18,id.as_mut_ptr().cast(),std::mem::size_of::<FileIdInformation>() as u32) } == 0 { return Err(io::Error::last_os_error()); }
+        let id=unsafe { id.assume_init() };
+        if id.id[8..].iter().any(|n|*n!=0) { return Err(io::Error::other("128-bit Windows file identities are not supported by recorder schema v1")); }
+        Ok((id.volume_serial,u64::from_le_bytes(id.id[..8].try_into().unwrap()),u64::from(info.links)))
     }
 }
 
@@ -87,10 +119,18 @@ struct FileInformation {
     volume_serial: u32, size_high: u32, size_low: u32, links: u32, index_high: u32, index_low: u32,
 }
 #[cfg(windows)]
+#[repr(C)]
+struct FileIdInformation { volume_serial: u64, id: [u8;16] }
+#[cfg(windows)]
+#[repr(C)]
+struct RenameInformation { flags: u32, root: *mut std::ffi::c_void, length: u32, name: [u16;1] }
+#[cfg(windows)]
 #[link(name="kernel32")]
 unsafe extern "system" {
     fn MoveFileExW(existing: *const u16, new: *const u16, flags: u32) -> i32;
     fn GetFileInformationByHandle(handle: *mut std::ffi::c_void, information: *mut FileInformation) -> i32;
+    fn GetFileInformationByHandleEx(handle: *mut std::ffi::c_void, class: i32, information: *mut std::ffi::c_void, size: u32) -> i32;
+    fn SetFileInformationByHandle(handle: *mut std::ffi::c_void, class: i32, information: *mut std::ffi::c_void, size: u32) -> i32;
 }
 #[cfg(windows)]
 #[link(name="bcrypt")]

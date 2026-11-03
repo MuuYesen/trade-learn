@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import stat
 
+from .filesystem import verify_private_fd, original_identity, path_stat, file_stat, open_read_fd
 from .source_file_contract import validate_native_time_anchor
 
 
@@ -15,16 +16,15 @@ _CAPTURE = ('device', 'inode', 'published_length', 'publication_sequence', 'seal
 
 
 def _private_json(path, limit=4096):
-    before = path.lstat()
+    before = path_stat(path)
     if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
-            or stat.S_IMODE(before.st_mode) != 0o600 or before.st_uid != os.getuid()
             or not 0 < before.st_size <= limit):
         raise ValueError('private bounded source metadata required')
-    fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+    fd = open_read_fd(path)
     with os.fdopen(fd, 'rb') as stream:
-        opened = os.fstat(stream.fileno())
+        opened = verify_private_fd(stream.fileno())
         raw = stream.read(limit + 1)
-        after = os.fstat(stream.fileno())
+        after = file_stat(stream.fileno())
     identity = lambda value: tuple(getattr(value, k) for k in ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns'))
     if identity(before) != identity(opened) or identity(opened) != identity(after) or len(raw) != before.st_size:
         raise ValueError('source metadata changed during read')
@@ -54,7 +54,7 @@ def source_publication(path, anchor):
         return None
     document, _ = _private_json(sidecar)
     value = _validated(document, path, anchor)
-    info = path.lstat()
+    info = path_stat(path)
     if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
             or (info.st_dev, info.st_ino) != (value['device'], value['inode'])
             or info.st_size < value['published_length']
@@ -89,7 +89,11 @@ def retire_source_sidecars(outbox, directory, *, limit=16, scan=64):
             if any(os.path.lexists(p) for p in (path, path.with_suffix('.pending'), path.with_suffix('.window'))):
                 continue
             metadata = [path.with_name(path.name + '.source.json'), path.with_suffix('.native-time.json')]
-            present = [p for p in metadata if os.path.lexists(p)]
+            def actual(item):
+                retired=item.with_name('.'+item.name+'.proof-retired')
+                if os.name=='nt' and not os.path.lexists(item) and os.path.lexists(retired):return retired
+                return item
+            present = [p for p in metadata if os.path.lexists(actual(p))]
             if not present:
                 continue
             proof = outbox.verified_proof(file_id)
@@ -101,17 +105,31 @@ def retire_source_sidecars(outbox, directory, *, limit=16, scan=64):
             anchor = validate_native_time_anchor(json.loads(anchor_row[0]))
             checks = []
             for item in present:
-                value, identity = _private_json(item)
+                value, identity = _private_json(actual(item))
                 if item == metadata[0]:
                     publication = _validated(value, path, anchor)
                     expected = outbox.db.execute('SELECT body FROM source_publications WHERE producer=? AND file_id=?', (outbox.producer_id, file_id)).fetchone()
                     if (not publication['sealed'] or publication['published_length'] != proof['length']
-                            or (publication['device'], publication['inode']) != (device, inode)
+                            or (publication['device'], publication['inode']) != (original_identity(device), original_identity(inode))
                             or expected is None or json.loads(expected[0]) != publication):
                         raise ValueError('retired publication differs from proved source')
                 elif validate_native_time_anchor(value) != anchor:
                     raise ValueError('retired source clock differs')
                 checks.append((item, identity))
+            if os.name=='nt':
+                from .filesystem import move_write_through
+                for item, identity in checks:
+                    current=actual(item)
+                    _, again=_private_json(current)
+                    if again!=identity:raise ValueError('source sidecar changed before retirement')
+                    if any(os.path.lexists(p) for p in (path,path.with_suffix('.pending'),path.with_suffix('.window'))):
+                        raise ValueError('source reappeared before metadata retirement')
+                    retired=item.with_name('.'+item.name+'.proof-retired')
+                    if current==item:move_write_through(item,retired)
+                    retired.unlink()
+                removed+=1
+                if removed>=limit:break
+                continue
             fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | getattr(os, 'O_NOFOLLOW', 0))
             try:
                 os.fsync(fd)

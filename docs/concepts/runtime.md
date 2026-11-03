@@ -101,9 +101,13 @@ TA-Lib 的 SMA/EMA 按 `timeperiod` 暖机，RSI/ATR 使用 `timeperiod + 1` 根
 
 0.2.9的`step_market_batch(events)`显式表达同timestamp原子批次；默认研究合步、标准实盘逐到达的差异及异常清理合同见[观察API的市场批次与异常结束](../guides/strategy-observers.md#市场批次与异常结束)。Runtime本身不新建loop、不等网络或缺失标的，预验证失败不部分推进feed。
 
+<a id="runtime-install"></a>
+
 ### 安装与原生扩展
 
 使用 `pip install trade-learn==0.2.9` 安装与 Python ABI、平台匹配的 wheel。源码构建沿 pyproject/maturin 与 Cargo.lock；不能复用或改名旧扩展。安装后版本应满足 `tradelearn.__version__ == _rust.tradelearn_rust_version() == '0.2.9'`，observer capability 为 1。历史候选和验收阶段见[发布记录](../reviews/2026-11-03-runtime-release.md)，不作为当前安装步骤。
+
+<a id="nautilus-logging"></a>
 
 ## Nautilus 与策略日志
 

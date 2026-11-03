@@ -460,7 +460,10 @@ fn regular_private(path: &std::path::Path) -> std::io::Result<bool> {
 
 fn entry_size_if_present(entry: &fs::DirEntry) -> std::io::Result<u64> {
     let size = || -> std::io::Result<u64> {
-        if entry.file_type()?.is_file() { Ok(entry.metadata()?.len()) } else { Ok(0) }
+        // Windows DirEntry metadata is enumeration-time WIN32_FIND_DATA. A
+        // receipt-gated sender may already have retired that exact path.
+        let current=fs::symlink_metadata(entry.path())?;
+        if current.is_file() { Ok(current.len()) } else { Ok(0) }
     };
     match size() {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(0),

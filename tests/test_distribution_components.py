@@ -11,7 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_public_distribution_contains_logger_recorder_and_neutral_bridge():
     for relative in ('leafquant_monitor/logger.py', 'leafquant_monitor/tradelearn.py',
-                     'tradelearn_runtime/broker.py', 'tradelearn_runtime/execution.py'):
+                     'tradelearn_runtime/broker.py', 'tradelearn_runtime/execution.py',
+                     'leafquant_monitor/filesystem.py'):
         assert (ROOT / relative).is_file(), relative
         ast.parse((ROOT / relative).read_text())
     metadata = tomllib.loads((ROOT / 'pyproject.toml').read_text())
@@ -40,3 +41,14 @@ import tradelearn_runtime.execution
     result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True)
     assert result.returncode != 0
     assert 'requires the verified trade-learn[nautilus] dependency' in result.stderr
+
+
+def test_protocol_only_closure_contains_platform_io_without_native_dependency():
+    from leafquant_monitor.source_inventory import transport_sources
+    sources = transport_sources()
+    assert len(sources) == 7
+    assert "leafquant_monitor/filesystem.py" in sources
+    helper = ast.parse(sources["leafquant_monitor/filesystem.py"].read_text())
+    assert not any(isinstance(n, ast.ImportFrom) and n.module
+                   and n.module.startswith(("tradelearn", "nautilus_trader"))
+                   for n in ast.walk(helper))

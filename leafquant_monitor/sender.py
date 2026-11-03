@@ -67,10 +67,14 @@ class SegmentSender:
     def _native_anchor(self,path):
         metadata=path.with_suffix('.native-time.json')
         try:
-            fd=os.open(metadata,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0))
+            from .filesystem import open_read_fd
+            fd=open_read_fd(metadata)
             with os.fdopen(fd,'rb') as stream:
                 info=os.fstat(stream.fileno())
-                if metadata.is_symlink() or not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or stat.S_IMODE(info.st_mode)!=0o600 or info.st_size>1024:
+                if os.name=='nt':
+                    from .filesystem import verify_private_fd
+                    verify_private_fd(stream.fileno())
+                if metadata.is_symlink() or not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or (os.name!='nt' and stat.S_IMODE(info.st_mode)!=0o600) or info.st_size>1024:
                     raise ValueError('private bounded native anchor required')
                 raw=stream.read(1025)
             return validate_native_time_anchor(json.loads(raw))
@@ -117,13 +121,17 @@ class SegmentSender:
 def client_from_config(path):
     """Explicit send-only credentials; no default AWS chain or S3 client."""
     document = Path(path)
-    if document.stat().st_mode & 0o077:
+    if os.name=='nt':
+        from .filesystem import check_private_path
+        check_private_path(document)
+    if os.name!='nt' and document.stat().st_mode & 0o077:
         raise ValueError('sender credentials file must be private (0600)')
     value = json.loads(document.read_text())
     if set(value) != {'region', 'queue_url', 'credentials_file'}:
         raise ValueError('invalid sender configuration')
     key_file = Path(value['credentials_file'])
-    if not key_file.is_absolute() or key_file.stat().st_mode & 0o077:
+    if os.name=='nt':check_private_path(key_file)
+    if not key_file.is_absolute() or (os.name!='nt' and key_file.stat().st_mode & 0o077):
         raise ValueError('private absolute sender credentials path required')
     keys = json.loads(key_file.read_text())
     if (not {'access_key_id', 'secret_access_key'} <= keys.keys()

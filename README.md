@@ -102,7 +102,7 @@ pip install trade-learn==0.2.9
 pip install "trade-learn[nautilus]==0.2.9"
 ```
 
-`[nautilus]` 固定官方 `nautilus_trader==2.0.0rc7`。这条可选执行路径使用预发行框架，按实验性接入提供；仍需显式账户、标的、venue 路由与恢复配置。其它 Python 版本的 pip 会按依赖 marker 跳过 Nautilus，不能因此使用执行桥；基础 TL 功能仍可用。详见[安装与运行边界](docs/concepts/runtime.md#安装与原生扩展)。
+`[nautilus]` 固定官方 `nautilus_trader==2.0.0rc7`。这条可选执行路径使用预发行框架，按实验性接入提供；仍需显式账户、标的、venue 路由与恢复配置。其它 Python 版本的 pip 会按依赖 marker 跳过 Nautilus，不能因此使用执行桥；基础 TL 功能仍可用。详见[安装与运行边界](docs/concepts/runtime.md#runtime-install)。
 
 可选 extras：
 
@@ -124,7 +124,7 @@ pip install "trade-learn[nautilus]==0.2.9"
 | `[all]` | Lab、MLflow、指标后端、ML、DuckDB 等完整研究环境 |
 
 > **💡 安装建议**：
-> 默认安装包含基础数据处理、本地记录器和按需发送依赖；不安装 Nautilus。因子分析、Parquet、指标后端和报表需要对应 extra。若需开启包含 JupyterLab 与 MLflow 的全栈投研体验，请指定 `[all]` 扩展进行安装：
+> 默认安装包含基础数据处理、本地记录器和按需发送依赖；不安装 Nautilus。因子分析、Parquet、指标后端和报表需要对应 extra。若需开启包含 JupyterLab 与 MLflow 的完整研究环境，请指定 `[all]`；它不自动安装 Na，Python 3.13/3.14 可显式组合 `[all,nautilus]`：
 > ```bash
 > pip install "trade-learn[all]"
 > ```
@@ -138,7 +138,7 @@ pip install "trade-learn[nautilus]==0.2.9"
 |---|---|
 | 研究、回测与原生内核 | Python 3.10–3.14：Linux x86_64、macOS arm64、Windows x86_64；Linux aarch64 提供 CPython 3.13 wheel |
 | 可选 Nautilus 执行 | Python 3.13/3.14，须存在官方 rc7 对应平台 wheel；订单、产品及真实 venue 的支持另行验收 |
-| 策略日志 | 需匹配的本包 native Recorder；本地持久化与远程发送按平台分别验证，详情见[运行说明](docs/concepts/runtime.md#nautilus-与策略日志) |
+| 策略日志 | 需匹配的本包 native Recorder；本地持久化与远程发送按平台分别验证，详情见[运行说明](docs/concepts/runtime.md#nautilus-logging) |
 
 ## 快速上手
 
@@ -231,7 +231,7 @@ python -m tradelearn_runtime.support
 
 该命令展示固定官方版本实际内置的适配器及行情/执行 factory 分类；行情源不因此具有下单能力，目录存在也不表示全部订单、paper、实盘或平台已验收。自研券商扩展应独立安装，私有 cTrader、策略与账户配置不在本包内。
 
-策略日志按需装配，共用本地记录器；远程发送须显式配置受限授权。关闭日志或不接商业监控，不会关闭账户、路由、持仓归属与未决提交恢复保护。安装不是自动交易许可，软件校验不能保证避免交易损失。API、原生平台与发送边界见[运行与日志说明](docs/concepts/runtime.md#nautilus-与策略日志)。
+策略日志按需装配，共用本地记录器；远程发送须显式配置受限授权。关闭日志或不接商业监控，不会关闭账户、路由、持仓归属与未决提交恢复保护。安装不是自动交易许可，软件校验不能保证避免交易损失。API、原生平台与发送边界见[运行与日志说明](docs/concepts/runtime.md#nautilus-logging)。
 
 ## 投研流水线示例
 
@@ -379,7 +379,7 @@ class LiveStylePortfolio(tl.Strategy):
 |---|-------------------------------------------------------------------------|
 | 30 行走通第一个回测 | [快速开始](./docs/quickstart.md)                                            |
 | Lite / Engine 用法 | [Lite 指南](./docs/guides/lite.md) · [Engine 指南](./docs/guides/engine.md) |
-| 外部执行与日志 | [执行接入](docs/guides/live.md) · [运行与日志](docs/concepts/runtime.md#nautilus-与策略日志) |
+| 外部执行与日志 | [执行接入](docs/guides/live.md) · [运行与日志](docs/concepts/runtime.md#nautilus-logging) |
 | 架构与边界 | [架构](./docs/concepts/architecture.md)                                   |
 | 因子 / ML / 权重研究流水线 | [Research 指南](./docs/guides/research.md)                                |
 | 双口径指标（`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`） | [Indicators 指南](./docs/guides/indicators.md)                            |

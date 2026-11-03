@@ -130,9 +130,8 @@ class RecoveryIndex:
                 if db.execute('SELECT count(*) FROM facts').fetchone()[0]>self.settings.max_event_history*2:
                     raise BufferError('strategy recovery identity capacity exhausted')
         finally:db.close()
-        fd=os.open(self.path.parent,os.O_RDONLY|os.O_DIRECTORY)
-        try:os.fsync(fd)
-        finally:os.close(fd)
+        from .filesystem import sync_committed_database
+        sync_committed_database(self.path)
 
     def records(self):
         if not self.path.exists():return

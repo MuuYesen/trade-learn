@@ -1,6 +1,6 @@
 # Strategy observers
 
-本页定义0.2.9本地候选的通用策略观察API（`OBSERVER_API_VERSION = 1`）。它是Python domain API，不是日志wire协议，不提供商业SDK、持久化、发送器或账户金融计算。发布与外部SDK联合验收是独立步骤。
+本页定义0.2.9的通用策略观察API（`OBSERVER_API_VERSION = 1`）。它是Python domain API，不是日志wire协议，不提供商业SDK、持久化、发送器或账户金融计算。发布与外部SDK联合验收是独立步骤。
 
 ## 唯一运行协调
 
@@ -59,7 +59,7 @@ run/environment/业务身份由外部显式context绑定；缺失保持缺失，
 
 ## 只读与错误策略
 
-观察器及error handler必须同步；async函数注册拒绝，返回awaitable也记为错误，不创建事件loop或等待网络。SDK可以同步完成其本地durable接收，再由自己的发送器异步传输；本库不实现这条链。
+观察器及error handler必须同步；async函数注册拒绝，返回awaitable也记为错误，不创建事件loop或等待网络。SDK可以同步完成其本地durable接收，再由自己的发送器异步传输；通用observer层不实现这条链；包内可选日志组件负责自己的持久接收与异步发送。
 
 观察期间Runtime步进、策略业务方法（包括用户override的next/start/stop/notify）、买卖撤单、指标写入/重算及其他框架变更入口受guard约束。类声明期的幂等guard只检查观察上下文，不再派一次业务，不改正常方法签名或订单行为。观察器仅拿冻结事件；trusted Python扩展仍可持有外部引用，本API不宣称能沙箱化任意反射或恶意属性赋值。
 
@@ -71,10 +71,8 @@ run/environment/业务身份由外部显式context绑定；缺失保持缺失，
 
 初始化完成/部分启动后由Runtime负责清理，stop和closed恰一次；构造失败尚未取得策略实例时不强行调用stop。业务/启动失败A与清理失败B同时发生时保留A对象和原traceback，B仅作为受保护附加诊断；正常结束时stop失败仍向调用方抛出。清理中禁止新业务订单，但必要撤单及已到达权威执行事实不因此丢弃。observer及error handler失败不替换上述主异常。
 
-本页为通用接口候选，不是TradeLogStrategy TL版成品。既有Nautilus SDK入口由其所有者维护；SDK方后续用capability 1和冻结TL候选包进行适配/联合验证。
+本页只定义通用观察接口。包内TL日志薄类 `leafquant_monitor.tradelearn.TradeLogStrategy` 使用此接口装配，Nautilus日志薄类观察框架事实；记录器/传输与执行生命周期分开，见[运行与日志](../concepts/runtime.md#nautilus-logging)。
 
-## 外部依赖候选识别
+## 版本识别
 
-实际Python distribution名为`trade-learn`（wheel文件前缀`trade_learn`），import名为`tradelearn`。本地候选是`trade-learn==0.2.9`与`OBSERVER_API_VERSION == 1`；旧0.2.8没有本页完整默认调度/观察合同。尚未发布到公共包源，不应仅写普通公共源安装命令便声称取得候选。
-
-2026-10-27本机可安装候选为`trade_learn-0.2.9-cp312-cp312-macosx_11_0_arm64.whl`，SHA-256 `ca243bfdb06d2ba81119121a60a9e35bbedacba466f583b9dd2e6d7f77d0abc9`。仅适用macOS arm64 / CPython3.12，不是Windows或Linux wheel。调用方从已核交付清单取得文件，在隔离环境本地安装并核Python/Rust版本一致；SDK适配方同时冻结能力版本和完整候选源码摘要，实际TL SDK薄类仍待其实现及联合确认。此哈希标识本次候选，不取代后续发行版本管理。
+实际distribution为 `trade-learn`、import为 `tradelearn`。0.2.9的 `OBSERVER_API_VERSION == 1`；Python包、native版本、目标ABI与平台必须一致，文件摘要取实际发行来源，不按同名版本猜测。旧候选与日期化安装证据保留在[发布记录](../reviews/2026-11-03-runtime-release.md)。

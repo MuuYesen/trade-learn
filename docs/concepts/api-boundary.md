@@ -57,7 +57,7 @@ cash_flow_return(begin, finish, *, net_flow=None, events=(), start=None, end=Non
 
 实盘 broker / data 适配器不作为稳定用户 facade。QMT、IB、CTP 等适配器建议放在私有扩展或 `deploy` 项目里维护，只通过 `tradelearn.engine` / `tradelearn.lite` 的策略意图和内部 broker-neutral 契约对接。
 
-增量 paper/live 策略使用 `tradelearn.engine`；Lite 保留批量研究定位。Nautilus 等公开外部宿主的依赖由集成层声明；当前公共包未交付完整 Nautilus 桥接。具体范围见[接入指南](../guides/live.md)。
+增量 paper/live 策略使用 `tradelearn.engine`；Lite 保留批量研究定位。Nautilus 等公开外部宿主的依赖由集成层声明；0.2.9包内提供通用 `tradelearn_runtime` 桥，可选 `[nautilus]` 固定官方rc7；日志可选且不承担执行保护。具体venue与私有扩展仍需单独验收。具体范围见[接入指南](../guides/live.md)。
 
 用户策略仍应只调用公开策略 API，例如 `buy`、`sell`、`order_target_percent`、`target_weights`。具体账户、行情、成交回报、批量状态查询由部署侧适配器负责。
 

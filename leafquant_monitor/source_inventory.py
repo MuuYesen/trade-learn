@@ -2,7 +2,7 @@
 from pathlib import Path
 
 TRANSPORT_MODULES = ('__init__.py', 'codec.py', 'sqs_transport.py', 'source_file_contract.py',
-                     'source_file_sender.py', 'archive_receipt_client.py')
+                     'source_file_sender.py', 'archive_receipt_client.py', 'filesystem.py')
 
 
 def transport_sources():

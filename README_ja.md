@@ -21,7 +21,7 @@
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
-**trade-learn** は、投資研究（Learn）とバックテスト実行（Trade）の間の摩擦を解消することを目指しています。「Python 戦略ロジック + Rust ネイティブコア」のハイブリッドアーキテクチャにより、Backtrader との **100% 厳格なロジック同期** を維持しながら、多資産バックテストで **110倍以上** のパフォーマンス向上を実現しました。大規模な検証時間を「時間単位」から「秒単位」に短縮し、インデックス強化や機械学習戦略に極速の反復体験を提供します。
+**trade-learn** は、投資研究（Learn）とバックテスト実行（Trade）の間の摩擦を解消することを目指しています。「Python 戦略ロジック + Rust ネイティブコア」のハイブリッドアーキテクチャにより、固定サンプルにおけるBacktraderとの宣言済みセマンティクス対照 を維持しながら、多資産バックテストで **110倍以上** のパフォーマンス向上を実現しました。数値は下記固定サンプルの結果で、すべての戦略・プラットフォーム・実取引への保証ではありません。研究の検証時間を短縮し、インデックス強化や機械学習戦略に極速の反復体験を提供します。
 
 高性能なエンジンに加え、**trade-learn** は完全な投資研究インフラを提供します。**JupyterLab** と **MLflow** を内蔵し、ファクターマイニング、戦略検証、実験監査をシームレスに結合。**再現可能、追跡可能、監査可能**なフルライフサイクルの研究パイプラインを構築します。これにより、研究プロセスは「結果重視」からシステム化されたエンジニアリングワークフローへと進化し、研究者は戦略の本質に集中できるようになります。
 
@@ -47,7 +47,7 @@
 - **Rust ハイブリッド動力**：マッチングエンジンとコア計算を Rust で実装し、Backtrader 比較で単一銘柄 **28倍**、多資産リバランス **110倍以上** の高速化を実現。
 - **自動ランナー配置**：データの形状に応じて、Bar 毎の逐次実行かパネル一括実行を自動選択。**インデックス強化シナリオ**に最適化されたメモリレイアウト。
 
-#### 🛡️ 厳格な金融工学：Backtrader との 100% 同期
+#### 🛡️ 厳格な金融工学：Backtraderとの回測セマンティクス対照
 - **Engine レベルの同期**：Analyzer / Sizer / Signal 体系を完全サポートし、Backtrader Oracle との論理的乖離をゼロに。
 - **Lite 最小限の表現**：同じランタイム上に構築された軽量な構文。機械学習モデルの出力を即座にバックテストの意思決定に変換する `target_weights` インターフェースを内蔵。
 
@@ -84,17 +84,19 @@
 
 ## インストール
 
-研究・バックテストに加えて、任意のNautilus実行ブリッジと戦略ログを提供します。`[nautilus]` はPython 3.13/3.14で公式 `2.0.0rc7` を固定します。この実行経路は実験的で、口座・venueルーティング・復旧設定を明示する必要があります。インストールだけでは接続や発注は行いません。[インストールと実行範囲](docs/concepts/runtime.md#安装与原生扩展)。
+研究・バックテストに加えて、任意のNautilus実行ブリッジと戦略ログを提供します。`[nautilus]` はPython 3.13/3.14で公式 `2.0.0rc7` を固定します。この実行経路は実験的で、口座・venueルーティング・復旧設定を明示する必要があります。インストールだけでは接続や発注は行いません。[インストールと実行範囲](docs/concepts/runtime.md#runtime-install)。
 
 ```bash
-pip install trade-learn
+pip install trade-learn==0.2.9
 ```
 
-最新バージョンの取得：
+任意の実行ホストには **Python 3.13 または 3.14** を使用します。
 
 ```bash
-pip install git+https://github.com/MuuYesen/trade-learn.git@master
+pip install "trade-learn[nautilus]==0.2.9"
 ```
+
+他のPython版では依存markerによりNautilusが省略され、実行ブリッジは利用できません。基本TL機能は引き続き利用できます。
 
 オプション（Extras）：
 
@@ -116,13 +118,23 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 | `[all]` | 完全な研究環境 (Lab, MLflow, indicators, ML, DuckDB など) |
 
 > **💡 インストールのヒント**:
-> 標準インストールは基本的なバックテストに対応します。チャートや出力には `[report]`、組み込み指標には `[indicators]` を追加してください。JupyterLab と MLflow を含む全機能には `[all]` を推奨します。
+> 標準インストールは基本的なバックテストに対応します。チャートや出力には `[report]`、組み込み指標には `[indicators]` を追加してください。JupyterLab と MLflow を含む研究環境には `[all]` を使用します。Nautilusは別途指定し、Python 3.13/3.14では `[all,nautilus]` を組み合わせられます。
 > ```bash
 > pip install "trade-learn[all]"
 > ```
 > `tradelearn lab` コマンドで起動し、8888 ポートで JupyterLab、5050 ポートで MLflow にアクセス可能です。
 
+### 原生wheelとプラットフォーム
+
+| 機能 | Python / プラットフォーム |
+|---|---|
+| 研究・バックテスト・原生カーネル | Python 3.10–3.14：Linux x86_64、macOS arm64、Windows x86_64。Linux aarch64：CPython 3.13 |
+| 任意のNautilus実行 | Python 3.13/3.14と対応する公式rc7 wheel。venue・商品・注文の検証は個別 |
+| 戦略ログ | 対応するRecorderが必要。ローカル永続化と遠隔送信をプラットフォーム別に検証 |
+
 ## クイックスタート
+
+以下は指標とレポートを使用します。先に `trade-learn[indicators,report]` をインストールしてください。
 
 **Lite — 最短パス**（迅速な検証、教育、ターゲットウェイト戦略に最適）：
 
@@ -196,6 +208,18 @@ cerebro.report("report.html")
 
 > [!TIP]
 > **マルチアセットロジックについて：** マルチアセットバックテストでは、戦略はデフォルトで `self.data`（主データフィード）にバインドされます。そのため、上記の例に複数銘柄を渡しても、意思決定は最初の銘柄のシグナルに基づきます。複数銘柄を独立して取引するには、戦略の `init` で `self.datas` を走査し、各フィードごとに指標を作成してください。
+
+## 任意の実行ホストと戦略ログ
+
+研究・バックテストはEngine/Liteを使用します。任意のブリッジはEngine `StrategyRuntime`をNautilusに接続し、adapterが注文・約定・口座の一次情報を提供します。Liteのバッチ指標機能だけでは完全な実取引接続になりません。[実行接続ガイド](docs/guides/live.md)。
+
+```bash
+python -m tradelearn_runtime.support
+```
+
+固定公式版の内蔵adapterとdata/execution factoryを表示します。ディレクトリの存在は注文・paper・実取引・全プラットフォームの検証を意味しません。データ専用providerも含まれ、私有cTrader・戦略・認証情報・口座状態は同梱しません。
+
+ログと商用監視は任意です。遠隔送信は明示的な制限付き認可が必要で、ログを無効にしても口座・経路・所有ポジション・未解決注文の保護は無効になりません。インストールだけでは発注せず、ソフトウェア検証は取引損失を防ぐ保証ではありません。[実行とログ](docs/concepts/runtime.md#nautilus-logging)。
 
 ## 投資研究パイプライン例
 
@@ -355,7 +379,7 @@ class LiveStylePortfolio(tl.Strategy):
 
 #### バックテストエンジンと核心基盤
 - [x] **Rust ハイブリッドカーネル**：Clocked Multi-Data Runner により、多資産バックテストで **110x+** 加速。
-- [x] **Backtrader セマンティクス同期**：マッチングロジック 100%、`bt.Strategy` によるランタイム共有。
+- [x] **Backtrader セマンティクス同期**：宣言済みマッチングケースを検証し、`bt.Strategy` によるランタイム共有。
 - [x] **インデックス強化パイプライン**：`Data → Factor → Score → Weights → target_weights()` の全フローを接続。
 - [x] **自動実験監査**：MLflow と深く統合し、コードスナップショット、パラメータ、指標、レポートを自動記録。
 - [x] **高性能データバックエンド**：**DuckDB ネイティブコネクタが実装済み**。億単位の Bar に対するローカル秒級読み込みと横断クエリをサポート。
@@ -377,7 +401,7 @@ class LiveStylePortfolio(tl.Strategy):
 
 #### 実盤取引とエコシステム構想
 - [x] **共通 Runtime**：デフォルト研究、イベント再生、外部 paper/live のライフサイクルを共有。約定結果は入力順序とブローカーに依存します。
-- [ ] **外部実行接続**：ブローカー・ホスト統合を個別に検証。実運用アダプターと認証情報は本リポジトリの配布対象外です。
+- [x] **任意の実行ホスト**：共通Nautilusブリッジと任意のログを提供。venue・注文機能・実運用は個別に検証し、私有adapterと認証情報は同梱しません。
 - [ ] **Agentic Quant プラットフォーム**：自然言語駆動のエンドツーエンド投資研究自動化基盤へ進化。
 
 ## 免責事項 (Disclaimer)

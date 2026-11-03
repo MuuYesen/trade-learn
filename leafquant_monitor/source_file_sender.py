@@ -19,6 +19,7 @@ from threading import RLock
 
 from .source_file_contract import MAX_CHUNK_BYTES, MAX_CHUNKS, MAX_FILE_BYTES, validate_source_manifest, validate_source_receipt, validate_native_time_anchor
 from .sqs_transport import SourceEnvelope
+from .filesystem import database_identity, original_identity, file_stat, path_stat, open_read_fd
 
 
 def canonical(value):
@@ -27,7 +28,7 @@ def canonical(value):
 
 class _FileBytes:
     """Pinned descriptor with at most one 256KiB read allocation."""
-    def __init__(self,fd): self.fd=fd; self.info=os.fstat(fd); self.length=self.info.st_size; self.published_digest=None;self.sealed=False;self._read_lock=RLock()
+    def __init__(self,fd): self.fd=fd; self.info=file_stat(fd); self.length=self.info.st_size; self.published_digest=None;self.sealed=False;self._read_lock=RLock()
     def pin(self,length,*,sealed=False):
         if type(length) is not int or not 0<=length<=self.info.st_size:raise ValueError("invalid published source prefix")
         self.length=length;self.sealed=sealed;self.published_digest=self.sha()
@@ -54,7 +55,7 @@ class _FileBytes:
         for offset in range(0,length,MAX_CHUNK_BYTES): h.update(self[offset:min(length,offset+MAX_CHUNK_BYTES)])
         return h.hexdigest()
     def check(self):
-        now=os.fstat(self.fd)
+        now=file_stat(self.fd)
         fields=('st_dev','st_ino','st_size','st_mtime_ns','st_ctime_ns')
         if self.sealed and any(getattr(now,k)!=getattr(self.info,k) for k in fields):
             raise ValueError('sealed source changed during capture')
@@ -77,9 +78,15 @@ class SourceFileSender:
         self.producer_id=producer_id
         self.max_pending_bytes=max_pending_bytes
         database=Path(database)
+        if os.name=='nt':
+            from .filesystem import check_private_directory
+            check_private_directory(database.parent)
         if database.is_symlink(): raise ValueError('unsafe sender database')
         self.db=sqlite3.connect(database,timeout=10,isolation_level=None)
         os.chmod(database,0o600)
+        if os.name=='nt':
+            from .filesystem import check_private_path
+            check_private_path(database)
         self.db.execute('PRAGMA journal_mode=WAL')
         self.db.execute('PRAGMA synchronous=FULL')
         self.db.executescript('''
@@ -125,11 +132,18 @@ class SourceFileSender:
     def close(self): self.db.close()
 
     def _read(self,path):
-        before=os.lstat(path)
+        if os.name=='nt':
+            from .filesystem import check_private_directory
+            check_private_directory(Path(path).parent)
+        before=path_stat(path)
         if not stat.S_ISREG(before.st_mode) or getattr(before,'st_file_attributes',0)&getattr(stat,'FILE_ATTRIBUTE_REPARSE_POINT',0):
             raise ValueError('unsafe source leaf')
-        fd=os.open(path,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_BINARY',0))
+        fd=open_read_fd(path)
         data=_FileBytes(fd)
+        if os.name=='nt':
+            from .filesystem import verify_private_fd
+            try:verify_private_fd(fd)
+            except BaseException:data.close();raise
         # Windows has no O_NOFOLLOW; comparing the opened descriptor to the
         # lstat identity prevents a raced symlink/reparse replacement being read.
         if any(getattr(data.info,key)!=getattr(before,key) for key in ('st_dev','st_ino','st_size','st_mtime_ns','st_ctime_ns')):
@@ -178,7 +192,7 @@ class SourceFileSender:
             row=self.db.execute('SELECT path,device,inode,business_start,offset,prefix_sha,manifest FROM source_files WHERE producer=? AND file_id=?',(self.producer_id,file_id)).fetchone()
             if row:
                 oldpath,dev,ino,start,offset,prefix,manifest=row
-                if (str(path),info.st_dev,info.st_ino)!=(oldpath,dev,ino) or len(data)<offset or data.sha(offset)!=prefix:
+                if (str(path),info.st_dev,info.st_ino)!=(oldpath,original_identity(dev),original_identity(ino)) or len(data)<offset or data.sha(offset)!=prefix:
                     raise ValueError('source identity or acknowledged prefix changed')
                 if business_start is not None and business_start!=start: raise ValueError('business watermark changed')
                 if manifest:
@@ -190,7 +204,7 @@ class SourceFileSender:
                 if type(start) is not int or not 0<=start<=len(data) or (self.mode=='log' and start and data[start-1:start]!=b'\n'):
                     raise ValueError('invalid business watermark')
                 offset=0
-                self.db.execute('INSERT INTO source_files(producer,file_id,path,device,inode,business_start,offset,prefix_sha) VALUES(?,?,?,?,?,?,?,?)',(self.producer_id,file_id,str(path),info.st_dev,info.st_ino,start,0,hashlib.sha256(b'').hexdigest()))
+                self.db.execute('INSERT INTO source_files(producer,file_id,path,device,inode,business_start,offset,prefix_sha) VALUES(?,?,?,?,?,?,?,?)',(self.producer_id,file_id,str(path),database_identity(info.st_dev),database_identity(info.st_ino),start,0,hashlib.sha256(b'').hexdigest()))
             tail_start=data.rfind(b'\n')+1 if self.mode=='log' else len(data)
             if sealed and tail_start<len(data):
                 self.db.execute('INSERT OR REPLACE INTO source_diagnostics VALUES(?,?,?)',(self.producer_id,file_id,'unterminated_tail'))
@@ -288,6 +302,7 @@ class SourceFileSender:
             raise
 
     def poll_receipts(self,client,*,before_collect=None,limit=16,now=None,prefer_recent=False):
+        self._retry_windows_gc()
         now=time.time() if now is None else now
         if type(prefer_recent) is not bool:raise ValueError('explicit receipt scheduling mode required')
         self._prune_retired_once()
@@ -339,14 +354,14 @@ class SourceFileSender:
             if row[4] not in (1,2): raise ValueError('unverified source disappeared')
             self._finish_gc(path,file_id); return
         try:
-            if (info.st_dev,info.st_ino)!=(row[1],row[2]) or len(data)!=manifest['length'] or data.sha()!=manifest['sha256']:
+            if (info.st_dev,info.st_ino)!=(original_identity(row[1]),original_identity(row[2])) or len(data)!=manifest['length'] or data.sha()!=manifest['sha256']:
                 raise ValueError('source changed before collection')
             data.check()
         finally:
             data.close()
 
         # Producers own this immutable sealed path and must never replace/reuse it.
-        current=path.lstat()
+        current=path_stat(path)
         if (current.st_dev,current.st_ino,current.st_mtime_ns,current.st_ctime_ns)!=(info.st_dev,info.st_ino,info.st_mtime_ns,info.st_ctime_ns): raise ValueError('source changed before unlink')
         self.db.execute('BEGIN IMMEDIATE')
         try:
@@ -355,6 +370,8 @@ class SourceFileSender:
         self._finish_gc(path,file_id,True)
 
     def _finish_gc(self,path,file_id,unlink=False):
+        if os.name=='nt':
+            return self._finish_windows_gc(path,file_id,unlink)
         # This existing GC synchronization point must establish capability
         # BEFORE destructive IO. Unsupported platforms retain their raw file;
         # no new Windows deletion/flush implementation is implied here.
@@ -367,3 +384,48 @@ class SourceFileSender:
             os.fsync(fd)
         finally:os.close(fd)
         self.db.execute('UPDATE source_files SET verified=2 WHERE producer=? AND file_id=?',(self.producer_id,file_id))
+
+
+    def _finish_windows_gc(self,path,file_id,unlink):
+        from .filesystem import move_write_through, verify_private_fd
+        proof=self.verified_proof(file_id)
+        if proof is None:raise ValueError('complete persisted proof required before retirement')
+        row=self.db.execute('SELECT device,inode,manifest,verified FROM source_files WHERE producer=? AND file_id=?',(self.producer_id,file_id)).fetchone()
+        manifest=json.loads(row[2]);path=Path(path)
+        retired=path.with_name('.'+path.name+'.proof-retired')
+        def checked(candidate):
+            info,data=self._read(candidate)
+            try:
+                verify_private_fd(data.fd)
+                if (info.st_dev,info.st_ino)!=(original_identity(row[0]),original_identity(row[1])) or len(data)!=manifest['length'] or data.sha()!=manifest['sha256']:
+                    raise ValueError('proof retirement source changed')
+                data.check()
+            finally:data.close()
+        if os.path.lexists(path):
+            if not unlink:raise ValueError('source reappeared during retirement')
+            if os.path.lexists(retired):raise ValueError('retirement destination already exists')
+            checked(path)
+            move_write_through(path,retired)
+        if os.path.lexists(retired):checked(retired)
+        # verified=1 and the complete proof were committed before the rename.
+        # A restart at either side of the rename can therefore finish safely.
+        self.db.execute('UPDATE source_files SET verified=2 WHERE producer=? AND file_id=?',(self.producer_id,file_id))
+        if os.path.lexists(retired):retired.unlink()
+        # DeleteFile is reclamation only. If it is lost or fails, this same
+        # proof-bound tombstone is retried; it is never discovered as a log.
+
+    def _retry_windows_gc(self,limit=16):
+        if os.name!='nt':return
+        key='windows-proof-retirement:'+self.producer_id
+        row=self.db.execute('SELECT value FROM file_sender_meta WHERE key=?',(key,)).fetchone();cursor=row[0] if row else ''
+        query='SELECT file_id,path,verified FROM source_files WHERE producer=? AND verified IN (1,2) AND file_id>? ORDER BY file_id LIMIT ?'
+        rows=self.db.execute(query,(self.producer_id,cursor,limit)).fetchall()
+        if not rows and cursor:rows=self.db.execute(query,(self.producer_id,'',limit)).fetchall()
+        error=None
+        for file_id,path,verified in rows:
+            original=Path(path);retired=original.with_name('.'+original.name+'.proof-retired')
+            try:
+                if verified==1 or not os.path.lexists(original) or os.path.lexists(retired):self._finish_windows_gc(original,file_id,verified==1 and os.path.lexists(original))
+            except (OSError,ValueError) as exc:error=error or exc
+        if rows:self.db.execute('INSERT OR REPLACE INTO file_sender_meta VALUES(?,?)',(key,rows[-1][0]))
+        if error is not None:raise error

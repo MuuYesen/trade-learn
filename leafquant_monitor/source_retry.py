@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 import time
 
+from .filesystem import original_identity
 from .source_file_sender import SourceFileSender,canonical
 from .source_file_contract import validate_source_manifest,validate_native_time_anchor,MAX_CHUNK_BYTES
 from .sqs_transport import SourceEnvelope
@@ -69,7 +70,7 @@ class RetryingSourceFileSender(SourceFileSender):
                 manifest=validate_source_manifest(json.loads(encoded))
                 if (manifest['producer_id']!=self.producer_id or manifest['generation']!=self.generation
                         or manifest['file_id']!=file_id or manifest['revision']!=0
-                        or (info.st_dev,info.st_ino)!=(dev,ino) or len(data)!=manifest['length']
+                        or (info.st_dev,info.st_ino)!=(original_identity(dev),original_identity(ino)) or len(data)!=manifest['length']
                         or offset!=manifest['length'] or prefix!=manifest['sha256'] or data.sha()!=manifest['sha256']):
                     raise ValueError('retained source identity or bytes changed')
                 anchor_row=self.db.execute('SELECT body FROM source_time_anchors WHERE producer=? AND file_id=?',(self.producer_id,file_id)).fetchone()

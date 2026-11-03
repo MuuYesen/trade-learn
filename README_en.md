@@ -21,7 +21,7 @@
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
-**trade-learn** aims to eliminate the long-standing friction between quantitative research ("Learn") and backtest execution ("Trade"). By adopting a hybrid architecture of "Python for strategy logic + Rust for native backtest core," it achieves a **110x+ performance leap** in multi-asset backtesting while ensuring **100% rigorous semantic alignment** with Backtrader. It compresses large-scale strategy validation from hours to seconds, providing truly iterative research efficiency for index enhancement and machine learning strategies.
+**trade-learn** aims to eliminate the long-standing friction between quantitative research ("Learn") and backtest execution ("Trade"). By adopting a hybrid architecture of "Python for strategy logic + Rust for native backtest core," it achieves a **110x+ performance leap** in multi-asset backtesting with the declared Backtrader semantics checked against fixed fixtures. These benchmark results apply to the fixed samples below, not every strategy, platform or live execution path; it shortens large research runs, providing truly iterative research efficiency for index enhancement and machine learning strategies.
 
 Beyond high performance, **trade-learn** provides a complete research infrastructure. With built-in **JupyterLab** and **MLflow**, it seamlessly links factor mining, strategy validation, and experiment auditing into a **reproducible, traceable, and auditable** full-lifecycle research pipeline. This elevates the research process from "result-oriented" to a systematically managed engineering workflow, allowing researchers to focus on the core strategy logic.
 
@@ -36,7 +36,7 @@ Beyond high performance, **trade-learn** provides a complete research infrastruc
 **trade-learn** rejects the simple stacking of features. Instead, it balances professional depth with research efficiency through a unique "Dual-Mode, Dual-Core" design. The **Engine** layer strictly aligns with Backtrader semantics for logic correctness, while the **Lite** layer provides a minimal Pythonic interface for rapid iteration.
 
 You can define the depth of your strategy based on the research stage:
-- **Engine Mode (Deep Research)**: Fully aligns with Backtrader semantics, supporting the complete Analyzer/Sizer/Signal ecosystem. Ideal for building complex, production-grade systems with precise logic.
+- **Engine Mode (Deep Research)**: Fully aligns with Backtrader semantics, supporting the complete Analyzer/Sizer/Signal ecosystem. Ideal for building complex, complex backtest strategies with precise logic.
 - **Lite Mode (Agile Validation)**: Follows the minimalism of `backtesting.py`, supporting direct connection to model weights. Perfect for high-frequency iteration and prototype validation during the factor mining stage.
 
 In terms of ecosystem, **trade-learn** provides comprehensive indicator support, compatible with TA-Lib, Pandas-TA-Classic, TDX, and TradingView, while allowing flexible expansion of custom indicators and data sources.
@@ -47,7 +47,7 @@ In terms of ecosystem, **trade-learn** provides comprehensive indicator support,
 - **Rust Hybrid Power**: The matching engine and core calculations are powered by Rust, providing **28x** speedup for single assets and **110x+** for multi-asset rebalancing compared to Backtrader.
 - **Automatic Runner Scheduling**: Automatically selects between "Single-Stream Bar-by-Bar" or "Batch Panel" processing based on data shape. Optimized memory layout for **Index Enhancement** scenarios.
 
-#### 🛡️ Rigorous Finance: 100% Backtrader Alignment
+#### 🛡️ Rigorous Finance: Backtest Semantics Checked Against Backtrader
 - **Engine-Level Alignment**: Full support for the Analyzer/Sizer/Signal system, ensuring zero logical divergence from the Backtrader Oracle.
 - **Lite Minimalist Expression**: Lightweight syntax built on the same runtime. Features a built-in `target_weights` interface to convert ML model outputs into backtest decisions instantly.
 
@@ -84,17 +84,19 @@ Most quantitative research stops at **Correlation**, which often leads to factor
 
 ## Installation
 
-This release provides research/backtesting, an optional Nautilus execution bridge and strategy logging. The `[nautilus]` extra requires Python 3.13/3.14 and pins official `2.0.0rc7`; that execution path remains experimental and needs explicit account/venue routing and recovery configuration. Installation does not connect accounts or trade. See [installation and runtime](docs/concepts/runtime.md#安装与原生扩展).
+This release provides research/backtesting, an optional Nautilus execution bridge and strategy logging. The `[nautilus]` extra requires Python 3.13/3.14 and pins official `2.0.0rc7`; that execution path remains experimental and needs explicit account/venue routing and recovery configuration. Installation does not connect accounts or trade. See [installation and runtime](docs/concepts/runtime.md#runtime-install).
 
 ```bash
-pip install trade-learn
+pip install trade-learn==0.2.9
 ```
 
-Get the latest version:
+For the optional execution host, use **Python 3.13 or 3.14**:
 
 ```bash
-pip install git+https://github.com/MuuYesen/trade-learn.git@master
+pip install "trade-learn[nautilus]==0.2.9"
 ```
+
+Older/newer Python versions skip Nautilus through the dependency marker and cannot use the bridge; base TL remains available.
 
 Optional extras:
 
@@ -113,16 +115,26 @@ Optional extras:
 | `[duckdb]` | DuckDB bars backend |
 | `[lab]` | JupyterLab / Jupyter AI / MCP / Pygwalker environment |
 | `[mlflow]` | MLflow tracking server and artifact logging |
-| `[all]` | Full environment (Lab, MLflow, indicators, ML, DuckDB, etc.) |
+| `[all]` | Full research environment (Lab, MLflow, indicators, ML, DuckDB, etc.) |
 
 > **💡 Installation Tip**:
-> The default install supports basic backtesting. Add `[report]` for charts and exports or `[indicators]` for built-in indicators. For the full research environment, use `[all]`:
+> The default install supports basic backtesting. Add `[report]` for charts and exports or `[indicators]` for built-in indicators. For the full research environment, use `[all]` (Nautilus is separate; Python 3.13/3.14 may combine `[all,nautilus]`):
 > ```bash
 > pip install "trade-learn[all]"
 > ```
 > Launch with `tradelearn lab`. Access JupyterLab at port `8888` and MLflow at `5050`.
 
+### Native wheels and platforms
+
+| Capability | Python / platform |
+|---|---|
+| Research, backtesting, native kernel | Python 3.10–3.14: Linux x86_64, macOS arm64, Windows x86_64; Linux aarch64: CPython 3.13 |
+| Optional Nautilus execution | Python 3.13/3.14, matching official rc7 wheel; venue, product and order qualification remain separate |
+| Strategy logging | Matching Recorder required; local persistence and remote delivery are verified separately by platform |
+
 ## Quick Start
+
+These examples use indicator providers and reports: install `trade-learn[indicators,report]` first.
 
 **Lite — The Shortest Path** (Ideal for rapid validation, teaching, and target-weight portfolios):
 
@@ -196,6 +208,18 @@ cerebro.report("report.html")
 
 > [!TIP]
 > **Multi-asset logic:** In multi-asset backtests, the strategy binds to `self.data` by default (the primary data feed). The example above therefore makes decisions from the first asset even if multiple assets are provided. To trade multiple assets independently, iterate over `self.datas` in `init` and create indicators for each feed.
+
+## Optional execution and strategy logging
+
+Engine/Lite retain their research and backtest roles. The optional bridge connects Engine `StrategyRuntime` to Nautilus; its adapter supplies authoritative orders, fills and account facts. Lite's batch indicator lifecycle is not a complete live integration. See the [execution guide](docs/guides/live.md).
+
+```bash
+python -m tradelearn_runtime.support
+```
+
+The command discovers the fixed official package's bundled adapters and public data/execution factory declarations. A directory is not proof of order, paper, live or platform acceptance; some providers are data-only. Private cTrader, strategies, credentials and account state are not shipped.
+
+Logging and remote monitoring are optional. Remote sending requires explicit restricted authorization; execution identity, routing, owned positions and unresolved-intent protection remain active without logging. Installation does not trade, and validation cannot guarantee against trading losses. See [runtime and logging](docs/concepts/runtime.md#nautilus-logging).
 
 ## Research Pipeline Example
 
@@ -355,7 +379,7 @@ Based on the current engineering plan, **trade-learn** evolves along these core 
 
 #### Backtest Engine & Core Foundation
 - [x] **Rust Hybrid Kernel**: Clocked Multi-Data Runner, **110x+** speedup for multi-asset backtests.
-- [x] **Backtrader Semantic Parity**: 100% matching consistency and shared runtime through `bt.Strategy`.
+- [x] **Backtrader Semantic Parity**: Declared matching cases and shared runtime through `bt.Strategy`.
 - [x] **Index Enhancement Pipeline**: Complete `Data → Factor → Score → Weights → target_weights()` workflow.
 - [x] **Automated Experiment Audit**: Deep MLflow integration for code snapshots, parameters, metrics, and reports.
 - [x] **High-Performance Data Backend**: **DuckDB native connector has landed**, supporting local second-level reads and cross-dimensional queries over hundreds of millions of bars.
@@ -377,7 +401,7 @@ Based on the current engineering plan, **trade-learn** evolves along these core 
 
 #### Live Trading & Ecosystem Vision
 - [x] **Universal Live Event Link**: Shared `StrategyRuntime` lifecycle for default research, event replay, and external paper/live hosts; execution outcomes depend on the broker and input schedule.
-- [ ] **Live Trading Connectivity**: Validate external broker/host integrations independently; production adapters and credentials are outside this repository.
+- [x] **Optional Execution Host**: Common Nautilus bridge and optional logging; each venue, order capability and production deployment still needs validation. Private adapters and credentials are not shipped.
 - [ ] **Agentic Quant Platform**: Evolve into a natural-language-driven automation foundation for end-to-end quantitative research.
 
 ## Disclaimer
