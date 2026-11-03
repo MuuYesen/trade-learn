@@ -12,14 +12,14 @@ def test_discovery_is_only_installed_adapter_directories():
         version="2.0.0rc7",
         files=[
             "nautilus_trader/adapters/binance/__init__.py",
-            "nautilus_trader/adapters/ib/__init__.py",
+            "nautilus_trader/adapters/interactive_brokers/__init__.py",
             "nautilus_trader/adapters/__init__.py",
             "nautilus_trader/adapters/_template/__init__.py",
             "leafquant_ctrader/__init__.py",
         ],
     )
     result = adapter_inventory(dist)
-    assert result["adapters"] == ["binance", "ib"]
+    assert result["adapters"] == ["binance", "interactive_brokers"]
     assert result["scope"] == "installed_official_adapter_discovery_only"
     assert "not evidence" in result["acceptance"]
 
@@ -31,3 +31,14 @@ def test_wrong_version_and_missing_files_rejected():
     ):
         with pytest.raises(ValueError):
             adapter_inventory(dist)
+
+
+def test_private_or_unknown_adapter_is_not_advertised_as_official():
+    dist = SimpleNamespace(
+        version="2.0.0rc7",
+        files=[
+            "nautilus_trader/adapters/ctrader/__init__.py",
+        ],
+    )
+    with pytest.raises(ValueError, match="pinned official inventory"):
+        adapter_inventory(dist)

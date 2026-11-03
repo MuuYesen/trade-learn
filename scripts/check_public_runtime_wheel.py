@@ -4,11 +4,18 @@ import importlib.util
 import json
 import sys
 import tempfile
-from importlib import metadata
+from importlib import metadata, resources
 from pathlib import Path
 
 import tradelearn
 from leafquant_monitor import MonitorSettings, TradeLogger
+
+pinned = json.loads(
+    resources.files("tradelearn_runtime").joinpath("official_adapters.json").read_text()
+)
+assert pinned["nautilus_version"] == "2.0.0rc7"
+assert len(pinned["adapters"]) == 19
+assert not any(row["package"] == "ctrader" for row in pinned["adapters"])
 
 distribution = metadata.distribution("trade-learn")
 license_files = [

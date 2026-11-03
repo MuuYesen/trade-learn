@@ -1,0 +1,103 @@
+{
+  "nautilus_version": "2.0.0rc7",
+  "source": "https://pypi.org/pypi/nautilus_trader/2.0.0rc7/json",
+  "source_wheel_sha256": "b3928f37d75d57508030a421dc762186ad1f9ffc5d5420d7daf1d2c6badb8044",
+  "scope": "public factory declarations, not execution capability or binary authentication",
+  "adapters": [
+    {
+      "package": "architect_ax",
+      "data_factory": true,
+      "execution_factory": true
+    },
+    {
+      "package": "betfair",
+      "data_factory": true,
+      "execution_factory": true
+    },
+    {
+      "package": "binance",
+      "data_factory": true,
+      "execution_factory": true
+    },
+    {
+      "package": "blockchain",
+      "data_factory": true,
+      "execution_factory": false
+    },
+    {
+      "package": "bybit",
+      "data_factory": true,
+      "execution_factory": true
+    },
+    {
+      "package": "coinapi",
+      "data_factory": true,
+      "execution_factory": false
+    },
+    {
+      "package": "coinbase",
+      "data_factory": true,
+      "execution_factory": true
+    },
+    {
+      "package": "databento",
+      "data_factory": true,
+      "execution_factory": false
+    },
+    {
+      "package": "deribit",
+      "data_factory": true,
+      "execution_factory": true
+    },
+    {
+      "package": "derive",
+      "data_factory": true,
+      "execution_factory": true
+    },
+    {
+      "package": "dydx",
+      "data_factory": true,
+      "execution_factory": true
+    },
+    {
+      "package": "hyperliquid",
+      "data_factory": true,
+      "execution_factory": true
+    },
+    {
+      "package": "interactive_brokers",
+      "data_factory": true,
+      "execution_factory": true
+    },
+    {
+      "package": "kraken",
+      "data_factory": true,
+      "execution_factory": true
+    },
+    {
+      "package": "lighter",
+      "data_factory": true,
+      "execution_factory": true
+    },
+    {
+      "package": "okx",
+      "data_factory": true,
+      "execution_factory": true
+    },
+    {
+      "package": "polymarket",
+      "data_factory": true,
+      "execution_factory": true
+    },
+    {
+      "package": "sandbox",
+      "data_factory": false,
+      "execution_factory": true
+    },
+    {
+      "package": "tardis",
+      "data_factory": true,
+      "execution_factory": false
+    }
+  ]
+}

@@ -120,7 +120,7 @@ TA-Lib 的 SMA/EMA 按 `timeperiod` 暖机，RSI/ATR 使用 `timeperiod + 1` 根
 python -m tradelearn_runtime.support
 ```
 
-该命令只从已安装官方固定版本的包文件清单发现适配器，不导入adapter、读取账户或建立网络。下面由已审官方Linux CP313 wheel的公开factory接口核出；“内置”是可发现代码范围，不是每个来源的TL桥、订单、paper、实盘或平台均已验收。行情源不因此成为交易券商，sandbox也不证明其它adapter支持模拟账户。私有cTrader不在官方包或本库内。
+该命令从已安装固定版本的包文件清单发现适配器，并与真实官方wheel生成的唯一official_adapters.json核对；出现名单外目录拒绝冒称官方清单。此展示检查不用于阻止用户注册独立适配器，也不是官方二进制认证。该命令，不导入adapter、读取账户或建立网络。下面由已审官方Linux CP313 wheel的公开factory接口核出；“内置”是可发现代码范围，不是每个来源的TL桥、订单、paper、实盘或平台均已验收。行情源不因此成为交易券商，sandbox也不证明其它adapter支持模拟账户。私有cTrader不在官方包或本库内。
 
 | 内置包 | 官方公开接口形态 | TL逐来源业务验收 |
 |---|---|---|

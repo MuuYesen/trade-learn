@@ -157,6 +157,7 @@ include = [
     { path = "LICENSE", format = "sdist" },
     { path = "NOTICE", format = "sdist" },
     { path = "THIRD_PARTY_LICENSES/**/*", format = ["sdist", "wheel"] },
+    { path = "tradelearn_runtime/official_adapters.json", format = ["sdist", "wheel"] },
 ]
 
 [tool.cibuildwheel]

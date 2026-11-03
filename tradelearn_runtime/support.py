@@ -3,7 +3,7 @@
 Discovery is an inventory, never a claim of broker, paper or live acceptance.
 """
 import argparse
-from importlib import metadata
+from importlib import metadata, resources
 import json
 from pathlib import PurePosixPath
 
@@ -24,8 +24,14 @@ def adapter_inventory(distribution=None):
                 adapters.add(name)
     if not adapters:
         raise ValueError('installed distribution has no bundled adapter inventory')
+    pinned = json.loads(resources.files(__package__).joinpath('official_adapters.json').read_text())
+    declarations = {row['package']: row for row in pinned['adapters']}
+    if pinned['nautilus_version'] != distribution.version or adapters - declarations.keys():
+        raise ValueError('installed adapter names differ from pinned official inventory; verify distribution provenance')
     return {
-        'nautilus_version': distribution.version,
+        'official_interfaces': {name: declarations[name] for name in sorted(adapters)},
+        'provenance': 'inventory comparison is not binary authentication',
+        'nautilus_version' : distribution.version,
         'scope': 'installed_official_adapter_discovery_only',
         'adapters': sorted(adapters),
         'acceptance': 'not evidence of TL bridge, paper, live, order or platform acceptance',
