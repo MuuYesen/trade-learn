@@ -9,6 +9,8 @@ on:
         default: false
         type: boolean
   push:
+    branches:
+      - "publish/preview-runtime-20261103"
     tags:
       - "v*"
 

@@ -1,7 +1,10 @@
 """Public distribution includes real component sources, not checkout forwards."""
 from pathlib import Path
 import ast
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 

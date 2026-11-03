@@ -159,7 +159,7 @@ include = [
 [tool.cibuildwheel]
 build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
 skip = "*-musllinux_*"
-test-command = "python {project}/scripts/check_order_lifecycle_wheel.py"
+test-command = "python {project}/scripts/check_order_lifecycle_wheel.py && python {project}/scripts/check_public_runtime_wheel.py"
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]
