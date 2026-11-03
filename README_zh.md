@@ -17,13 +17,13 @@
   <img src="https://img.shields.io/pypi/v/trade-learn?style=flat-square" alt="PyPI version">
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
   <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/source-0.2.9_unreleased-blue?style=flat-square" alt="Source version">
+  <img src="https://img.shields.io/badge/source-0.2.9-blue?style=flat-square" alt="Source version">
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
-**trade-learn** 旨在解决量化投研中「研究（Learn）」与「回测（Trade）」长期脱节的问题。它采用「Python 表达策略逻辑 + Rust 原生回测内核」的混合架构，在与 Backtrader **100% 严格语义对齐** 的前提下，实现多资产回测 **110x+ 的性能提升**，将大规模策略验证从小时级压缩至秒级，为指数增强与机器学习策略提供真正可迭代的研究效率。
+**trade-learn** 旨在解决量化投研中「研究（Learn）」与「回测（Trade）」长期脱节的问题。它采用「Python 表达策略逻辑 + Rust 原生回测内核」的混合架构，按已登记的 Backtrader 语义逐项对照，在下文固定多资产回测样本中取得 **110x+ 的性能提升**，将大规模策略验证从小时级压缩至秒级，为指数增强与机器学习策略提供真正可迭代的研究效率。
 
-在高性能之外，**trade-learn** 同时提供一套完整的投研基础设施。框架内置 **JupyterLab** 与 **MLflow**，将因子挖掘、策略验证与实验审计无缝串联，构建出一条**可复现、可追踪、可审计**的全生命周期投研流水线，使研究过程从“结果导向”升级为可系统化管理的工程流程，让研究员专注于策略逻辑本身。
+在高性能之外，**trade-learn** 同时提供一套完整的投研基础设施。框架内置 **JupyterLab** 与 **MLflow**，将因子挖掘、策略验证与实验审计无缝串联，构建出一条**可复现、可追踪、可审计**的投研流水线，使研究过程从“结果导向”升级为可系统化管理的工程流程，让研究员专注于策略逻辑本身。
 
 <p align="center">
   <img src="docs/research-flow.png" alt="trade-learn research flow" width="100%" />
@@ -36,7 +36,7 @@
 **trade-learn** 拒绝功能的简单堆砌，而是通过独特的“双模双核”设计，在专业深度与研发效率之间构建了平衡。底层通过 **Engine** 深度对齐 Backtrader 语义以夯实逻辑正确性，上层则由 **Lite** 提供极简的 Pythonic 接口，确保了“快”与“准”的统一。
 
 您可以根据研发阶段，自由定义策略的深度：
-- **Engine 模式 (深度研发)**：深度对齐 Backtrader 语义，支持 Analyzer/Sizer/Signal 完整生态，适合构建逻辑精密、颗粒度极细的生产级复杂系统。
+- **Engine 模式 (深度研发)**：深度对齐 Backtrader 语义，支持 Analyzer/Sizer/Signal 完整生态，适合逐项研究订单、指标与分析器行为的复杂回测策略。
 - **Lite 模式 (敏捷验证)**：沿袭 backtesting.py 的极简主义，支持模型权重直连，极其适合在因子挖掘阶段进行高频迭代与原型验证。
 
 在生态层面，**trade-learn** 提供完善的指标支持。框架兼容 TA-Lib、Pandas-TA-Classic、TDX、TradingView 等主流指标库，并支持灵活扩展自定义指标与数据源，满足不同研究场景的需求。
@@ -47,7 +47,7 @@
 - **Rust 混合动力**：撮合引擎与核心计算由 Rust 承载，提供单标的 **28x**、多资产调仓 **110x+** 的 Backtrader 级加速。
 - **自动 Runner 调度**：根据数据形态自动选择“单流逐 Bar”或“Panel 批量”推进。**针对指数增强场景优化了内存布局**，开发者只需关注 `next()` 逻辑。
 
-#### 🛡️ 严谨金融：Backtrader 语义 100% 对齐
+#### 🛡️ 严谨金融：回测语义逐项对照
 - **Engine 级对齐**：完整支持 Analyzer / Sizer / Signal 体系，确保回测 Trades 与 Backtrader Oracle 逻辑零差异，高度支持自拓展组件。
 - **Lite 极简表达**：在同一 Runtime 上构建的轻量语法。**内置 `target_weights` 接口**，将机器学习模型输出的权重一键转化为回测决策。
 
@@ -90,22 +90,25 @@
 
 ## 安装
 
-> 当前仓库源码为 **0.2.9（尚未发布）**；以下普通安装命令获取 PyPI 已发行版本。源码、原生扩展与目标平台须匹配，详见[安装说明](./docs/concepts/runtime.md#029候选安装)。
+默认安装提供研究、回测、通用策略生命周期及策略日志组件；不自动连接账户、启用策略或发送日志。研究与回测支持 Python 3.10–3.14，原生扩展须匹配操作系统和 Python ABI。
 
 ```bash
-pip install trade-learn
+pip install trade-learn==0.2.9
 ```
 
-获取最新版本：
+选择 Nautilus 执行宿主时，在 **Python 3.13 或 3.14** 安装：
 
 ```bash
-pip install git+https://github.com/MuuYesen/trade-learn.git@master
+pip install "trade-learn[nautilus]==0.2.9"
 ```
+
+`[nautilus]` 固定官方 `nautilus_trader==2.0.0rc7`。这条可选执行路径使用预发行框架，按实验性接入提供；仍需显式账户、标的、venue 路由与恢复配置。其它 Python 版本的 pip 会按依赖 marker 跳过 Nautilus，不能因此使用执行桥；基础 TL 功能仍可用。详见[安装与运行边界](docs/concepts/runtime.md#安装与原生扩展)。
 
 可选 extras：
 
 | extra | 用途 |
 |---|---|
+| `[nautilus]` | 固定官方 Nautilus；实验性外部执行桥，需 Python 3.13/3.14 |
 | `[tdx]` | OpenTDX 数据源与国内指标依赖 |
 | `[tv]` | TradingView 数据源与 PyneCore 指标后端 |
 | `[talib]` | TA-Lib 指标命名空间 |
@@ -121,13 +124,21 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 | `[all]` | Lab、MLflow、指标后端、ML、DuckDB 等完整研究环境 |
 
 > **💡 安装建议**：
-> 默认安装只包含 NumPy、Pandas、tqdm、Typer、PyYAML 和 Requests 等核心依赖。因子分析、Parquet、指标后端和报表需要对应 extra。若需开启包含 JupyterLab 与 MLflow 的全栈投研体验，请指定 `[all]` 扩展进行安装：
+> 默认安装包含基础数据处理、本地记录器和按需发送依赖；不安装 Nautilus。因子分析、Parquet、指标后端和报表需要对应 extra。若需开启包含 JupyterLab 与 MLflow 的全栈投研体验，请指定 `[all]` 扩展进行安装：
 > ```bash
 > pip install "trade-learn[all]"
 > ```
 > 在项目根目录使用命令行启动 `tradelearn lab` 后，默认可通过 `8888` 端口进入交互式环境，通过 `5050` 端口查看 MLflow 实验记录。
 
 
+
+### 原生产物与平台
+
+| 能力 | Python / 平台 |
+|---|---|
+| 研究、回测与原生内核 | Python 3.10–3.14：Linux x86_64、macOS arm64、Windows x86_64；Linux aarch64 提供 CPython 3.13 wheel |
+| 可选 Nautilus 执行 | Python 3.13/3.14，须存在官方 rc7 对应平台 wheel；订单、产品及真实 venue 的支持另行验收 |
+| 策略日志 | 需匹配的本包 native Recorder；本地持久化与远程发送按平台分别验证，详情见[运行说明](docs/concepts/runtime.md#nautilus-与策略日志) |
 
 ## 快速上手
 
@@ -209,6 +220,18 @@ cerebro.report("report.html")
 
 > [!TIP]
 > **关于多标的逻辑：** 在多标的回测场景下，策略默认会绑定到 `self.data`（主数据源）。这意味着上述代码即使传入了多个标的，也仅会根据第一个标的的信号进行决策。若要实现多标的独立并行交易，需在策略 `init` 中遍历 `self.datas` 为每个标的建立指标。
+
+## 可选执行与策略日志
+
+研究和回测继续使用 Engine / Lite；需要外部执行时，通用桥把 Engine `StrategyRuntime` 接到 Nautilus，由其适配器提供权威订单、成交与账户事实。Lite 的批量指标生命周期不等于完整实盘接入。具体用法见[执行接入指南](docs/guides/live.md)。
+
+```bash
+python -m tradelearn_runtime.support
+```
+
+该命令展示固定官方版本实际内置的适配器及行情/执行 factory 分类；行情源不因此具有下单能力，目录存在也不表示全部订单、paper、实盘或平台已验收。自研券商扩展应独立安装，私有 cTrader、策略与账户配置不在本包内。
+
+策略日志按需装配，共用本地记录器；远程发送须显式配置受限授权。关闭日志或不接商业监控，不会关闭账户、路由、持仓归属与未决提交恢复保护。安装不是自动交易许可，软件校验不能保证避免交易损失。API、原生平台与发送边界见[运行与日志说明](docs/concepts/runtime.md#nautilus-与策略日志)。
 
 ## 投研流水线示例
 
@@ -356,6 +379,7 @@ class LiveStylePortfolio(tl.Strategy):
 |---|-------------------------------------------------------------------------|
 | 30 行走通第一个回测 | [快速开始](./docs/quickstart.md)                                            |
 | Lite / Engine 用法 | [Lite 指南](./docs/guides/lite.md) · [Engine 指南](./docs/guides/engine.md) |
+| 外部执行与日志 | [执行接入](docs/guides/live.md) · [运行与日志](docs/concepts/runtime.md#nautilus-与策略日志) |
 | 架构与边界 | [架构](./docs/concepts/architecture.md)                                   |
 | 因子 / ML / 权重研究流水线 | [Research 指南](./docs/guides/research.md)                                |
 | 双口径指标（`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`） | [Indicators 指南](./docs/guides/indicators.md)                            |
@@ -391,7 +415,7 @@ class LiveStylePortfolio(tl.Strategy):
 
 #### 实盘与生态愿景
 - [x] **通用实盘事件链路**：默认研究、事件回放和外部 paper/live 共用策略生命周期；成交结果取决于券商及输入调度。
-- [ ] **实盘交易打通**：按需接入外部执行宿主及券商适配器，并逐项验收；生产凭据不随公共包交付。
+- [x] **可选执行宿主**：通用 Nautilus 桥与可选日志装配；具体来源、订单及生产接入仍逐项验收，生产凭据不随公共包交付。
 - [ ] **Agentic Quant 平台**：最终演进为支持自然语言驱动的全流程投研自动化底座。
 
 ## 免责声明 (Disclaimer)

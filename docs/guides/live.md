@@ -1,6 +1,6 @@
 # 实盘协议
 
-当前 0.2.9 源码候选通过公开 `engine.StrategyRuntime` 协调默认研究、事件回放和外部驱动 paper/live 的策略生命周期。接入方负责事件调度、行情、权威订单/账户事实和执行保护；Runtime 不启动后台循环。完整调用与限制见 [Runtime](../concepts/runtime.md#正式增量策略runtime)。
+0.2.9通过公开 `engine.StrategyRuntime` 协调默认研究、事件回放和外部驱动 paper/live 的策略生命周期。接入方负责事件调度、行情、权威订单/账户事实和执行保护；Runtime 不启动后台循环。完整调用与限制见 [Runtime](../concepts/runtime.md#正式增量策略runtime)。
 
 ## 回测 broker 与实盘 broker 的区别
 
@@ -58,15 +58,16 @@ trade-learn 不公开 `tradelearn.live` 包。具体券商适配器由独立扩�
 
 [NautilusTrader](https://github.com/nautechsystems/nautilus_trader) 是公开的外部交易引擎。选择它作为执行宿主时，集成层必须安装并导入 `nautilus_trader` 及所需适配器；业务策略可以继续使用 TL API。公共 TL 本身不强制依赖 Nautilus。
 
-本仓库尚未交付可独立安装的通用 Nautilus 桥接包。内部桥接包含商业监控 SDK 依赖，不能把它当成安装公开上游包后自动具备的功能。本地自研适配器也须独立核对是否存在于目标上游版本。接入方应声明并验证支持的版本、平台、订单能力、恢复语义和报告顺序。
+0.2.9将通用桥接和可选日志纳入同一发行包；安装 `trade-learn[nautilus]==0.2.9` 才装配固定官方框架，桥接不强制启用商业监控。基础包不导入Na，未装依赖或Python版本不支持时，实际桥接入口明确拒绝。本地自研适配器不随公共包交付，须独立核对是否存在于目标上游版本。接入方应声明并验证支持的版本、平台、订单能力、恢复语义和报告顺序。
 
 ## 当前源码状态
 
 | 能力 | 状态与限制 |
 |---|---|
 | 原生回测、Engine / Lite 研究 | 已有实现；原生回测需匹配的 Rust 扩展 |
-| 正式 StrategyRuntime | 0.2.9 候选覆盖默认研究与增量事件协调；不启动内部 loop |
+| 正式 StrategyRuntime | 0.2.9 覆盖默认研究与增量事件协调；不启动内部 loop |
 | Broker 中性契约、内部事件泵 | 接入基础设施；内部类型不是策略 facade |
 | 通用只读 observers | capability 1；不含持久传输或商业 SDK |
-| Nautilus / 具体券商接入 | 外部扩展；本公共包未交付完整桥接、账户配置或生产策略 |
+| Nautilus通用桥 | 包内 `tradelearn_runtime.execution`；可选官方rc7，账户/路由需显式配置，具体venue另验 |
+| 具体券商接入 | 官方内置或独立扩展；不交付私有cTrader、账户配置或生产策略 |
 | 发行与实盘验收 | 单独核验；源码存在不表示已发布或已通过真实券商验收 |

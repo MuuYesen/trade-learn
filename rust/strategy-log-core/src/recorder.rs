@@ -1,4 +1,6 @@
 //! Shared durable JSON recorder. No Python or framework dependency.
+#[path = "recorder_platform.rs"]
+mod platform;
 #[derive(Debug)]
 pub enum RecorderError { Invalid(String), Io(std::io::Error), Runtime(String) }
 impl std::fmt::Display for RecorderError {
@@ -210,9 +212,6 @@ impl Recorder {
         Self::open(state_dir, capacity, segment_bytes, max_disk_bytes, false, Some(window))
     }
     fn open(state_dir: String, capacity: usize, segment_bytes: usize, max_disk_bytes: u64, native_text: bool, window: Option<Duration>) -> Result<Self, RecorderError> {
-        if !cfg!(unix) {
-            return Err(runtime_error("durable Recorder is unsupported on this platform; verified Unix filesystem semantics required"));
-        }
         if capacity == 0 || segment_bytes < 3 || max_disk_bytes == 0 {
             return Err(invalid(
                 "positive capacity/disk and segment_bytes >= 3 required",
@@ -224,6 +223,7 @@ impl Recorder {
             return Err(invalid("explicit existing canonical native source directory required"));
         }
         fs::create_dir_all(&path).map_err(RecorderError::Io)?;
+        #[cfg(windows)] let path = fs::canonicalize(&path).map_err(RecorderError::Io)?;
         let lock = OpenOptions::new()
             .create(true)
             .truncate(false)
@@ -250,12 +250,12 @@ impl Recorder {
                 }
             }
         }
-        match OpenOptions::new().write(true).create_new(true).open(&pin) {
+        match platform::create_new(&pin) {
             Ok(mut file) => {
                 #[cfg(unix)] {use std::os::unix::fs::PermissionsExt;file.set_permissions(fs::Permissions::from_mode(0o600)).map_err(RecorderError::Io)?;}
                 file.write_all(expected.as_bytes()).map_err(RecorderError::Io)?;
                 file.sync_all().map_err(RecorderError::Io)?;
-                File::open(&path).and_then(|f|f.sync_all()).map_err(RecorderError::Io)?;
+                #[cfg(unix)] platform::sync_directory(&path).map_err(RecorderError::Io)?;
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let info=fs::symlink_metadata(&pin).map_err(RecorderError::Io)?;
@@ -280,10 +280,10 @@ impl Recorder {
                     if raw.len()>1024 {return Err(invalid("bounded native anchor required"));}
                     let value:serde_json::Value=serde_json::from_slice(&raw).map_err(|_|invalid("invalid native anchor"))?;
                     if value.as_object().is_none_or(|o|o.len()!=4 || ["schema_version","start_ts_ns","end_ts_ns","source_schema"].iter().any(|k|!o.contains_key(*k))) || value["source_schema"]!="native-log-file.v1" || value["schema_version"]!=1 || value["start_ts_ns"].as_u64().is_none_or(|n|n==0 || n>i64::MAX as u64) || !value["end_ts_ns"].is_null() {return Err(invalid("invalid native anchor"));}
-                    File::open(entry.path()).and_then(|f|f.sync_all()).map_err(RecorderError::Io)?;
+                    platform::open_for_sync(&entry.path()).and_then(|f|f.sync_all()).map_err(RecorderError::Io)?;
                     let sealed=entry.path().with_extension("log");
                     if sealed.exists(){return Err(invalid("native recovery target exists"));}
-                    fs::rename(entry.path(),&sealed).map_err(RecorderError::Io)?;File::open(&path).and_then(|f|f.sync_all()).map_err(RecorderError::Io)?;
+                    platform::move_file(&entry.path(),&sealed,false).map_err(RecorderError::Io)?;#[cfg(unix)] platform::sync_directory(&path).map_err(RecorderError::Io)?;
                     if native_text {publish_native(&path,sealed.file_name().unwrap().to_str().unwrap(),&stem[..32],value["start_ts_ns"].as_u64().unwrap()).map_err(RecorderError::Io)?;}
                     segments.push(sealed.file_name().unwrap().to_string_lossy().into_owned());
                 } // Unknown historical pending bytes are retained, never date-guessed or deleted.
@@ -300,7 +300,7 @@ impl Recorder {
                 segments.push(entry.file_name().to_string_lossy().into_owned());
             }
         }
-        File::open(&path).and_then(|f| f.sync_all()).map_err(RecorderError::Io)?;
+        #[cfg(unix)] platform::sync_directory(&path).map_err(RecorderError::Io)?;
         segments.sort();
         let shared = Arc::new(Shared {
             completion: Condvar::new(),
@@ -451,6 +451,13 @@ fn read_native_anchor(path: &PathBuf) -> std::io::Result<u64> {
     }
     Ok(value["start_ts_ns"].as_u64().unwrap())
 }
+fn regular_private(path: &std::path::Path) -> std::io::Result<bool> {
+    let info=fs::symlink_metadata(path)?;
+    if !info.is_file() || info.file_type().is_symlink() { return Ok(false); }
+    #[cfg(unix)] { use std::os::unix::fs::PermissionsExt; if info.permissions().mode() & 0o777 != 0o600 { return Ok(false); } }
+    Ok(true)
+}
+
 fn entry_size_if_present(entry: &fs::DirEntry) -> std::io::Result<u64> {
     let size = || -> std::io::Result<u64> {
         if entry.file_type()?.is_file() { Ok(entry.metadata()?.len()) } else { Ok(0) }
@@ -485,23 +492,20 @@ fn persist(
     // Native enqueue-time is persisted before creating or writing raw bytes.
     let anchor = serde_json::json!({"schema_version":1,"start_ts_ns":native_start,"end_ts_ns":null,"source_schema":"native-log-file.v1"}).to_string();
     if disk_usage(path)?.saturating_add(size).saturating_add(anchor.len() as u64).saturating_add(if native_text {4096} else {0})>max_disk {return Err(std::io::Error::other("recorder disk limit exceeded"));}
-    let mut metadata=OpenOptions::new().write(true).create_new(true).open(path.join(format!("{stem}.native-time.json")))?;
+    let mut metadata=platform::create_new(&path.join(format!("{stem}.native-time.json")))?;
     #[cfg(unix)] {use std::os::unix::fs::PermissionsExt;metadata.set_permissions(fs::Permissions::from_mode(0o600))?;}
-    metadata.write_all(anchor.as_bytes())?;metadata.sync_all()?;File::open(path)?.sync_all()?;
+    metadata.write_all(anchor.as_bytes())?;metadata.sync_all()?;#[cfg(unix)] platform::sync_directory(path)?;
     let pending = path.join(format!("{stem}.pending"));
     let name = format!("{stem}.log");
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&pending)?;
+    let mut file = platform::create_new(&pending)?;
     #[cfg(unix)] if native_text {use std::os::unix::fs::PermissionsExt;file.set_permissions(fs::Permissions::from_mode(0o600))?;}
     for r in records {
         file.write_all(r.as_bytes())?;
         file.write_all(b"\n")?;
     }
     file.sync_all()?;
-    fs::rename(pending, path.join(&name))?;
-    File::open(path)?.sync_all()?;
+    platform::move_file(&pending, &path.join(&name), false)?;
+    #[cfg(unix)] platform::sync_directory(path)?;
     if native_text { publish_native(path, &name, &shared.run_id, native_start)?; }
     Ok(name)
 }
@@ -510,7 +514,7 @@ fn native_publication_clock(path: &PathBuf, name: &str) -> std::io::Result<u64> 
     let sidecar=path.join(format!("{name}.source.json"));
     match fs::symlink_metadata(&sidecar) {
         Ok(info)=>{
-            #[cfg(unix)] {use std::os::unix::fs::PermissionsExt;if !info.is_file() || info.len()>4096 || info.permissions().mode()&0o777!=0o600 {return Err(std::io::Error::other("private bounded native publication required"));}}
+            if !regular_private(&sidecar)? || info.len()>4096 {return Err(std::io::Error::other("private bounded native publication required"));}
             let mut raw=Vec::new();File::open(sidecar)?.take(4097).read_to_end(&mut raw)?;
             let value:serde_json::Value=serde_json::from_slice(&raw).map_err(|_|std::io::Error::other("invalid native publication"))?;
             value["native_time_anchor"]["start_ts_ns"].as_u64().filter(|n|*n>0 && *n<=i64::MAX as u64).ok_or_else(||std::io::Error::other("invalid native publication clock"))
@@ -521,42 +525,44 @@ fn native_publication_clock(path: &PathBuf, name: &str) -> std::io::Result<u64> 
 }
 
 fn publish_native(path: &PathBuf, name: &str, generation: &str, native_start: u64) -> std::io::Result<()> {
-    #[cfg(unix)] {
-        use std::os::unix::fs::{MetadataExt, PermissionsExt, OpenOptionsExt};
+    {
         let info=fs::symlink_metadata(path.join(name))?;
-        if !info.is_file() || info.permissions().mode()&0o777!=0o600 {return Err(std::io::Error::other("private native file required"));}
+        if !regular_private(&path.join(name))? {return Err(std::io::Error::other("private native file required"));}
+        let file=platform::open_for_sync(&path.join(name))?;
+        let (device,inode,links)=platform::identity(&file)?;
+        if links!=1 {return Err(std::io::Error::other("native source must have one hard link"));}
         let expected=serde_json::json!({"schema_version":1,"path":name,"owner_generation":generation,
-            "device":info.dev(),"inode":info.ino(),"published_length":info.len(),
+            "device":device,"inode":inode,"published_length":info.len(),
             "publication_sequence":1,"sealed":true,"native_time_anchor":{
                 "schema_version":1,"start_ts_ns":native_start,"end_ts_ns":null,"source_schema":"native-log-file.v1"}});
         let sidecar=path.join(format!("{name}.source.json"));
         match fs::symlink_metadata(&sidecar) {
             Ok(meta)=>{
-                if !meta.is_file() || meta.len()>4096 || meta.permissions().mode()&0o777!=0o600 {return Err(std::io::Error::other("private bounded native publication required"));}
+                if !regular_private(&sidecar)? || meta.len()>4096 {return Err(std::io::Error::other("private bounded native publication required"));}
                 let mut raw=Vec::new();File::open(&sidecar)?.take(4097).read_to_end(&mut raw)?;
                 let actual:serde_json::Value=serde_json::from_slice(&raw).map_err(|_|std::io::Error::other("invalid native publication"))?;
                 if actual!=expected {return Err(std::io::Error::other("native publication contract changed"));}
             }
             Err(error) if error.kind()==std::io::ErrorKind::NotFound=>{
                 let temporary=path.join(format!("{name}.source.pending"));
-                let mut file=OpenOptions::new().create_new(true).write(true).mode(0o600).open(&temporary)?;
+                let mut file=platform::create_new(&temporary)?;
                 file.write_all(expected.to_string().as_bytes())?;file.sync_all()?;
                 // Atomic no-overwrite publication; a crash exposes either no sidecar
                 // or the complete fsynced inode, never a partial public document.
-                fs::hard_link(&temporary,&sidecar)?;File::open(path)?.sync_all()?;
-                fs::remove_file(temporary)?;File::open(path)?.sync_all()?;
+                #[cfg(unix)] fs::hard_link(&temporary,&sidecar)?;
+                #[cfg(windows)] platform::move_file(&temporary,&sidecar,false)?;#[cfg(unix)] platform::sync_directory(path)?;
+                #[cfg(unix)] fs::remove_file(temporary)?;#[cfg(unix)] platform::sync_directory(path)?;
             }
             Err(error)=>return Err(error),
         }
         let anchor=path.join(name).with_extension("native-time.json");
         match fs::symlink_metadata(&anchor) {
-            Ok(_)=>{if read_native_anchor(&anchor)?!=native_start {return Err(std::io::Error::other("native anchor changed during publication"));}fs::remove_file(anchor)?;File::open(path)?.sync_all()?;}
+            Ok(_)=>{if read_native_anchor(&anchor)?!=native_start {return Err(std::io::Error::other("native anchor changed during publication"));}fs::remove_file(anchor)?;#[cfg(unix)] platform::sync_directory(path)?;}
             Err(error) if error.kind()==std::io::ErrorKind::NotFound=>{},
             Err(error)=>return Err(error),
         }
         Ok(())
     }
-    #[cfg(not(unix))] {let _=(path,name,generation,native_start);Err(std::io::Error::other("native source publication requires Unix metadata"))}
 }
 
 fn materialize(command: Command, segment_bytes: usize) -> Command {
@@ -663,11 +669,8 @@ fn worker(
     }
 }
 fn run_id() -> String {
-    use std::io::Read;
     let mut bytes = [0u8; 16];
-    File::open("/dev/urandom")
-        .and_then(|mut f| f.read_exact(&mut bytes))
-        .expect("OS entropy unavailable");
+    platform::random(&mut bytes).expect("OS entropy unavailable");
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
@@ -675,30 +678,27 @@ fn native_clock_ns()->u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().and_then(|d|u64::try_from(d.as_nanos()).ok()).filter(|n|*n<=i64::MAX as u64).unwrap_or(0)
 }
 
-#[cfg(unix)]
 fn window_publication(path: &PathBuf, name: &str, file: &File, generation: &str, anchor: u64, seq: u64, sealed: bool) -> std::io::Result<()> {
-    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
     let info=file.metadata()?;
-    let value=serde_json::json!({"schema_version":1,"path":name,"owner_generation":generation,"device":info.dev(),"inode":info.ino(),"published_length":info.len(),"publication_sequence":seq,"sealed":sealed,"native_time_anchor":{"schema_version":1,"start_ts_ns":anchor,"end_ts_ns":null,"source_schema":"native-log-file.v1"}});
+    let (device,inode,_)=platform::identity(file)?;
+    let value=serde_json::json!({"schema_version":1,"path":name,"owner_generation":generation,"device":device,"inode":inode,"published_length":info.len(),"publication_sequence":seq,"sealed":sealed,"native_time_anchor":{"schema_version":1,"start_ts_ns":anchor,"end_ts_ns":null,"source_schema":"native-log-file.v1"}});
     let tmp=path.join(format!(".{name}.{}.source.tmp",run_id()));
-    let mut output=OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp)?;
+    let mut output=platform::create_new(&tmp)?;
     output.write_all(value.to_string().as_bytes())?;output.sync_all()?;
-    fs::rename(&tmp,path.join(format!("{name}.source.json")))?;File::open(path)?.sync_all()
+    platform::move_file(&tmp,&path.join(format!("{name}.source.json")),true)?;
+    #[cfg(unix)] platform::sync_directory(path)?;
+    Ok(())
 }
-#[cfg(not(unix))]
-fn window_publication(_: &PathBuf, _: &str, _: &File, _: &str, _: u64, _: u64, _: bool) -> std::io::Result<()> { Err(std::io::Error::other("windowed publication requires Unix")) }
 
 // Recovery runs under the recorder lock, before a new generation can write.
-#[cfg(unix)]
 fn recover_windowed(path: &PathBuf) -> std::io::Result<()> {
-    use std::os::unix::fs::{MetadataExt, PermissionsExt};
     for entry in fs::read_dir(path)? {
         let entry=entry?;let side=entry.path();let filename=entry.file_name().to_string_lossy().into_owned();
         let Some(name)=filename.strip_suffix(".source.json") else {continue};
         let Some(stem)=name.strip_suffix(".log") else {continue};
         if !legal_segment_stem(stem) {continue}
         let meta=fs::symlink_metadata(&side)?;
-        if !meta.is_file() || meta.permissions().mode()&0o777!=0o600 || meta.len()>4096 {return Err(std::io::Error::other("invalid window publication file"));}
+        if !regular_private(&side)? || meta.len()>4096 {return Err(std::io::Error::other("invalid window publication file"));}
         let doc:serde_json::Value=serde_json::from_slice(&fs::read(&side)?).map_err(std::io::Error::other)?;
         let sealed=doc["sealed"].as_bool().ok_or_else(||std::io::Error::other("invalid window seal"))?;
         let anchor=doc["native_time_anchor"]["start_ts_ns"].as_u64().filter(|n|*n>0 && *n<=i64::MAX as u64).ok_or_else(||std::io::Error::other("invalid window anchor"))?;
@@ -710,11 +710,13 @@ fn recover_windowed(path: &PathBuf) -> std::io::Result<()> {
         if sealed && !final_path.exists() && !pending.exists() {continue} // Source may already have been proof-retired by the sender.
         let actual=if final_path.exists() {if pending.exists(){return Err(std::io::Error::other("duplicate window source"));} final_path.clone()} else {pending.clone()};
         let info=fs::symlink_metadata(&actual)?;
-        if !info.is_file() || info.permissions().mode()&0o777!=0o600 || info.nlink()!=1 || doc["device"].as_u64()!=Some(info.dev()) || doc["inode"].as_u64()!=Some(info.ino()) || length>info.len() || (sealed && length!=info.len()) {return Err(std::io::Error::other("window source identity or length changed"));}
-        let file=OpenOptions::new().read(true).open(&actual)?;file.sync_all()?;
+        let file=platform::open_for_sync(&actual)?;
+        let (device,inode,links)=platform::identity(&file)?;
+        if !regular_private(&actual)? || links!=1 || doc["device"].as_u64()!=Some(device) || doc["inode"].as_u64()!=Some(inode) || length>info.len() || (sealed && length!=info.len()) {return Err(std::io::Error::other("window source identity or length changed"));}
+        file.sync_all()?;
         if !sealed {window_publication(path,name,&file,&stem[..32],anchor,seq.checked_add(1).ok_or_else(||std::io::Error::other("publication sequence overflow"))?,true)?;}
-        if actual==pending {fs::rename(&pending,&final_path)?;File::open(path)?.sync_all()?;}
-        match fs::remove_file(path.join(format!("{stem}.window"))) {Ok(())=>File::open(path)?.sync_all()?,Err(e) if e.kind()==std::io::ErrorKind::NotFound=>{},Err(e)=>return Err(e)}
+        if actual==pending {platform::move_file(&pending,&final_path,false)?;#[cfg(unix)] platform::sync_directory(path)?;}
+        match fs::remove_file(path.join(format!("{stem}.window"))) {Ok(())=>{#[cfg(unix)] platform::sync_directory(path)?;},Err(e) if e.kind()==std::io::ErrorKind::NotFound=>{},Err(e)=>return Err(e)}
     }
     // A crash before the first publication leaves the explicit window marker,
     // anchor and possibly a partial pending file. Publish before making it visible.
@@ -724,19 +726,16 @@ fn recover_windowed(path: &PathBuf) -> std::io::Result<()> {
         if !legal_segment_stem(stem) || !path.join(format!("{stem}.window")).exists() {continue}
         let name=format!("{stem}.log");
         if path.join(format!("{name}.source.json")).exists() {return Err(std::io::Error::other("unresolved window publication"));}
-        let meta=fs::symlink_metadata(entry.path())?;
-        if !meta.is_file() || meta.permissions().mode()&0o777!=0o600 || meta.nlink()!=1 {return Err(std::io::Error::other("invalid pending window"));}
+        if !regular_private(&entry.path())? || platform::identity(&platform::open_for_sync(&entry.path())?)?.2!=1 {return Err(std::io::Error::other("invalid pending window"));}
         let anchor=read_native_anchor(&path.join(format!("{stem}.native-time.json")))?;
-        let file=OpenOptions::new().read(true).open(entry.path())?;file.sync_all()?;
+        let file=platform::open_for_sync(&entry.path())?;file.sync_all()?;
         window_publication(path,&name,&file,&stem[..32],anchor,1,true)?;
-        fs::rename(entry.path(),path.join(name))?;File::open(path)?.sync_all()?;
-        fs::remove_file(path.join(format!("{stem}.window")))?;File::open(path)?.sync_all()?;
+        platform::move_file(&entry.path(),&path.join(name),false)?;#[cfg(unix)] platform::sync_directory(path)?;
+        fs::remove_file(path.join(format!("{stem}.window")))?;#[cfg(unix)] platform::sync_directory(path)?;
     }
     Ok(())
 }
 
-#[cfg(not(unix))]
-fn recover_windowed(_: &PathBuf) -> std::io::Result<()> { Err(std::io::Error::other("windowed publication requires Unix")) }
 
 struct WindowFile { file: File, name: String, anchor: u64, seq: u64, started: Instant }
 fn window_seal(path:&PathBuf, shared:&Shared, active:&mut Option<WindowFile>) -> std::io::Result<()> {
@@ -744,14 +743,12 @@ fn window_seal(path:&PathBuf, shared:&Shared, active:&mut Option<WindowFile>) ->
         a.file.sync_all()?;a.seq=a.seq.checked_add(1).ok_or_else(||std::io::Error::other("publication sequence overflow"))?;
         window_publication(path,&a.name,&a.file,&shared.run_id,a.anchor,a.seq,true)?;
         let stem=a.name.strip_suffix(".log").ok_or_else(||std::io::Error::other("invalid window name"))?;
-        fs::remove_file(path.join(format!("{stem}.window")))?;File::open(path)?.sync_all()?;
+        fs::remove_file(path.join(format!("{stem}.window")))?;#[cfg(unix)] platform::sync_directory(path)?;
     }
     Ok(())
 }
-#[cfg(unix)]
 fn window_worker(path:PathBuf,rx:mpsc::Receiver<Command>,shared:Arc<Shared>,segment_bytes:usize,max_disk:u64,lock:File,window:Duration) {
-    use std::os::unix::fs::OpenOptionsExt;
-    let mut active:Option<WindowFile>=None;let mut sequence=0u64;let mut clean=Instant::now();let mut pending=None;let _lock=lock;
+    let mut active:Option<WindowFile>=None;let mut sequence=0u64;let mut clean=Instant::now();let mut pending=None;let mut held_lock=Some(lock);
     loop {
         let timeout=active.as_ref().map(|a|window.saturating_sub(a.started.elapsed()).min(Duration::from_secs(1))).unwrap_or(Duration::from_secs(1));
         let cmd=match pending.take() {Some(c)=>Ok(c),None=>rx.recv_timeout(timeout)};
@@ -774,16 +771,16 @@ fn window_worker(path:PathBuf,rx:mpsc::Receiver<Command>,shared:Arc<Shared>,segm
                     if disk_usage(&path)?.saturating_add(size as u64).saturating_add(8192)>max_disk {return Err(std::io::Error::other("recorder disk limit exceeded"));}
                     if active.is_none() {
                         let stem=format!("{}-{sequence:020}",shared.run_id);sequence+=1;let name=format!("{stem}.log");
-                        let marker=OpenOptions::new().write(true).create_new(true).mode(0o600).open(path.join(format!("{stem}.window")))?;
-                        marker.sync_all()?;File::open(&path)?.sync_all()?;
+                        let marker=platform::create_new(&path.join(format!("{stem}.window")))?;
+                        marker.sync_all()?;#[cfg(unix)] platform::sync_directory(&path)?;
                         let anchor_path=path.join(format!("{stem}.native-time.json"));
-                        let mut anchor_file=OpenOptions::new().write(true).create_new(true).mode(0o600).open(anchor_path)?;
+                        let mut anchor_file=platform::create_new(&anchor_path)?;
                         anchor_file.write_all(serde_json::json!({"schema_version":1,"start_ts_ns":clock,"end_ts_ns":null,"source_schema":"native-log-file.v1"}).to_string().as_bytes())?;
-                        anchor_file.sync_all()?;File::open(&path)?.sync_all()?;
-                        let temp=path.join(format!("{stem}.pending"));let mut file=OpenOptions::new().read(true).write(true).create_new(true).mode(0o600).open(&temp)?;
+                        anchor_file.sync_all()?;#[cfg(unix)] platform::sync_directory(&path)?;
+                        let temp=path.join(format!("{stem}.pending"));let mut file=platform::create_new(&temp)?;
                         for r in &records {file.write_all(r.as_bytes())?;file.write_all(b"\n")?;}file.sync_all()?;
                         window_publication(&path,&name,&file,&shared.run_id,clock,1,false)?;
-                        fs::rename(temp,path.join(&name))?;File::open(&path)?.sync_all()?;
+                        platform::move_file(&temp,&path.join(&name),false)?;#[cfg(unix)] platform::sync_directory(&path)?;
                         shared.state.lock().unwrap().segments.push(name.clone());
                         active=Some(WindowFile{file,name,anchor:clock,seq:1,started:batch_start});
                     } else {
@@ -796,7 +793,7 @@ fn window_worker(path:PathBuf,rx:mpsc::Receiver<Command>,shared:Arc<Shared>,segm
                 let mut s=shared.state.lock().unwrap();s.outstanding-=records.len();match result {Ok(())=>s.durable+=records.len() as u64,Err(e)=>{s.error.get_or_insert(format!("storage: {e}"));}}
             }
             Ok(Command::Barrier(done)) => {let _=done.send(());}
-            Ok(Command::Close(done)) => {if let Err(e)=window_seal(&path,&shared,&mut active){shared.state.lock().unwrap().error.get_or_insert(format!("storage: {e}"));}shared.state.lock().unwrap().closed=true;shared.completion.notify_all();let _=done.send(());break;}
+            Ok(Command::Close(done)) => {if let Err(e)=window_seal(&path,&shared,&mut active){shared.state.lock().unwrap().error.get_or_insert(format!("storage: {e}"));}drop(active.take());drop(held_lock.take());shared.state.lock().unwrap().closed=true;shared.completion.notify_all();let _=done.send(());break;}
             Ok(_) => {shared.state.lock().unwrap().error.get_or_insert("storage: invalid window command".into());}
             Err(mpsc::RecvTimeoutError::Timeout)=>{},
             Err(mpsc::RecvTimeoutError::Disconnected)=>{let _=window_seal(&path,&shared,&mut active);shared.state.lock().unwrap().closed=true;shared.completion.notify_all();break;}
@@ -819,6 +816,3 @@ mod window_tests {
         let mut logs=fs::read_dir(&path).unwrap().flatten().filter(|e|e.path().extension().is_some_and(|v|v=="log")).map(|e|fs::read_to_string(e.path()).unwrap()).collect::<Vec<_>>();logs.sort();assert_eq!(logs,vec!["{\"a\":1}\n","{\"b\":2}\n"]);fs::remove_dir_all(path).unwrap();
     }
 }
-
-#[cfg(not(unix))]
-fn window_worker(_:PathBuf,_:mpsc::Receiver<Command>,_:Arc<Shared>,_:usize,_:u64,_:File,_:Duration) { unreachable!("windowed mode is rejected during startup") }

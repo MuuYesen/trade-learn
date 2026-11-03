@@ -5,13 +5,16 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
-## [Unreleased] — 0.2.9 source
+## [0.2.9] - 2026-11-03
 
 ### 新增与调整
 - 修复 CI 所需依赖及公开数据导入，保留冻结 Oracle 与指标覆盖率门槛；修复行情周期、重复 Bar、TA-Lib 暖机和示例训练输入的已验失败。
 - 公开券商无关的 `engine.StrategyRuntime`：统一默认 Cerebro/Backtest（含 Lite 批量 profile）、事件回放和外部驱动 paper/live 的策略构造、生命周期、指标推进与业务通知。Rust 撮合和批量预计算保留；Lite 增量 profile 仍明确拒绝。
-- 提供通用只读 strategy observer capability 1，以及显式同时间戳市场批次与异常清理契约；不包含商业 SDK、可靠日志投递或生产适配器。
-- 同步多语言首页及公共架构、接入边界说明。0.2.9 为本地源码候选，不表示 PyPI、GitHub Release 或跨平台 wheel 已发布。详见 [Runtime](docs/concepts/runtime.md) 与 [observers](docs/guides/strategy-observers.md)。
+- 提供通用只读 strategy observer capability 1，以及显式同时间戳市场批次与异常清理契约；观察接口本身不承担日志投递；包内日志组件按需装配，生产适配器与账户配置独立。
+- 默认纳入通用TL↔Nautilus桥、可选策略日志与native Recorder；`[nautilus]` 精确依赖官方2.0.0rc7，这条执行路径标为实验，不等于所有内置venue均通过交易验收。基础导入不要求Na，日志/远程发送显式启用。
+- 账户/路由/持仓归属与持久未知提交保护独立于监控装配；固定官方19项内置清单从发行物生成，不包含私有cTrader。
+- 修复已知证书/HTTP/IDNA与PyO3依赖漏洞，保全原生依赖原始许可材料；新增精确tag/版本/同commit CI发布守卫。
+- 同步多语言首页及公共安装、执行/日志接入说明。API见[Runtime](docs/concepts/runtime.md)、[接入指南](docs/guides/live.md)及[observers](docs/guides/strategy-observers.md)；具体发行产物与日期验收见[记录](docs/reviews/2026-11-03-runtime-release.md)。
 
 ## [0.2.7] - 2026-10-09
 

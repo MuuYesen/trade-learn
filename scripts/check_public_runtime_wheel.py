@@ -2,7 +2,6 @@
 
 import importlib.util
 import json
-import sys
 import tempfile
 from importlib import metadata, resources
 from pathlib import Path
@@ -36,28 +35,18 @@ with tempfile.TemporaryDirectory() as directory:
     settings = MonitorSettings(
         "LOCAL", "installed-check", "synthetic", directory, account_source="external"
     )
-    if sys.platform == "win32":
-        try:
-            TradeLogger(settings)
-        except RuntimeError as error:
-            assert "durable Recorder is unsupported on this platform" in str(error)
-            assert not (Path(directory) / "segments").exists()
-        else:
-            raise AssertionError("unsupported Windows recorder must reject before writing")
-        recording = "explicitly_unsupported_no_files_written"
-    else:
-        logger = TradeLogger(settings)
-        fact = logger.record("heartbeat", {"expected_running": True})
-        assert fact["source"] == "LOCAL"
-        assert logger.flush()["error"] is None
-        assert logger.close()["error"] is None
-        records = [
-            json.loads(line)
-            for path in (Path(directory) / "segments").glob("*.log")
-            for line in path.read_text().splitlines()
-        ]
-        assert len(records) == 1 and records[0]["kind"] == "heartbeat"
-        recording = "passed"
+    logger = TradeLogger(settings)
+    fact = logger.record("heartbeat", {"expected_running": True})
+    assert fact["source"] == "LOCAL"
+    assert logger.flush()["error"] is None
+    assert logger.close()["error"] is None
+    records = [
+        json.loads(line)
+        for path in (Path(directory) / "segments").glob("*.log")
+        for line in path.read_text().splitlines()
+    ]
+    assert len(records) == 1 and records[0]["kind"] == "heartbeat"
+    recording = "passed"
 
 print(
     json.dumps(

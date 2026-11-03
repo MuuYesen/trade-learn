@@ -95,32 +95,25 @@ TA-Lib 的 SMA/EMA 按 `timeperiod` 暖机，RSI/ATR 使用 `timeperiod + 1` 根
 
 动态注册也受`max_indicators`（默认1024）和`max_plans`（默认4096）限制；长期策略应在构造/start建立可复用图，不应每个tick无界创建新指标。超过预算在当前步失败并令`.failed=True`，不再接受新行情/回报。输出line有独立revision，写入当前值会使同step派生缓存失效；常量图在返回前规范化。非法参数构图先完整验证，不能先开启full-history保留再报错。
 
-### 0.2.8安装与原生回测（历史）
-
-上一轮0.2.8为本地源码候选，未自动发布PyPI或Windows wheel；普通pip安装已发布旧版本不会自动获得本API。外部broker驱动的正式Runtime不启动Rust模拟撮合；原生研究回测需要同时匹配Python ABI/平台及0.2.8 Rust扩展。不能把源码树旧cp310二进制改名作为cp312的新版本。
-
-源码用户按现有pyproject/maturin和原Cargo.lock在独立源码副本或构建目录生成本机wheel/扩展，再执行`scripts/check_order_lifecycle_wheel.py`核`tradelearn.__version__ == _rust.tradelearn_rust_version() == '0.2.8'`。本地验收保留macOS arm64 / CPython3.12匹配扩展及构建SHA回执，原engine/backtest/lite全目录776项通过；该本机构建不等于Windows/Linux研究wheel或公开发布。
-
-## 默认路径与观察API（0.2.9候选）
+## 默认路径与观察 API
 
 此前0.2.8只把EventRunner/paper/live接入正式Runtime，默认Rust研究路径仍独立调度；不能把上一轮验收外推为默认完整统一。0.2.9将默认研究的构造、setup/init/start、预载游标/指标/warmup、业务/组件回调和stop也纳入同一协调器，纯批量预计算与Rust匹配保留。新中性观察接口见[Strategy observers](../guides/strategy-observers.md)，不依赖任何SDK或执行引擎。SDK产品实现及双方联调不在通用hook实现中冒充完成。
 
-0.2.9候选的`step_market_batch(events)`显式表达同timestamp原子批次；默认研究合步、标准实盘逐到达的差异及异常清理合同见[观察API的市场批次与异常结束](../guides/strategy-observers.md#市场批次与异常结束)。Runtime本身不新建loop、不等网络或缺失标的，预验证失败不部分推进feed。
+0.2.9的`step_market_batch(events)`显式表达同timestamp原子批次；默认研究合步、标准实盘逐到达的差异及异常清理合同见[观察API的市场批次与异常结束](../guides/strategy-observers.md#市场批次与异常结束)。Runtime本身不新建loop、不等网络或缺失标的，预验证失败不部分推进feed。
 
-### 0.2.9候选安装
+### 安装与原生扩展
 
-安装必须使用实际0.2.9 wheel与对应平台/Python ABI，不能复用或改名旧扩展。源码按原Cargo.lock在隔离构建目录运行maturin；本地候选安装后核对`tradelearn.__version__ == _rust.tradelearn_rust_version() == '0.2.9'`和`OBSERVER_API_VERSION == 1`，再运行默认Cerebro/Backtest及外部fake观察基类测试。候选产物不表示已发布PyPI或完成Windows/Linux研究wheel；仅实盘前端的Linux镜像也不能证明默认Rust回测闭包。实际平台、wheel哈希与安装回执由日期化交付清单记录。
+使用 `pip install trade-learn==0.2.9` 安装与 Python ABI、平台匹配的 wheel。源码构建沿 pyproject/maturin 与 Cargo.lock；不能复用或改名旧扩展。安装后版本应满足 `tradelearn.__version__ == _rust.tradelearn_rust_version() == '0.2.9'`，observer capability 为 1。历史候选和验收阶段见[发布记录](../reviews/2026-11-03-runtime-release.md)，不作为当前安装步骤。
 
+## Nautilus 与策略日志
 
-## Nautilus 桥与日志预览
-
-本节是0.2.9实验性源码候选，未代表PyPI当前版本具备这些组件。基础安装包含本地记录器和按需发送依赖，不安装Nautilus；使用桥必须在Python3.13或3.14安装 `trade-learn[nautilus]`，目前精确依赖官方 `nautilus_trader==2.0.0rc7`（预发行版，Python>=3.13）。其它Python安装该extra时pip会按marker跳过NT，不能使用Na桥；实际桥入口明确拒绝，不自动fallback。导入不连接账户、不创建交易节点或自动发送，日志默认按调用者显式配置开启。
+0.2.9默认包含通用桥和策略日志组件；可选Na执行依赖预发行框架，作为实验性接入路径维护。基础安装包含本地记录器和按需发送依赖，不安装Nautilus；使用桥必须在Python3.13或3.14安装 `trade-learn[nautilus]`，目前精确依赖官方 `nautilus_trader==2.0.0rc7`（预发行版，Python>=3.13）。其它Python安装该extra时pip会按marker跳过NT，不能使用Na桥；实际桥入口明确拒绝，不自动fallback。导入不连接账户、不创建交易节点或自动发送，日志默认按调用者显式配置开启。
 
 ```bash
 python -m tradelearn_runtime.support
 ```
 
-该命令从已安装固定版本的包文件清单发现适配器，并与真实官方wheel生成的唯一official_adapters.json核对；出现名单外目录拒绝冒称官方清单。此展示检查不用于阻止用户注册独立适配器，也不是官方二进制认证。该命令，不导入adapter、读取账户或建立网络。下面由已审官方Linux CP313 wheel的公开factory接口核出；“内置”是可发现代码范围，不是每个来源的TL桥、订单、paper、实盘或平台均已验收。行情源不因此成为交易券商，sandbox也不证明其它adapter支持模拟账户。私有cTrader不在官方包或本库内。
+该命令从已安装固定版本的包文件清单发现适配器，并与真实官方wheel生成的唯一official_adapters.json核对；出现名单外目录拒绝冒称官方清单。此展示检查不用于阻止用户注册独立适配器，也不是官方二进制认证。该命令不导入adapter、读取账户或建立网络。下面由已审官方Linux CP313 wheel的公开factory接口核出；“内置”是可发现代码范围，不是每个来源的TL桥、订单、paper、实盘或平台均已验收。行情源不因此成为交易券商，sandbox也不证明其它adapter支持模拟账户。私有cTrader不在官方包或本库内。
 
 | 内置包 | 官方公开接口形态 | TL逐来源业务验收 |
 |---|---|---|
@@ -149,11 +142,3 @@ python -m tradelearn_runtime.support
 已进行Mac arm64及Linux x86_64 CPython3.13的本地无账户仿真、绑定拒绝、部分成交、重放及恢复验证；Windows和各真实venue的业务验收未完成。安装官方wheel成功不替代以上验收，也不构成交易损失保证。关闭日志或不接商业监控不关闭执行保护；发送需调用方明确配置受限授权，监控接收/归档/计算/展示是独立服务，不代策略决策。
 
 接线入口为 `tradelearn_runtime.execution.create_execution_host`；需保留真实native缓存及broker事件作为执行/账户事实来源，不从logger生成成交或财务结果。自定义宿主可通过 `get_execution_host_class(logging_enabled=...)` 保留业务hooks；不把继承当恶意代码沙箱。
-
-
-### 预览依赖安全范围
-
-早期预览提交26df434/9d19ff8沿用上游锁，含已知漏洞依赖，不推荐采用其构建产物。修补候选为发送路径加入证书、HTTP与IDNA依赖的最低修复版本，并成对升级PyO3/numpy Rust绑定及许可材料；最终可安装产物必须以修补后的CI/构建回执为准。安全查询覆盖发行依赖的精确PyPI版本和Cargo.lock闭包，不等于审计官方Nautilus二进制内嵌全部依赖或承诺没有未知漏洞。
-
-
-Windows现有回测wheel继续验收；新增持久Recorder目前明确不支持Windows，构造时在创建状态/线程前拒绝，不跳过目录同步假称写入成功。Windows产物检查包含这个明确拒绝反例，而非记录/flush/恢复通过；仅希望运行Windows回测不需要启用日志。Mac/Linux仍要求真实写入、flush、close、恢复及原始许可成员验收。

@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/pypi/v/trade-learn?style=flat-square" alt="PyPI version">
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
   <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/source-0.2.9_unreleased-blue?style=flat-square" alt="Source version">
+  <img src="https://img.shields.io/badge/source-0.2.9-blue?style=flat-square" alt="Source version">
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
@@ -84,7 +84,7 @@
 
 ## インストール
 
-> 現在のソースは **0.2.9（未リリース）** です。以下のコマンドは PyPI 公開版を取得します。ネイティブ拡張のバージョン・プラットフォーム・Python ABI を一致させてください。[インストール詳細](docs/concepts/runtime.md#029候选安装)。
+研究・バックテストに加えて、任意のNautilus実行ブリッジと戦略ログを提供します。`[nautilus]` はPython 3.13/3.14で公式 `2.0.0rc7` を固定します。この実行経路は実験的で、口座・venueルーティング・復旧設定を明示する必要があります。インストールだけでは接続や発注は行いません。[インストールと実行範囲](docs/concepts/runtime.md#安装与原生扩展)。
 
 ```bash
 pip install trade-learn
@@ -100,6 +100,7 @@ pip install git+https://github.com/MuuYesen/trade-learn.git@master
 
 | Extra | 用途 |
 |---|---|
+| `[nautilus]` | 公式Nautilusの任意実行経路（実験的、Python 3.13/3.14） |
 | `[tdx]` | OpenTDX データ / 中国市場向け指標依存関係 |
 | `[tv]` | TradingView datafeed と PyneCore ベースの TradingView 指標 |
 | `[talib]` | TA-Lib 指標名前空間 |

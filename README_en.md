@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/pypi/v/trade-learn?style=flat-square" alt="PyPI version">
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
   <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/source-0.2.9_unreleased-blue?style=flat-square" alt="Source version">
+  <img src="https://img.shields.io/badge/source-0.2.9-blue?style=flat-square" alt="Source version">
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
@@ -84,7 +84,7 @@ Most quantitative research stops at **Correlation**, which often leads to factor
 
 ## Installation
 
-> This source tree is **0.2.9 (unreleased)**. The command below installs the published PyPI package; native extensions must match the package version, platform, and Python ABI. See [installation details](docs/concepts/runtime.md#029候选安装).
+This release provides research/backtesting, an optional Nautilus execution bridge and strategy logging. The `[nautilus]` extra requires Python 3.13/3.14 and pins official `2.0.0rc7`; that execution path remains experimental and needs explicit account/venue routing and recovery configuration. Installation does not connect accounts or trade. See [installation and runtime](docs/concepts/runtime.md#安装与原生扩展).
 
 ```bash
 pip install trade-learn
@@ -100,6 +100,7 @@ Optional extras:
 
 | extra | Usage |
 |---|---|
+| `[nautilus]` | Optional official Nautilus execution; experimental, Python 3.13/3.14 |
 | `[tdx]` | OpenTDX data / China-market indicator dependencies |
 | `[tv]` | TradingView datafeed and PyneCore-backed TradingView indicators |
 | `[talib]` | TA-Lib indicator namespace |
