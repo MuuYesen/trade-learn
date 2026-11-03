@@ -94,12 +94,12 @@
     },
     {
       "name": "numpy",
-      "version": "0.28.0",
+      "version": "0.29.0",
       "declared_license": "BSD-2-Clause",
       "included_notices": [
         "LICENSE"
       ],
-      "source": "https://crates.io/crates/numpy/0.28.0"
+      "source": "https://crates.io/crates/numpy/0.29.0"
     },
     {
       "name": "once_cell",
@@ -139,48 +139,48 @@
     },
     {
       "name": "pyo3",
-      "version": "0.28.3",
+      "version": "0.29.0",
       "declared_license": "MIT OR Apache-2.0",
       "included_notices": [
         "LICENSE-MIT"
       ],
-      "source": "https://crates.io/crates/pyo3/0.28.3"
+      "source": "https://crates.io/crates/pyo3/0.29.0"
     },
     {
       "name": "pyo3-build-config",
-      "version": "0.28.3",
+      "version": "0.29.0",
       "declared_license": "MIT OR Apache-2.0",
       "included_notices": [
         "LICENSE-MIT"
       ],
-      "source": "https://crates.io/crates/pyo3-build-config/0.28.3"
+      "source": "https://crates.io/crates/pyo3-build-config/0.29.0"
     },
     {
       "name": "pyo3-ffi",
-      "version": "0.28.3",
+      "version": "0.29.0",
       "declared_license": "MIT OR Apache-2.0",
       "included_notices": [
         "LICENSE-MIT"
       ],
-      "source": "https://crates.io/crates/pyo3-ffi/0.28.3"
+      "source": "https://crates.io/crates/pyo3-ffi/0.29.0"
     },
     {
       "name": "pyo3-macros",
-      "version": "0.28.3",
+      "version": "0.29.0",
       "declared_license": "MIT OR Apache-2.0",
       "included_notices": [
         "LICENSE-MIT"
       ],
-      "source": "https://crates.io/crates/pyo3-macros/0.28.3"
+      "source": "https://crates.io/crates/pyo3-macros/0.29.0"
     },
     {
       "name": "pyo3-macros-backend",
-      "version": "0.28.3",
+      "version": "0.29.0",
       "declared_license": "MIT OR Apache-2.0",
       "included_notices": [
         "LICENSE-MIT"
       ],
-      "source": "https://crates.io/crates/pyo3-macros-backend/0.28.3"
+      "source": "https://crates.io/crates/pyo3-macros-backend/0.29.0"
     },
     {
       "name": "quote",

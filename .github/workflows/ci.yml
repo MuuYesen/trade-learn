@@ -32,7 +32,10 @@ jobs:
           oracle_commit="$(uv run python -c 'import json;print(json.load(open("scripts/oracle_manifest.json"))["commit"])')"
           git fetch --no-tags --depth=1 origin "$oracle_commit"
       - run: uv run ruff check tradelearn/core tradelearn/data tradelearn/factor tradelearn/indicators tradelearn/metrics tradelearn/report tests/unit/core tests/unit/data tests/unit/factor tests/unit/indicators tests/unit/metrics tests/unit/report tests/golden tests/consistency scripts
-      - run: uv run pytest
+      - run: uv run pytest --junitxml=pytest-results.xml
+      - name: Expose test failures in public annotations
+        if: failure()
+        run: python scripts/report_test_failures.py pytest-results.xml
       - run: uv run pytest tests/unit/metrics tests/consistency/test_metrics.py --cov=tradelearn.metrics --cov-report=term-missing --cov-fail-under=100
       - run: uv run pytest tests/unit/core --doctest-modules tradelearn/core
       - run: uv run pytest --doctest-modules tradelearn/data

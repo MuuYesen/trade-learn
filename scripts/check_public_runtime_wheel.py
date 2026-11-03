@@ -3,10 +3,25 @@
 import importlib.util
 import json
 import tempfile
+from importlib import metadata
 from pathlib import Path
 
 import tradelearn
 from leafquant_monitor import MonitorSettings, TradeLogger
+
+distribution = metadata.distribution("trade-learn")
+license_files = [
+    entry for entry in distribution.files or () if "THIRD_PARTY_LICENSES" in Path(str(entry)).parts
+]
+inventories = [entry for entry in license_files if Path(str(entry)).name == "inventory.json"]
+assert len(inventories) == 1, "installed native dependency license inventory required"
+inventory = json.loads(distribution.locate_file(inventories[0]).read_text())
+for package in inventory["packages"]:
+    for notice in package["included_notices"]:
+        suffix = f"{package['name']}-{package['version']}/{notice}"
+        assert any(str(entry).replace("\\", "/").endswith(suffix) for entry in license_files), (
+            suffix
+        )
 
 assert importlib.util.find_spec("nautilus_trader") is None, "base environment must have no Nautilus"
 with tempfile.TemporaryDirectory() as directory:

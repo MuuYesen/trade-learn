@@ -149,3 +149,8 @@ python -m tradelearn_runtime.support
 已进行Mac arm64及Linux x86_64 CPython3.13的本地无账户仿真、绑定拒绝、部分成交、重放及恢复验证；Windows和各真实venue的业务验收未完成。安装官方wheel成功不替代以上验收，也不构成交易损失保证。关闭日志或不接商业监控不关闭执行保护；发送需调用方明确配置受限授权，监控接收/归档/计算/展示是独立服务，不代策略决策。
 
 接线入口为 `tradelearn_runtime.execution.create_execution_host`；需保留真实native缓存及broker事件作为执行/账户事实来源，不从logger生成成交或财务结果。自定义宿主可通过 `get_execution_host_class(logging_enabled=...)` 保留业务hooks；不把继承当恶意代码沙箱。
+
+
+### 预览依赖安全范围
+
+早期预览提交26df434/9d19ff8沿用上游锁，含已知漏洞依赖，不推荐采用其构建产物。修补候选为发送路径加入证书、HTTP与IDNA依赖的最低修复版本，并成对升级PyO3/numpy Rust绑定及许可材料；最终可安装产物必须以修补后的CI/构建回执为准。安全查询覆盖发行依赖的精确PyPI版本和Cargo.lock闭包，不等于审计官方Nautilus二进制内嵌全部依赖或承诺没有未知漏洞。
