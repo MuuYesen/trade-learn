@@ -2,6 +2,8 @@
 
 import importlib.util
 import json
+import subprocess
+import sys
 import tempfile
 from importlib import metadata, resources
 from pathlib import Path
@@ -32,6 +34,17 @@ for package in inventory["packages"]:
 
 assert importlib.util.find_spec("nautilus_trader") is None, "base environment must have no Nautilus"
 with tempfile.TemporaryDirectory() as directory:
+    if sys.platform == "win32":
+        from leafquant_monitor.filesystem import _token_sids, check_private_directory
+
+        user = _token_sids()[0]
+        for args in (
+            ["/reset"],
+            ["/inheritance:r"],
+            ["/grant:r", f"*{user}:(OI)(CI)F", "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F"],
+        ):
+            subprocess.run(["icacls", directory, *args], capture_output=True, check=True)
+        check_private_directory(Path(directory))
     settings = MonitorSettings(
         "LOCAL", "installed-check", "synthetic", directory, account_source="external"
     )

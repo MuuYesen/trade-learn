@@ -120,9 +120,14 @@ def preflight_sender(settings, *, credential_files=True):
         credential=Path(value['credentials_file'])
         if not credential.is_absolute():raise ValueError('absolute private sender credential path required')
         check_private_path(credential)
-    # Inspect the nearest existing directory through a real backup-semantics
-    # handle. Future children inherit its DACL; every opened file is rechecked.
-    directory=Path(settings.state_dir).absolute()
+    preflight_state_directory(settings.state_dir)
+
+
+def preflight_state_directory(state_dir):
+    # Local-only logging has the SAME privacy precondition as transmission.
+    # This checks before mkdir, lock, format pin, writer or account bytes exist.
+    if os.name!='nt':return
+    directory=Path(state_dir).absolute()
     while not directory.exists():directory=directory.parent
     check_private_directory(directory)
 
@@ -135,7 +140,8 @@ def check_private_directory(directory):
     handle=create(str(directory),0x20000,7,None,3,0x02000000|0x00200000,None)
     if handle==c.c_void_p(-1).value:raise c.WinError(c.get_last_error())
     try:
-        if getattr(directory.lstat(),'st_file_attributes',0)&0x400:raise ValueError('private non-reparse state directory required')
+        info=directory.lstat()
+        if not stat.S_ISDIR(info.st_mode) or getattr(info,'st_file_attributes',0)&0x400:raise ValueError('private non-reparse state directory required')
         _check_windows_handle(handle)
     finally:kernel.CloseHandle(handle)
 

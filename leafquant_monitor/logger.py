@@ -76,6 +76,8 @@ class TradeLogger:
     def __init__(self, settings, *, recorder=None, sender_factory=None):
         if sender_factory is not None and (not callable(sender_factory) or settings.sender_config is None):
             raise ValueError('trusted sender factory requires explicit sender configuration')
+        from .filesystem import preflight_state_directory
+        preflight_state_directory(settings.state_dir)
         if settings.sender_config is not None:
             from .filesystem import preflight_sender
             preflight_sender(settings, credential_files=sender_factory is None)

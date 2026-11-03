@@ -108,6 +108,18 @@ def test_acl_broad_grant_is_rejected_and_sender_preflight_creates_no_state(tmp_p
     assert not state.exists()
 
 
+def test_local_logger_without_sender_rejects_wide_state_before_creating_files(tmp_path):
+    from leafquant_monitor.logger import MonitorSettings,TradeLogger
+    wide=tmp_path/'wide';wide.mkdir()
+    result=subprocess.run(['icacls',str(wide),'/grant','*S-1-1-0:(OI)(CI)R'],capture_output=True,timeout=20)
+    assert result.returncode==0,'fixture must establish a real broad state DACL'
+    state=wide/'new-state'
+    with pytest.raises(ValueError):
+        TradeLogger(MonitorSettings('PUBLIC','strategy','account',str(state)))
+    assert not state.exists()
+    assert not list(wide.iterdir()),'no recorder lock, format pin or raw account bytes may be created'
+
+
 def test_proof_retirement_restarts_after_delete_failure_without_replaying_raw(tmp_path,monkeypatch):
     from leafquant_monitor.source_file_sender import SourceFileSender
     from leafquant_monitor.filesystem import check_private_path

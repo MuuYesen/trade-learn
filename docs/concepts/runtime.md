@@ -146,3 +146,27 @@ python -m tradelearn_runtime.support
 已进行Mac arm64及Linux x86_64 CPython3.13的本地无账户仿真、绑定拒绝、部分成交、重放及恢复验证；Windows和各真实venue的业务验收未完成。安装官方wheel成功不替代以上验收，也不构成交易损失保证。关闭日志或不接商业监控不关闭执行保护；发送需调用方明确配置受限授权，监控接收/归档/计算/展示是独立服务，不代策略决策。
 
 接线入口为 `tradelearn_runtime.execution.create_execution_host`；需保留真实native缓存及broker事件作为执行/账户事实来源，不从logger生成成交或财务结果。自定义宿主可通过 `get_execution_host_class(logging_enabled=...)` 保留业务hooks；不把继承当恶意代码沙箱。
+
+### 本地记录与发送的平台条件
+
+记录器需要与Python ABI/操作系统匹配的本包原生扩展。Unix沿文件与目录同步发布；现代Windows/NTFS使用WRITE_THROUGH文件、FlushFileBuffers及同目录原子命名操作，不模拟Unix目录fsync、不跨盘复制降级。要求系统提供FILE_ID_INFO与现代重命名语义；超出可表达身份范围明确拒绝、不截断文件ID。进程崩溃/恢复和硬件断电是不同范围，不据测试宣称所有存储硬件断电无损。
+
+日志状态目录由调用方提供。Windows按真实当前owner/SYSTEM/Administrators DACL验证，不把POSIX 0600数字当ACL；已有或最近存在父目录的权限不合格时，TradeLogger在任何状态文件/线程前拒绝，未启用发送也一样。SDK不自动修改已有ACL。建议使用用户受保护的LocalAppData私有子目录；不要把共享项目目录作为账户日志目录。
+
+```python
+import os
+from pathlib import Path
+from leafquant_monitor import MonitorSettings, TradeLogger
+
+private_root = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / ".local" / "state")))
+settings = MonitorSettings("LOCAL", "example", "offline", str(private_root / "trade-learn" / "example"),
+                           account_source="external")
+logger = TradeLogger(settings)
+try:
+    logger.record("lifecycle", {"state": "started"})
+    logger.flush()
+finally:
+    logger.close()
+```
+
+该例只写本地事实，不连接账户、不发送。远程发送另需显式受限配置/授权、受信receipt origin与archive binding；标准配置拒绝公共可读的凭据文件，受信内存provider无需被迫落地秘密。SQS ACK不代表原文可删除：完整、正确绑定与摘要的归档proof先持久登记，才允许按文件身份退休；Windows在同目录保留可恢复tombstone，删除失败可重启继续，不重发已证明退休原文。source-only传输角色共用纯stdlib平台薄层，不强加Na或native依赖。
