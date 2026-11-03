@@ -75,6 +75,8 @@ CommissionInfo = CommInfoBase
 
 
 def __getattr__(name: str) -> Any:
+    if name == "TradeLogStrategy":
+        return importlib.import_module("tradelearn.strategy_logging.tradelearn").TradeLogStrategy
     if name == "pta":
         return importlib.import_module("tradelearn.indicators.pta")
     if name == "talib":
@@ -84,6 +86,10 @@ def __getattr__(name: str) -> Any:
     if name == "tv":
         return importlib.import_module("tradelearn.indicators.tv")
     raise AttributeError(f"module 'tradelearn.engine' has no attribute {name!r}")
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | {"TradeLogStrategy"})
+
 
 __all__ = [
     "StrategyRuntime",

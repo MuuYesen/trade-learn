@@ -17,3 +17,11 @@ Attribution register:
 - causallearn (MIT): causal discovery dependency.
 - mlflow (Apache-2.0): experiment tracking client dependency.
 - pandas-ta-classic (MIT): pandas-ta style indicator backend.
+
+Native dependency notices:
+THIRD_PARTY_LICENSES/inventory.json records the complete Cargo.lock registry closure
+(including build/procedural-macro and target-specific dependencies). Original license
+and copyright texts are preserved per crate. Dual-licensed crates use their MIT
+option; numpy uses BSD-2-Clause; target-lexicon uses Apache-2.0 WITH LLVM-exception;
+unicode-ident includes both MIT and the required Unicode-3.0 notice.
+This inventory does not claim every locked crate is linked into every platform wheel.

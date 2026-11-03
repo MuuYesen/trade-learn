@@ -1,6 +1,7 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
+mod logging;
 pub mod engine;
 pub mod matching;
 pub mod resampler;
@@ -565,6 +566,7 @@ impl RustBacktestEngine {
 
 #[pymodule]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    logging::register(m)?;
     m.add_function(wrap_pyfunction!(tradelearn_rust_version, m)?)?;
     m.add_function(wrap_pyfunction!(match_order_fill, m)?)?;
     resampler::register_pyfunctions(m)?;

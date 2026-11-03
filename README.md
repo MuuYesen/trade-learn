@@ -407,3 +407,10 @@ class LiveStylePortfolio(tl.Strategy):
 ## 联系方式
 
 微信公众号：知守溪的收纳屋 · 邮箱：muyes88@gmail.com
+
+
+## 通用桥与日志预览
+
+0.2.9预览源码加入通用TL↔Nautilus桥与本地日志记录器；`[nautilus]`固定官方2.0.0rc7（预发行版），不包含私有cTrader。运行 `python -m tradelearn_runtime.support` 可发现官方包内置adapter；清单不表示全部交易、paper或平台已验收。安装不自动连接账户或下单，日志/商业监控可选，执行与恢复保护独立于监控。真实适配器仍须显式账户、路由和能力验收，软件校验不保证无交易损失。
+
+安装与范围见[运行说明](docs/concepts/runtime.md#nautilus-桥与日志预览)。当前PyPI旧版、源码预览及未来正式发行分开，不能仅凭版本号判断上述能力。

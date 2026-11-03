@@ -110,3 +110,42 @@ TA-Lib 的 SMA/EMA 按 `timeperiod` 暖机，RSI/ATR 使用 `timeperiod + 1` 根
 ### 0.2.9候选安装
 
 安装必须使用实际0.2.9 wheel与对应平台/Python ABI，不能复用或改名旧扩展。源码按原Cargo.lock在隔离构建目录运行maturin；本地候选安装后核对`tradelearn.__version__ == _rust.tradelearn_rust_version() == '0.2.9'`和`OBSERVER_API_VERSION == 1`，再运行默认Cerebro/Backtest及外部fake观察基类测试。候选产物不表示已发布PyPI或完成Windows/Linux研究wheel；仅实盘前端的Linux镜像也不能证明默认Rust回测闭包。实际平台、wheel哈希与安装回执由日期化交付清单记录。
+
+
+## Nautilus 桥与日志预览
+
+本节是0.2.9实验性源码候选，未代表PyPI当前版本具备这些组件。基础安装包含本地记录器和按需发送依赖，不安装Nautilus；使用桥必须在Python3.13或3.14安装 `trade-learn[nautilus]`，目前精确依赖官方 `nautilus_trader==2.0.0rc7`（预发行版，Python>=3.13）。其它Python安装该extra时pip会按marker跳过NT，不能使用Na桥；实际桥入口明确拒绝，不自动fallback。导入不连接账户、不创建交易节点或自动发送，日志默认按调用者显式配置开启。
+
+```bash
+python -m tradelearn_runtime.support
+```
+
+该命令只从已安装官方固定版本的包文件清单发现适配器，不导入adapter、读取账户或建立网络。下面由已审官方Linux CP313 wheel的公开factory接口核出；“内置”是可发现代码范围，不是每个来源的TL桥、订单、paper、实盘或平台均已验收。行情源不因此成为交易券商，sandbox也不证明其它adapter支持模拟账户。私有cTrader不在官方包或本库内。
+
+| 内置包 | 官方公开接口形态 | TL逐来源业务验收 |
+|---|---|---|
+| `architect_ax` | 行情与执行 factory | 未逐来源验收 |
+| `betfair` | 行情与执行 factory | 未逐来源验收 |
+| `binance` | 行情与执行 factory | 未逐来源验收 |
+| `blockchain` | 仅行情 factory | 未逐来源验收 |
+| `bybit` | 行情与执行 factory | 未逐来源验收 |
+| `coinapi` | 仅行情 factory | 未逐来源验收 |
+| `coinbase` | 行情与执行 factory | 未逐来源验收 |
+| `databento` | 仅行情 factory | 未逐来源验收 |
+| `deribit` | 行情与执行 factory | 未逐来源验收 |
+| `derive` | 行情与执行 factory | 未逐来源验收 |
+| `dydx` | 行情与执行 factory | 未逐来源验收 |
+| `hyperliquid` | 行情与执行 factory | 未逐来源验收 |
+| `interactive_brokers` | 行情与执行 factory | 未逐来源验收 |
+| `kraken` | 行情与执行 factory | 未逐来源验收 |
+| `lighter` | 行情与执行 factory | 未逐来源验收 |
+| `okx` | 行情与执行 factory | 未逐来源验收 |
+| `polymarket` | 行情与执行 factory | 未逐来源验收 |
+| `sandbox` | 仅模拟执行 factory | 未逐来源验收 |
+| `tardis` | 仅行情 factory | 未逐来源验收 |
+
+通用桥使用engine StrategyRuntime，当前只接受market/limit和DAY/GTC/IOC/FOK等已实现请求；实际venue的订单、数量、TIF及产品限制仍需单独验证，不支持控制字段明确拒绝。桥要求显式账户、instrument、venue路由、策略身份及持久intent路径；不支持用per-order client覆盖绕过已验证路由。只有对同账户/策略/标的已验证的仓位才能reduce-only关闭；未知发送先查原订单，不自动重发或以空仓清除未决意图。
+
+已进行Mac arm64及Linux x86_64 CPython3.13的本地无账户仿真、绑定拒绝、部分成交、重放及恢复验证；Windows和各真实venue的业务验收未完成。安装官方wheel成功不替代以上验收，也不构成交易损失保证。关闭日志或不接商业监控不关闭执行保护；发送需调用方明确配置受限授权，监控接收/归档/计算/展示是独立服务，不代策略决策。
+
+接线入口为 `tradelearn_runtime.execution.create_execution_host`；需保留真实native缓存及broker事件作为执行/账户事实来源，不从logger生成成交或财务结果。自定义宿主可通过 `get_execution_host_class(logging_enabled=...)` 保留业务hooks；不把继承当恶意代码沙箱。

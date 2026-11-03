@@ -23,6 +23,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
+    "boto3==1.41.2",
     "numpy>=1.26",
     "pandas>=2.1",
     "tqdm",
@@ -39,6 +40,7 @@ Documentation = "https://muuyesen.github.io/trade-learn/"
 tradelearn = "tradelearn.cli:main"
 
 [project.optional-dependencies]
+nautilus = ["nautilus_trader==2.0.0rc7; python_version >= '3.13' and python_version < '3.15'"]
 lab = [
     "jupyterlab",
     "jupyterlab-git",
@@ -139,17 +141,19 @@ oracle = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["tradelearn*"]
+include = ["tradelearn*", "leafquant_monitor*"]
 exclude = ["reference*", "tests*"]
 
 [tool.maturin]
 manifest-path = "rust/tradelearn-rust/Cargo.toml"
 module-name = "tradelearn._rust"
 python-source = "."
+python-packages = ["tradelearn", "tradelearn_runtime", "leafquant_monitor"]
 features = ["extension-module"]
 include = [
     { path = "LICENSE", format = "sdist" },
     { path = "NOTICE", format = "sdist" },
+    { path = "THIRD_PARTY_LICENSES/**/*", format = ["sdist", "wheel"] },
 ]
 
 [tool.cibuildwheel]

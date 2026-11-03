@@ -1,1 +1,4 @@
 reference/tradelearn_1x/**/*.py text eol=lf
+
+# Preserve upstream license notices verbatim.
+THIRD_PARTY_LICENSES/** whitespace=-blank-at-eof

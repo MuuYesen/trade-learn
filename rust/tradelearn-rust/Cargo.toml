@@ -19,3 +19,5 @@ extension-module = ["pyo3/extension-module"]
 [dependencies]
 pyo3 = { version = "0.28" }
 numpy = { version = "0.28" }
+
+leafquant-external-log-core = { path = "../strategy-log-core" }
