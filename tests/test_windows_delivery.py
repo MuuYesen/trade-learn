@@ -37,6 +37,26 @@ def no_network(monkeypatch):
     monkeypatch.setattr(socket.socket,'connect',deny)
 
 
+@pytest.fixture(autouse=True)
+def explicitly_private_fixture_directory(tmp_path):
+    # Runner Temp ACLs differ. Establish the production precondition rather
+    # than weakening the checker to trust a runner-specific extra group.
+    from leafquant_monitor.filesystem import _token_sids, check_private_directory
+    user=_token_sids()[0]
+    commands=[['icacls',str(tmp_path),'/reset'],
+              ['icacls',str(tmp_path),'/inheritance:r','/grant:r',
+               f'*{user}:(OI)(CI)F','*S-1-5-18:(OI)(CI)F','*S-1-5-32-544:(OI)(CI)F']]
+    for command in commands:
+        result=subprocess.run(command,capture_output=True,timeout=20)
+        assert result.returncode==0,'must establish a real private synthetic Windows directory'
+    try:check_private_directory(tmp_path)
+    except (OSError,ValueError) as error:
+        # This directory contains only this test's synthetic data, never user
+        # credentials. A failed precondition must show its actual ACL.
+        diagnostic=subprocess.run(['icacls',str(tmp_path)],capture_output=True,text=True,timeout=20)
+        raise AssertionError('synthetic private ACL unavailable: '+diagnostic.stdout) from error
+
+
 def test_real_recorder_to_mock_queue_requires_complete_receipt_before_gc(tmp_path):
     from leafquant_monitor.logger import MonitorSettings,TradeLogger
     from leafquant_monitor.sender import SegmentSender
@@ -53,6 +73,9 @@ def test_real_recorder_to_mock_queue_requires_complete_receipt_before_gc(tmp_pat
         assert raw.exists(),'SQS ACK alone must not retire raw bytes'
         seal=next(e for e in queue.items if e.kind=='source_seal')
         receipts.proof=dict(proof(seal),binding_id='foreign')
+        # The earlier no-receipt response scheduled the next poll. Advance
+        # this fixture to that eligibility point so the bad proof is read.
+        sender.outbox.db.execute('UPDATE receipt_retries SET next_attempt=0')
         with pytest.raises(ValueError):sender.send_once()
         assert raw.read_bytes()==original
         receipts.proof=proof(seal)

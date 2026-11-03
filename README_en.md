@@ -36,7 +36,7 @@ Beyond high performance, **trade-learn** provides a complete research infrastruc
 **trade-learn** rejects the simple stacking of features. Instead, it balances professional depth with research efficiency through a unique "Dual-Mode, Dual-Core" design. The **Engine** layer strictly aligns with Backtrader semantics for logic correctness, while the **Lite** layer provides a minimal Pythonic interface for rapid iteration.
 
 You can define the depth of your strategy based on the research stage:
-- **Engine Mode (Deep Research)**: Fully aligns with Backtrader semantics, supporting the complete Analyzer/Sizer/Signal ecosystem. Ideal for building complex, complex backtest strategies with precise logic.
+- **Engine Mode (Deep Research)**: Fully aligns with Backtrader semantics, supporting the complete Analyzer/Sizer/Signal ecosystem. Ideal for building complex backtest strategies with precise logic.
 - **Lite Mode (Agile Validation)**: Follows the minimalism of `backtesting.py`, supporting direct connection to model weights. Perfect for high-frequency iteration and prototype validation during the factor mining stage.
 
 In terms of ecosystem, **trade-learn** provides comprehensive indicator support, compatible with TA-Lib, Pandas-TA-Classic, TDX, and TradingView, while allowing flexible expansion of custom indicators and data sources.
