@@ -94,7 +94,7 @@ jobs:
         run: python -m pip install --upgrade cibuildwheel
       - name: Verify Windows recorder platform semantics
         if: matrix.os == 'windows-latest'
-        run: cargo test --locked -p leafquant-external-log-core --lib --test platform_recorder -- --nocapture
+        run: python scripts/check_recorder_platform.py
       - name: Build wheels
         env:
           CIBW_ARCHS: ${{ matrix.cibw-archs }}
