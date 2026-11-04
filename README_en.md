@@ -57,7 +57,7 @@ In terms of ecosystem, **trade-learn** provides comprehensive indicator support,
 
 #### 📦 Modular Platform: Lightweight Core, On-Demand Expansion
 - **Decoupled Core**: The default installation includes Engine, Lite, and basic data handling; reports, factors, Parquet, ML, and indicator backends are optional extras.
-- **Elastic Expansion**: One-click activation of the integrated research environment (**JupyterLab + MLflow + AI Assistant**) via `[lab]` or `[all]` extras.
+- **Elastic Expansion**: One-click activation of the integrated research environment (**JupyterLab + MLflow + AI Assistant**) via `[research,lab]` extras.
 
 #### 🌍 Global Vision: Multi-Standard Indicators & Modern Ecosystem
 - **Dual-Market Standards**: Explicit support for TDX (China) and TradingView (International) indicator standards, with deep compatibility for TA-Lib and Pandas-TA-Classic.
@@ -102,28 +102,13 @@ Optional extras:
 
 | extra | Usage |
 |---|---|
-| `[nautilus]` | Optional official Nautilus execution; experimental, Python 3.13/3.14 |
-| `[sqs]` | Optional AWS sender SDK in the current unpublished source; not required for local recording |
-| `[tdx]` | OpenTDX data / China-market indicator dependencies |
-| `[tv]` | TradingView datafeed and PyneCore-backed TradingView indicators |
-| `[talib]` | TA-Lib indicator namespace |
-| `[indicators]` | Pandas-TA, TDX, TradingView, and TA-Lib indicator backends |
-| `[factor]` | SciPy for Alpha101/Alpha191 |
-| `[parquet]` | PyArrow for Parquet caches |
-| `[report]` | Bokeh charts, HTML, and Excel export |
-| `[ml]` | scikit-learn and causal ML dependencies |
-| `[research]` | Research acceleration utilities such as Numba |
-| `[duckdb]` | DuckDB bars backend |
-| `[lab]` | JupyterLab / Jupyter AI / MCP / Pygwalker environment |
-| `[mlflow]` | MLflow tracking server and artifact logging |
-| `[all]` | Full research environment (Lab, MLflow, indicators, ML, DuckDB, etc.) |
+| `[research]` | Data, indicators, factors, ML, Parquet/DuckDB, reports and optimization |
+| `[lab]` | JupyterLab, interactive tools and MLflow; research libraries remain separate |
+| `[nautilus]` | Official NT 2.0.0rc7 and AWS SDK; execution requires Python 3.13/3.14 |
 
-> **💡 Installation Tip**:
-> The current source build supports basic backtesting and local recording without AWS SDKs. From the source root, explicitly install `pip install ".[sqs]"` for SQS delivery (or the extra on the matching local wheel); restricted configuration/authorization is still required. Published PyPI 0.2.9 retains its original dependencies and does not provide this new extra. Add `[report]` for charts and exports or `[indicators]` for built-in indicators. For the full research environment, use `[all]` (Nautilus is separate; Python 3.13/3.14 may combine `[all,nautilus]`):
-> ```bash
-> pip install "trade-learn[all]"
-> ```
-> Launch with `tradelearn lab`. Access JupyterLab at port `8888` and MLflow at `5050`.
+The current source exposes only these three groups. From this source root (Rust/maturin required), use `pip install ".[research,lab]"` for the research workbench or `pip install ".[nautilus]"` for execution/sending dependencies; matching local wheels also work. Base use needs no AWS. Sending still requires explicit restricted configuration and never starts trading automatically. Python 3.10–3.12 gets only the SDK from nautilus; NT is skipped by its marker and the execution entry rejects unsupported Python.
+
+Published PyPI 0.2.9 retains its old extras and dependencies; these three groups describe current source, not a new release. Developer/docs tools use `uv sync --group dev` / `uv sync --group docs`. `[lab]` provides JupyterLab/MLflow; combine `[research]` for the full workbench.
 
 ### Native wheels and platforms
 
@@ -135,7 +120,7 @@ Optional extras:
 
 ## Quick Start
 
-These examples use indicator providers and reports: install `trade-learn[indicators,report]` first.
+These examples use indicator providers and reports: install `.[research]` first.
 
 **Lite — The Shortest Path** (Ideal for rapid validation, teaching, and target-weight portfolios):
 

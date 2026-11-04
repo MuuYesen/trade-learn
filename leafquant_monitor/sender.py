@@ -126,7 +126,7 @@ def require_sqs_dependencies():
     except ModuleNotFoundError as exc:
         if exc.name not in {'boto3', 'botocore', 'botocore.config'}:
             raise
-        raise ImportError("SQS sending requires 'trade-learn[sqs]'; install the matching local wheel with this extra") from exc
+        raise ImportError("SQS sending requires boto3 and botocore; install the matching local 'trade-learn[nautilus]' source or wheel (sending still requires explicit configuration)") from exc
     return boto3, Config
 
 

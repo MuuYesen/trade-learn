@@ -26,7 +26,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install docs dependencies
-        run: uv sync --extra docs
+        run: uv sync --frozen --group docs
 
       - name: Build site
         run: uv run mkdocs build --strict

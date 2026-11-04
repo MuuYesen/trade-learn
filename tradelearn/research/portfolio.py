@@ -530,7 +530,7 @@ class RiskfolioOptimizer:
 
 
 def _import_optional(module: str, *, package: str):
-    extra = module.replace("_", "-")
+    extra = "research"
     try:
         imported = import_module(module)
     except ImportError as exc:

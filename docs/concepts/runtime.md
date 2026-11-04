@@ -111,7 +111,7 @@ TA-Lib 的 SMA/EMA 按 `timeperiod` 暖机，RSI/ATR 使用 `timeperiod + 1` 根
 
 ## Nautilus 与策略日志
 
-0.2.9默认包含通用桥和策略日志组件；可选Na执行依赖预发行框架，作为实验性接入路径维护。当前未发布源码的基础安装包含本地记录器，不安装AWS SDK或Nautilus；SQS发送在源码根目录安装 `pip install ".[sqs]"` 或对应本地wheel extra。已发布PyPI0.2.9的依赖保持不变，不提供此新extra；使用桥必须在Python3.13或3.14安装 `trade-learn[nautilus]`，目前精确依赖官方 `nautilus_trader==2.0.0rc7`（预发行版，Python>=3.13）。其它Python安装该extra时pip会按marker跳过NT，不能使用Na桥；实际桥入口明确拒绝，不自动fallback。导入不连接账户、不创建交易节点或自动发送，日志默认按调用者显式配置开启。
+0.2.9默认包含通用桥和策略日志组件；可选Na执行依赖预发行框架，作为实验性接入路径维护。当前未发布源码的基础安装包含本地记录器，不安装AWS SDK或Nautilus；SQS SDK并入源码`[nautilus]`，在源码根目录安装 `pip install ".[nautilus]"` 或对应本地wheel。已发布PyPI0.2.9的依赖保持不变，保持原extra定义；使用桥必须在Python3.13或3.14安装 `trade-learn[nautilus]`，目前精确依赖官方 `nautilus_trader==2.0.0rc7`（预发行版，Python>=3.13）。其它Python安装该extra会安装SDK但按marker跳过NT，不能使用Na桥；实际桥入口明确拒绝，不自动fallback。导入不连接账户、不创建交易节点或自动发送，日志默认按调用者显式配置开启。
 
 ```bash
 python -m tradelearn_runtime.support
@@ -171,4 +171,6 @@ finally:
 
 该例只写本地事实，不连接账户、不发送。远程发送另需显式受限配置/授权、受信receipt origin与archive binding；标准配置拒绝公共可读的凭据文件，受信内存provider无需被迫落地秘密。SQS ACK不代表原文可删除：完整、正确绑定与摘要的归档proof先持久登记，才允许按文件身份退休；Windows在同目录保留可恢复tombstone，删除失败可重启继续，不重发已证明退休原文。source-only传输角色共用纯stdlib平台薄层，不强加Na或native依赖。
 
-当前源码启用默认SQS发送但缺SDK时，TradeLogger在创建Recorder/state/线程前明确拒绝并给出匹配本地wheel的`[sqs]`安装指引。受信注入sender factory/client不强制SDK；未配置发送时不加载SDK，执行身份与恢复保护不依赖日志/远程监控。
+当前源码启用默认SQS发送但缺SDK时，TradeLogger在创建Recorder/state/线程前明确拒绝并给出匹配本地wheel的`[nautilus]`安装指引。受信注入sender factory/client不强制SDK；未配置发送时不加载SDK，执行身份与恢复保护不依赖日志/远程监控。
+
+当前源码仅三组公开extra：research（研究库）、lab（交互/MLflow）、nautilus（官方NT+SDK）。完整研究工具需组合research,lab；开发/文档工具通过uv dependency-groups。已发0.2.9保持历史安装契约。

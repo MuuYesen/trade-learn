@@ -8,10 +8,10 @@
 pip install trade-learn
 ```
 
-下面的快速示例使用 TradingView 数据源和 TDX 指标口径；如果要直接运行示例，请安装对应 extras：
+下面的快速示例使用 TradingView 数据源、内置 TDX 指标及报告；如果要直接运行示例，请安装对应 extras：
 
 ```bash
-pip install "trade-learn[tv,tdx]"
+pip install ".[research]"  # 当前源码根目录；需要Rust/maturin，PyPI 0.2.9保留原extras
 ```
 
 推荐使用虚拟环境（如 `uv`）：

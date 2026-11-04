@@ -36,7 +36,7 @@ def main() -> int:
         status = "ok" if available else "missing"
         print(f"provider:{engine}={status}")
     if not all(statuses.values()):
-        print("hint=uv sync --group oracle --extra dev")
+        print("hint=uv sync --group oracle --group dev")
     return 0
 
 

@@ -42,8 +42,24 @@ Documentation = "https://muuyesen.github.io/trade-learn/"
 tradelearn = "tradelearn.cli:main"
 
 [project.optional-dependencies]
-sqs = ["boto3==1.41.2", "botocore==1.41.6"]
-nautilus = ["nautilus_trader==2.0.0rc7; python_version >= '3.13' and python_version < '3.15'"]
+research = [
+    "opentdx; python_version >= '3.12'",
+    "websocket-client>=1.8",
+    "pynesys-pynecore; python_version >= '3.11'",
+    "TA-Lib",
+    "scikit-learn",
+    "causal-learn",
+    "scipy",
+    "pyarrow",
+    "bokeh",
+    "xlsxwriter",
+    "jinja2",
+    "numba>=0.65.1",
+    "duckdb",
+    "pandas-ta-classic",
+    "Riskfolio-Lib",
+    "optuna",
+]
 lab = [
     "jupyterlab",
     "jupyterlab-git",
@@ -51,73 +67,15 @@ lab = [
     "jupyter-ai",
     "pygwalker",
     "mcp>=1.8.0,<2",
-]
-mlflow = [
     "mlflow",
 ]
-tdx = [
-    "opentdx; python_version >= '3.12'",
+nautilus = [
+    "nautilus_trader==2.0.0rc7; python_version >= '3.13' and python_version < '3.15'",
+    "boto3==1.41.2",
+    "botocore==1.41.6",
 ]
-tv = [
-    "websocket-client>=1.8",
-    "pynesys-pynecore; python_version >= '3.11'",
-]
-talib = [
-    "TA-Lib",
-]
-ml = [
-    "scikit-learn",
-    "causal-learn",
-]
-factor = [
-    "scipy",
-]
-parquet = [
-    "pyarrow",
-]
-report = [
-    "bokeh",
-    "xlsxwriter",
-    "jinja2",
-]
-research = [
-    "numba>=0.65.1",
-]
-duckdb = [
-    "duckdb",
-]
-indicators = [
-    "pandas-ta-classic",
-    "opentdx; python_version >= '3.12'",
-    "websocket-client>=1.8",
-    "TA-Lib",
-    "pynesys-pynecore; python_version >= '3.11'",
-]
-all = [
-    "scipy",
-    "scikit-learn",
-    "pyarrow",
-    "pandas-ta-classic",
-    "bokeh",
-    "xlsxwriter",
-    "jinja2",
-    "jupyterlab",
-    "jupyterlab-git",
-    "ipywidgets",
-    "jupyter-ai",
-    "pygwalker",
-    "mcp>=1.8.0,<2",
-    "mlflow",
-    "Riskfolio-Lib",
-    "optuna",
-    "duckdb",
-    "opentdx; python_version >= '3.12'",
-    "websocket-client>=1.8",
-    "TA-Lib",
-    "pynesys-pynecore; python_version >= '3.11'",
-    "causal-learn",
-    "numba>=0.65.1",
-]
+
+[dependency-groups]
 dev = [
     "pytest",
     "pytest-cov",
@@ -129,13 +87,27 @@ docs = [
     "mkdocs-material",
     "mkdocstrings-python",
 ]
-
-[dependency-groups]
 ci = [
     "mcp>=1.8,<2",
     "openpyxl",
     "statsmodels",
     "tomli; python_version < '3.11'",
+    "boto3==1.41.2",
+    "botocore==1.41.6",
+    "pandas-ta-classic",
+    "opentdx; python_version >= '3.12'",
+    "websocket-client>=1.8",
+    "TA-Lib",
+    "pynesys-pynecore; python_version >= '3.11'",
+    "scipy",
+    "pyarrow",
+    "bokeh",
+    "xlsxwriter",
+    "jinja2",
+    "scikit-learn",
+    "causal-learn",
+    "duckdb",
+    "numba>=0.65.1",
 ]
 oracle = [
     "backtesting>=0.6.5",

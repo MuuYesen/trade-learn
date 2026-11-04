@@ -57,7 +57,7 @@
 
 #### 📦 モジュール化プラットフォーム：軽量コアと柔軟な拡張
 - **デカップリングされたコア**：標準インストールは Engine、Lite と基本データ処理を提供します。レポート、因子、Parquet、ML、指標バックエンドは追加オプションです。
-- **弾力的な拡張**：`[lab]` または `[all]` オプションにより、投資研究環境（**JupyterLab + MLflow + AI アシスタント**）を一括で有効化。
+- **弾力的な拡張**：`[research,lab]` オプションにより、投資研究環境（**JupyterLab + MLflow + AI アシスタント**）を一括で有効化。
 
 #### 🌍 グローバルな視点：多基準指標とモダンなエコシステム
 - **ダブルマーケット基準**：国内 (TDX) と海外 (TradingView) の両指標基準を明示的にサポート。TA-Lib や Pandas-TA-Classic とも深く互換。
@@ -102,30 +102,13 @@ pip install "trade-learn[nautilus]==0.2.9"
 
 | Extra | 用途 |
 |---|---|
-| `[nautilus]` | 公式Nautilusの任意実行経路（実験的、Python 3.13/3.14） |
-| `[sqs]` | 未公開ソースの任意AWS送信SDK；ローカル記録には不要 |
-| `[tdx]` | OpenTDX データ / 中国市場向け指標依存関係 |
-| `[tv]` | TradingView datafeed と PyneCore ベースの TradingView 指標 |
-| `[talib]` | TA-Lib 指標名前空間 |
-| `[indicators]` | Pandas-TA、TDX、TradingView、TA-Lib 指標バックエンド |
-| `[factor]` | Alpha101/Alpha191 用 SciPy |
-| `[parquet]` | Parquet キャッシュ用 PyArrow |
-| `[report]` | Bokeh チャート、HTML、Excel 出力 |
-| `[ml]` | scikit-learn と因果 ML 依存関係 |
-| `[research]` | Numba などのリサーチ高速化ユーティリティ |
-| `[duckdb]` | DuckDB bars backend |
-| `[lab]` | JupyterLab / Jupyter AI / MCP / Pygwalker 投資研究環境 |
-| `[mlflow]` | MLflow 実験管理とアーティファクト記録 |
-| `[all]` | 完全な研究環境 (Lab, MLflow, indicators, ML, DuckDB など) |
+| `[research]` | データ、指標、因子、ML、Parquet/DuckDB、レポート、最適化 |
+| `[lab]` | JupyterLab、対話ツール、MLflow；研究ライブラリとは別 |
+| `[nautilus]` | 公式NT 2.0.0rc7とAWS SDK；実行はPython 3.13/3.14のみ |
 
-> **💡 インストールのヒント**:
-> 標準インストールは基本的なバックテストに対応します。チャートや出力には `[report]`、組み込み指標には `[indicators]` を追加してください。JupyterLab と MLflow を含む研究環境には `[all]` を使用します。Nautilusは別途指定し、Python 3.13/3.14では `[all,nautilus]` を組み合わせられます。
-> ```bash
-> pip install "trade-learn[all]"
-> ```
-> `tradelearn lab` コマンドで起動し、8888 ポートで JupyterLab、5050 ポートで MLflow にアクセス可能です。
+現在のソースはこの3組のみです。ソースルート（Rust/maturin必要）で `pip install ".[research,lab]"` は研究環境、`pip install ".[nautilus]"` は実行・送信依存関係を用意します。対応ローカルwheelも使用できます。基本機能はAWS不要で、送信は明示的な設定・権限が必要です。自動的に取引しません。Python 3.10–3.12ではnautilus組のSDKだけが入り、NTはmarkerで省略され実行入口で拒否されます。
 
-現在のソースでは基本インストールにAWS SDKは不要です。SQS送信はソースルートで `pip install ".[sqs]"`（または対応ローカルwheelのextra）と明示的な設定・権限が必要です。公開済みPyPI 0.2.9の依存関係はそのままで、この新extraはありません。
+公開済みPyPI 0.2.9の旧extras・依存関係は変更しません。新3組は現在のソースを説明し、新版公開ではありません。開発・文書ツールは `uv sync --group dev` / `uv sync --group docs`。`[lab]` のJupyterLab/MLflowと `[research]` を組み合わせて使用します。
 
 ### 原生wheelとプラットフォーム
 
@@ -137,7 +120,7 @@ pip install "trade-learn[nautilus]==0.2.9"
 
 ## クイックスタート
 
-以下は指標とレポートを使用します。先に `trade-learn[indicators,report]` をインストールしてください。
+以下は指標とレポートを使用します。先に `.[research]` をインストールしてください。
 
 **Lite — 最短パス**（迅速な検証、教育、ターゲットウェイト戦略に最適）：
 

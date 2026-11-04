@@ -25,7 +25,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: uv sync --extra dev --extra sqs --group ci --group oracle --extra indicators --extra factor --extra parquet --extra report --extra ml --extra duckdb --extra research
+      - run: uv sync --frozen --group dev --group ci --group oracle
       - name: Fetch the frozen oracle revision
         shell: bash
         run: |
@@ -50,7 +50,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
-      - run: uv sync --extra dev --group ci --group oracle --extra indicators --extra factor --extra parquet --extra report --extra ml --extra duckdb --extra research
+      - run: uv sync --frozen --group dev --group ci --group oracle
       - name: Fetch the frozen oracle revision
         shell: bash
         run: |
@@ -67,5 +67,5 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
-      - run: uv sync --group ci --group oracle --extra dev --extra indicators --extra factor --extra parquet --extra report --extra ml --extra duckdb --extra research
+      - run: uv sync --frozen --group dev --group ci --group oracle
       - run: uv run python scripts/check_oracle.py

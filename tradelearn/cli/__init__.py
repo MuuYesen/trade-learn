@@ -108,7 +108,7 @@ def lab(
         raise typer.Exit(2)
     if missing_mlflow:
         typer.echo("MLflow is not installed. Skipping MLflow server.")
-        typer.echo("Install MLflow extras with: pip install 'trade-learn[mlflow]'")
+        typer.echo("Install MLflow extras with: pip install 'trade-learn[lab]'")
     raise typer.Exit(start_lab_stack(plan))
 
 
@@ -142,7 +142,7 @@ def mlflow_server(
     missing = check_mlflow_dependencies()
     typer.echo(f"mlflow_missing={','.join(missing) if missing else 'none'}")
     if missing:
-        typer.echo("Install MLflow extras before starting: pip install 'trade-learn[mlflow]'")
+        typer.echo("Install MLflow extras before starting: pip install 'trade-learn[lab]'")
         raise typer.Exit(2)
     raise typer.Exit(start_mlflow_server(command))
 

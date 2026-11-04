@@ -6856,23 +6856,30 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-all = [
-    { name = "bokeh" },
-    { name = "causal-learn" },
-    { name = "duckdb" },
+lab = [
     { name = "ipywidgets" },
-    { name = "jinja2" },
     { name = "jupyter-ai" },
     { name = "jupyterlab" },
     { name = "jupyterlab-git" },
     { name = "mcp" },
     { name = "mlflow" },
+    { name = "pygwalker" },
+]
+nautilus = [
+    { name = "boto3" },
+    { name = "botocore" },
+    { name = "nautilus-trader", marker = "python_full_version >= '3.13' and python_full_version < '3.15'" },
+]
+research = [
+    { name = "bokeh" },
+    { name = "causal-learn" },
+    { name = "duckdb" },
+    { name = "jinja2" },
     { name = "numba" },
     { name = "opentdx", marker = "python_full_version >= '3.12'" },
     { name = "optuna" },
     { name = "pandas-ta-classic" },
     { name = "pyarrow" },
-    { name = "pygwalker" },
     { name = "pynesys-pynecore", marker = "python_full_version >= '3.11'" },
     { name = "riskfolio-lib", version = "7.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "riskfolio-lib", version = "7.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -6881,6 +6888,32 @@ all = [
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "ta-lib" },
+    { name = "websocket-client" },
+    { name = "xlsxwriter" },
+]
+
+[package.dev-dependencies]
+ci = [
+    { name = "bokeh" },
+    { name = "boto3" },
+    { name = "botocore" },
+    { name = "causal-learn" },
+    { name = "duckdb" },
+    { name = "jinja2" },
+    { name = "mcp" },
+    { name = "numba" },
+    { name = "openpyxl" },
+    { name = "opentdx", marker = "python_full_version >= '3.12'" },
+    { name = "pandas-ta-classic" },
+    { name = "pyarrow" },
+    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11'" },
+    { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "statsmodels" },
+    { name = "ta-lib" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "websocket-client" },
     { name = "xlsxwriter" },
 ]
@@ -6896,72 +6929,6 @@ docs = [
     { name = "mkdocs-material" },
     { name = "mkdocstrings-python" },
 ]
-duckdb = [
-    { name = "duckdb" },
-]
-factor = [
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-]
-indicators = [
-    { name = "opentdx", marker = "python_full_version >= '3.12'" },
-    { name = "pandas-ta-classic" },
-    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11'" },
-    { name = "ta-lib" },
-    { name = "websocket-client" },
-]
-lab = [
-    { name = "ipywidgets" },
-    { name = "jupyter-ai" },
-    { name = "jupyterlab" },
-    { name = "jupyterlab-git" },
-    { name = "mcp" },
-    { name = "pygwalker" },
-]
-ml = [
-    { name = "causal-learn" },
-    { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-]
-mlflow = [
-    { name = "mlflow" },
-]
-nautilus = [
-    { name = "nautilus-trader", marker = "python_full_version >= '3.13' and python_full_version < '3.15'" },
-]
-parquet = [
-    { name = "pyarrow" },
-]
-report = [
-    { name = "bokeh" },
-    { name = "jinja2" },
-    { name = "xlsxwriter" },
-]
-research = [
-    { name = "numba" },
-]
-sqs = [
-    { name = "boto3" },
-    { name = "botocore" },
-]
-talib = [
-    { name = "ta-lib" },
-]
-tdx = [
-    { name = "opentdx", marker = "python_full_version >= '3.12'" },
-]
-tv = [
-    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11'" },
-    { name = "websocket-client" },
-]
-
-[package.dev-dependencies]
-ci = [
-    { name = "mcp" },
-    { name = "openpyxl" },
-    { name = "statsmodels" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
-]
 oracle = [
     { name = "backtesting" },
     { name = "backtrader" },
@@ -6970,82 +6937,77 @@ oracle = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bokeh", marker = "extra == 'all'" },
-    { name = "bokeh", marker = "extra == 'report'" },
-    { name = "boto3", marker = "extra == 'sqs'", specifier = "==1.41.2" },
-    { name = "botocore", marker = "extra == 'sqs'", specifier = "==1.41.6" },
-    { name = "causal-learn", marker = "extra == 'all'" },
-    { name = "causal-learn", marker = "extra == 'ml'" },
+    { name = "bokeh", marker = "extra == 'research'" },
+    { name = "boto3", marker = "extra == 'nautilus'", specifier = "==1.41.2" },
+    { name = "botocore", marker = "extra == 'nautilus'", specifier = "==1.41.6" },
+    { name = "causal-learn", marker = "extra == 'research'" },
     { name = "certifi", specifier = ">=2026.10.19" },
-    { name = "cibuildwheel", marker = "extra == 'dev'" },
-    { name = "duckdb", marker = "extra == 'all'" },
-    { name = "duckdb", marker = "extra == 'duckdb'" },
+    { name = "duckdb", marker = "extra == 'research'" },
     { name = "idna", specifier = ">=3.15,<4" },
-    { name = "interrogate", marker = "extra == 'dev'" },
-    { name = "ipywidgets", marker = "extra == 'all'" },
     { name = "ipywidgets", marker = "extra == 'lab'" },
-    { name = "jinja2", marker = "extra == 'all'" },
-    { name = "jinja2", marker = "extra == 'report'" },
-    { name = "jupyter-ai", marker = "extra == 'all'" },
+    { name = "jinja2", marker = "extra == 'research'" },
     { name = "jupyter-ai", marker = "extra == 'lab'" },
-    { name = "jupyterlab", marker = "extra == 'all'" },
     { name = "jupyterlab", marker = "extra == 'lab'" },
-    { name = "jupyterlab-git", marker = "extra == 'all'" },
     { name = "jupyterlab-git", marker = "extra == 'lab'" },
-    { name = "mcp", marker = "extra == 'all'", specifier = ">=1.8.0,<2" },
     { name = "mcp", marker = "extra == 'lab'", specifier = ">=1.8.0,<2" },
-    { name = "mkdocs-material", marker = "extra == 'docs'" },
-    { name = "mkdocstrings-python", marker = "extra == 'docs'" },
-    { name = "mlflow", marker = "extra == 'all'" },
-    { name = "mlflow", marker = "extra == 'mlflow'" },
+    { name = "mlflow", marker = "extra == 'lab'" },
     { name = "nautilus-trader", marker = "python_full_version >= '3.13' and python_full_version < '3.15' and extra == 'nautilus'", specifier = "==2.0.0rc7" },
-    { name = "numba", marker = "extra == 'all'", specifier = ">=0.65.1" },
     { name = "numba", marker = "extra == 'research'", specifier = ">=0.65.1" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "opentdx", marker = "python_full_version >= '3.12' and extra == 'all'" },
-    { name = "opentdx", marker = "python_full_version >= '3.12' and extra == 'indicators'" },
-    { name = "opentdx", marker = "python_full_version >= '3.12' and extra == 'tdx'" },
-    { name = "optuna", marker = "extra == 'all'" },
+    { name = "opentdx", marker = "python_full_version >= '3.12' and extra == 'research'" },
+    { name = "optuna", marker = "extra == 'research'" },
     { name = "pandas", specifier = ">=2.1" },
-    { name = "pandas-ta-classic", marker = "extra == 'all'" },
-    { name = "pandas-ta-classic", marker = "extra == 'indicators'" },
-    { name = "pyarrow", marker = "extra == 'all'" },
-    { name = "pyarrow", marker = "extra == 'parquet'" },
-    { name = "pygwalker", marker = "extra == 'all'" },
+    { name = "pandas-ta-classic", marker = "extra == 'research'" },
+    { name = "pyarrow", marker = "extra == 'research'" },
     { name = "pygwalker", marker = "extra == 'lab'" },
-    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11' and extra == 'all'" },
-    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11' and extra == 'indicators'" },
-    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11' and extra == 'tv'" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
+    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11' and extra == 'research'" },
     { name = "pyyaml" },
     { name = "requests", specifier = ">=2.31" },
-    { name = "riskfolio-lib", marker = "extra == 'all'" },
-    { name = "ruff", marker = "extra == 'dev'" },
-    { name = "scikit-learn", marker = "extra == 'all'" },
-    { name = "scikit-learn", marker = "extra == 'ml'" },
-    { name = "scipy", marker = "extra == 'all'" },
-    { name = "scipy", marker = "extra == 'factor'" },
-    { name = "ta-lib", marker = "extra == 'all'" },
-    { name = "ta-lib", marker = "extra == 'indicators'" },
-    { name = "ta-lib", marker = "extra == 'talib'" },
+    { name = "riskfolio-lib", marker = "extra == 'research'" },
+    { name = "scikit-learn", marker = "extra == 'research'" },
+    { name = "scipy", marker = "extra == 'research'" },
+    { name = "ta-lib", marker = "extra == 'research'" },
     { name = "tqdm" },
     { name = "typer" },
     { name = "urllib3", specifier = ">=2.8.0,<3" },
-    { name = "websocket-client", marker = "extra == 'all'", specifier = ">=1.8" },
-    { name = "websocket-client", marker = "extra == 'indicators'", specifier = ">=1.8" },
-    { name = "websocket-client", marker = "extra == 'tv'", specifier = ">=1.8" },
-    { name = "xlsxwriter", marker = "extra == 'all'" },
-    { name = "xlsxwriter", marker = "extra == 'report'" },
+    { name = "websocket-client", marker = "extra == 'research'", specifier = ">=1.8" },
+    { name = "xlsxwriter", marker = "extra == 'research'" },
 ]
-provides-extras = ["sqs", "nautilus", "lab", "mlflow", "tdx", "tv", "talib", "ml", "factor", "parquet", "report", "research", "duckdb", "indicators", "all", "dev", "docs"]
+provides-extras = ["research", "lab", "nautilus"]
 
 [package.metadata.requires-dev]
 ci = [
+    { name = "bokeh" },
+    { name = "boto3", specifier = "==1.41.2" },
+    { name = "botocore", specifier = "==1.41.6" },
+    { name = "causal-learn" },
+    { name = "duckdb" },
+    { name = "jinja2" },
     { name = "mcp", specifier = ">=1.8,<2" },
+    { name = "numba", specifier = ">=0.65.1" },
     { name = "openpyxl" },
+    { name = "opentdx", marker = "python_full_version >= '3.12'" },
+    { name = "pandas-ta-classic" },
+    { name = "pyarrow" },
+    { name = "pynesys-pynecore", marker = "python_full_version >= '3.11'" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
     { name = "statsmodels" },
+    { name = "ta-lib" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
+    { name = "websocket-client", specifier = ">=1.8" },
+    { name = "xlsxwriter" },
+]
+dev = [
+    { name = "cibuildwheel" },
+    { name = "interrogate" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+docs = [
+    { name = "mkdocs-material" },
+    { name = "mkdocstrings-python" },
 ]
 oracle = [
     { name = "backtesting", specifier = ">=0.6.5" },

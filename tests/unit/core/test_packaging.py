@@ -45,12 +45,12 @@ def test_optional_backends_are_not_required_for_core_install() -> None:
     assert not any(
         dep.startswith(prefix) for dep in dependencies for prefix in optional_runtime_prefixes
     )
-    assert any(dep.startswith("opentdx") for dep in extras["tdx"])
+    assert any(dep.startswith("opentdx") for dep in extras["research"])
     # TradingView transport is maintained in-tree and uses websocket-client.
-    assert any(dep.startswith("websocket-client") for dep in extras["tv"])
-    assert any(dep.startswith("pynesys-pynecore") for dep in extras["tv"])
-    assert any(dep.startswith("TA-Lib") for dep in extras["talib"])
-    assert any(dep.startswith("causal-learn") for dep in extras["ml"])
+    assert any(dep.startswith("websocket-client") for dep in extras["research"])
+    assert any(dep.startswith("pynesys-pynecore") for dep in extras["research"])
+    assert any(dep.startswith("TA-Lib") for dep in extras["research"])
+    assert any(dep.startswith("causal-learn") for dep in extras["research"])
     assert any(dep.startswith("numba") for dep in extras["research"])
 
 
@@ -61,12 +61,12 @@ def test_default_dependencies_exclude_research_and_export_stacks() -> None:
     heavy = ("scipy", "scikit-learn", "pyarrow", "pandas-ta-classic", "bokeh", "xlsxwriter")
 
     assert not any(dep.lower().startswith(heavy) for dep in base)
-    assert any(dep.startswith("scikit-learn") for dep in extras["ml"])
-    assert any(dep.startswith("scipy") for dep in extras["factor"])
-    assert any(dep.startswith("pyarrow") for dep in extras["parquet"])
-    assert any(dep.startswith("pandas-ta-classic") for dep in extras["indicators"])
-    assert any(dep.startswith("bokeh") for dep in extras["report"])
-    assert any(dep.startswith("xlsxwriter") for dep in extras["report"])
+    assert any(dep.startswith("scikit-learn") for dep in extras["research"])
+    assert any(dep.startswith("scipy") for dep in extras["research"])
+    assert any(dep.startswith("pyarrow") for dep in extras["research"])
+    assert any(dep.startswith("pandas-ta-classic") for dep in extras["research"])
+    assert any(dep.startswith("bokeh") for dep in extras["research"])
+    assert any(dep.startswith("xlsxwriter") for dep in extras["research"])
 
 
 def test_core_facades_import_without_optional_research_and_report_packages() -> None:

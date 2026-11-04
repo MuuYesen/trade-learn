@@ -11,7 +11,7 @@
 | `tl.tv` / `bt.tv` | TradingView / PyneCore 口径 |
 | `tl.pta` / `bt.pta` | pandas-ta-classic 口径 |
 
-`tl.pta` 默认可用；`talib`、`tdx`、`tv` 是按需后端，分别通过 `trade-learn[talib]`、`trade-learn[tdx]`、`trade-learn[tv]` 安装。需要一次安装全部指标后端时使用 `trade-learn[indicators]`。
+内置`tl.tdx`公式不需要OpenTDX；OpenTDX仅提供行情数据。pandas-ta、TradingView/PyneCore与TA-Lib等指标后端统一由源码`[research]`提供（从源码根目录 `pip install ".[research]"`）；公开Python命名空间保持不变，不再维护细分安装extra。
 
 Lite:
 

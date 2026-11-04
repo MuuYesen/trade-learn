@@ -7,7 +7,8 @@
 
 ## Unreleased
 
-- Make the AWS SQS SDK optional via `[sqs]`; local recording and Nautilus bridging do not require it. Published 0.2.9 artifacts remain unchanged.
+- Consolidate optional installation into research, lab, and nautilus; AWS SDKs are included in nautilus while base recording remains independent.
+- Installation migration (unreleased): replace old data/indicator/factor/ML/report/storage extras with `[research]`; replace `[all]` with `[research,lab]` and `[mlflow]` with `[lab]`. The old extras, including `[sqs]`, are removed without aliases; AWS SDKs now come with `[nautilus]`. Use `uv sync --group dev` / `uv sync --group docs` for developer/docs tools. Published 0.2.9 artifacts are unchanged. Published 0.2.9 artifacts remain unchanged.
 - Reject unsupported PandasData arguments and remove unused console/report compatibility entries.
 
 ## [0.2.9] - 2026-11-03

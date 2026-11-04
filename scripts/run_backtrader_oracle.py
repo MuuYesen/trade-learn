@@ -58,7 +58,7 @@ def _load_backtrader() -> Any:
     except ModuleNotFoundError as exc:
         raise GoldenDataError(
             "backtrader is required for --oracle backtrader; "
-            "run `uv sync --group oracle --extra dev`"
+            "run `uv sync --group oracle --group dev`"
         ) from exc
     return bt
 

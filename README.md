@@ -57,7 +57,7 @@
 
 #### 📦 模块化平台：轻量核心，按需扩展
 - **核心解耦**：默认安装包含 Engine、Lite 与基础数据处理；报告、因子、Parquet、机器学习和指标后端按需安装。
-- **弹性扩展**：通过 `[lab]` 或 `[all]` 扩展，可一键激活 **JupyterLab + MLflow + AI 助手** 组成的集成投研环境，实现“按需加载、随处运行”。
+- **弹性扩展**：通过 `[research,lab]` 扩展，可一键激活 **JupyterLab + MLflow + AI 助手** 组成的集成投研环境，实现“按需加载、随处运行”。
 
 
 #### 🌍 全球视野：多口径指标与现代生态
@@ -108,30 +108,13 @@ pip install "trade-learn[nautilus]==0.2.9"
 
 | extra | 用途 |
 |---|---|
-| `[nautilus]` | 固定官方 Nautilus；实验性外部执行桥，需 Python 3.13/3.14 |
-| `[sqs]` | 当前未发布源码的可选 AWS 发送 SDK；本地记录不需要 |
-| `[tdx]` | OpenTDX 数据源与国内指标依赖 |
-| `[tv]` | TradingView 数据源与 PyneCore 指标后端 |
-| `[talib]` | TA-Lib 指标命名空间 |
-| `[indicators]` | TDX + TradingView + TA-Lib 指标后端 |
-| `[factor]` | 因子统计分析（SciPy） |
-| `[parquet]` | Parquet 数据读写（PyArrow） |
-| `[report]` | 图表与 HTML / Excel 报告 |
-| `[ml]` | 因果机器学习依赖 |
-| `[research]` | Numba 等投研加速工具 |
-| `[duckdb]` | DuckDB 行情存储后端 |
-| `[lab]` | JupyterLab / Jupyter AI / MCP / Pygwalker 交互研究环境 |
-| `[mlflow]` | MLflow tracking server 与实验 artifact 记录 |
-| `[all]` | Lab、MLflow、指标后端、ML、DuckDB 等完整研究环境 |
+| `[research]` | 数据源、指标、因子、机器学习、Parquet/DuckDB、报表与优化 |
+| `[lab]` | JupyterLab、交互工具与MLflow；不重复安装研究库 |
+| `[nautilus]` | 官方NT 2.0.0rc7与AWS SDK；执行桥仍需Python 3.13/3.14 |
 
-> **💡 安装建议**：
-> 当前源码构建的默认安装包含基础数据处理、本地记录器，不安装AWS SDK或Nautilus。SQS发送在源码根目录显式安装 `pip install ".[sqs]"`（或对应本地wheel的该extra），并提供受限配置/授权；已发布PyPI 0.2.9保留原依赖，不提供这个新extra。因子分析、Parquet、指标后端和报表需要对应 extra。若需开启包含 JupyterLab 与 MLflow 的完整研究环境，请指定 `[all]`；它不自动安装 Na，Python 3.13/3.14 可显式组合 `[all,nautilus]`：
-> ```bash
-> pip install "trade-learn[all]"
-> ```
-> 在项目根目录使用命令行启动 `tradelearn lab` 后，默认可通过 `8888` 端口进入交互式环境，通过 `5050` 端口查看 MLflow 实验记录。
+当前源码只提供这三组；完整研究工作台组合为 `pip install ".[research,lab]"`，执行/发送使用 `pip install ".[nautilus]"`（从源码根目录安装需要Rust/maturin，亦可使用对应本地wheel）。基础安装仍无AWS；发送必须另配受限授权，不自动联网或交易。Python 3.10–3.12安装nautilus组只得到SDK，NT会被marker跳过，执行入口明确拒绝。
 
-
+已发布PyPI 0.2.9保留原有extras与依赖；这里的新三组只描述当前源码，不代表新版本已发行。开发与文档工具用 `uv sync --group dev` / `uv sync --group docs`，不再作为公开extras。`tradelearn lab`在安装 `[lab]` 后提供JupyterLab/MLflow，完整研究还需组合 `[research]`。
 
 ### 原生产物与平台
 
@@ -143,7 +126,7 @@ pip install "trade-learn[nautilus]==0.2.9"
 
 ## 快速上手
 
-以下快速上手示例调用 TradingView、TDX 指标和报表，请先安装 `pip install "trade-learn[indicators,report]"`。单标的时间序列因子评估见 [Research 指南](./docs/guides/research.md)。
+以下快速上手示例调用 TradingView、TDX 指标和报表，请先安装 `pip install ".[research]"`。单标的时间序列因子评估见 [Research 指南](./docs/guides/research.md)。
 
 **Lite——最短路径**（适合快速验证、教学、多资产目标权重）：
 

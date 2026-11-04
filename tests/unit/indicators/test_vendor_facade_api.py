@@ -15,7 +15,7 @@ from tradelearn.lite import Strategy as LiteStrategy
 HAS_PYNECORE = importlib.util.find_spec("pynecore") is not None
 requires_pynecore = pytest.mark.skipif(
     not HAS_PYNECORE,
-    reason="TradingView indicator backend requires trade-learn[tv]",
+    reason="TradingView indicator backend requires trade-learn[research]",
 )
 
 
@@ -115,7 +115,7 @@ def test_vendor_indicator_namespaces_keep_init_files_as_facades() -> None:
     assert tl.pta.SMA._func.__module__ == "tradelearn.indicators.pta.pandas_ta_adapter"
     assert tl.tdx.MA._func.__module__ == "tradelearn.indicators.tdx.mytt_adapter"
     if not HAS_PYNECORE:
-        pytest.skip("TradingView indicator backend requires trade-learn[tv]")
+        pytest.skip("TradingView indicator backend requires trade-learn[research]")
     assert tl.tv.SMA._func.__module__ == "tradelearn.indicators.tv.pynecore_adapter"
 
 

@@ -25,6 +25,6 @@ def test_docs_workflow_deploys_mkdocs_site_with_github_pages_actions() -> None:
     assert "astral-sh/setup-uv@v5" in step_uses
     assert "actions/configure-pages@v5" in step_uses
     assert "actions/upload-pages-artifact@v3" in step_uses
-    assert "uv sync --extra docs" in step_runs
+    assert "uv sync --frozen --group docs" in step_runs
     assert "uv run mkdocs build --strict" in step_runs
     assert workflow["jobs"]["deploy"]["steps"][0]["uses"] == "actions/deploy-pages@v4"

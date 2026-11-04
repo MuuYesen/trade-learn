@@ -51,7 +51,7 @@ def test_check_oracle_cli_prints_oracle_group_hint_when_provider_missing() -> No
 
     assert result.returncode == 0
     if "provider:" in result.stdout and "=missing" in result.stdout:
-        assert "hint=uv sync --group oracle --extra dev" in result.stdout
+        assert "hint=uv sync --group oracle --group dev" in result.stdout
 
 
 def test_pyproject_has_oracle_dependency_group() -> None:
@@ -62,9 +62,9 @@ def test_pyproject_has_oracle_dependency_group() -> None:
 
     assert not any(dep.startswith("opentdx") for dep in dependencies)
     assert not any(dep.startswith("tradingview-datafeed") for dep in dependencies)
-    assert any(dep.startswith("opentdx") for dep in extras["tdx"])
-    assert any(dep.startswith("websocket-client") for dep in extras["tv"])
-    assert not any(dep.startswith("tradingview-datafeed") for dep in extras["tv"])
+    assert any(dep.startswith("opentdx") for dep in extras["research"])
+    assert any(dep.startswith("websocket-client") for dep in extras["research"])
+    assert not any(dep.startswith("tradingview-datafeed") for dep in extras["research"])
     assert not any(dep.startswith(RETIRED_PROVIDER_NAMES[0]) for dep in dependencies)
     assert not any(dep.startswith("yfinance") for dep in oracle)
     assert any(dep.startswith("opentdx") for dep in oracle)

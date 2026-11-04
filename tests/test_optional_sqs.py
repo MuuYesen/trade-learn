@@ -15,12 +15,11 @@ class NoAws(importlib.abc.MetaPathFinder):
             raise ModuleNotFoundError(name=fullname)
 
 
-def test_metadata_keeps_aws_only_in_sqs_extra():
+def test_metadata_keeps_aws_out_of_base_and_in_nautilus_extra():
     data=tomllib.loads((Path(__file__).parents[1]/'pyproject.toml').read_text())['project']
     assert not any('boto' in dep for dep in data['dependencies'])
-    assert not any('boto' in dep for dep in data['optional-dependencies']['nautilus'])
-    assert 'boto3==1.41.2' in data['optional-dependencies']['sqs']
-    assert any(dep.startswith('botocore==') for dep in data['optional-dependencies']['sqs'])
+    assert 'boto3==1.41.2' in data['optional-dependencies']['nautilus']
+    assert any(dep.startswith('botocore==') for dep in data['optional-dependencies']['nautilus'])
 
 
 def test_missing_sqs_dependency_rejects_before_state_or_recorder(tmp_path, monkeypatch):
@@ -31,7 +30,7 @@ def test_missing_sqs_dependency_rejects_before_state_or_recorder(tmp_path, monke
     settings=MonitorSettings(source='fixture',strategy_id='s',account_id='a',state_dir=str(root),
         sender_config=str(tmp_path/'not-read.json'),receipt_origin='https://receipt.invalid',archive_binding_id='binding')
     try:
-        with pytest.raises(ImportError,match=r'trade-learn\[sqs\]'):
+        with pytest.raises(ImportError,match=r'trade-learn\[nautilus\]'):
             TradeLogger(settings)
         assert not root.exists()
     finally:sys.meta_path.remove(block)
