@@ -25,7 +25,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: uv sync --extra dev --group ci --group oracle --extra indicators --extra factor --extra parquet --extra report --extra ml --extra duckdb --extra research
+      - run: uv sync --extra dev --extra sqs --group ci --group oracle --extra indicators --extra factor --extra parquet --extra report --extra ml --extra duckdb --extra research
       - name: Fetch the frozen oracle revision
         shell: bash
         run: |
