@@ -3,31 +3,72 @@ Supervised Models
 """
 # Author: Shankar Rao Pandala <shankar.pandala@live.com>
 
+import time
+import warnings
+
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
-
-import time
-from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder
+from sklearn.base import ClassifierMixin, RegressorMixin
 from sklearn.compose import ColumnTransformer
-from sklearn.utils import all_estimators
-from sklearn.base import RegressorMixin
-from sklearn.base import ClassifierMixin
+from sklearn.impute import SimpleImputer
 from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
-    roc_auc_score,
     f1_score,
-    r2_score,
     mean_squared_error,
+    r2_score,
+    roc_auc_score,
 )
-import warnings
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
+from sklearn.utils import all_estimators
+from tqdm import tqdm
 
 warnings.filterwarnings("ignore")
 pd.set_option("display.precision", 2)
 pd.set_option("display.float_format", lambda x: "%.2f" % x)
+
+
+def _error(exception):
+    return {"error_type": type(exception).__name__, "message": str(exception)}
+
+
+def _binary_auc(pipe, X, y):
+    classes = np.asarray(pipe.classes_)
+    observed = np.unique(y)
+    if classes.shape != (2,):
+        raise ValueError("ROC AUC supports binary fitted classes only")
+    if len(observed) != 2 or not np.isin(observed, classes).all():
+        raise ValueError("ROC AUC requires both fitted classes in evaluation labels")
+    estimator = pipe.steps[-1][1]
+    if callable(getattr(estimator, "predict_proba", None)):
+        scores = np.asarray(pipe.predict_proba(X))
+        if scores.shape != (len(y), 2):
+            raise ValueError("predict_proba must return shape (n_samples, 2)")
+        scores = scores[:, 1]
+    elif callable(getattr(estimator, "decision_function", None)):
+        scores = np.asarray(pipe.decision_function(X))
+        if scores.shape != (len(y),):
+            raise ValueError("binary decision_function must return shape (n_samples,)")
+    else:
+        raise ValueError("ROC AUC requires predict_proba or decision_function")
+    if not np.isfinite(scores).all():
+        raise ValueError("ROC AUC scores must be finite")
+    return roc_auc_score(np.asarray(y) == classes[1], scores)
+
+
+def _score(owner, name, metric, function):
+    try:
+        value = function()
+        if not np.isscalar(value) or not np.isfinite(value):
+            raise ValueError("metric must return a finite scalar")
+        return value
+    except Exception as exception:
+        owner.score_errors_.setdefault(name, {})[metric] = _error(exception)
+        if not owner.ignore_warnings:
+            print(f"{name} {metric} unavailable: {exception}")
+        return np.nan
+
 
 removed_classifiers = [
     "ClassifierChain",
@@ -98,6 +139,7 @@ categorical_transformer_high = Pipeline(
 
 
 # Helper function
+
 
 def get_card_split(df, cols, n=11):
     """
@@ -191,6 +233,8 @@ class LazyClassifier:
         self.custom_metric = custom_metric
         self.predictions = predictions
         self.models = {}
+        self.failures_ = {}
+        self.score_errors_ = {}
         self.random_state = random_state
         self.classifiers = classifiers
 
@@ -217,6 +261,10 @@ class LazyClassifier:
         predictions : Pandas DataFrame
             Returns predictions of all the models in a Pandas DataFrame.
         """
+        self.models = {}
+        self.failures_ = {}
+        self.score_errors_ = {}
+        metric_name = getattr(self.custom_metric, "__name__", type(self.custom_metric).__name__)
         Accuracy = []
         B_Accuracy = []
         ROC_AUC = []
@@ -235,9 +283,7 @@ class LazyClassifier:
         numeric_features = X_train.select_dtypes(include=[np.number]).columns
         categorical_features = X_train.select_dtypes(include=["object"]).columns
 
-        categorical_low, categorical_high = get_card_split(
-            X_train, categorical_features
-        )
+        categorical_low, categorical_high = get_card_split(X_train, categorical_features)
 
         preprocessor = ColumnTransformer(
             transformers=[
@@ -247,21 +293,15 @@ class LazyClassifier:
             ]
         )
 
-        if self.classifiers == "all":
-            self.classifiers = CLASSIFIERS
-        else:
-            try:
-                temp_list = []
-                for classifier in self.classifiers:
-                    full_name = (classifier.__name__, classifier)
-                    temp_list.append(full_name)
-                self.classifiers = temp_list
-            except Exception as exception:
-                print(exception)
-                print("Invalid Classifier(s)")
+        selected_models = (
+            CLASSIFIERS
+            if self.classifiers == "all"
+            else [(model.__name__, model) for model in self.classifiers]
+        )
 
-        for name, model in tqdm(self.classifiers):
+        for name, model in tqdm(selected_models):
             start = time.time()
+            stage = "construct"
             try:
                 if "random_state" in model().get_params().keys():
                     pipe = Pipeline(
@@ -271,23 +311,35 @@ class LazyClassifier:
                         ]
                     )
                 else:
-                    pipe = Pipeline(
-                        steps=[("preprocessor", preprocessor), ("classifier", model())]
-                    )
+                    pipe = Pipeline(steps=[("preprocessor", preprocessor), ("classifier", model())])
 
+                stage = "fit"
                 pipe.fit(X_train, y_train)
                 self.models[name] = pipe
+                stage = "predict"
                 y_pred = pipe.predict(X_test)
-                accuracy = accuracy_score(y_test, y_pred, normalize=True)
-                b_accuracy = balanced_accuracy_score(y_test, y_pred)
-                f1 = f1_score(y_test, y_pred, average="weighted")
-                try:
-                    roc_auc = roc_auc_score(y_test, y_pred)
-                except Exception as exception:
-                    roc_auc = None
-                    if self.ignore_warnings is False:
-                        print("ROC AUC couldn't be calculated for " + name)
-                        print(exception)
+                stage = "scoring"
+                accuracy = _score(
+                    self,
+                    name,
+                    "Accuracy",
+                    lambda y_pred=y_pred: accuracy_score(y_test, y_pred, normalize=True),
+                )
+                b_accuracy = _score(
+                    self,
+                    name,
+                    "Balanced Accuracy",
+                    lambda y_pred=y_pred: balanced_accuracy_score(y_test, y_pred),
+                )
+                f1 = _score(
+                    self,
+                    name,
+                    "F1 Score",
+                    lambda y_pred=y_pred: f1_score(y_test, y_pred, average="weighted"),
+                )
+                roc_auc = _score(
+                    self, name, "ROC AUC", lambda pipe=pipe: _binary_auc(pipe, X_test, y_test)
+                )
                 names.append(name)
                 Accuracy.append(accuracy)
                 B_Accuracy.append(b_accuracy)
@@ -295,7 +347,12 @@ class LazyClassifier:
                 F1.append(f1)
                 TIME.append(time.time() - start)
                 if self.custom_metric is not None:
-                    custom_metric = self.custom_metric(y_test, y_pred)
+                    custom_metric = _score(
+                        self,
+                        name,
+                        metric_name,
+                        lambda y_pred=y_pred: self.custom_metric(y_test, y_pred),
+                    )
                     CUSTOM_METRIC.append(custom_metric)
                 if self.verbose > 0:
                     if self.custom_metric is not None:
@@ -306,7 +363,7 @@ class LazyClassifier:
                                 "Balanced Accuracy": b_accuracy,
                                 "ROC AUC": roc_auc,
                                 "F1 Score": f1,
-                                self.custom_metric.__name__: custom_metric,
+                                metric_name: custom_metric,
                                 "Time taken": time.time() - start,
                             }
                         )
@@ -324,6 +381,7 @@ class LazyClassifier:
                 if self.predictions:
                     predictions[name] = y_pred
             except Exception as exception:
+                self.failures_[name] = {"stage": stage, **_error(exception)}
                 if self.ignore_warnings is False:
                     print(name + " model failed to execute")
                     print(exception)
@@ -346,13 +404,11 @@ class LazyClassifier:
                     "Balanced Accuracy": B_Accuracy,
                     "ROC AUC": ROC_AUC,
                     "F1 Score": F1,
-                    self.custom_metric.__name__: CUSTOM_METRIC,
+                    metric_name: CUSTOM_METRIC,
                     "Time Taken": TIME,
                 }
             )
-        scores = scores.sort_values(by="Balanced Accuracy", ascending=False).set_index(
-            "Model"
-        )
+        scores = scores.sort_values(by="Balanced Accuracy", ascending=False).set_index("Model")
 
         if self.predictions:
             predictions_df = pd.DataFrame.from_dict(predictions)
@@ -491,6 +547,8 @@ class LazyRegressor:
         self.custom_metric = custom_metric
         self.predictions = predictions
         self.models = {}
+        self.failures_ = {}
+        self.score_errors_ = {}
         self.random_state = random_state
         self.regressors = regressors
 
@@ -517,6 +575,10 @@ class LazyRegressor:
         predictions : Pandas DataFrame
             Returns predictions of all the models in a Pandas DataFrame.
         """
+        self.models = {}
+        self.failures_ = {}
+        self.score_errors_ = {}
+        metric_name = getattr(self.custom_metric, "__name__", type(self.custom_metric).__name__)
         R2 = []
         ADJR2 = []
         RMSE = []
@@ -535,9 +597,7 @@ class LazyRegressor:
         numeric_features = X_train.select_dtypes(include=[np.number]).columns
         categorical_features = X_train.select_dtypes(include=["object"]).columns
 
-        categorical_low, categorical_high = get_card_split(
-            X_train, categorical_features
-        )
+        categorical_low, categorical_high = get_card_split(X_train, categorical_features)
 
         preprocessor = ColumnTransformer(
             transformers=[
@@ -547,21 +607,15 @@ class LazyRegressor:
             ]
         )
 
-        if self.regressors == "all":
-            self.regressors = REGRESSORS
-        else:
-            try:
-                temp_list = []
-                for regressor in self.regressors:
-                    full_name = (regressor.__name__, regressor)
-                    temp_list.append(full_name)
-                self.regressors = temp_list
-            except Exception as exception:
-                print(exception)
-                print("Invalid Regressor(s)")
+        selected_models = (
+            REGRESSORS
+            if self.regressors == "all"
+            else [(model.__name__, model) for model in self.regressors]
+        )
 
-        for name, model in tqdm(self.regressors):
+        for name, model in tqdm(selected_models):
             start = time.time()
+            stage = "construct"
             try:
                 if "random_state" in model().get_params().keys():
                     pipe = Pipeline(
@@ -571,19 +625,32 @@ class LazyRegressor:
                         ]
                     )
                 else:
-                    pipe = Pipeline(
-                        steps=[("preprocessor", preprocessor), ("regressor", model())]
-                    )
+                    pipe = Pipeline(steps=[("preprocessor", preprocessor), ("regressor", model())])
 
+                stage = "fit"
                 pipe.fit(X_train, y_train)
                 self.models[name] = pipe
+                stage = "predict"
                 y_pred = pipe.predict(X_test)
+                stage = "scoring"
 
-                r_squared = r2_score(y_test, y_pred)
-                adj_rsquared = adjusted_rsquared(
-                    r_squared, X_test.shape[0], X_test.shape[1]
+                r_squared = _score(
+                    self, name, "R-Squared", lambda y_pred=y_pred: r2_score(y_test, y_pred)
                 )
-                rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+                adj_rsquared = _score(
+                    self,
+                    name,
+                    "Adjusted R-Squared",
+                    lambda r_squared=r_squared: adjusted_rsquared(
+                        r_squared, X_test.shape[0], X_test.shape[1]
+                    ),
+                )
+                rmse = _score(
+                    self,
+                    name,
+                    "RMSE",
+                    lambda y_pred=y_pred: np.sqrt(mean_squared_error(y_test, y_pred)),
+                )
 
                 names.append(name)
                 R2.append(r_squared)
@@ -592,7 +659,12 @@ class LazyRegressor:
                 TIME.append(time.time() - start)
 
                 if self.custom_metric:
-                    custom_metric = self.custom_metric(y_test, y_pred)
+                    custom_metric = _score(
+                        self,
+                        name,
+                        metric_name,
+                        lambda y_pred=y_pred: self.custom_metric(y_test, y_pred),
+                    )
                     CUSTOM_METRIC.append(custom_metric)
 
                 if self.verbose > 0:
@@ -605,12 +677,13 @@ class LazyRegressor:
                     }
 
                     if self.custom_metric:
-                        scores_verbose[self.custom_metric.__name__] = custom_metric
+                        scores_verbose[metric_name] = custom_metric
 
                     print(scores_verbose)
                 if self.predictions:
                     predictions[name] = y_pred
             except Exception as exception:
+                self.failures_[name] = {"stage": stage, **_error(exception)}
                 if self.ignore_warnings is False:
                     print(name + " model failed to execute")
                     print(exception)
@@ -624,12 +697,10 @@ class LazyRegressor:
         }
 
         if self.custom_metric:
-            scores[self.custom_metric.__name__] = CUSTOM_METRIC
+            scores[metric_name] = CUSTOM_METRIC
 
         scores = pd.DataFrame(scores)
-        scores = scores.sort_values(by="Adjusted R-Squared", ascending=False).set_index(
-            "Model"
-        )
+        scores = scores.sort_values(by="Adjusted R-Squared", ascending=False).set_index("Model")
 
         if self.predictions:
             predictions_df = pd.DataFrame.from_dict(predictions)

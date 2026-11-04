@@ -7,6 +7,9 @@
 
 ## Unreleased
 
+- Calculate binary classifier ROC AUC from class-aligned continuous scores; unsupported or unavailable scores are NaN with a reason.
+- Keep classifier/regressor construction, fit, prediction and metric diagnostics on each comparison instance; reset them on refit and preserve successful metrics/predictions. The exploratory leaderboard exposes diagnostics in DataFrame attrs.
+
 - Keep causal/ML research in the strategy workflow; correct the target/Pipeline guide and explicitly identify correlation versus PC/FCI examples.
 - Preserve actual discovery edge endpoints and uncertainty in Mermaid, clear stale graphs on refit, and accept direct HTML/Excel mapping sections.
 - Remove public `AutoML`/`tradelearn.ml.automl`; migrate the random-half-split leaderboard to `examples/exploration/classifier_comparison.py` (`compare_classifiers`). Explicit train/test model implementations remain; no compatibility shell.

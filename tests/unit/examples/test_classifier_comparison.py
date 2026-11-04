@@ -13,6 +13,8 @@ def test_exploratory_comparison_keeps_explicit_feature_selection() -> None:
     class FakeLazyClassifier:
         def __init__(self, **kwargs) -> None:
             seen["kwargs"] = kwargs
+            self.failures_ = {"BadModel": {"stage": "fit"}}
+            self.score_errors_ = {}
 
         def fit(self, x_train, x_test, y_train, y_test):
             seen["x_columns"] = list(x_train.columns)
@@ -38,6 +40,8 @@ def test_exploratory_comparison_keeps_explicit_feature_selection() -> None:
     assert seen["x_columns"] == ["feature_b"]
     assert seen["y_name"] == "label"
     assert models.index.tolist() == ["FakeModel"]
+    assert models.attrs["failures"]["BadModel"]["stage"] == "fit"
+    assert models.attrs["score_errors"] == {}
 
 
 def test_exploratory_comparison_rejects_unknown_target_and_features():

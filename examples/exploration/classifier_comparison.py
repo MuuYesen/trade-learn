@@ -45,4 +45,7 @@ def compare_classifiers(
     clf = classifier_cls(verbose=0, ignore_warnings=True, custom_metric=None)
     models, _predictions = clf.fit(x_train, x_test, y_train, y_test)
 
+    # Keep diagnostics visible without changing the leaderboard return type.
+    models.attrs["failures"] = clf.failures_
+    models.attrs["score_errors"] = clf.score_errors_
     return models

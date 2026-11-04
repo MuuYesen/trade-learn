@@ -72,3 +72,29 @@ Reporter(stats).html("report.html", sections=[selector.to_section("候选因果�
 未发布源码已移除`tradelearn.ml.AutoML`及`tradelearn.ml.automl`。原随机半分的分类器排行榜移到[探索示例](../../examples/exploration/classifier_comparison.py)的`compare_classifiers`；它只返回排行榜，不是时序验证、预测模型或交易策略。底层`tradelearn.ml._lazy_predict`的显式train/test模型比较实现保留，不新增兼容壳。正式0.2.9历史产物不变。
 
 [研究指南](research.md) · [ML API](../api/reference/ml.md)
+
+### 探索评分与失败诊断（未发布源码）
+
+底层 `LazyClassifier` / `LazyRegressor` 接收调用者已划分的训练和评估样本，
+不替代上面的时序验证。`fit` 返回形式、评分列与可选预测表保持不变。
+每次调用会清空上次模型和诊断：`failures_[model]` 记录构造、拟合或预测失败的
+`stage`、`error_type`、`message`；这些模型不进入成功评分表。
+`score_errors_[model][metric]` 记录单项评分不可用原因，评分为 NaN，
+同一模型的其它评分和预测保留。`ignore_warnings` 只控制打印，不隐藏诊断。
+
+分类 ROC AUC 目前只支持二分类：正类为已拟合 `classes_[1]`，
+优先使用 `predict_proba` 的对应列，否则使用一维 `decision_function`。
+不会使用硬预测标签替代连续分数；已提供的概率方法报错或格式错误时也不会
+静默转用另一方法。评估集必须含两个已拟合类别；多分类、单类、未知标签、
+缺少连续评分、非有限分数或评分异常均为 NaN 并有具体原因。
+这没有引入多分类 OvR/OvO 或平均规则。分析表 NaN 不应跨 JSON 直接输出；
+需要转换为 null 并携带原因。
+
+```python
+from tradelearn.ml._lazy_predict import LazyClassifier
+
+comparison = LazyClassifier(classifiers=[classifier_type], predictions=True)
+scores, predictions = comparison.fit(x_train, x_valid, y_train, y_valid)
+print(comparison.failures_)
+print(comparison.score_errors_)
+```
