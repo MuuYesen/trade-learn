@@ -82,6 +82,8 @@ Most quantitative research stops at **Correlation**, which often leads to factor
     *   **Unified strategy operations**: Manage rule-based and model-based strategies in one stack, avoiding fragmented research and maintenance workflows.
 *   **Causal Inference Explorers**: Bring causal graph methods into factor selection to remove pseudo-correlations and build more explainable, robust quantitative systems.
 
+Causal/ML research remains part of the strategy workflow. See the [causal guide](docs/guides/causal.md) for explicit target routing, temporal boundaries, graph/report semantics and the unreleased AutoML migration.
+
 ## Installation
 
 This release provides research/backtesting, an optional Nautilus execution bridge and strategy logging. The `[nautilus]` extra requires Python 3.13/3.14 and pins official `2.0.0rc7`; that execution path remains experimental and needs explicit account/venue routing and recovery configuration. Installation does not connect accounts or trade. See [installation and runtime](docs/concepts/runtime.md#runtime-install).

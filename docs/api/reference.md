@@ -28,7 +28,7 @@
 | `tradelearn.factor` | Alpha formulas and factor analysis tools. | `FactorAnalyzer`, `MultiFactorAnalyzer`, `MultiPeriodFactorAnalyzer`, `FactorRiskModel`, `PerformanceAttribution`, `alpha101`, `alpha191`, `clean_factor_and_forward_returns` | [Factor](reference/factor.md) |
 | `tradelearn.report` | HTML, Excel, and research report export utilities. | `Reporter`, `ReportContext`, `ReportSection` | [Report](reference/report.md) |
 | `tradelearn.research` | Research workflow tracking, preprocessing, and portfolio construction tools. | `Pipeline`, `FeatureBuilder`, `FeatureSet`, `ModelScorer`, `ResearchResult`, `ResearchRun`, `ResearchStep`, `Transformer`, `current_run`, `derive`, ... (+7) | [Research](reference/research.md) |
-| `tradelearn.ml` | Machine learning, model registry, and feature selection utilities. | `CausalSelector`, `AutoML`, `ModelLoader`, `ModelRegistry`, `model_uri` | [ML](reference/ml.md) |
+| `tradelearn.ml` | Machine learning, model registry, and feature selection utilities. | `CausalSelector`, `ModelLoader`, `ModelRegistry`, `model_uri` | [ML](reference/ml.md) |
 
 ## 按模块列出公开符号
 
@@ -66,4 +66,4 @@
 
 ### [`tradelearn.ml`](reference/ml.md)
 
-`CausalSelector`, `AutoML`, `ModelLoader`, `ModelRegistry`, `model_uri`
+`CausalSelector`, `ModelLoader`, `ModelRegistry`, `model_uri`

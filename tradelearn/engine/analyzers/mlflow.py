@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import logging
-import tempfile
 from collections import Counter
-from pathlib import Path
 from typing import Any
 
 from tradelearn.core.broker_events import BrokerEvent
-from tradelearn.report.mlflow import build_run_metrics, build_run_params
+from tradelearn.report.mlflow import build_run_metrics, build_run_params, log_artifact_bundle
 
 from ..analyzer import Analyzer
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_MLFLOW_URI = "http://127.0.0.1:5050"
+
+
 class MLflowAnalyzer(Analyzer):
     """Log strategy params, broker settings, stats, and artifacts to MLflow."""
 
@@ -55,7 +55,9 @@ class MLflowAnalyzer(Analyzer):
                 self.p.experiment or "default",
                 self.p.run_name or "auto",
                 uri,
-                self.p.upload_artifacts if self.p.log_artifacts is None else bool(self.p.log_artifacts),
+                self.p.upload_artifacts
+                if self.p.log_artifacts is None
+                else bool(self.p.log_artifacts),
             )
             mlflow.set_tracking_uri(uri)
             if self.p.experiment:
@@ -73,7 +75,7 @@ class MLflowAnalyzer(Analyzer):
                 )
                 mlflow.log_metrics(build_run_metrics(stats))
                 if upload_artifacts:
-                    _log_artifact_bundle(
+                    log_artifact_bundle(
                         mlflow,
                         strategy=self.strategy,
                         stats=stats,
@@ -137,51 +139,8 @@ class MLflowAnalyzer(Analyzer):
 
 def _import_mlflow() -> Any:
     import mlflow
+
     return mlflow
-
-
-def _log_artifact_bundle(
-    mlflow: Any,
-    *,
-    strategy: Any,
-    stats: Any,
-    artifact_path: str | None,
-    log_report: bool,
-    log_plot: bool,
-) -> None:
-    if not hasattr(mlflow, "log_artifact"):
-        return
-
-    from tradelearn.report.artifacts import market_data_from_strategy, write_artifact_bundle
-
-    with tempfile.TemporaryDirectory(prefix="tradelearn-mlflow-") as directory:
-        artifacts = write_artifact_bundle(
-            stats,
-            Path(directory),
-            strategy=strategy,
-            market_data=market_data_from_strategy(strategy),
-            log_report=log_report,
-            log_plot=log_plot,
-        )
-        for artifact in artifacts:
-            _log_path(mlflow, artifact, artifact_path)
-
-
-def _log_path(mlflow: Any, path: Path, artifact_path: str | None) -> None:
-    if path.is_dir():
-        destination = _join_artifact_path(artifact_path, path.name)
-        if hasattr(mlflow, "log_artifacts"):
-            mlflow.log_artifacts(str(path), artifact_path=destination)
-            return
-        for child in sorted(path.iterdir()):
-            if child.is_file():
-                mlflow.log_artifact(str(child), artifact_path=destination)
-        return
-    mlflow.log_artifact(str(path), artifact_path=artifact_path)
-
-
-def _join_artifact_path(base: str | None, name: str) -> str:
-    return f"{base}/{name}" if base else name
 
 
 def _coerce_broker_event(event: BrokerEvent | dict[str, Any]) -> BrokerEvent:

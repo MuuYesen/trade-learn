@@ -41,7 +41,7 @@ MIGRATION_CHECKPOINTS: tuple[MigrationCheckpoint, ...] = (
         "tradelearn.factor.FactorAnalyzer",
     ),
     MigrationCheckpoint("reporter", "removed Evaluate facade", "tradelearn.report.Reporter"),
-    MigrationCheckpoint("ml", "AutoML / CausalGraph", "tradelearn.ml"),
+    MigrationCheckpoint("ml", "CausalSelector / ModelRegistry", "tradelearn.ml"),
 )
 
 def run_migration_smoke() -> dict[str, Any]:

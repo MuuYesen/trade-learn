@@ -7,6 +7,11 @@
 
 ## Unreleased
 
+- Keep causal/ML research in the strategy workflow; correct the target/Pipeline guide and explicitly identify correlation versus PC/FCI examples.
+- Preserve actual discovery edge endpoints and uncertainty in Mermaid, clear stale graphs on refit, and accept direct HTML/Excel mapping sections.
+- Remove public `AutoML`/`tradelearn.ml.automl`; migrate the random-half-split leaderboard to `examples/exploration/classifier_comparison.py` (`compare_classifiers`). Explicit train/test model implementations remain; no compatibility shell.
+- Share Engine/Lite MLflow artifact upload helpers without changing run lifecycle, parameters, metrics or tags. These are source changes, not a new release; published 0.2.9 artifacts are unchanged.
+
 - Consolidate optional installation into research, lab, and nautilus; AWS SDKs are included in nautilus while base recording remains independent.
 - Installation migration (unreleased): replace old data/indicator/factor/ML/report/storage extras with `[research]`; replace `[all]` with `[research,lab]` and `[mlflow]` with `[lab]`. The old extras, including `[sqs]`, are removed without aliases; AWS SDKs now come with `[nautilus]`. Use `uv sync --group dev` / `uv sync --group docs` for developer/docs tools. Published 0.2.9 artifacts are unchanged. Published 0.2.9 artifacts remain unchanged.
 - Reject unsupported PandasData arguments and remove unused console/report compatibility entries.

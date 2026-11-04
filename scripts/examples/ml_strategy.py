@@ -4,6 +4,7 @@ The default bars are synthetic demonstration data, not historical GOOG prices.
 Pass an OHLCV frame to run_example to use real market data instead.
 """
 
+import argparse
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,9 +27,7 @@ def build_alpha101_features(bars: pd.DataFrame, max_features: int = 3) -> pd.Dat
     factor_input["date"] = dates.tz_localize(None)
     factor_input["symbol"] = "DEMO"
     factor_input["vwap"] = factor_input[["open", "high", "low", "close"]].mean(axis=1)
-    alpha_frame = alpha101(
-        factor_input, names=["alpha001", "alpha002", "alpha003"][:max_features]
-    )
+    alpha_frame = alpha101(factor_input, names=["alpha001", "alpha002", "alpha003"][:max_features])
     factors = alpha_frame.drop(columns=["symbol"]).set_index("date")
     factors = factors.reindex(dates.tz_localize(None))
     factors.index = bars.index
@@ -59,14 +58,25 @@ def _demo_bars() -> pd.DataFrame:
     close = 100.0 + np.cumsum(rng.normal(0.08, 1.0, 200))
     opening = close + rng.normal(0, 0.2, len(close))
     return pd.DataFrame(
-        {"open": opening, "high": np.maximum(opening, close) + 0.5,
-         "low": np.minimum(opening, close) - 0.5, "close": close,
-         "volume": rng.integers(1000, 10000, len(close)).astype(float)},
+        {
+            "open": opening,
+            "high": np.maximum(opening, close) + 0.5,
+            "low": np.minimum(opening, close) - 0.5,
+            "close": close,
+            "volume": rng.integers(1000, 10000, len(close)).astype(float),
+        },
         index=pd.date_range("2024-01-01", periods=len(close), tz="UTC"),
     )
 
 
-def run_example(bars: pd.DataFrame | None = None) -> MLExampleResult:
+def run_example(
+    bars: pd.DataFrame | None = None, *, selection_method: str = "correlation"
+) -> MLExampleResult:
+    """Single-asset demonstration; one-step purge applies to its next-bar label.
+
+    Select correlation, pc, or fci explicitly. Discovery is not causal proof;
+    this one fixed chronological holdout is not walk-forward validation.
+    """
     bars = _demo_bars() if bars is None else bars.copy()
     if len(bars) < 30 or not bars.index.is_monotonic_increasing or not bars.index.is_unique:
         raise ValueError("bars must contain at least 30 unique chronological observations")
@@ -78,7 +88,9 @@ def run_example(bars: pd.DataFrame | None = None) -> MLExampleResult:
     eligible = [name for name in candidates if training[name].notna().any()]
     if not eligible:
         raise ValueError("no training features have observed values")
-    selector = CausalSelector(target="target", features=eligible, max_features=3)
+    selector = CausalSelector(
+        target="target", features=eligible, max_features=3, method=selection_method
+    )
     features = selector.select(training)
     while features and training.dropna(subset=[*features, "target"]).empty:
         features.pop()
@@ -89,18 +101,34 @@ def run_example(bars: pd.DataFrame | None = None) -> MLExampleResult:
     cerebro.addstrategy(
         Alpha101GBMStrategy,
         model=GradientBoostingRegressor(random_state=7, n_estimators=50, max_depth=3),
-        features=tuple(features), threshold=0.001, size=10, training_data=training,
+        features=tuple(features),
+        threshold=0.001,
+        size=10,
+        training_data=training,
     )
     [strategy] = cerebro.run()
     return MLExampleResult(
-        features, float(strategy.stats.summary["final_value"]), strategy.stats,
-        data.loc[:, candidates], training, strategy,
+        features,
+        float(strategy.stats.summary["final_value"]),
+        strategy.stats,
+        data.loc[:, candidates],
+        training,
+        strategy,
     )
 
 
 def main():
-    result = run_example()
-    print("Synthetic demonstration data; chronological holdout evaluation.")
+    parser = argparse.ArgumentParser(description="Single-asset chronological ML demonstration")
+    parser.add_argument(
+        "--selection-method", choices=("correlation", "pc", "fci"), default="correlation"
+    )
+    args = parser.parse_args()
+    result = run_example(selection_method=args.selection_method)
+    print(
+        f"Synthetic demonstration; selection={args.selection_method}; "
+        "discovery is not causal proof."
+    )
+    print("One next-bar label purged at the chronological holdout boundary; not walk-forward.")
     print("\nML Backtest Summary:")
     print(f"Final Value: {result.final_value:.2f}")
 

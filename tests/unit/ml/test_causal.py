@@ -106,3 +106,154 @@ def _fake_fci_runner(data, **kwargs):
     assert kwargs["node_names"] == ["strong", "weak", "noise", "__target__"]
     assert kwargs["independence_test_method"] == "fisherz"
     return _FakeCausalGraph([1]), []
+
+
+class _Node:
+    def __init__(self, name):
+        self.name = name
+
+    def get_name(self):
+        return self.name
+
+
+class _Endpoint:
+    def __init__(self, name):
+        self.name = name
+
+
+class _Edge:
+    def __init__(self, left, right, first, second):
+        self.left, self.right = left, right
+        self.first, self.second = _Endpoint(first), _Endpoint(second)
+
+    def get_node1(self):
+        return self.left
+
+    def get_node2(self):
+        return self.right
+
+    def get_endpoint1(self):
+        return self.first
+
+    def get_endpoint2(self):
+        return self.second
+
+
+class _EdgeGraph:
+    def __init__(self, first, second):
+        self.nodes = [_Node('feature "A" <tag>'), _Node("target")]
+        self.edge = _Edge(*self.nodes, first, second)
+
+    def get_nodes(self):
+        return self.nodes
+
+    def get_graph_edges(self):
+        return [self.edge]
+
+
+def test_mermaid_preserves_actual_edge_endpoints_and_safe_node_identifiers():
+    cases = [
+        ("TAIL", "ARROW", "n0 --> n1"),
+        ("ARROW", "TAIL", "n1 --> n0"),
+        ("TAIL", "TAIL", "n0 --- n1"),
+        ("ARROW", "ARROW", "n0 <--> n1"),
+        ("CIRCLE", "CIRCLE", "n0 o--o n1"),
+        ("CIRCLE", "ARROW", "n0 ---|CIRCLE / ARROW| n1"),
+        ("ARROW", "CIRCLE", "n0 ---|ARROW / CIRCLE| n1"),
+        ("TAIL", "CIRCLE", "n0 ---|TAIL / CIRCLE| n1"),
+        ("CIRCLE", "TAIL", "n0 ---|CIRCLE / TAIL| n1"),
+        ("STAR", "NULL", "n0 ---|STAR / NULL| n1"),
+        ("TAIL_AND_ARROW", "ARROW_AND_ARROW", "n0 ---|TAIL_AND_ARROW / ARROW_AND_ARROW| n1"),
+    ]
+    for first, second, expected in cases:
+        selector = CausalSelector(target="target", method="fci")
+        selector.graph_ = _EdgeGraph(first, second)
+        rendered = selector.to_mermaid()
+        assert expected in rendered
+        assert 'n0["feature &quot;A&quot; &lt;tag&gt;"]' in rendered
+
+
+def test_refit_correlation_does_not_keep_an_old_discovery_graph():
+    selector = CausalSelector(target="target")
+    selector.graph_ = _EdgeGraph("TAIL", "ARROW")
+    selector.fit(_dataset())
+    assert not hasattr(selector, "graph_")
+    assert "No_Data" in selector.to_mermaid()
+
+
+def test_unknown_graph_endpoint_is_not_silently_rendered_as_causal_arrow():
+    import pytest
+
+    selector = CausalSelector(target="target")
+    selector.graph_ = _EdgeGraph("UNKNOWN", "ARROW")
+    with pytest.raises(ValueError, match="endpoint"):
+        selector.to_mermaid()
+
+
+def test_mermaid_does_not_collapse_multiple_edges_between_the_same_nodes():
+    graph = _EdgeGraph("TAIL", "ARROW")
+    second = _Edge(*graph.nodes, "ARROW", "ARROW")
+    graph.get_graph_edges = lambda: [graph.edge, second]
+    selector = CausalSelector(target="target")
+    selector.graph_ = graph
+    rendered = selector.to_mermaid()
+    assert "n0 --> n1" in rendered and "n0 <--> n1" in rendered
+
+
+def test_existing_pipeline_and_selector_use_explicit_train_label_only():
+    import pytest
+
+    from tradelearn.research import FeatureSet, Pipeline
+    from tradelearn.research.preprocess import StandardScaler
+    from tradelearn.research.temporal import forward_return, purged_splits
+
+    index = pd.MultiIndex.from_product(
+        [pd.date_range("2024-01-01", periods=10, tz="UTC"), ["SYNTH"]],
+        names=["timestamp", "symbol"],
+    )
+    bars = pd.DataFrame(
+        {name: range(10, 20) for name in ("open", "high", "low", "close", "volume")}, index=index
+    )
+    labels = forward_return(bars, horizon=1)
+    builder = FeatureSet(
+        {"price": lambda panel: panel.close}, target={"label": labels.forward_return}
+    )
+    seen = {}
+
+    def backend(X, y):
+        seen["X"], seen["y"] = X.copy(), y.copy()
+        return {"price": 1.0}
+
+    selector = CausalSelector(target="label", features=["price"], backend=backend)
+    with pytest.raises(ValueError, match="target column"):
+        selector.fit(builder.fit_transform(bars))
+    dataset = builder.fit_transform(bars, include_target=True)
+    split = purged_splits(labels, train_end="2024-01-07", validation_end="2024-01-09")
+    train = dataset.loc[split["train"]]
+    pipeline = Pipeline([StandardScaler(columns=["price"])])
+    X_train = pipeline.fit_transform(train[["price"]])
+    selector.fit(X_train.join(train[["label"]]))
+    validation = dataset.loc[split["validation"], ["price"]]
+    output = selector.transform(pipeline.transform(validation))
+    assert seen["X"].index.equals(split["train"])
+    assert (labels.loc[seen["y"].index, "label_end"] < pd.Timestamp("2024-01-07", tz="UTC")).all()
+    assert output.index.equals(validation.index) and list(output) == ["price"]
+    assert "label" not in output and not seen["X"].index.intersection(validation.index).size
+
+
+def test_correlation_and_report_section_do_not_import_causal_learn():
+    import subprocess
+    import sys
+
+    code = """import sys, importlib.abc
+class Block(importlib.abc.MetaPathFinder):
+    def find_spec(self, name, path=None, target=None):
+        if name.split('.')[0] == 'causallearn': raise AssertionError('unexpected discovery import')
+sys.meta_path.insert(0, Block())
+import pandas as pd
+from tradelearn.ml import CausalSelector
+selector = CausalSelector(target='label').fit(pd.DataFrame({'x':[1,2,3], 'label':[2,4,6]}))
+assert 'No_Data' in selector.to_section()['html']
+"""
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr

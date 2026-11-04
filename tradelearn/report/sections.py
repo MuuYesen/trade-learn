@@ -61,7 +61,9 @@ def render_html_sections(
     """Render custom HTML sections."""
     rendered: list[str] = []
     for section in sections or ():
-        if callable(section) and not hasattr(section, "html"):
+        if isinstance(section, Mapping):
+            value = section.get("html")
+        elif callable(section) and not hasattr(section, "html"):
             value = section(context)
             if isinstance(value, Mapping):
                 value = value.get("html")
@@ -81,7 +83,9 @@ def collect_excel_sheets(
     """Collect custom Excel sheets from sections."""
     sheets: dict[str, pd.DataFrame] = {}
     for section in sections or ():
-        if callable(section) and not hasattr(section, "excel"):
+        if isinstance(section, Mapping):
+            value = section.get("excel")
+        elif callable(section) and not hasattr(section, "excel"):
             value = section(context)
             if isinstance(value, Mapping):
                 value = value.get("excel")

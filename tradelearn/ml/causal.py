@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from html import escape
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
 from tradelearn.utils.console import smart_tqdm as tqdm
 
 CausalBackend = Callable[[pd.DataFrame, pd.Series], dict[str, float] | pd.Series]
@@ -34,7 +36,9 @@ class CausalSelector:
         method = self.method.lower()
         if method not in {"correlation", "pc", "fci"}:
             raise ValueError("method must be one of 'correlation', 'pc', or 'fci'")
-        
+
+        if hasattr(self, "graph_"):
+            del self.graph_
         with tqdm(total=1, desc=f"CausalSelector.fit({method.upper()})", leave=True) as pbar:
             frame, target = self._split_dataset(data)
             scores = self._score(frame, target)
@@ -49,7 +53,7 @@ class CausalSelector:
             self.selected_features_ = selected
             pbar.update(1)
             pbar.set_postfix(selected=len(selected))
-        
+
         return self
 
     def plot(self, filename: str | None = None) -> str:
@@ -63,14 +67,14 @@ class CausalSelector:
         if not hasattr(self, "graph_"):
             raise RuntimeError("No fitted graph found. Call fit() first.")
         try:
+            import pydot  # noqa: F401 - explicit optional dependency availability check
             from causallearn.utils.GraphUtils import GraphUtils
-            import pydot
         except ImportError as exc:
             raise ImportError("plot() requires causal-learn and pydot.") from exc
-        
+
         if filename is None:
             filename = f"{self.method}_graph.png"
-        
+
         pdy = GraphUtils.to_pydot(self.graph_)
         try:
             pdy.write_png(filename)
@@ -81,24 +85,46 @@ class CausalSelector:
         return filename
 
     def to_mermaid(self) -> str:
-        """Return a Mermaid.js graph representation of the causal structure."""
+        """Render actual discovery endpoints; adjacency is not causal-effect proof."""
         if not hasattr(self, "graph_"):
             return "graph LR\n    No_Data"
-        edges = []
-        for edge in self.graph_.get_graph_edges():
-            n1 = edge.get_node1().get_name()
-            n2 = edge.get_node2().get_name()
-            edges.append(f"    {n1} --> {n2}")
-        return "graph LR\n" + ("\n".join(edges) if edges else "    No_Relationships")
+        edges = list(self.graph_.get_graph_edges())
+        nodes = list(self.graph_.get_nodes()) if hasattr(self.graph_, "get_nodes") else []
+        for edge in edges:
+            nodes.extend((edge.get_node1(), edge.get_node2()))
+        names = list(dict.fromkeys(node.get_name() for node in nodes))
+        ids = {name: f"n{i}" for i, name in enumerate(names)}
+        lines = [f'    {ids[name]}["{_mermaid_label(name)}"]' for name in names]
+        for edge in edges:
+            left, right = ids[edge.get_node1().get_name()], ids[edge.get_node2().get_name()]
+            first, second = (
+                _endpoint_name(edge.get_endpoint1()),
+                _endpoint_name(edge.get_endpoint2()),
+            )
+            if (first, second) == ("ARROW", "TAIL"):
+                lines.append(f"    {right} --> {left}")
+            else:
+                connector = {
+                    ("TAIL", "TAIL"): "---",
+                    ("TAIL", "ARROW"): "-->",
+                    ("ARROW", "ARROW"): "<-->",
+                    ("CIRCLE", "CIRCLE"): "o--o",
+                }.get((first, second))
+                if connector is None:
+                    connector = f"---|{first} / {second}|"
+                lines.append(f"    {left} {connector} {right}")
+        return "graph LR\n" + ("\n".join(lines) if lines else "    No_Relationships")
 
     def to_section(self, title: str = "Causal Diagram") -> dict[str, str]:
         """Return a report section dictionary containing the causal diagram."""
-        graph_code = self.to_mermaid()
+        graph_code = escape(self.to_mermaid())
+        title = escape(title, quote=True)
         return {
             "html": f"""
             <section class="compact-section">
                 <h2>{title}</h2>
-                <div style="background:white; padding:20px; text-align:center; border:1px solid #eee; border-radius:8px;">
+                <div style="background:white; padding:20px; text-align:center;
+                            border:1px solid #eee; border-radius:8px;">
                     <pre class="mermaid">{graph_code}</pre>
                 </div>
                 <script type="module">
@@ -245,3 +271,25 @@ def _target_adjacent_feature_indices(graph: Any, target_idx: int, feature_count:
         elif node2 is target and node1 in nodes[:feature_count]:
             adjacent.add(nodes.index(node1))
     return adjacent
+
+
+def _mermaid_label(name: str) -> str:
+    return escape(str(name), quote=True).replace("\r", "&#13;").replace("\n", "&#10;")
+
+
+def _endpoint_name(endpoint: Any) -> str:
+    values = {
+        -1: "TAIL",
+        0: "NULL",
+        1: "ARROW",
+        2: "CIRCLE",
+        3: "STAR",
+        4: "TAIL_AND_ARROW",
+        5: "ARROW_AND_ARROW",
+    }
+    name = getattr(endpoint, "name", None)
+    if name is None:
+        name = values.get(endpoint) if isinstance(endpoint, int) else str(endpoint)
+    if name not in values.values():
+        raise ValueError(f"unsupported graph endpoint: {name}")
+    return name

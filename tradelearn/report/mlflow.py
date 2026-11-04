@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import math
 import re
+import tempfile
+from pathlib import Path
 from typing import Any
 
 _MLFLOW_PARAM_KEY_RE = re.compile(r"[^0-9A-Za-z_\-. :/]+")
@@ -29,10 +31,7 @@ def build_run_params(
         payload.update(params)
     if tags:
         payload.update(
-            {
-                f"tag.{_mlflow_param_key(key)}": _json_scalar(value)
-                for key, value in tags.items()
-            }
+            {f"tag.{_mlflow_param_key(key)}": _json_scalar(value) for key, value in tags.items()}
         )
     return payload
 
@@ -227,3 +226,47 @@ def _call_or_none(obj: Any, name: str) -> Any:
     if callable(func):
         return func()
     return None
+
+
+def log_artifact_bundle(
+    mlflow: Any,
+    *,
+    strategy: Any,
+    stats: Any,
+    artifact_path: str | None,
+    log_report: bool,
+    log_plot: bool,
+) -> None:
+    if not hasattr(mlflow, "log_artifact"):
+        return
+
+    from tradelearn.report.artifacts import market_data_from_strategy, write_artifact_bundle
+
+    with tempfile.TemporaryDirectory(prefix="tradelearn-mlflow-") as directory:
+        artifacts = write_artifact_bundle(
+            stats,
+            Path(directory),
+            strategy=strategy,
+            market_data=market_data_from_strategy(strategy),
+            log_report=log_report,
+            log_plot=log_plot,
+        )
+        for artifact in artifacts:
+            _log_path(mlflow, artifact, artifact_path)
+
+
+def _log_path(mlflow: Any, path: Path, artifact_path: str | None) -> None:
+    if path.is_dir():
+        destination = _join_artifact_path(artifact_path, path.name)
+        if hasattr(mlflow, "log_artifacts"):
+            mlflow.log_artifacts(str(path), artifact_path=destination)
+            return
+        for child in sorted(path.iterdir()):
+            if child.is_file():
+                mlflow.log_artifact(str(child), artifact_path=destination)
+        return
+    mlflow.log_artifact(str(path), artifact_path=artifact_path)
+
+
+def _join_artifact_path(base: str | None, name: str) -> str:
+    return f"{base}/{name}" if base else name

@@ -75,7 +75,7 @@ API_REFERENCE_MODULES: tuple[ApiReferenceModule, ...] = (
         "ML",
         "tradelearn.ml",
         "Machine learning, model registry, and feature selection utilities.",
-        ("AutoML", "CausalSelector", "ModelRegistry", "ModelLoader"),
+        ("CausalSelector", "ModelRegistry", "ModelLoader"),
     ),
 )
 

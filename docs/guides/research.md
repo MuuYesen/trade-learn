@@ -1,5 +1,7 @@
 # 研究指南
 
+因果筛选保留在本研究链路中；监督target的显式接线、train-only拟合、图与报告协议见[因果特征筛选](causal.md)。FeatureSet/Pipeline不是自动标签路由或自动walk-forward训练器。
+
 `tradelearn.research` 用来组织机器学习策略和指数增强研究里的固定流程。
 
 ## 单标的时间序列与秒级标签

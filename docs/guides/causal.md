@@ -1,79 +1,74 @@
-# 因果推断指南 (Causal Inference)
+# 因果特征筛选
 
-在量化投研中，**相关性 (Correlation) 不等于因果性 (Causality)**。传统的机器学习策略往往会陷入“伪相关陷阱”，导致回测表现优异但实盘迅速失效（因子失效）。
+`CausalSelector` 在已有研究接口中选择候选特征。`method="correlation"` 是默认的绝对 Pearson 相关性基线；`pc` / `fci` 显式调用 causal-learn。在各算法及条件独立性检验假设下得到的结构是候选关系，不证明因果效应、收益或样本外有效性。
 
-`trade-learn` 创造性地将因果推断引入因子研究流水线，帮助开发者发现驱动收益的真正原因。
-
----
-
-## 核心组件：`CausalSelector`
-
-`CausalSelector` 是 `tradelearn.ml` 中的核心工具，它基于因果发现算法（如 PC, FCI）对因子特征进行筛选。
-
-### 1. 为什么需要因果筛选？
-传统的特征筛选（如相关系数、信息增益）只能识别特征与目标在数值上的关联，而无法区分以下情况：
-- **直接因果**：因子 A 确实驱动了收益 Y。
-- **共同观测 (Common Cause)**：因子 A 和收益 Y 都是由隐藏因素 Z 驱动的，A 并不产生预测力。
-
-### 2. 快速上手
+## 实际 API
 
 ```python
 from tradelearn.ml import CausalSelector
 
-# 初始化因果选择器，使用 PC 算法
-selector = CausalSelector(
-    method="pc", 
-    alpha=0.05, 
-    max_reach=2
-)
-
-# 对特征集进行因果筛选
-# data: DataFrame, 必须包含特征列和目标列
-selected_features = selector.fit_transform(data, target="label")
-
-print(f"原始特征数: {data.shape[1]}")
-print(f"因果有效特征: {selected_features.columns.tolist()}")
+selector = CausalSelector(target="label", features=["momentum", "range"],
+                          method="pc", alpha=0.05, indep_test="fisherz")
+selector.fit(training_data)        # 只含已成熟训练样本；包括 label
+X_train = selector.transform(training_data)
+X_validation = selector.transform(validation_features)  # 预测输入不需要 label
 ```
 
----
+`target` 是构造参数；`fit(data)` / `fit_transform(data)` 不接 `target=`，也没有 `max_reach` 参数。`selected_features_` 为列名；PC/FCI的`scores_`是目标邻接的0/1指示，不是效应强度、方向或置信概率。`max_features`只限制数量；同分按列名排序，不表示因果重要性排序。相关性/backend重拟合会清除上次发现的图。
 
-## 在投研流水线中使用
+## 用现有 FeatureSet、Pipeline 显式接入监督标签
 
-因果筛选通常位于“特征工程”之后，“权重分配”之前。
+不需要另一套管线。`FeatureSet.transform`默认排除target；`Pipeline`顺序调用fit/transform，不自动路由监督标签，也不自动训练最后一个预测模型。先分离训练/验证角色，再在选择器fit时显式接上训练标签：
 
 ```python
-from tradelearn import research
+from sklearn.ensemble import GradientBoostingRegressor
+from tradelearn.research import FeatureSet, Pipeline
+from tradelearn.research.preprocess import StandardScaler
+from tradelearn.research.temporal import forward_return, purged_splits
 
-# 1. 定义特征集
-feature_set = research.FeatureSet(factors, target=label)
-df = feature_set.fit_transform(bars)
-
-# 2. 因果筛选（剔除伪相关因子）
-selector = CausalSelector(method="fci")
-df_causal = selector.fit_transform(df, target="label")
-
-# 3. 基于因果特征进行训练或打分
-scores = model.fit(df_causal).predict(test_causal)
+# bars: 已验证的UTC MultiIndex(timestamp, symbol) OHLCV面板，唯一且有序。
+# 此标签是逐symbol下一条观测的价格收益，不是可执行交易收益。
+labels = forward_return(bars, horizon=1, unit="observations")
+feature_set = FeatureSet(
+    {"momentum": lambda p: p.close.pct_change(fill_method=None),
+     "range": lambda p: (p.high - p.low) / p.close},
+    target={"label": labels["forward_return"]},
+)
+dataset = feature_set.fit_transform(bars, include_target=True)
+parts = purged_splits(labels, train_end="2024-07-01", validation_end="2024-10-01")
+names = ["momentum", "range"]
+train = dataset.loc[parts["train"]].dropna(subset=names + ["label"])
+validation = dataset.loc[parts["validation"]].dropna(subset=names)
+preprocess = Pipeline([StandardScaler(columns=names)])
+X_train = preprocess.fit_transform(train[names])
+selector = CausalSelector(target="label", features=names, method="pc")
+selector.fit(X_train.join(train[["label"]]))
+if not selector.selected_features_:
+    raise ValueError("没有入选特征；保留该结果，不强凑特征训练")
+model = GradientBoostingRegressor(random_state=7)
+model.fit(selector.transform(X_train), train["label"])
+validation_scores = model.predict(selector.transform(preprocess.transform(validation[names])))
 ```
 
----
+`purged_splits`按每条label_end剔除跨下一段边界的标签；它不自动证明特征可得、股票池、修订或所有多资产信息区间都合格。预处理、选择器和模型只在训练段fit；验证/测试只transform/predict。以上是一次切分示例，不是自动walk-forward，也不授权反复查看Test选参数。固定日期需按实际输入与研究角色选择。
 
-## 技术背后的原理
+可直接阅读[现有单资产策略示例](../../scripts/examples/ml_strategy.py)：`--selection-method correlation|pc|fci`明确方法，默认correlation；其70%时间切分及一步purge仅针对该单资产下一bar标签。该例在训练段筛选/拟合，测试段由策略预测并进入回测，不将示例成绩称因果证明。
 
-`trade-learn` 深度集成了 `causal-learn` 生态：
-- **PC 算法**：通过条件独立性测试构建因果图的有向无环图 (DAG)。
-- **FCI 算法**：在存在潜变量（无法观测的混杂因素）的情况下，依然能尝试还原因果关系。
+## 图与报告
 
-!!! tip
-    **什么时候使用？**
-    当你的因子池非常庞大（例如 >1000 个 Alpha 因子）且担心过拟合时，`CausalSelector` 是极佳的“去噪过滤器”。
+`to_mermaid()`读取每条边的两个实际端点。TAIL→ARROW、反向、双箭头、无向及双CIRCLE分别显示；混合CIRCLE、STAR、NULL或复合端点用无定向连线加左右端点名称保留不确定性，不伪造统一方向。多边不折叠，未知端点明确拒绝。`plot()`继续使用causal-learn的GraphUtils/pydot，另需Graphviz；两种绘图路径不是同一renderer。
 
-!!! important
-    **因果性与未来函数**
-    本章节探讨如何利用 `CausalSelector` 避免在策略研究中误入未来函数的陷阱。
+```python
+from tradelearn.report import Reporter
+Reporter(stats).html("report.html", sections=[selector.to_section("候选因果关系")])
+```
 
----
+报告sections支持Mapping、现有回调和带html/excel方法的对象。HTML字典取`html`，Excel字典取`excel`；`to_section()`仅提供HTML，不自动生成Excel图。图的标题/列名会转义，不能把结构图当作干预效应估计。
 
-## 接下来阅读
-- [研究指南](research.md)：了解如何将因果筛选嵌入完整 Pipeline。
-- [API 参考 - ML](../api/reference/ml.md)：查看 `CausalSelector` 的详细参数。
+## 模型与探索工具边界
+
+`ModelRegistry.load`可加载既有MLflow模型；ResearchRun追踪参数/结果，并不自动序列化整套已拟合模型、预处理器和选择器。持久化这些训练产物由调用者明确完成。
+
+未发布源码已移除`tradelearn.ml.AutoML`及`tradelearn.ml.automl`。原随机半分的分类器排行榜移到[探索示例](../../examples/exploration/classifier_comparison.py)的`compare_classifiers`；它只返回排行榜，不是时序验证、预测模型或交易策略。底层`tradelearn.ml._lazy_predict`的显式train/test模型比较实现保留，不新增兼容壳。正式0.2.9历史产物不变。
+
+[研究指南](research.md) · [ML API](../api/reference/ml.md)

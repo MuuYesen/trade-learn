@@ -337,3 +337,10 @@ class _FactorAnalyzerStub:
             },
             index=pd.date_range("2024-01-01", periods=2, tz="UTC"),
         )
+
+
+def test_reporter_excel_accepts_direct_mapping_section(tmp_path):
+    path = tmp_path/'dict-section.xlsx'
+    Reporter(_stats(), periods=252).excel(path, sections=[{'excel': {'causal_features': pd.DataFrame({'feature': ['alpha']})}}])
+    assert 'causal_features' in _sheet_names(path)
+    assert 'alpha' in _shared_strings(path)

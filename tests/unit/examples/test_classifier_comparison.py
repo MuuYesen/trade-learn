@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pandas as pd
 
-from tradelearn.ml import AutoML
+from examples.exploration.classifier_comparison import compare_classifiers
 
 
-def test_automl_lazy_predict_splits_dataset_by_target_and_features() -> None:
-    """AutoML accepts one dataset plus target/features configuration."""
+def test_exploratory_comparison_keeps_explicit_feature_selection() -> None:
+    """Exploration only: the old leaderboard remains outside the public ML API."""
 
     seen: dict[str, object] = {}
 
@@ -28,7 +28,7 @@ def test_automl_lazy_predict_splits_dataset_by_target_and_features() -> None:
         }
     )
 
-    models = AutoML.lazy_predict(
+    models = compare_classifiers(
         data,
         target="label",
         features=["feature_b"],
@@ -38,3 +38,13 @@ def test_automl_lazy_predict_splits_dataset_by_target_and_features() -> None:
     assert seen["x_columns"] == ["feature_b"]
     assert seen["y_name"] == "label"
     assert models.index.tolist() == ["FakeModel"]
+
+
+def test_exploratory_comparison_rejects_unknown_target_and_features():
+    import pytest
+
+    data = pd.DataFrame({"label": [0, 1], "feature": [1.0, 2.0]})
+    with pytest.raises(ValueError, match="target column"):
+        compare_classifiers(data, target="absent")
+    with pytest.raises(ValueError, match="feature column"):
+        compare_classifiers(data, features=["absent"])

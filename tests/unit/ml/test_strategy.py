@@ -14,11 +14,14 @@ def test_ml_facade_does_not_export_mlstrategy() -> None:
     assert not hasattr(ml, "MLStrategy")
 
 
-def test_ml_facade_exports_automl_next_to_causal_selector() -> None:
-    """AutoML is exposed directly from the ML facade."""
+def test_ml_facade_keeps_causal_models_but_not_exploratory_automl() -> None:
+    assert "AutoML" not in ml.__all__
+    assert not hasattr(ml, "AutoML")
+    from importlib.util import find_spec
 
-    assert ml.AutoML.__name__ == "AutoML"
+    assert find_spec("tradelearn.ml.automl") is None
     assert ml.CausalSelector.__name__ == "CausalSelector"
+    assert ml.ModelRegistry.__name__ == "ModelRegistry"
 
 
 def test_ml_facade_does_not_export_feature_store() -> None:

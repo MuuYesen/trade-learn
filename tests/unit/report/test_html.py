@@ -638,3 +638,13 @@ def _market_data() -> pd.DataFrame:
         },
         index=pd.date_range("2024-01-01", periods=3, tz="UTC"),
     )
+
+
+def test_causal_selector_section_is_rendered_directly_in_real_html(tmp_path):
+    from tradelearn.ml import CausalSelector
+    selector = CausalSelector(target='label')
+    path = tmp_path/'causal-section.html'
+    Reporter(_stats(), periods=252).html(path, sections=[selector.to_section('Observed graph')])
+    content = path.read_text()
+    assert 'Observed graph' in content
+    assert 'No_Data' in content
