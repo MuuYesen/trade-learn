@@ -118,6 +118,18 @@ class SegmentSender:
     def close(self):self.outbox.close()
 
 
+def require_sqs_dependencies():
+    """Validate the optional SDK without creating a client or reading credentials."""
+    try:
+        import boto3
+        from botocore.config import Config
+    except ModuleNotFoundError as exc:
+        if exc.name not in {'boto3', 'botocore', 'botocore.config'}:
+            raise
+        raise ImportError("SQS sending requires 'trade-learn[sqs]'; install the matching local wheel with this extra") from exc
+    return boto3, Config
+
+
 def client_from_config(path):
     """Explicit send-only credentials; no default AWS chain or S3 client."""
     document = Path(path)
@@ -138,8 +150,7 @@ def client_from_config(path):
             or keys.keys() - {'access_key_id', 'secret_access_key', 'session_token'}
             or any(not isinstance(v, str) or not v for v in keys.values())):
         raise ValueError('invalid send-only credential object')
-    import boto3
-    from botocore.config import Config
+    boto3, Config = require_sqs_dependencies()
     sqs = boto3.client('sqs', region_name=value['region'], aws_access_key_id=keys['access_key_id'],
                        aws_secret_access_key=keys['secret_access_key'], aws_session_token=keys.get('session_token'),
                        config=Config(connect_timeout=5, read_timeout=10, retries={'max_attempts': 1}))

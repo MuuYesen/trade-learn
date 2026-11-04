@@ -149,3 +149,9 @@ def test_cerebro_adddata_panel_name_mapping() -> None:
     assert returned is cerebro.datas[0]
     assert [data._name for data in cerebro.datas] == ["alpha", "beta"]
     assert list(cerebro.datasbyname) == ["alpha", "beta"]
+
+
+@pytest.mark.parametrize("unsupported", [{"openinterest": None}, {"openinterest": "oi"}, {"typo_column": "close"}])
+def test_pandasdata_rejects_unimplemented_parameters(unsupported):
+    with pytest.raises(TypeError):
+        bt.feeds.PandasData(dataname=bars(), **unsupported)

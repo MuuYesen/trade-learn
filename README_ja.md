@@ -103,6 +103,7 @@ pip install "trade-learn[nautilus]==0.2.9"
 | Extra | 用途 |
 |---|---|
 | `[nautilus]` | 公式Nautilusの任意実行経路（実験的、Python 3.13/3.14） |
+| `[sqs]` | 未公開ソースの任意AWS送信SDK；ローカル記録には不要 |
 | `[tdx]` | OpenTDX データ / 中国市場向け指標依存関係 |
 | `[tv]` | TradingView datafeed と PyneCore ベースの TradingView 指標 |
 | `[talib]` | TA-Lib 指標名前空間 |
@@ -123,6 +124,8 @@ pip install "trade-learn[nautilus]==0.2.9"
 > pip install "trade-learn[all]"
 > ```
 > `tradelearn lab` コマンドで起動し、8888 ポートで JupyterLab、5050 ポートで MLflow にアクセス可能です。
+
+現在のソースでは基本インストールにAWS SDKは不要です。SQS送信はソースルートで `pip install ".[sqs]"`（または対応ローカルwheelのextra）と明示的な設定・権限が必要です。公開済みPyPI 0.2.9の依存関係はそのままで、この新extraはありません。
 
 ### 原生wheelとプラットフォーム
 

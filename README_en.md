@@ -103,6 +103,7 @@ Optional extras:
 | extra | Usage |
 |---|---|
 | `[nautilus]` | Optional official Nautilus execution; experimental, Python 3.13/3.14 |
+| `[sqs]` | Optional AWS sender SDK in the current unpublished source; not required for local recording |
 | `[tdx]` | OpenTDX data / China-market indicator dependencies |
 | `[tv]` | TradingView datafeed and PyneCore-backed TradingView indicators |
 | `[talib]` | TA-Lib indicator namespace |
@@ -118,7 +119,7 @@ Optional extras:
 | `[all]` | Full research environment (Lab, MLflow, indicators, ML, DuckDB, etc.) |
 
 > **💡 Installation Tip**:
-> The default install supports basic backtesting. Add `[report]` for charts and exports or `[indicators]` for built-in indicators. For the full research environment, use `[all]` (Nautilus is separate; Python 3.13/3.14 may combine `[all,nautilus]`):
+> The current source build supports basic backtesting and local recording without AWS SDKs. From the source root, explicitly install `pip install ".[sqs]"` for SQS delivery (or the extra on the matching local wheel); restricted configuration/authorization is still required. Published PyPI 0.2.9 retains its original dependencies and does not provide this new extra. Add `[report]` for charts and exports or `[indicators]` for built-in indicators. For the full research environment, use `[all]` (Nautilus is separate; Python 3.13/3.14 may combine `[all,nautilus]`):
 > ```bash
 > pip install "trade-learn[all]"
 > ```

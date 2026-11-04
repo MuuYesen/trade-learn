@@ -33,6 +33,8 @@ for package in inventory["packages"]:
         )
 
 assert importlib.util.find_spec("nautilus_trader") is None, "base environment must have no Nautilus"
+assert importlib.util.find_spec("boto3") is None, "base environment must have no AWS SDK"
+assert importlib.util.find_spec("botocore") is None, "base environment must have no AWS core"
 with tempfile.TemporaryDirectory() as directory:
     if sys.platform == "win32":
         from leafquant_monitor.filesystem import _token_sids, check_private_directory

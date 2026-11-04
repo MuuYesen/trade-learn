@@ -359,10 +359,6 @@ class Reporter:
             benchmark=benchmark if benchmark is not None else self.default_benchmark(),
         )
 
-    def price_trades_chart(self, benchmark: pd.Series | None = None):
-        """Return the market replay chart; kept as an internal compatibility alias."""
-        return self.market_replay_chart(benchmark=benchmark)
-
     def holdings_chart(self):
         """Return a Bokeh holdings chart."""
         return charts.holdings(

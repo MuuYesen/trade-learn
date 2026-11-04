@@ -6843,7 +6843,6 @@ name = "trade-learn"
 version = "0.2.9"
 source = { editable = "." }
 dependencies = [
-    { name = "boto3" },
     { name = "certifi" },
     { name = "idna" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -6941,6 +6940,10 @@ report = [
 research = [
     { name = "numba" },
 ]
+sqs = [
+    { name = "boto3" },
+    { name = "botocore" },
+]
 talib = [
     { name = "ta-lib" },
 ]
@@ -6969,7 +6972,8 @@ oracle = [
 requires-dist = [
     { name = "bokeh", marker = "extra == 'all'" },
     { name = "bokeh", marker = "extra == 'report'" },
-    { name = "boto3", specifier = "==1.41.2" },
+    { name = "boto3", marker = "extra == 'sqs'", specifier = "==1.41.2" },
+    { name = "botocore", marker = "extra == 'sqs'", specifier = "==1.41.6" },
     { name = "causal-learn", marker = "extra == 'all'" },
     { name = "causal-learn", marker = "extra == 'ml'" },
     { name = "certifi", specifier = ">=2026.10.19" },
@@ -7034,7 +7038,7 @@ requires-dist = [
     { name = "xlsxwriter", marker = "extra == 'all'" },
     { name = "xlsxwriter", marker = "extra == 'report'" },
 ]
-provides-extras = ["nautilus", "lab", "mlflow", "tdx", "tv", "talib", "ml", "factor", "parquet", "report", "research", "duckdb", "indicators", "all", "dev", "docs"]
+provides-extras = ["sqs", "nautilus", "lab", "mlflow", "tdx", "tv", "talib", "ml", "factor", "parquet", "report", "research", "duckdb", "indicators", "all", "dev", "docs"]
 
 [package.metadata.requires-dev]
 ci = [

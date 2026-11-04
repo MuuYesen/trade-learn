@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pandas as pd
 
 from .datafeed import DataFeed
@@ -23,8 +21,6 @@ class PandasData(DataFeed):
         low: str = "low",
         close: str = "close",
         volume: str = "volume",
-        openinterest: str | None = None,
-        **kwargs: Any,
     ) -> None:
         frame = dataname.copy()
         if datetime is not None:
@@ -39,8 +35,6 @@ class PandasData(DataFeed):
             },
             index=frame.index,
         )
-        self._openinterest_column = openinterest
-        self._compat_options = dict(kwargs)
         super().__init__(mapped, name=name)
 
 

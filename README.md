@@ -109,6 +109,7 @@ pip install "trade-learn[nautilus]==0.2.9"
 | extra | 用途 |
 |---|---|
 | `[nautilus]` | 固定官方 Nautilus；实验性外部执行桥，需 Python 3.13/3.14 |
+| `[sqs]` | 当前未发布源码的可选 AWS 发送 SDK；本地记录不需要 |
 | `[tdx]` | OpenTDX 数据源与国内指标依赖 |
 | `[tv]` | TradingView 数据源与 PyneCore 指标后端 |
 | `[talib]` | TA-Lib 指标命名空间 |
@@ -124,7 +125,7 @@ pip install "trade-learn[nautilus]==0.2.9"
 | `[all]` | Lab、MLflow、指标后端、ML、DuckDB 等完整研究环境 |
 
 > **💡 安装建议**：
-> 默认安装包含基础数据处理、本地记录器和按需发送依赖；不安装 Nautilus。因子分析、Parquet、指标后端和报表需要对应 extra。若需开启包含 JupyterLab 与 MLflow 的完整研究环境，请指定 `[all]`；它不自动安装 Na，Python 3.13/3.14 可显式组合 `[all,nautilus]`：
+> 当前源码构建的默认安装包含基础数据处理、本地记录器，不安装AWS SDK或Nautilus。SQS发送在源码根目录显式安装 `pip install ".[sqs]"`（或对应本地wheel的该extra），并提供受限配置/授权；已发布PyPI 0.2.9保留原依赖，不提供这个新extra。因子分析、Parquet、指标后端和报表需要对应 extra。若需开启包含 JupyterLab 与 MLflow 的完整研究环境，请指定 `[all]`；它不自动安装 Na，Python 3.13/3.14 可显式组合 `[all,nautilus]`：
 > ```bash
 > pip install "trade-learn[all]"
 > ```

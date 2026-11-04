@@ -65,7 +65,3 @@ def smart_print(*args, **kwargs):
     """Prints to the default synchronized stream (stdout for Notebook, stderr for CLI)."""
     kwargs.setdefault("file", DEFAULT_FILE)
     print(*args, **kwargs)
-
-def mark_console_clean():
-    """No-op for backward compatibility."""
-    pass

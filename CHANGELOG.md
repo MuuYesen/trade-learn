@@ -5,6 +5,11 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
+## Unreleased
+
+- Make the AWS SQS SDK optional via `[sqs]`; local recording and Nautilus bridging do not require it. Published 0.2.9 artifacts remain unchanged.
+- Reject unsupported PandasData arguments and remove unused console/report compatibility entries.
+
 ## [0.2.9] - 2026-11-03
 
 ### 新增与调整

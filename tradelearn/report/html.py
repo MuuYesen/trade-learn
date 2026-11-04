@@ -95,7 +95,7 @@ def write_html_report(
     plots["Closed Trade PnL Distribution"] = charts.trade_distribution(
         reporter.trade_distribution()
     )
-    price_plot = reporter.price_trades_chart(
+    price_plot = reporter.market_replay_chart(
         benchmark=None if benchmark is None else benchmark_returns
     )
     if price_plot is not None:
