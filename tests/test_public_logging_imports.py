@@ -17,7 +17,8 @@ def bootstrap():
            'tradelearn.engine.cerebro','tradelearn.engine.grid','tradelearn.engine.indicators',
            'tradelearn.engine.signal','tradelearn.engine.strategy','tradelearn.backtest',
            'tradelearn.backtest.event_runtime','tradelearn.backtest.targets','tradelearn.core',
-           'tradelearn.core.costs','tradelearn.core.strategy_events']
+           'tradelearn.core.costs','tradelearn.core.strategy_events',
+           'tradelearn.core.observation_clock']
     for name in names:
         modules[name]=StubModule(name)
         if name in ('tradelearn.core','tradelearn.backtest'):modules[name].__path__=[]

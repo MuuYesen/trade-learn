@@ -5,7 +5,7 @@ from typing import Any
 
 import pandas as pd
 
-from tradelearn.engine import analyzers, feeds, observers, sizers
+from tradelearn.engine import analyzers, feeds, observers, sizers, stores
 from tradelearn.engine.analyzer import Analyzer
 from tradelearn.engine.base import TimeFrame
 from tradelearn.engine.cerebro import Cerebro, OptReturn
@@ -117,6 +117,7 @@ __all__ = [
     "az",
     "observers",
     "sizers",
+    "stores",
     "GridSearchResult",
     "grid_search",
     "Observer",

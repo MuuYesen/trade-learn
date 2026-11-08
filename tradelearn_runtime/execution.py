@@ -35,7 +35,8 @@ class _RuntimeBridge:
     def __init__(self, config, *, business_cls, feeds, instruments, parameters=None,
                  account_provider=None, subscriptions=(), monitor=None, recorder=None, sender_factory=None,
                  intent_path=None, offline_test=False, runtime_observer_factory=None,
-                 account_id=None, intent_identity=None):
+                 account_id=None, intent_identity=None, frontend_broker=None,
+                 strategy_args=(), buffer_capacity=512, failure_callback=None):
         if nautilus_trader.__version__ != '2.0.0rc7':
             raise RuntimeError('live bridge requires verified Nautilus 2.0.0rc7')
         if not isinstance(business_cls,type) or not issubclass(business_cls,Strategy):
@@ -46,21 +47,25 @@ class _RuntimeBridge:
         if monitor is None:
             if recorder is not None or sender_factory is not None:
                 raise ValueError('recorder and sender require explicit monitor settings')
-            super().__init__(config)
         else:
             expected = monitor.framework_account_id or monitor.account_id
             if self._account_id is None or self._account_id != expected:
                 raise ValueError('monitor differs from native bridge account binding')
-            super().__init__(config, monitor=monitor, recorder=recorder, sender_factory=sender_factory)
         if not set(feeds).issubset(instruments) and instruments:
             raise ValueError('every feed needs an explicit Nautilus InstrumentId')
         if runtime_observer_factory is not None and not callable(runtime_observer_factory):
             raise TypeError('runtime_observer_factory must be callable')
+        if failure_callback is not None and not callable(failure_callback):
+            raise TypeError('failure_callback must be callable')
+        self._failure_callback=failure_callback
         self._runtime_observer_factory=runtime_observer_factory
         self._business_cls=business_cls
         self._feeds=dict(feeds)
         self._instrument_ids=dict(instruments)
         self._parameters=parameters or {}
+        self._strategy_args=tuple(strategy_args)
+        self._buffer_capacity=buffer_capacity
+        self._provided_broker=frontend_broker
         self._account_provider=account_provider
         self._subscriptions=tuple(subscriptions)
         self.frontend=None
@@ -75,12 +80,24 @@ class _RuntimeBridge:
             raise ValueError('live execution requires an identity-bound durable intent_path')
         self.intent_journal=None
         self._recovering={}
-        if intent_path is not None:
-            from .intents import IntentJournal
-            if not isinstance(intent_identity, str) or not intent_identity or intent_identity.strip() != intent_identity:
-                raise ValueError('explicit durable intent identity required')
-            self.intent_journal=IntentJournal(intent_path,identity=intent_identity)
-            self._recovering=self.intent_journal.unfinished()
+        try:
+            if intent_path is not None:
+                from .intents import IntentJournal
+                if not isinstance(intent_identity, str) or not intent_identity or intent_identity.strip() != intent_identity:
+                    raise ValueError('explicit durable intent identity required')
+                self.intent_journal=IntentJournal(intent_path,identity=intent_identity)
+                self._recovering=self.intent_journal.unfinished()
+            if monitor is None:
+                super().__init__(config)
+            else:
+                super().__init__(config, monitor=monitor, recorder=recorder, sender_factory=sender_factory)
+        except BaseException as primary:
+            from tradelearn.backtest.event_runtime import _safe_cleanup_diagnostic
+            for resource in (self.intent_journal, getattr(self,'logger',None)):
+                if resource is not None:
+                    try:resource.close()
+                    except BaseException as cleanup:_safe_cleanup_diagnostic(primary,cleanup)
+            raise
 
     def _assert_account_binding(self):
         if not self._account_id:
@@ -206,9 +223,13 @@ class _RuntimeBridge:
         for iid in self._instrument_ids.values():
             if self.cache.instrument(iid) is None:
                 raise ValueError('required instrument is not loaded')
-        self.frontend_broker=NautilusBroker(self)
+        provided_broker=getattr(self,'_provided_broker',None)
+        self.frontend_broker=provided_broker if provided_broker is not None else NautilusBroker(self)
+        self.frontend_broker.bind_gateway(self)
         self.frontend=StrategyRuntime(self._business_cls,feeds=self._feeds,
-                                   broker=self.frontend_broker,parameters=self._parameters)
+                                   broker=self.frontend_broker,parameters=self._parameters,
+                                   strategy_args=getattr(self,'_strategy_args',()),
+                                   capacity=getattr(self,'_buffer_capacity',512))
         from .observers import attach_runtime_observer
         attach_runtime_observer(self.frontend,getattr(self,'_runtime_observer_factory',None))
         for oid,(native,payload) in recovered.items():
@@ -299,6 +320,9 @@ class _RuntimeBridge:
                 self._worker_error=done.exception()
                 if self.frontend_broker is not None:
                     self.frontend_broker._unresolved.add('durable-worker-failure')
+                callback=getattr(self,'_failure_callback',None)
+                if callback is not None:
+                    callback()
         task.add_done_callback(finished)
         return task
 
@@ -328,10 +352,21 @@ class _RuntimeBridge:
 
     async def drain(self):
         self._stopping=True
+        errors=[]
         while self._tasks:
-            await asyncio.gather(*tuple(self._tasks),return_exceptions=False)
+            tasks=tuple(self._tasks)
+            results=await asyncio.gather(*tasks,return_exceptions=True)
+            self._tasks.difference_update(tasks)
+            errors.extend(result for result in results if isinstance(result,BaseException))
         if self.intent_journal is not None:
-            await asyncio.to_thread(self.intent_journal.close)
+            try:
+                await asyncio.to_thread(self.intent_journal.close)
+            except BaseException as error:
+                errors.append(error)
+        if errors:
+            from tradelearn.backtest.event_runtime import _safe_cleanup_diagnostic
+            for error in errors[1:]:_safe_cleanup_diagnostic(errors[0],error)
+            raise errors[0]
         if self._worker_error is not None:raise RuntimeError('durable intent worker failed') from self._worker_error
 
     def cancel(self,client_oid):

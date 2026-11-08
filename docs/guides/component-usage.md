@@ -2,6 +2,8 @@
 
 本页只列当前代码中已经实现、适合作为用户入口的调用方式。规划中或兼容层内部接口不会放在这里。
 
+外部执行的本地新增入口为 `bt.stores.NautilusStore`，保留 `Cerebro.adddata/addstrategy/setbroker/run`。官方适配器配置、完整示例及未发布边界见[执行接入指南](live.md#nautilusstorecerebro-组装入口)；远程 `run(monitor=...)` 尚未实现。
+
 ## Lite / Engine 总览
 
 Lite 和 Engine 共用 `tradelearn.backtest` runtime、Rust broker 和 `Stats`，区别只在用户语法：

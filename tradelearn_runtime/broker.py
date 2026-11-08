@@ -24,6 +24,13 @@ class NautilusBroker:
         self._thread = get_ident()
         self.storage = None
 
+    def bind_gateway(self, gateway):
+        """Bind once on the native callback thread, before Runtime construction."""
+        if hasattr(self, 'runtime'):
+            raise RuntimeError('broker projection cannot be reused across runtimes')
+        self.gateway = gateway
+        self._thread = get_ident()
+
     def bind_runtime(self, runtime):
         self.runtime = runtime
 
