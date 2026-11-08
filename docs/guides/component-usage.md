@@ -2,7 +2,7 @@
 
 本页只列当前代码中已经实现、适合作为用户入口的调用方式。规划中或兼容层内部接口不会放在这里。
 
-外部执行的本地新增入口为 `bt.stores.NautilusStore`，保留 `Cerebro.adddata/addstrategy/setbroker/run`。官方适配器配置、完整示例及未发布边界见[执行接入指南](live.md#nautilusstorecerebro-组装入口)；远程 `run(monitor=...)` 尚未实现。
+外部执行的本地新增入口为 `bt.stores.DefaultStore`（已安装的 TL 适配器）和 `bt.stores.NautilusStore`（官方 NA 适配器），保留 `Cerebro.adddata/addstrategy/setbroker/run`。官方适配器配置、完整示例及未发布边界见[执行接入指南](live.md#nautilusstorecerebro-组装入口)；可选 `run(monitor=...)` 使用已有受限 SQS 发送配置，详情见该页监控章节。
 
 ## Lite / Engine 总览
 

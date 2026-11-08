@@ -2,6 +2,18 @@
 
 0.2.9通过公开 `engine.StrategyRuntime` 协调默认研究、事件回放和外部驱动 paper/live 的策略生命周期。接入方负责事件调度、行情、权威订单/账户事实和执行保护；Runtime 不启动后台循环。完整调用与限制见 [Runtime](../concepts/runtime.md#正式增量策略runtime)。
 
+## DefaultStore：TradeLearn 适配器入口
+
+本轮源码新增两个独立入口：`bt.stores.DefaultStore(adapter=..., config=...)` 组装已安装的 TL 适配器；`bt.stores.NautilusStore(...)` 组装官方 Nautilus 适配器。`DefaultStore` 是 TL 的命名与扩展入口，Backtrader 本身使用 IBStore、OandaStore 等来源 Store，并无同名通用类。
+
+`DefaultStore` 不捆绑私有券商实现。适配器通过 `bt.stores.register_adapter(name, factory)` 或已安装扩展的 `tradelearn.store_adapters` entry point 注册。未安装、重名和未知参数显式失败；注册表只保存工厂，每次构造新建独立 binding、broker 和运行状态。不能仅凭名称推定某来源已实现或通过实盘验收。
+
+使用形状为 `store = bt.stores.DefaultStore(adapter=adapter_name, config=adapter_config)`，其后仍依次 `engine.setbroker(store.getbroker())`、`engine.adddata(store.getdata(**data_config))`、`engine.addstrategy(MyStrategy, **strategy_parameters)`、`engine.run()`。连接、账户与路由由具体 adapter config 拥有，行情参数由该适配器的 `getdata` 校验，业务参数沿 TL 原有机制。这里的变量不是新增的通用账号、标的或 YAML 格式。
+
+扩展 factory 接收 `config` 并返回 binding：惰性 `broker`、`getdata(store, **kwargs)`、`validate(store, engine)`、`run(store)`、`runtime(host)`，启用远程日志时另提供 `monitor_settings()`。feed 必须带所属 `_store`、唯一 `_name` 与 live 标记；配置校验与构造不连接、不读秘密、不创建持久状态。`run(store)` 复用该来源已有驱动，负责等待其唯一 Runtime 与原生循环退出、持久化 drain 和 Node dispose；以 `store.bind_native(node, host)` 绑定停止 handle，现有 Runtime 初始化复用 `store.prepare_runtime`，日志装配复用 `store.resolve_monitor()`。Store 在外围管理单次运行、生命周期通知、Sender 退出与客户端释放，不进入逐笔热路径。扩展须通过离线故障清理验收后才能登记能力。
+
+两个 Store 都由 Cerebro 在 `run()` 时选择唯一路径，禁止叠加 live polling Runtime；构造默认不连接。`DefaultStore` 的当前公共源码测试使用离线测试适配器，不代表任何私有适配器已进入公开发行包。`getbroker/getdata`、`stop/runstop`、通知和单次运行约束与下文一致；实际 broker、行情及账户能力由对应扩展确定。
+
 ## NautilusStore：Cerebro 组装入口
 
 以下是 **2026-11-08 本地源码新增、尚未发布** 的接口；已发行的 0.2.9 不据此获得 Store。安装目标为 Python 3.13/3.14 上的 `pip install "trade-learn[nautilus]"`；使用本轮源码时须安装对应本地构建包。官方依赖固定 `nautilus_trader==2.0.0rc7`，平台须有相应 wheel。
@@ -66,7 +78,7 @@ engine.run()
 
 | 入口 | 已实现参数与行为 |
 |---|---|
-| `NautilusStore(config, *, data_factories, exec_factories, strategy_config=None, state_dir=".tradelearn/nautilus", account_provider=None)` | `config` 为官方 `LiveNodeConfig`；factory 的键与对应 client config 的键完全匹配。当前每 Store 恰好一个暴露 `account_id` 的 exec config，账户直接从该配置读取。连接、重连、路由、provider 等参数由官方配置拥有，不在 Store 重复定义。 |
+| `NautilusStore(config, *, data_factories, exec_factories, strategy_config=None, state_dir=".tradelearn/nautilus", account_provider=None)` | `config` 为官方 `LiveNodeConfig`；factory 的键与对应 client config 的键完全匹配，并限定于固定 NA 版本清单中具有对应 data/execution 能力的官方 adapter module；拒绝私有工厂。此检查不是二进制来源认证。当前每 Store 恰好一个暴露 `account_id` 的 exec config，账户直接从该配置读取。连接、重连、路由、provider 等参数由官方配置拥有，不在 Store 重复定义。 |
 | `strategy_config` | 官方 `StrategyConfig`，省略时为 `StrategyConfig(strategy_id=StrategyId("TL-001"))`。NA 执行身份/OMS 等放这里，业务参数仍放 `addstrategy(MyStrategy, *args, **parameters)`，沿用 TL `params` 与构造参数机制。 |
 | `getdata(bar_type, *, name=None)` | 接收原生 `BarType` 或其字符串；标的、周期、价格类型、聚合来源由其唯一表达。默认 feed 名为 instrument ID。当前每标的限一个 Bar 订阅，不新增 Tick 回调，不做隐式重采样、补空秒或历史回填。 |
 | `getbroker()` | 返回该实例唯一的 `NautilusBroker`；启动时直接绑定 ExecutionHost，无 Store 逐笔转发。启动前读取现金/持仓显式失败。 |
@@ -82,9 +94,25 @@ engine.run()
 
 未知 Store、feed、native run 参数显式报错；官方适配器自己校验其字段。不支持的订单类型/控制、缺失账户/标的与恢复冲突继续由现有桥拒绝。特定 venue、账户经济数据及订单能力须逐项验收，不能由 factory 存在推定可交易。
 
-### 监控复用接缝
+### 可选 SQS 监控
 
-`run(monitor={"endpoint": ..., "token": ...})` **尚未实现**，现明确抛出 `NotImplementedError`。现有 Sender 仍依赖 SQS/AWS 受限凭据与已有授权配置；尚无已验证的 Bearer 自动引导，不能以 endpoint/token 替代发送权限。Store 复用原生宿主日志器和 Runtime observer 接缝，后续认证引导应在该装配边界接入，不在交易热路径或策略回调里另造 Sender，也不修改后端授权。
+本地源码已支持 `run(monitor=...)` 直接使用受限 SQS 发送配置。`endpoint` 是完整队列 URL；`credentials` 是该队列的 AWS 发送凭据，字段沿现有发送器使用 `access_key_id`、`secret_access_key`、可选 `session_token`。区域从队列 URL 读取，不使用默认 AWS 身份链，不访问 Sentinel 领取配置，也不要求平台 token。
+
+```python
+# 接入配置由服务方提供；实际秘密只放在用户私有配置中。
+engine.run(monitor={
+    "endpoint": sqs_queue_url,
+    "credentials": restricted_sender_credentials,
+    "receipt_origin": trusted_receipt_origin,
+    "archive_binding_id": archive_binding_id,
+})
+```
+
+`receipt_origin`、`archive_binding_id` 沿既有归档证明协议提供，不是交易账户参数，不能猜测或省略后放松原件清理条件。使用 `bt.TradeLogStrategy` 时，Store 自动生成运行 ID、环境和策略/账户上下文，原生宿主与 TL observer 共用一个日志器；后台 Sender 复用原有文件 outbox、源段格式、重试和回执校验。仅 SQS ACK 不允许删除原件，缺归档证明保留本地日志。用户不用手工创建 Runtime、Node、Sender。
+
+连接规格的构造只做语法校验；启用时先检查 SDK 依赖，再创建本地记录和后台发送。凭据仅保留在内存，停止时先关闭记录器、等待发送线程退出，再释放发送客户端；日志不包含发送凭据。IAM 资格只能由实际 AWS 请求确认，本轮以合成凭据/队列客户端验证本地链路，没有调用真实 AWS 或修改 IAM。发送失败保留重试状态和日志，不控制策略交易逻辑。
+
+此前讨论的普通平台 `token` 不作为 SQS 身份，`run(monitor={"endpoint": ..., "token": ...})` 会明确拒绝；本轮没有新增平台 HTTP 接收服务或 Bearer 自动引导。
 
 数据说明：仅上传运行日志，不上传策略源码、券商密码、交易 API 密钥或 OAuth 凭据。
 
@@ -92,7 +120,7 @@ engine.run()
 
 参考 [Backtrader IB Store 文档](https://www.backtrader.com/docu/live/ib/ib/) 的连接配置、feed/broker 组装与周期参数分工，以及 [Store 接口源码](https://raw.githubusercontent.com/mementum/backtrader/master/backtrader/store.py) 的生命周期/通知入口。这里独立实现实例隔离，不复制 GPL 实现或 singleton，不替换 TL 参数机制。直接创建第二套 live Runtime、Store 逐笔转发两种方案会重复所有权或增加热路径，均未采用。
 
-实现入口：`tradelearn/engine/stores/`、`tradelearn_runtime/store.py`；回归入口：`tests/unit/engine/test_nautilus_store.py`。验收覆盖惰性构造、配置冲突、账户隔离、无 super 的参数/日志装配、官方 NA 离线 Bar 回放、唯一 Runtime/Broker、runstop 及各阶段失败清理。此次只验证本地源码及离线行为，不代表新版 wheel 已发行、真实券商已接通或远程监控已可用。
+实现入口：`tradelearn/engine/stores/`、`tradelearn_runtime/store.py`、`leafquant_monitor/bootstrap.py`；回归入口：`tests/unit/engine/test_default_store.py`、`test_nautilus_store.py` 及 `tests/test_monitor_bootstrap.py`。验收覆盖惰性构造、配置冲突、账户隔离、无 super 的参数/日志装配、官方 NA 离线 Bar 回放、唯一 Runtime/Broker、runstop 及各阶段失败清理。此次只验证本地源码及离线行为，不代表新版 wheel 已发行、真实券商已接通或远程监控已可用。
 
 ## 回测 broker 与实盘 broker 的区别
 

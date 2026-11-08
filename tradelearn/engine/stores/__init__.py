@@ -1,10 +1,12 @@
 """Optional connection assemblers. Importing this namespace loads no adapters."""
 import importlib
 
-__all__ = ['NautilusStore']
+__all__ = ['DefaultStore', 'NautilusStore', 'register_adapter']
 
 
 def __getattr__(name):
+    if name in {'DefaultStore', 'register_adapter'}:
+        return getattr(importlib.import_module('.default', __name__), name)
     if name == 'NautilusStore':
         return importlib.import_module('tradelearn_runtime.store').NautilusStore
     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

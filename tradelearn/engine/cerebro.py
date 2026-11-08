@@ -287,8 +287,8 @@ class Cerebro:
     def run(self, **kwargs: Any) -> list[Strategy]:
         from tradelearn.engine.stores import select_driver
         driver = select_driver(self)
-        if 'monitor' in kwargs:
-            raise NotImplementedError('run(monitor=...) requires an authenticated bootstrap transport; not implemented')
+        if kwargs.get('monitor') is not None and driver is None:
+            raise ValueError('remote monitor requires a Store-owned native driver')
         if driver is not None:
             return driver._run_cerebro(self, kwargs)
         self._apply_run_kwargs(kwargs)

@@ -53,6 +53,14 @@ class NautilusStore:
             raise ValueError('native data client configuration required')
         if set(data_factories) != set(config.data_clients) or set(exec_factories) != set(config.exec_clients):
             raise ValueError('native factory keys must match client configuration keys')
+        from importlib.resources import files
+        inventory = json.loads(files('tradelearn_runtime').joinpath('official_adapters.json').read_text())
+        for kind, factories in (('data_factory', data_factories), ('execution_factory', exec_factories)):
+            allowed = {entry['package'] for entry in inventory['adapters'] if entry[kind]}
+            for factory in factories.values():
+                module = type(factory).__module__.split('.')
+                if len(module) < 3 or module[:2] != ['nautilus_trader', 'adapters'] or module[2] not in allowed:
+                    raise ValueError('NautilusStore requires an official adapter factory from the pinned NA version')
         if strategy_config is None:
             strategy_config = StrategyConfig(strategy_id=StrategyId('TL-001'))
         if not isinstance(strategy_config, StrategyConfig):
@@ -74,6 +82,7 @@ class NautilusStore:
         self._notifications = deque()
         self._used = False
         self._handle = self._host = self._engine = None
+        self._remote_monitor = None
 
     def getbroker(self):
         return self._broker
@@ -147,7 +156,10 @@ class NautilusStore:
         strategy_cls, args, parameters = engine.strats[0]
         parameters = dict(parameters)
         monitor = None
+        sender_factory = None
         from tradelearn.engine import TradeLogStrategy
+        if self._remote_monitor is not None and not issubclass(strategy_cls, TradeLogStrategy):
+            raise ValueError('remote monitor requires engine.TradeLogStrategy')
         if issubclass(strategy_cls, TradeLogStrategy):
             if 'monitor_config' in parameters or getattr(strategy_cls, 'monitor_config', None) is not None:
                 raise ValueError('Store owns TradeLogStrategy context; custom monitor_config is unsupported')
@@ -157,6 +169,8 @@ class NautilusStore:
                 source=self.account_id.split('-', 1)[0], strategy_id=str(self.strategy_config.strategy_id),
                 account_id=self.account_id, state_dir=str(self.state_path / 'logs'),
                 framework_strategy_id=str(self.strategy_config.strategy_id), framework_account_id=self.account_id)
+            if self._remote_monitor is not None:
+                monitor, sender_factory = self._remote_monitor.bind(monitor)
             # Provider runs after host construction; the native host owns the one
             # recorder/run_id. The business observer borrows it and starts no Sender.
             log_config = TradeLogConfig(
@@ -176,7 +190,7 @@ class NautilusStore:
             account_id=self.account_id, account_provider=self.account_provider,
             intent_path=self.state_path / 'intents.sqlite', intent_identity=self.intent_identity,
             frontend_broker=self._broker, buffer_capacity=engine.kwargs.get('buffer_capacity', 512),
-            runtime_observer_factory=self._prepare_runtime, monitor=monitor,
+            runtime_observer_factory=self._prepare_runtime, monitor=monitor, sender_factory=sender_factory,
             failure_callback=self.stop)
         if monitor is not None:
             context = log_config.context
@@ -185,6 +199,8 @@ class NautilusStore:
         return host
 
     def _run_cerebro(self, engine, run_kwargs):
+        run_kwargs = dict(run_kwargs)
+        remote = run_kwargs.pop('monitor', None)
         self._validate(engine, run_kwargs)
         try:
             asyncio.get_running_loop()
@@ -192,22 +208,35 @@ class NautilusStore:
             pass
         else:
             raise RuntimeError('Cerebro.run requires a thread without a running event loop')
+        if remote is not None:
+            from leafquant_monitor.bootstrap import MonitorConnection
+            self._remote_monitor = MonitorConnection.from_options(remote)
         self._used = True
         self._engine = engine
         engine._active_store_driver = self
         self._notifications.append(('STARTING', (), {}))
+        primary = None
         try:
             result = asyncio.run(self._run_native(engine))
-        except BaseException:
+        except BaseException as error:
+            primary = error
             self._notifications.append(('FAILED', (), {}))
             raise
-        else:
-            self._notifications.append(('STOPPED', (), {}))
-            engine._last_results = result
-            return result
         finally:
             self._handle = None
             engine._active_store_driver = None
+            if self._remote_monitor is not None:
+                try:
+                    self._remote_monitor.close()
+                except BaseException as cleanup:
+                    if primary is None:
+                        self._notifications.append(('FAILED', (), {}))
+                        raise
+                    from tradelearn.backtest.event_runtime import _safe_cleanup_diagnostic
+                    _safe_cleanup_diagnostic(primary, cleanup)
+        self._notifications.append(('STOPPED', (), {}))
+        engine._last_results = result
+        return result
 
     async def _run_native(self, engine):
         from tradelearn.backtest.event_runtime import _safe_cleanup_diagnostic
@@ -248,7 +277,7 @@ class NautilusStore:
                     cleanup_errors.append(error)
             if self._host is not None and hasattr(self._host, 'logger'):
                 try:
-                    self._host.logger.close()
+                    await asyncio.to_thread(self._host.logger.finish_delivery)
                 except BaseException as error:
                     cleanup_errors.append(error)
             if cleanup_errors:

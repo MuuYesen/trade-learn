@@ -334,3 +334,55 @@ def test_documented_official_adapter_configuration_constructs_offline(tmp_path, 
     assert value.account_id == 'BINANCE-001'
     assert namespace['engine'].broker is value.getbroker()
     assert not (tmp_path / '.tradelearn').exists()
+
+
+def test_engine_monitor_assembles_one_logger_and_joins_sender(tmp_path, monkeypatch):
+    pytest.importorskip('tradelearn._rust')
+    from dataclasses import replace
+    from threading import Event
+    from leafquant_monitor.bootstrap import MonitorConnection
+    calls = []
+    class Sender:
+        def __init__(self):
+            self.stop = Event()
+        def start(self):
+            calls.append('sender-start')
+        def close(self, timeout=30):
+            self.stop.set()
+            calls.append('sender-close')
+    def bind(self, settings):
+        calls.append('bootstrap')
+        settings = replace(settings, sender_config=self.endpoint, receipt_origin='https://receipt.invalid', archive_binding_id='test')
+        return settings, lambda current, flush: Sender()
+    monkeypatch.setattr(MonitorConnection, 'bind', bind)
+    a = store(tmp_path)
+    engine = engine_for(a, bt.TradeLogStrategy)
+    monkeypatch.setattr(a, '_build_node', lambda: FakeNode([]))
+    engine.run(monitor=dict(endpoint='https://sqs.ap-southeast-1.amazonaws.com/123456789012/test.fifo',
+        credentials=dict(access_key_id='synthetic',secret_access_key='synthetic'),
+        receipt_origin='https://receipt.invalid',archive_binding_id='test'))
+    assert calls == ['bootstrap', 'sender-start', 'sender-close']
+    assert a._remote_monitor._closed and a._remote_monitor._credentials == {}
+
+
+def test_monitor_denial_prevents_native_node_and_local_state(tmp_path, monkeypatch):
+    from leafquant_monitor.bootstrap import MonitorConnection
+    def denied(self, settings):
+        raise RuntimeError('denied')
+    monkeypatch.setattr(MonitorConnection, 'bind', denied)
+    a = store(tmp_path)
+    engine = engine_for(a, bt.TradeLogStrategy)
+    monkeypatch.setattr(a, '_build_node', lambda: pytest.fail('denied monitor reached Node'))
+    with pytest.raises(RuntimeError, match='denied'):
+        engine.run(monitor=dict(endpoint='https://sqs.ap-southeast-1.amazonaws.com/123456789012/test.fifo',
+            credentials=dict(access_key_id='synthetic',secret_access_key='synthetic'),
+            receipt_origin='https://receipt.invalid',archive_binding_id='test'))
+    assert not list(tmp_path.iterdir())
+
+
+def test_private_factories_are_not_accepted_by_official_store(tmp_path):
+    official = store(tmp_path)
+    with pytest.raises(ValueError, match='official adapter'):
+        bt.stores.NautilusStore(official.config,
+            data_factories={'BINANCE': object()}, exec_factories=official.exec_factories,
+            state_dir=tmp_path)
