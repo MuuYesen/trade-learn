@@ -78,3 +78,5 @@ that does not prove every originally proposed external-oracle/E2E check exists.
 The separate `design/PROJECT_STRUCTURE.md` skip concerns a missing documentation
 artifact; executable layering tests still enforce import/module boundaries.
 Neither kind of skip should be counted as a passing numerical check.
+
+2026-11-12：比较器统一使用TL比率口径。Backtrader Returns 的 `rnorm` 映射 `annual_return`，`rnorm100` 是百分数，不直接与比率比较；`return_pct` 则保持百分数。只修对照输出适配，不修改固定oracle源码、收益公式或比较容差。golden消费者使用显式PandasData和当前指标输出名。

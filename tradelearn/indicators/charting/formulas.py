@@ -98,7 +98,7 @@ def compute(f, name, p, secondary=None):
             adxr=(adx + adx.shift(n - 1)) / 2,
         )
     if name == "Commodity Channel Index":
-        return val(tv.cci(h, low, c, n))
+        return val(tv.cci((h + low + c) / 3, length=n))
     if name == "Money Flow Index":
         return val(tv.mfi(h, low, c, v, n))
     if name == "Parabolic SAR":

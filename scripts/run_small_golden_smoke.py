@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.build_golden import dataset_path, load_manifest  # noqa: E402
-from tradelearn.engine import Analyzer, Cerebro, Strategy  # noqa: E402
+from tradelearn.engine import Analyzer, Cerebro, Strategy, feeds  # noqa: E402
 
 DATASETS_DIR = ROOT / "tests" / "golden" / "datasets"
 
@@ -73,7 +73,7 @@ def run_dataset_smoke(dataset: dict[str, str], path: Path) -> dict[str, object]:
     frame = pd.read_parquet(path)
     cerebro = Cerebro()
     cerebro.broker.setcash(100.0)
-    cerebro.adddata(frame, name=dataset["symbol"])
+    cerebro.adddata(feeds.PandasData(dataname=frame), name=dataset["symbol"])
     cerebro.addstrategy(BuyThenClose)
     cerebro.addanalyzer(SmokeAnalyzer, name="smoke")
 

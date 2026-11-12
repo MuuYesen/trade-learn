@@ -107,3 +107,20 @@ jobs:
       - run: uv pip install -e . --group dev --group ci --group oracle
       - run: python scripts/check_ci_dependencies.py
       - run: uv run --no-sync python scripts/check_oracle.py
+
+  official-na-boundary:
+    name: official NA CP313 boundary
+    needs: bootstrap
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - run: python .github/actions/prepare-ci-environment.py --python 3.13
+      - run: uv pip install -e '.[nautilus]' --group dev --group ci
+      - run: python scripts/check_ci_dependencies.py
+      - run: uv run --no-sync pytest tests/test_observation_clock_domain.py tests/test_sdk_tl_version_boundary.py tests/test_live_order_mapping.py tests/test_live_native_group_replay.py --junitxml=na-results.xml
+      - name: Expose official NA boundary failures
+        if: failure()
+        run: python scripts/report_test_failures.py na-results.xml

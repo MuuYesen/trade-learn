@@ -224,7 +224,7 @@ def test_summarize_backtrader_metrics_uses_common_native_summary_shape() -> None
         equity=equity,
         analyzers={
             "drawdown": {"drawdown": 1.0, "len": 2, "max": {"drawdown": 3.0, "len": 4}},
-            "returns": {"rnorm100": 5.0, "rtot": 0.02},
+            "returns": {"rnorm": 0.05, "rnorm100": 5.0, "rtot": 0.02},
             "sharpe": {"sharperatio": 1.5},
             "sqn": {"sqn": 2.5, "trades": 2},
             "trades": {
@@ -239,7 +239,7 @@ def test_summarize_backtrader_metrics_uses_common_native_summary_shape() -> None
     assert summary["bars"] == 4
     assert summary["return_pct"] == pytest.approx(2.0)
     assert summary["total_trades"] == 2
-    assert summary["annual_return"] == 5.0
+    assert summary["annual_return"] == 0.05
     assert summary["avg_trade_pct"] == pytest.approx(0.025)
     assert summary["expectancy"] == 25.0
     assert summary["final_realized_pnl"] == 50.0

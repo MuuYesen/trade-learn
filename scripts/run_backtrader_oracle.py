@@ -194,7 +194,8 @@ def summarize_backtrader_metrics(
     }
     summary.update(_trade_analyzer_metrics(trade_analyzer, initial_cash))
     optional_metrics = {
-        "annual_return": _nested_value(returns, "rnorm100"),
+        # TL annual_return is a ratio; Backtrader rnorm100 is percent.
+        "annual_return": _nested_value(returns, "rnorm"),
         "log_return": _nested_value(returns, "rtot"),
         "max_drawdown": _safe_float(_nested_value(drawdown, "max", "drawdown")) / 100.0,
         "drawdown": _safe_float(_nested_value(drawdown, "drawdown")) / 100.0,
