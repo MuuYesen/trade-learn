@@ -1,4 +1,4 @@
-"""Normalize Cargo SBOM source paths without changing native bytes or wheel tags."""
+"""Normalize wheel file records and Cargo SBOM paths, preserving native bytes."""
 
 from __future__ import annotations
 
@@ -39,8 +39,12 @@ def finalize(source: Path, destination: Path) -> dict:
         if len(records) != 1:
             raise ValueError("wheel requires one RECORD")
         record = records[0]
-        infos = {info.filename: copy(info) for info in archive.infolist()}
-        members = {name: archive.read(name) for name in names if name != record}
+        # auditwheel may add explicit ZIP directories. RECORD describes files;
+        # omit directory entries so downstream exact file-set gates agree.
+        infos = {
+            info.filename: copy(info) for info in archive.infolist() if not info.is_dir()
+        }
+        members = {name: archive.read(name) for name in infos if name != record}
     native = {
         name: hashlib.sha256(body).hexdigest()
         for name, body in members.items()

@@ -109,3 +109,32 @@ def test_checker_can_be_shipped_in_the_sdist_it_checks(tmp_path):
     from scripts.check_release_closure import verify
 
     assert verify(*archives(tmp_path, ship_checker=True))["artifact_closure_verified"]
+
+
+def test_finalizer_omits_archive_directories_from_file_record(tmp_path):
+    """Linux repair tools add directory entries; consumers verify files only."""
+    import csv
+    from scripts.finalize_wheel import finalize
+
+    wheel = tmp_path / 'trade_learn-0.3.0-cp313-cp313-manylinux_2_28_x86_64.whl'
+    files = {
+        'tradelearn/__init__.py': b'__version__ = "0.3.0"\n',
+        'tradelearn/_rust.so': b'fixed-native-bytes',
+        'THIRD_PARTY_LICENSES/example/LICENSE': b'preserved-license',
+    }
+    record = 'trade_learn-0.3.0.dist-info/RECORD'
+    with ZipFile(wheel, 'w') as archive:
+        for directory in ['tradelearn/', 'THIRD_PARTY_LICENSES/',
+                          'THIRD_PARTY_LICENSES/example/']:
+            archive.mkdir(directory)
+        for name, body in files.items():
+            archive.writestr(name, body)
+        archive.writestr(record, '')
+    receipt = finalize(wheel, wheel)
+    with ZipFile(wheel) as archive:
+        assert all(not entry.is_dir() for entry in archive.infolist())
+        assert {row[0] for row in csv.reader(io.StringIO(archive.read(record).decode()))} == set(files) | {record}
+        assert all(archive.read(name) == body for name, body in files.items())
+    assert receipt['native_unchanged'] == {
+        'tradelearn/_rust.so': hashlib.sha256(files['tradelearn/_rust.so']).hexdigest()
+    }

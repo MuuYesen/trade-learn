@@ -18,6 +18,7 @@
 - 安装组为default/research/nautilus/tl-store，原lab并入research；默认无研究/UI/云发送依赖，doctor自动识别已装组件。官方NA2rc7保持原包和唯一执行底座。
 - TL-Store独立命名统一到tl_store.ctrader及tl_store.ctrader._native，不保永久旧别名；新Store0.2.1a3与TL0.3.0的本机组合和外部发行资格分列。观察SDK明确只接TL0.2.9/0.3.0及observer API1，未知版本/API拒绝。
 - tvkit0.18.1有限研究候选已实作验证，none复权、完整历史/Charting契约仍不等价；当前Provider不静默替换，旧通信依赖按实际消费者保留，不新增实盘数据循环。
+- Linux wheel最终打包移除ZIP目录条目并重建仅文件RECORD，保持Python/native/许可文件原字节，兼容严格的安装闭包验收。
 - 移除公开AutoML薄包装，探索比较迁至examples/exploration/classifier_comparison.py；保各实例训练/预测诊断和连续分数ROC AUC。固定Oracle、metrics覆盖和exact-tag/exact-commit发行门继续保留。
 
 ## [0.2.9] - 2026-11-03
