@@ -26,6 +26,7 @@ on:
       - "leafquant_monitor/**"
       - "THIRD_PARTY_LICENSES/**"
       - "README*.md"
+      - "CHANGELOG.md"
       - "LICENSE"
       - "NOTICE"
       - "scripts/build_release.py"

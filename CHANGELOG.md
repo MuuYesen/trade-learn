@@ -5,19 +5,20 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
-## Unreleased
+## [0.3.0] - Unreleased
 
-- Calculate binary classifier ROC AUC from class-aligned continuous scores; unsupported or unavailable scores are NaN with a reason.
-- Keep classifier/regressor construction, fit, prediction and metric diagnostics on each comparison instance; reset them on refit and preserve successful metrics/predictions. The exploratory leaderboard exposes diagnostics in DataFrame attrs.
+本节是当前源码候选迁移记录，尚未发布PyPI或部署；已发布0.2.9保留原字节。
 
-- Keep causal/ML research in the strategy workflow; correct the target/Pipeline guide and explicitly identify correlation versus PC/FCI examples.
-- Preserve actual discovery edge endpoints and uncertainty in Mermaid, clear stale graphs on refit, and accept direct HTML/Excel mapping sections.
-- Remove public `AutoML`/`tradelearn.ml.automl`; migrate the random-half-split leaderboard to `examples/exploration/classifier_comparison.py` (`compare_classifiers`). Explicit train/test model implementations remain; no compatibility shell.
-- Share Engine/Lite MLflow artifact upload helpers without changing run lifecycle, parameters, metrics or tags. These are source changes, not a new release; published 0.2.9 artifacts are unchanged.
-
-- Consolidate optional installation into research, lab, and nautilus; AWS SDKs are included in nautilus while base recording remains independent.
-- Installation migration (unreleased): replace old data/indicator/factor/ML/report/storage extras with `[research]`; replace `[all]` with `[research,lab]` and `[mlflow]` with `[lab]`. The old extras, including `[sqs]`, are removed without aliases; AWS SDKs now come with `[nautilus]`. Use `uv sync --group dev` / `uv sync --group docs` for developer/docs tools. Published 0.2.9 artifacts are unchanged. Published 0.2.9 artifacts remain unchanged.
-- Reject unsupported PandasData arguments and remove unused console/report compatibility entries.
+- Engine与Lite共用事件/时钟、持久Indicator、订单和账户事实。Engine保持已核Backtrader外观；明确拒绝未实现参数，不承诺完整BT移植。Lite退出向量化I/未来初始化，七个示例采用有界状态，保原EMA初值与简单TR口径。
+- 指标公开来源收敛到固定资格集合TA-Lib/TV/TDX；PTA与重复ta入口退出。KunQuant提供82个Alpha101和158特征的显式TS/STREAM产物；编译、数值、恢复与平台资格分别记录，不用图生成代替数值合格。
+- 研究保留Pandas/Dataset/DuckDB、成熟标签与purge、显式组件调用、全部候选/trial、模型manifest和可信冷恢复；Riskfolio仅已核历史协方差、long-only最小方差，换手/成本等未支持参数拒绝。
+- gplearn按真实上游边界选择Python3.10的0.4.2与Python3.11+的0.4.3；旧版与现代sklearn仅在自有estimator实例上复用公开验证器，保全部输入检查/候选与可pickle状态，不改第三方类或公式。
+- 共同Reporter消费已有事实；修复Pandas3重采样精度、混合时间事实的Excel导出和窄屏报告可读性。运行后MLflow记录及显式模型产物保留，默认本地SQLite，不隐式重算或训练。
+- CLI仅new/lab/doctor和help/version；new生成策略、Notebook与_agents/skills；lab只启动并清理自有Jupyter。TL自建MCP、tradelearn mlflow及lab附带服务参数/编排退出，MLflow原生命令仍可显式使用。
+- 安装组为default/research/nautilus/tl-store，原lab并入research；默认无研究/UI/云发送依赖，doctor自动识别已装组件。官方NA2rc7保持原包和唯一执行底座。
+- TL-Store独立命名统一到tl_store.ctrader及tl_store.ctrader._native，不保永久旧别名；新Store0.2.1a3与TL0.3.0的本机组合和外部发行资格分列。观察SDK明确只接TL0.2.9/0.3.0及observer API1，未知版本/API拒绝。
+- tvkit0.18.1有限研究候选已实作验证，none复权、完整历史/Charting契约仍不等价；当前Provider不静默替换，旧通信依赖按实际消费者保留，不新增实盘数据循环。
+- 移除公开AutoML薄包装，探索比较迁至examples/exploration/classifier_comparison.py；保各实例训练/预测诊断和连续分数ROC AUC。固定Oracle、metrics覆盖和exact-tag/exact-commit发行门继续保留。
 
 ## [0.2.9] - 2026-11-03
 

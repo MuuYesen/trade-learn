@@ -150,6 +150,7 @@ include = [
     { path = "scripts/examples/ml_strategy.py", format = "sdist" },
     { path = "docs/guides/*.md", format = "sdist" },
     { path = "docs/quickstart.md", format = "sdist" },
+    { path = "CHANGELOG.md", format = "sdist" },
     { path = "docs/release/evaluation.md", format = "sdist" },
     { path = "examples/__init__.py", format = "sdist" },
     { path = "examples/research/*.py", format = "sdist" },
