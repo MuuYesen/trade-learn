@@ -100,7 +100,7 @@ jobs:
           - os: ubuntu-latest
             cibw-archs: aarch64
             cibw-build: "cp313-*"
-          - os: macos-14
+          - os: macos-15
             cibw-archs: arm64
             cibw-build: "cp310-* cp311-* cp312-* cp313-* cp314-*"
           - os: windows-latest
@@ -143,8 +143,8 @@ jobs:
         include:
           - os: ubuntu-latest
             artifact: wheels-ubuntu-latest-auto64
-          - os: macos-14
-            artifact: wheels-macos-14-arm64
+          - os: macos-15
+            artifact: wheels-macos-15-arm64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
