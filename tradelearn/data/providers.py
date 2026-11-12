@@ -266,6 +266,7 @@ class TradingViewProvider:
 
     @contextmanager
     def _suppress_stdout(self):
+        """Restore stdout after temporarily suppressing the legacy client's console output."""
         with open(os.devnull, "w") as devnull:
             old_stdout = sys.stdout
             sys.stdout = devnull
@@ -370,6 +371,7 @@ class TradingViewProvider:
         return bars
 
     def _make_client(self) -> object:
+        """Construct the injected client or the current explicit TradingView transport."""
         if self._client_factory is not None:
             return self._client_factory()
 
@@ -406,6 +408,7 @@ class TradingViewProvider:
 
     @staticmethod
     def _interval_value(freq: Frequency) -> object:
+        """Use a legacy interval enum when available, otherwise the fixed transport value."""
         try:
             from tvDatafeed import Interval
 
@@ -498,6 +501,7 @@ def _infer_tdx_exchange(code: str) -> str:
 
 
 def _split_tradingview_symbol(symbol: str, *, exchange: str | None = None) -> tuple[str, str]:
+    """Require an explicit exchange and normalize its symbol spelling."""
     normalized = symbol.strip()
     if exchange is not None:
         return exchange.strip().upper(), normalized.upper()
@@ -541,10 +545,12 @@ def _normalize_tradingview_columns(
 
 
 def _is_symbol_collection(symbol: object) -> bool:
+    """Recognize only list/tuple multi-symbol requests, not arbitrary iterables."""
     return isinstance(symbol, list | tuple)
 
 
 def _combine_bars(frames: list[pd.DataFrame]) -> pd.DataFrame:
+    """Combine nonempty symbol frames in index order and retain first-source metadata."""
     if not frames:
         raise ValueError("symbol list must not be empty")
     combined = pd.concat(frames).sort_index()

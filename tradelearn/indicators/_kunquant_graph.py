@@ -119,6 +119,7 @@ def _fixed_source_file(path, canonical_sha256, windows_sha256):
 
 
 def validate_names(names):
+    """Require nonempty unique factor names from the pinned provided Alpha101 family."""
     names = tuple(names)
     if any(not isinstance(name, str) for name in names):
         raise ValueError("factor names must be explicit strings")

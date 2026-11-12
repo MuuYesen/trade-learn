@@ -18,6 +18,7 @@ from tradelearn.indicators.base import FunctionIndicator
 
 
 def _unstable_names():
+    """Discover upstream unstable-period settings while omitting deprecated no-effect names."""
     names = []
     for name in talib.get_functions():
         if name in {"ADXR", "MFI", "STOCHRSI"}:
@@ -34,6 +35,7 @@ _UNSTABLE_NAMES = _unstable_names()
 
 
 def _settings():
+    """Capture compatibility and unstable periods used to reject changing backend configuration."""
     return talib.get_compatibility(), tuple(
         talib.get_unstable_period(name) for name in _UNSTABLE_NAMES
     )
@@ -111,6 +113,7 @@ class NativeState:
         self.history = [[] for _ in self.history]
 
     def _offset(self, value):
+        """Convert index-valued outputs back to the original stream's leading offset."""
         if self.name in {"MAXINDEX", "MININDEX"}:
             return value + self.leading
         if self.name == "MINMAXINDEX":
@@ -120,10 +123,12 @@ class NativeState:
         return value
 
     def _missing(self):
+        """Return the declared single- or multi-output missing-value shape."""
         return self.missing[0] if self.outputs == 1 else tuple(self.missing)
 
 
 def _warmup(name, params):
+    """Derive required observations from the configured upstream lookback."""
     function = abstract.Function(name)
     function.set_parameters(params)
     return int(function.lookback) + 1
@@ -150,6 +155,9 @@ def make_indicator(name, **overrides):
     signature = inspect.signature(getattr(talib, name))
 
     def batch(*args, **kwargs):
+        """Bind the fixed upstream signature and compute indexed batch outputs with matching
+        parameters.
+        """
         bound = signature.bind(*args, **kwargs)
         for key, value in params.items():
             if key not in bound.arguments:

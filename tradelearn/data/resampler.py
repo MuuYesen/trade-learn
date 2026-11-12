@@ -108,12 +108,14 @@ def _rust_resample_ohlcv(
     volumes: list[float],
     period_seconds: int,
 ):
+    """Load and call the Rust OHLCV aggregator only when the fast path is selected."""
     from tradelearn._rust import resample_ohlcv
 
     return resample_ohlcv(timestamps, opens, highs, lows, closes, volumes, period_seconds)
 
 
 def _fixed_period_seconds(timeframe: int, compression: int) -> int | None:
+    """Validate compression and map fixed-width timeframes to seconds; calendars return None."""
     if compression <= 0:
         raise ValueError("compression must be a positive integer")
     if timeframe == _MICROSECONDS:

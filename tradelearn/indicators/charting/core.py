@@ -7,26 +7,32 @@ from tradelearn.indicators import tv
 
 
 def sma(s, n):
+    """Use the fixed TV-source simple moving average for this research composition."""
     return tv.sma(s, n)
 
 
 def ema(s, n):
+    """Use the fixed TV-source exponential moving average without changing its seed semantics."""
     return tv.ema(s, n)
 
 
 def rma(s, n):
+    """Use the fixed TV-source Wilder moving average."""
     return tv.rma(s, n)
 
 
 def wma(s, n):
+    """Use the fixed TV-source weighted moving average."""
     return tv.wma(s, n)
 
 
 def div(a, b):
+    """Treat Series zero denominators as missing rather than fabricating finite ratios."""
     return a / b.replace(0, np.nan) if isinstance(b, pd.Series) else a / b
 
 
 def source(f, key):
+    """Select the declared OHLC composite or an available source column, defaulting to close."""
     return {
         "hl2": (f.high + f.low) / 2,
         "hlc3": (f.high + f.low + f.close) / 3,
@@ -35,12 +41,14 @@ def source(f, key):
 
 
 def tr(f):
+    """Compute true range from high/low and the previous delivered close."""
     return pd.concat(
         [f.high - f.low, (f.high - f.close.shift()).abs(), (f.low - f.close.shift()).abs()], axis=1
     ).max(axis=1)
 
 
 def regression(s, n):
+    """Return trailing fitted endpoint, slope and residual error without centered observations."""
     x = np.arange(n)
     z = x - x.mean()
     den = (z * z).sum()
@@ -60,6 +68,7 @@ def regression(s, n):
 
 
 def recursive(s, n, kind):
+    """Compute the declared causal KAMA/McGinley recursion using its explicit seed and history."""
     out = np.full(len(s), np.nan)
     previous = np.nan
     seed = ema(s, n)

@@ -10,6 +10,7 @@ from .special import pivots, zigzag
 
 
 def compute(f, name, p, secondary=None):
+    """Dispatch the fixed research study using validated parameters and supplied bars only."""
     o, h, low, c, v = f.open, f.high, f.low, f.close, f.volume
     s = source(f, p.get("source", "close"))
     n = p.get("length", 14)
@@ -19,12 +20,15 @@ def compute(f, name, p, secondary=None):
     delta = c.diff()
 
     def atr():
+        """Compute configured-length ATR using the retained TV source formula."""
         return tv.atr(h, low, c, n)
 
     def val(x):
+        """Wrap a one-series result in the catalog's value output schema."""
         return {"value": x}
 
     def band(mid, width):
+        """Return aligned middle, upper and lower band series."""
         return dict(mid=mid, upper=mid + width, lower=mid - width)
 
     direct = {

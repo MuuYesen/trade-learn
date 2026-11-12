@@ -13,6 +13,7 @@ from tradelearn.data.bars import normalize_bars
 
 
 class _RequestsUnavailable(ImportError):
+    """Distinguish a missing optional HTTP dependency from an upstream request failure."""
     pass
 
 
@@ -40,6 +41,7 @@ class TushareProvider:
 
     @staticmethod
     def _symbol(symbol):
+        """Validate six-digit A-share codes and normalize exchange-prefixed symbols."""
         value = str(symbol).strip().upper()
         match = re.fullmatch(r"(SH|SZ|BJ):(\d{6})", value)
         if match:
@@ -49,6 +51,9 @@ class TushareProvider:
         return value
 
     def _call(self, api, params, fields):
+        """Copy a valid transport frame and suppress upstream exception text containing
+        credentials.
+        """
         try:
             result = self._transport(api, params, fields)
             if not isinstance(result, pd.DataFrame):
@@ -63,6 +68,7 @@ class TushareProvider:
             ) from None
 
     def _request(self, api, params, fields):
+        """Send explicit-token JSON with bounded retries, no redirects and a shared deadline."""
         if not self._token:
             raise ConnectionError("TUSHARE_TOKEN is required")
         try:
@@ -111,6 +117,7 @@ class TushareProvider:
         raise ConnectionError("Tushare temporarily unavailable")
 
     def _pages(self, api, params, fields):
+        """Collect at most MAX_BARS rows and reject duplicate dates or ignored pagination."""
         frames = []
         for offset in range(0, self.MAX_BARS, self.PAGE_SIZE):
             limit = min(self.PAGE_SIZE, self.MAX_BARS - offset)
@@ -155,6 +162,7 @@ class TushareProvider:
     stocksearch = search
 
     def resolve(self, symbol):
+        """Resolve a validated code against the cached listed-stock directory."""
         canonical = self._symbol(symbol)
         matches = self.search(canonical)
         if not matches:
@@ -163,6 +171,7 @@ class TushareProvider:
 
     @staticmethod
     def _date(value):
+        """Normalize a date using Shanghai time and reject missing or invalid values."""
         try:
             date = pd.Timestamp(value)
             if pd.isna(date):
@@ -174,6 +183,9 @@ class TushareProvider:
             raise ValueError("Invalid Tushare date") from None
 
     def history_ohlc(self, symbol, start=None, end=None, freq="1d", adjust="none", anchor=None):
+        """Fetch finite daily Bars and explicitly apply the requested anchored
+        adjustment/aggregation.
+        """
         self._deadline = time.monotonic() + 20.0
         canonical = self._symbol(symbol)
         if freq not in ("1d", "1w", "1M"):

@@ -29,6 +29,7 @@ _CLOCK_UNSET = object()
 
 
 def _callback_context():
+    """Return the still-active callback context; expired copied contexts have no cause."""
     current = _ACTIVE_CALLBACK.get()
     return current[0] if current is not None and current[1][0] else None
 

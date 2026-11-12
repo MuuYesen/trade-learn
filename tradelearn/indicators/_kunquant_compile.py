@@ -12,6 +12,9 @@ from pathlib import Path
 
 
 def compiler_config(*, opt_level=2):
+    """Return the fixed backend compiler profile with declaration headers and bounded
+    compilation.
+    """
     from importlib.metadata import version
 
     if version("KunQuant") != "0.1.12":
@@ -21,8 +24,10 @@ def compiler_config(*, opt_level=2):
     header = Path(__file__).with_name("native") / "kunquant_split_state.hpp"
 
     class HeaderDeclarations(cfake.GCCCommandLineBuilder):
+        """Extend compiler declarations without altering upstream mathematical implementations."""
         @staticmethod
         def build_compile_options(config, source, output):
+            """Append the packaged declaration header to the upstream compiler options."""
             return [
                 *cfake.GCCCommandLineBuilder.build_compile_options(config, source, output),
                 "-include",

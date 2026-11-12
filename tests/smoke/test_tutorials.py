@@ -158,9 +158,15 @@ def run_mlflow_tutorial() -> dict[str, Any]:
             if result.status != "FINISHED":
                 raise RuntimeError(result.error)
             client = MlflowClient(tracking_uri=uri)
-            run = client.get_run(result.run_id)
-            return {"status": result.status, "metric_count": len(run.data.metrics),
-                    "artifact_count": len(client.list_artifacts(result.run_id))}
+            try:
+                run = client.get_run(result.run_id)
+                return {"status": result.status, "metric_count": len(run.data.metrics),
+                        "artifact_count": len(client.list_artifacts(result.run_id))}
+            finally:
+                # Only this unique synthetic SQLite URI belongs to the fixture.
+                # Dispose its checked-in pool before Windows removes tracking.db;
+                # never weaken TemporaryDirectory cleanup or a production store.
+                client._tracking_client.store.engine.dispose()
     finally:
         mlflow.set_tracking_uri(previous_uri)
 

@@ -72,6 +72,7 @@ class TvkitResearchClient:
         async def fetch() -> list[Any]:
             # A non-None token suppresses the upstream environment/browser
             # credential fallback. Anonymous calls use its actual anonymous token.
+            """Fetch once in an owned async context so cancellation closes the upstream client."""
             async with OHLCV(max_attempts=1, auth_token=self._auth_token) as client:
                 return await client.get_historical_ohlcv(symbol, interval, **query)
 

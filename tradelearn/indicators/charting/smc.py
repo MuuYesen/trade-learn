@@ -10,11 +10,13 @@ from tradelearn.indicators.smc import main
 
 
 def drawings(frame, depth):
+    """Convert a bounded closed-bar SMC snapshot to geometry with confirmation metadata."""
     if len(frame) > 5000:
         raise ValueError("Smart Money Concepts supports at most 5000 bars")
     result = main(frame.rename(columns=str.title).reset_index(drop=True), depth)
 
     def time_at(index):
+        """Map a snapshot-relative pivot index to its supplied bar's Unix timestamp."""
         return int(frame.index[int(index)].timestamp())
 
     output = dict(levels=[], bosLL=[], bosHH=[], zoneD=[], zoneS=[], impLL=[], impHH=[])

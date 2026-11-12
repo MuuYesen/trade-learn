@@ -191,6 +191,7 @@ class DuckDBBarsBackend:
 
 
 def _selected_columns(columns: list[str] | tuple[str, ...] | None) -> list[str]:
+    """Validate and deduplicate the supported Bars projection without allowing SQL fragments."""
     if columns is None:
         return list(REQUIRED_COLUMNS)
     allowed = set(REQUIRED_COLUMNS) | {"vwap", "amount", "adj_factor"}
@@ -207,6 +208,7 @@ def _filters(
     start: str | pd.Timestamp | None,
     end: str | pd.Timestamp | None,
 ) -> tuple[str, list[object]]:
+    """Build inclusive symbol/time predicates with bound values, never interpolated data."""
     clauses: list[str] = []
     params: list[object] = []
     if symbols is not None:
@@ -225,6 +227,7 @@ def _filters(
 
 
 def _utc_timestamp(value: str | pd.Timestamp) -> pd.Timestamp:
+    """Interpret naive filter values as UTC and convert aware values to UTC."""
     timestamp = pd.Timestamp(value)
     if timestamp.tzinfo is None:
         return timestamp.tz_localize("UTC")
@@ -232,6 +235,7 @@ def _utc_timestamp(value: str | pd.Timestamp) -> pd.Timestamp:
 
 
 def _table_identifier(value: str) -> str:
+    """Reject table names containing anything except alphanumerics and underscores."""
     if not value.replace("_", "").isalnum():
         raise ValueError(f"invalid DuckDB table name: {value!r}")
     return value

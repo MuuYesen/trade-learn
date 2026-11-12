@@ -189,6 +189,7 @@ class DataExplorer:
 
 
 def _as_bars_like(data: pd.DataFrame) -> pd.DataFrame:
+    """Copy input and normalize recognized timestamp/symbol columns into sorted Bars indexes."""
     frame = pd.DataFrame(data).copy()
     if isinstance(frame.index, pd.MultiIndex) and {"timestamp", "symbol"}.issubset(
         set(frame.index.names)
@@ -202,6 +203,7 @@ def _as_bars_like(data: pd.DataFrame) -> pd.DataFrame:
 
 
 def _timestamps(frame: pd.DataFrame) -> pd.DatetimeIndex | pd.Series | None:
+    """Extract available event timestamps without inventing a clock for unindexed data."""
     if isinstance(frame.index, pd.MultiIndex) and "timestamp" in frame.index.names:
         return pd.DatetimeIndex(frame.index.get_level_values("timestamp"))
     if "timestamp" in frame.columns:
@@ -212,6 +214,7 @@ def _timestamps(frame: pd.DataFrame) -> pd.DatetimeIndex | pd.Series | None:
 
 
 def _symbols(frame: pd.DataFrame) -> pd.Index | pd.Series | None:
+    """Extract the declared symbol axis, or return None for unidentified single-series data."""
     if isinstance(frame.index, pd.MultiIndex) and "symbol" in frame.index.names:
         return pd.Index(frame.index.get_level_values("symbol"), name="symbol")
     if "symbol" in frame.columns:
@@ -223,6 +226,7 @@ def _infer_frequency(
     timestamps: pd.DatetimeIndex | pd.Series | None,
     symbols: pd.Index | pd.Series | None,
 ) -> str | None:
+    """Infer frequency from unique sorted timestamps of the first declared symbol."""
     if timestamps is None or len(timestamps) < 3:
         return None
     if symbols is not None:
@@ -236,6 +240,7 @@ def _infer_frequency(
 
 
 def _count_mask(frame: pd.DataFrame, mask: Any) -> int:
+    """Count true aligned quality flags; absent or nonalignable masks contribute zero."""
     if mask is None or isinstance(mask, bool):
         return 0
     try:
@@ -245,6 +250,7 @@ def _count_mask(frame: pd.DataFrame, mask: Any) -> int:
 
 
 def _non_positive_prices(frame: pd.DataFrame) -> int:
+    """Count rows with at least one nonpositive supplied OHLC price."""
     price_columns = [column for column in ("open", "high", "low", "close") if column in frame]
     if not price_columns:
         return 0
@@ -252,6 +258,7 @@ def _non_positive_prices(frame: pd.DataFrame) -> int:
 
 
 def _close_outside_valid_range(frame: pd.DataFrame) -> pd.Series | bool:
+    """Flag close outside high/low only where the high/low range is itself valid."""
     if not {"high", "low", "close"}.issubset(frame.columns):
         return False
     valid_range = frame["high"] >= frame["low"]

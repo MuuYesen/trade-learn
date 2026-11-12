@@ -17,6 +17,7 @@ import numpy as np
 
 
 def _same(left, right):
+    """Compare nested event/state values including arrays and equal missing numeric values."""
     if isinstance(left, dict) and isinstance(right, dict):
         return left.keys() == right.keys() and all(_same(left[key], right[key]) for key in left)
     if isinstance(left, (tuple, list)) and isinstance(right, (tuple, list)):
@@ -36,6 +37,7 @@ def _same(left, right):
 
 
 def _available(value):
+    """Require finite numeric values across every nested output component."""
     if isinstance(value, dict):
         return all(_available(x) for x in value.values())
     if isinstance(value, (tuple, list)):
@@ -49,6 +51,7 @@ def _available(value):
 
 @dataclass
 class _Node:
+    """One persistent backend with declared dependencies, fixed configuration and event count."""
     backend: Any
     dependencies: tuple[str, ...]
     configuration: Any
@@ -67,6 +70,7 @@ class StreamGraph:
 
     @property
     def values(self):
+        """Return a deep copy so callers cannot mutate committed graph results."""
         return deepcopy(self._values)
 
     def add(self, name, backend, *, dependencies=(), configuration=None):
@@ -133,6 +137,7 @@ class StreamGraph:
         self._failed = False
 
     def _signature(self):
+        """Describe ordered graph identity, backend types, dependencies and configurations."""
         return (
             self.identity,
             tuple(

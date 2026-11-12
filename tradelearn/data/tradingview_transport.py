@@ -28,12 +28,15 @@ _TOKEN_TTL = 15 * 60
 
 
 class _TrackedHTTPMixin:
+    """Track the active urllib connection so a bounded request can interrupt socket reads."""
     def __init__(self, state):
         super().__init__()
         self._state = state
 
     def do_open(self, http_class, request, **kwargs):
+        """Wrap connection creation while retaining urllib HTTP/TLS and redirect handling."""
         def connection(*args, **options):
+            """Refuse cancelled work before recording the connection owned by this request."""
             if self._state["cancelled"].is_set():
                 raise TimeoutError("TradingView request timed out")
             conn = http_class(*args, **options)
@@ -44,10 +47,12 @@ class _TrackedHTTPMixin:
 
 
 class _TrackedHTTPHandler(_TrackedHTTPMixin, HTTPHandler):
+    """Apply cancellable connection tracking to urllib HTTP requests."""
     pass
 
 
 class _TrackedHTTPSHandler(_TrackedHTTPMixin, HTTPSHandler):
+    """Apply cancellable connection tracking while preserving urllib TLS verification."""
     pass
 
 
@@ -76,6 +81,7 @@ def normalize_adjustment(value):
 
 
 def _frame(payload):
+    """Wrap a JSON payload with the existing TradingView message-length framing."""
     return f"~m~{len(payload)}~m~{payload}"
 
 
@@ -91,6 +97,7 @@ class TradingViewTransport:
 
     @staticmethod
     def _remaining(deadline):
+        """Return positive deadline budget or fail before another network operation begins."""
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError("TradingView request timed out")
@@ -99,6 +106,7 @@ class TradingViewTransport:
     @staticmethod
     def _open_http(request, timeout, state):
         # Preserve urllib's proxy, TLS verification, and redirect handling.
+        """Open through tracked HTTP/HTTPS handlers with the remaining request timeout."""
         return build_opener(_TrackedHTTPHandler(state), _TrackedHTTPSHandler(state)).open(
             request,
             timeout=timeout,
@@ -106,6 +114,7 @@ class TradingViewTransport:
 
     @staticmethod
     def _interrupt_http(state):
+        """Mark cancellation and shut down active sockets to unblock an owned worker read."""
         state["cancelled"].set()
         connection = state.get("connection")
         response = state.get("response")
@@ -120,6 +129,7 @@ class TradingViewTransport:
                     pass
 
     def _http_json(self, url, *, deadline, data=None):
+        """Read bounded JSON with a shared deadline, finite worker slots and socket cleanup."""
         request = Request(
             url,
             data=data,
@@ -136,6 +146,7 @@ class TradingViewTransport:
         finished = threading.Event()
 
         def run():
+            """Record the HTTP result/error and release this worker's connections and semaphore."""
             response = None
             try:
                 response = self._open_http(request, self._remaining(deadline), state)
@@ -173,6 +184,9 @@ class TradingViewTransport:
                 self._interrupt_http(state)
 
     def _token(self, deadline):
+        """Return anonymous auth or cache a bounded-lived explicit login token without raw
+        credential keys.
+        """
         if not self.username or not self.password:
             return "unauthorized_user_token"
         # Retain no username/password in the process-wide cache keys.
@@ -206,6 +220,9 @@ class TradingViewTransport:
     def _request(
         self, symbol, *, resolution=None, count=300, to=None, forward=False, adjustment="splits"
     ):
+        """Run one finite chart request with explicit adjustment and guaranteed WebSocket
+        closure.
+        """
         adjustment = normalize_adjustment(adjustment)
         if not isinstance(symbol, str) or not symbol.strip() or len(symbol) > 200:
             raise ValueError("TradingView symbol is required")
@@ -225,6 +242,7 @@ class TradingViewTransport:
             session = "cs_" + uuid.uuid4().hex[:12]
 
             def send(method, params):
+                """Frame and send one protocol message within the same absolute request deadline."""
                 ws.settimeout(self._remaining(deadline))
                 ws.send(
                     _frame(

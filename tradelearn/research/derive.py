@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -82,6 +83,16 @@ class SymbolicFeatureGenerator:
             feature_names=feature_columns,
             **self.kwargs,
         )
+        # gplearn 0.4.2 (the Python 3.10 release) calls the estimator validation
+        # method removed by newer sklearn. Adapt only this owned instance, with
+        # sklearn's public validator; no class/global patch or formula change.
+        if type(transformer).__module__.startswith("gplearn.") and not hasattr(
+            transformer, "_validate_data"
+        ):
+            import gplearn
+
+            if gplearn.__version__ == "0.4.2":
+                transformer._validate_data = partial(_validate_symbolic_data, transformer)
         # A fresh transformer is fitted each time. Capture populations at the
         # append boundary before upstream's memory pruning. No global patch or
         # parallel worker instrumentation; qualified against gplearn 0.4.3.
@@ -196,6 +207,18 @@ class SymbolicFeatureGenerator:
         }
         params.update(self.kwargs)
         return params
+
+
+
+def _validate_symbolic_data(estimator, X, y="no_validation", reset=True, **options):
+    """Use sklearn's public validator for an owned legacy gplearn instance.
+
+    A module-level partial remains pickleable with the fitted estimator. It
+    retains sklearn feature/count/finite checks rather than bypassing validation.
+    """
+    from sklearn.utils.validation import validate_data
+
+    return validate_data(estimator, X, y, reset=reset, **options)
 
 
 def _load_symbolic_transformer():

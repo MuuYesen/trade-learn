@@ -17,6 +17,9 @@ import numpy as np
 
 @dataclass(frozen=True)
 class Artifact:
+    """Immutable native graph identity, source/schema/universe and machine compatibility
+    contract.
+    """
     source_revision: str
     expression_sha256: str
     library_sha256: str
@@ -54,6 +57,7 @@ class Artifact:
             raise ValueError("artifact provenance must be explicit")
 
     def fingerprint(self):
+        """Hash the complete normalized artifact contract for snapshot identity checks."""
         return hashlib.sha256(
             json.dumps(asdict(self), sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
@@ -135,6 +139,7 @@ class KunQuantStream(_Kernel):
         self.reset()
 
     def _cache_handles(self):
+        """Resolve this context's named native input/output buffers after creation or restore."""
         self._handles = {
             name: self._stream.queryBufferHandle(name)
             for name in (*self.spec.inputs, *self.spec.outputs)
@@ -142,9 +147,11 @@ class KunQuantStream(_Kernel):
 
     @property
     def ready(self):
+        """Require native warmup, finite outputs and a context that has not failed."""
         return self.count >= self.spec.warmup and all(self._available.values()) and not self._failed
 
     def update(self, *, symbols, asof, inputs, input_times, sequence=None):
+        """Commit one same-time universe; exact duplicates reuse results and revisions reject."""
         if self._failed:
             raise RuntimeError("KunQuant state failed; reset/replay required")
         sequence = asof if sequence is None else sequence
@@ -184,6 +191,7 @@ class KunQuantStream(_Kernel):
         return outputs
 
     def snapshot(self):
+        """Copy successful native state with identity, checksum and last committed input/output."""
         if self._failed or not self.count:
             raise RuntimeError("snapshot requires a successful run")
         state = bytes(self._stream.serializeStates())
@@ -202,6 +210,9 @@ class KunQuantStream(_Kernel):
         )
 
     def restore(self, snapshot):
+        """Validate snapshot identity, schema and state checksum before replacing the stream
+        context.
+        """
         if snapshot.get("identity") != self._identity:
             raise ValueError("incompatible KunQuant snapshot identity")
         if snapshot.get("version") != 4 or snapshot.get("fingerprint") != self.spec.fingerprint():
@@ -239,6 +250,7 @@ class KunQuantStream(_Kernel):
         self._failed = False
 
     def reset(self):
+        """Create a clean native stream and discard sequence, availability and cached results."""
         self._stream = self._kr.StreamContext(self._executor, self._module, len(self.spec.symbols))
         self._cache_handles()
         self._asof = None
@@ -267,6 +279,7 @@ class KunQuantBatch(_Kernel):
             raise ValueError("batch module is not TS layout")
 
     def compute(self, *, symbols, times, inputs, input_times):
+        """Run a validated ordered TS matrix with exact universe/schema/time and warmup masking."""
         if tuple(symbols) != self.spec.symbols:
             raise ValueError("symbol identity/order mismatch")
         times = np.asarray(times)
@@ -337,9 +350,11 @@ class KunQuantBatch(_Kernel):
         return self
 
     def transform(self, data):
+        """Apply the explicit batch graph to a Bars frame without fitting or compilation."""
         return self.compute_frame(data)
 
     def fit_transform(self, data, y=None):
+        """Follow the pipeline protocol while retaining the graph's no-training fit semantics."""
         return self.fit(data, y).transform(data)
 
     def get_params(self, deep=True):

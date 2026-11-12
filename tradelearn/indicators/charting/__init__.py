@@ -23,10 +23,12 @@ _LOCK = threading.RLock()  # PyneCore resets function isolation between calls.
 
 
 def catalog():
+    """Return an independent copy of the fixed catalog, not mutable shared definitions."""
     return deepcopy(_CATALOG)
 
 
 def _validate_frame(frame):
+    """Validate finite bounded chronological OHLCV and copy it into UTC chart input."""
     if not isinstance(frame, pd.DataFrame) or not {"open", "high", "low", "close", "volume"} <= set(
         frame.columns
     ):
@@ -52,6 +54,7 @@ def _validate_frame(frame):
 
 
 def calculate(frame, name_or_id, params=None, secondary=None, visible_range=None):
+    """Validate catalog parameters and return JSON-safe series or explicit snapshot geometry."""
     entry = _LOOKUP.get(name_or_id)
     if entry is None:
         raise ValueError("Unknown indicator: " + str(name_or_id))

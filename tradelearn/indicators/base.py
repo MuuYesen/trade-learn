@@ -262,6 +262,7 @@ class FunctionIndicator:
         self._isolated_default.clear()
 
     def _buffers_for(self, state: IndicatorState | None) -> dict[str, list[float]]:
+        """Return instance-local input buffers, initializing only declared column names."""
         if state is not None:
             if self._bar_columns is None:
                 return state.buffers
@@ -282,6 +283,7 @@ class StreamBinding:
         self.value = None
 
     def update(self, *values: float) -> Any:
+        """Validate input arity and advance exactly this binding's isolated indicator state."""
         if len(values) != len(self.indicator._bar_columns):
             raise ValueError("stream input arity mismatch")
         self.value = self.indicator.on_bar(
@@ -290,11 +292,13 @@ class StreamBinding:
         return self.value
 
     def reset(self) -> None:
+        """Reset this binding's backend state and forget its last emitted value."""
         self.indicator.reset(state=self.state)
         self.value = None
 
 
 def _line_owner(args: tuple[Any, ...]) -> Any | None:
+    """Find an input carrying the shared runtime line/indicator binding protocol."""
     for arg in args:
         if hasattr(arg, "to_series") and hasattr(arg, "wrap_indicator"):
             return arg
@@ -302,6 +306,7 @@ def _line_owner(args: tuple[Any, ...]) -> Any | None:
 
 
 def _to_indicator_arg(arg: Any) -> Any:
+    """Unwrap an indicator line and materialize only its explicitly available series view."""
     arg = getattr(arg, "_indicator_line", arg)
     if hasattr(arg, "to_series"):
         return arg.to_series()

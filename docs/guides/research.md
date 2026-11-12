@@ -91,3 +91,6 @@ Optuna保留独立`OptunaSearch/OptunaBacktestSearch`和原生trial建议接口�
 2026-11-12 恢复接线：Factor/DataExplorer 的完成结果缓存按输入值/索引/列/dtype/来源属性、组件配置及内部计算版本失效；返回独立表格快照。HTML 图按需单独缓存，Excel-only 不构建 HTML 图。因子标量保单位、不可计算原因和样本覆盖；多期限/多因子保各自命名空间。独立 `history.window` 与权重查询优先内部 `_decision_datetime`，外部对象可兼容旧时钟方法；不把 BT 日期序数当共同决策时间。旧 ML 独立脚本仅通过显式 FeatureFeed 声明训练所选额外 Lines 接新 Engine，研究算法不变。优化入口见[现行搜索](optimization.md)。
 
 模型代码恢复还会拒绝已加载的同名叶模块与产物代码摘要冲突，提示在新进程加载，避免 Python 模块缓存静默复用另一版本定义。相同代码摘要可复用；信任确认、依赖版本和代码摘要都不会被自动跳过。
+
+
+固定符号后端按真实Python边界选择：Python3.10为gplearn0.4.2，Python3.11+为0.4.3（上游0.4.3要求Python>=3.11/sklearn>=1.8）。旧0.4.2与新版sklearn组合仅在TL拥有的该estimator实例上接入sklearn公开validate_data，保输入特征/数量/有限值校验及可pickle状态；不改第三方类/全局实现、不绕过验证。两个版本的候选捕获、transform无标签与恢复分别验收；manifest仍记录实际运行版本，不外推跨minor模型可载。

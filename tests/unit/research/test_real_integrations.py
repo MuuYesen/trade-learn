@@ -13,6 +13,11 @@ from tradelearn.research.portfolio import Allocator, Constraints, RiskfolioWeigh
 
 def test_symbolic_real_expression_artifact_and_restore():
     pytest.importorskip("gplearn")
+    from gplearn.genetic import SymbolicTransformer
+    from sklearn.base import BaseEstimator
+
+    original_transformer_validation = getattr(SymbolicTransformer, "_validate_data", None)
+    original_base_validation = getattr(BaseEstimator, "_validate_data", None)
     x = np.linspace(1.0, 3.0, 24)
     frame = pd.DataFrame({"x": x, "y": x * x, "label": 2 * x + 1})
     generator = SymbolicFeatureGenerator(
@@ -24,6 +29,8 @@ def test_symbolic_real_expression_artifact_and_restore():
         stopping_criteria=2.0,
     )
     generator.fit(frame.iloc[:18], columns=["x", "y"], target="label")
+    assert getattr(SymbolicTransformer, "_validate_data", None) is original_transformer_validation
+    assert getattr(BaseEstimator, "_validate_data", None) is original_base_validation
     output = generator.transform(frame.iloc[18:].drop(columns="label"))
     restored = pickle.loads(pickle.dumps(generator))
     pd.testing.assert_frame_equal(output, restored.transform(frame.iloc[18:].drop(columns="label")))

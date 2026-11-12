@@ -59,6 +59,7 @@ class Dataset:
         return self._result(frame, selected, symbols, start, end)
 
     def _query(self, symbols, start, end, columns):
+        """Validate every file schema and build a parameterized, source-precision Bars query."""
         selected = _selected_columns(columns)
         where, params = _filters(symbols=symbols, start=start, end=end)
         types = None
@@ -90,6 +91,7 @@ class Dataset:
         return sql, [self.files, *params], selected
 
     def _result(self, frame, selected, symbols, start, end):
+        """Validate queried Bars and return selected columns with explicit source metadata."""
         frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
         if frame.timestamp.isna().any():
             raise ValueError("dataset timestamp must be present")
@@ -149,6 +151,7 @@ class Dataset:
         return DataExplorer(self.read(**query))
 
     def close(self) -> None:
+        """Release this dataset instance's DuckDB connection."""
         self.conn.close()
 
     def __enter__(self) -> Dataset:

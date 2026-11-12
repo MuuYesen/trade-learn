@@ -58,7 +58,8 @@ research = [
     "duckdb",
     "Riskfolio-Lib",
     "optuna",
-    "gplearn",
+    "gplearn==0.4.2; python_version < '3.11'",
+    "gplearn==0.4.3; python_version >= '3.11'",
     "jupyterlab>=4.5",
     "ipywidgets",
     "jupyter-ai-lite==0.21.0",
@@ -88,7 +89,8 @@ docs = [
     "mkdocstrings-python",
 ]
 ci = [
-    "gplearn",
+    "gplearn==0.4.2; python_version < '3.11'",
+    "gplearn==0.4.3; python_version >= '3.11'",
     "optuna",
     "Riskfolio-Lib",
     "build>=1.4.4; python_version < '3.11'",

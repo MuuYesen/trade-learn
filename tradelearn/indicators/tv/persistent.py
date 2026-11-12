@@ -138,6 +138,7 @@ _LENGTHS = dict(
 
 
 def _scalar(value):
+    """Convert upstream NA/scalar/tuple outputs to Python floating-point values."""
     if isinstance(value, (tuple, list)):
         return tuple(_scalar(x) for x in value)
     return float("nan") if isinstance(value, NA) else float(value)
@@ -156,6 +157,9 @@ class PyneState:
         self.previous = float("nan")
 
     def update(self, *values):
+        """Advance this isolated Pyne state once while restoring shared library fields
+        afterwards.
+        """
         inputs = dict(zip(self.columns, values, strict=True))
         with _LOCK:
             previous = {key: getattr(lib, key) for key in _FIELDS}
@@ -191,6 +195,7 @@ class PyneState:
 
 
 def _warmup(name, params):
+    """Compute the pinned function's declared observation requirement from its parameters."""
     length = int(params.get("length", 1))
     if name == "macd":
         return int(max(params["fastlen"], params["slowlen"]) + params["siglen"] - 1)
@@ -247,6 +252,7 @@ def make_indicator(name, **overrides):
     factory = partial(PyneState, name, columns=columns, arguments=arguments)
 
     def batch(*inputs, **kwargs):
+        """Replay input rows through one persistent state with exact matching indexes."""
         configuration = {**params, **kwargs}
         if kwargs.keys() - params.keys():
             raise TypeError("unknown TV parameters")
@@ -284,9 +290,13 @@ def make_indicator(name, **overrides):
     original_batch = batch
 
     def configuration_outputs(options):
+        """Merge explicit options with defaults for output-schema selection."""
         return {**params, **options}
 
     def named_batch(*args, **kwargs):
+        """Bind the public signature and label multi-output columns for the selected
+        configuration.
+        """
         bound = original_batch.__signature__.bind(*args, **kwargs)
         inputs = tuple(bound.arguments[key] for key in columns)
         options = {key: value for key, value in bound.arguments.items() if key not in columns}

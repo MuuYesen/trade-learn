@@ -5,6 +5,7 @@ import pandas as pd
 
 
 def profile(f, p, visible_range):
+    """Allocate bar volume uniformly over OHLC ranges; this is explicitly not tick volume."""
     if visible_range:
         if isinstance(visible_range, dict):
             a, b = visible_range.get("from"), visible_range.get("to")
@@ -12,6 +13,7 @@ def profile(f, p, visible_range):
             a, b = visible_range
 
         def ts(v):
+            """Normalize the supplied visible-range endpoint to an aware UTC timestamp."""
             return (
                 pd.to_datetime(v, unit="s", utc=True)
                 if isinstance(v, (int, float))
@@ -51,6 +53,7 @@ def profile(f, p, visible_range):
 
 def zigzag(f, deviation):
     # Emit only a newly confirmed reversal at its confirmation time, never backdate.
+    """Emit reversals at confirmation time instead of backdating the prior extreme."""
     result = pd.Series(np.nan, index=f.index)
     direction = 0
     extreme = float(f.close.iloc[0]) if len(f) else 0
@@ -71,6 +74,7 @@ def zigzag(f, deviation):
 
 
 def pivots(f, anchor):
+    """Compute pivot levels from the previous completed day/week/month aggregate."""
     idx = f.index
     if anchor == "day":
         groups = idx.strftime("%Y-%m-%d")
@@ -100,6 +104,7 @@ def pivots(f, anchor):
 
 
 def volatility_stop(f, n, mult, method):
+    """Compute the configured causal volatility stop from the chosen range smoother."""
     from .core import ema, rma, tr
 
     ranges = tr(f)
@@ -128,7 +133,9 @@ def volatility_stop(f, n, mult, method):
 def fractals(f, k):
     # Report at confirmation time. Newer bars must be strictly beyond the pivot;
     # allow up to four equal-price older bars before the strict k-bar flank.
+    """Emit directional fractals only after the required right-side confirmation bars."""
     def events(values, is_high):
+        """Recognize confirmed extrema and emit their value at the confirmation index."""
         a = values.to_numpy()
         out = np.full(len(a), np.nan)
         for i in range(2 * k, len(a)):
