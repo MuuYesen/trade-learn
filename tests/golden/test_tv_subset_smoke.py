@@ -61,7 +61,7 @@ def test_tv_subset_smoke_runs_every_manifest_tv_dataset(tmp_path: Path) -> None:
     ]
     assert payload["results"][0]["trades"] == [
         {"size": 2.0, "price": 11.0, "pnl": 0.0, "isclosed": False},
-        {"size": 0.0, "price": 13.0, "pnl": 4.0, "isclosed": True},
+        {"size": 0.0, "price": 11.0, "pnl": 4.0, "isclosed": True},
     ]
     assert payload["results"][0]["equity"] == [100.0, 101.0, 103.0, 104.0]
     assert payload["results"][0]["final_cash"] == 104.0

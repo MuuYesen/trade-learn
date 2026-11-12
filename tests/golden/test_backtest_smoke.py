@@ -60,7 +60,8 @@ def test_small_golden_smoke_covers_trades_pnl_and_equity_chain() -> None:
 
     assert analysis["trades"] == [
         {"size": 2.0, "price": 11.0, "pnl": 0.0, "isclosed": False},
-        {"size": 0.0, "price": 13.0, "pnl": 4.0, "isclosed": True},
+        {"size": 0.0, "price": 11.0, "pnl": 4.0, "isclosed": True},
     ]
     assert analysis["equity"] == [100.0, 101.0, 103.0, 104.0]
     assert strategy.broker.getcash() == 104.0
+    assert strategy.broker.fills_frame()["price"].tolist() == [11.0, 13.0]

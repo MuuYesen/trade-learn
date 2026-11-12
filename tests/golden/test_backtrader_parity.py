@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from packaging.requirements import Requirement
 
 try:
     import tomllib
@@ -81,7 +82,8 @@ def test_oracle_group_includes_backtrader() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     oracle = pyproject["dependency-groups"]["oracle"]
 
-    assert "backtrader" in oracle
+    reference = next(Requirement(item) for item in oracle if Requirement(item).name == "backtrader")
+    assert str(reference.specifier) == "==1.9.78.123"
 
 
 @pytest.mark.parametrize(
