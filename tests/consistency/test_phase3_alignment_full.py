@@ -115,7 +115,8 @@ def test_full_alignment():
     print(f"Drawdown Analysis: {drawdown_analysis}")
 
     assert "sharperatio" in sharpe_analysis, "Sharpe ratio missing from analysis"
-    assert "maxdrawdown" in drawdown_analysis, "Max drawdown missing from analysis"
+    assert set(drawdown_analysis) == {"len", "drawdown", "moneydown", "max"}
+    assert drawdown_analysis["max"]["drawdown"] >= drawdown_analysis["drawdown"] >= 0
 
     print("All alignment tests PASSED!")
 

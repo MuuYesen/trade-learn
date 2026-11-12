@@ -86,10 +86,12 @@ def test_analyzer_alignment():
     dd = strat.analyzers.drawdown.get_analysis()
 
     print(f"Sharpe Ratio: {analysis['sharperatio']}")
-    print(f"Max Drawdown: {dd['maxdrawdown']}%")
+    print(f"Max Drawdown: {dd['max']['drawdown']}%")
 
     assert analysis["sharperatio"] is not None
-    assert "maxdrawdown" in dd
+    assert set(dd) == {"len", "drawdown", "moneydown", "max"}
+    assert dd["max"]["drawdown"] >= dd["drawdown"] >= 0
+    assert dd["max"]["moneydown"] >= dd["moneydown"] >= 0
 
 
 if __name__ == "__main__":
