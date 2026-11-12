@@ -1,0 +1,54 @@
+name: Public wheel qualification
+on:
+  push:
+    branches: [dev]
+    paths:
+      - .github/actions/qualify-public-wheels.py
+      - .github/actions/public_store_binding_test.py
+      - .github/workflows/public-wheel-qualification.yml
+  workflow_dispatch:
+    inputs:
+      tl_version:
+        type: string
+        required: true
+        default: '0.3.1'
+      store_version:
+        type: string
+        required: true
+        default: '0.2.1a4'
+      source_sha:
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  linux-public:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: v${{ inputs.tl_version || '0.3.1' }}
+          path: qualification-source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Actual public wheels; no build, no publish, no broker connection
+        env:
+          TL_VERSION: ${{ inputs.tl_version || '0.3.1' }}
+          STORE_VERSION: ${{ inputs.store_version || '0.2.1a4' }}
+          SOURCE_SHA: ${{ inputs.source_sha || '0f08eaba7215ea3b45b4b11649cdcd758b59b19b' }}
+        run: python .github/actions/qualify-public-wheels.py --source "$GITHUB_WORKSPACE/qualification-source" --work "$RUNNER_TEMP/public-wheel-qualification" --tl "$TL_VERSION" --store "$STORE_VERSION" --sha "$SOURCE_SHA"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-wheel-qualification
+          path: |
+            ${{ runner.temp }}/public-wheel-qualification/public-files.json
+            ${{ runner.temp }}/public-wheel-qualification/source-inventory.json
+            ${{ runner.temp }}/public-wheel-qualification/installed-receipt.json
+            ${{ runner.temp }}/public-wheel-qualification/tests.xml
