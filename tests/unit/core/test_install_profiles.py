@@ -25,7 +25,13 @@ def test_base_ci_keeps_selected_profiles_and_mandatory_lock_gate():
     data=tomllib.loads((ROOT/'pyproject.toml').read_text())
     ci=data['dependency-groups']['ci']
     assert {'boto3==1.41.2','botocore==1.41.6','numba>=0.65.1'} <= set(ci)
-    assert not any(name.startswith(('nautilus','Riskfolio','optuna')) for name in ci)
+    # These three libraries have real component-workflow consumers in pytest.
+    # Keep them in the selected CI group; never add research/UI/execution to base.
+    assert {'gplearn', 'Riskfolio-Lib', 'optuna'} <= set(ci)
+    assert not any(name.startswith(('nautilus', 'jupyter')) for name in ci)
+    base = data['project']['dependencies']
+    assert not any(name.startswith(('Riskfolio', 'optuna', 'gplearn', 'jupyter',
+                                    'nautilus', 'mlflow', 'boto3')) for name in base)
     workflow=(ROOT/'.github/workflows/ci.yml').read_text()
     assert '--extra' not in workflow
     assert 'uv pip install -e . --group dev --group ci --group oracle' in workflow
