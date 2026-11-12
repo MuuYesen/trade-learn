@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from tradelearn.engine import Analyzer, Cerebro, Strategy
+from tradelearn.engine import Analyzer, Cerebro, Strategy, feeds
 
 
 def synthetic_bars() -> pd.DataFrame:
@@ -51,7 +51,7 @@ def test_small_golden_smoke_covers_trades_pnl_and_equity_chain() -> None:
 
     cerebro = Cerebro()
     cerebro.broker.setcash(100.0)
-    cerebro.adddata(synthetic_bars(), name="synthetic")
+    cerebro.adddata(feeds.PandasData(dataname=synthetic_bars()), name="synthetic")
     cerebro.addstrategy(BuyThenClose)
     cerebro.addanalyzer(SmokeAnalyzer, name="smoke")
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import signal
+import threading
 import subprocess
 import sys
 from collections.abc import Callable, Mapping
@@ -78,11 +80,22 @@ def build_lab_plan(
 
 def start_lab_stack(plan: LabPlan, *, popen: Callable[..., Any] = subprocess.Popen) -> int:
     process = popen(plan.jupyter.args, env={**os.environ, **plan.jupyter.env})
+    terminated = False
+
+    def stop(signum, frame):
+        nonlocal terminated
+        terminated = True
+        raise KeyboardInterrupt
+
+    owns_handler = threading.current_thread() is threading.main_thread()
+    previous = signal.signal(signal.SIGTERM, stop) if owns_handler else None
     try:
         return process.wait()
     except KeyboardInterrupt:
-        return 0
+        return 128 + signal.SIGTERM if terminated else 0
     finally:
+        if owns_handler:
+            signal.signal(signal.SIGTERM, previous)
         if process.poll() is None:
             process.terminate()
             try:

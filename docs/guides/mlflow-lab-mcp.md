@@ -49,3 +49,5 @@ CLI仅保留`tradelearn new 项目名`、`tradelearn lab`、`tradelearn doctor`�
 
 
 参数网格位于 `tradelearn.integrations.search.grid_search`，独立于 Engine 和共同运行时核心。所有组合完成后，显式 `mlflow={...}` 会把已有策略列表一次交给 `log`，共享一个原生 Run；不会为每个组合隐式创建嵌套 Run。返回的每项策略引用同一 `mlflow_result`。
+
+`lab` 收到 Ctrl-C 或 SIGTERM 时关闭并回收自有 Jupyter；SIGTERM 返回 143，恢复调用方原信号处理器。不会停止外部 MLflow 或其他既有进程。

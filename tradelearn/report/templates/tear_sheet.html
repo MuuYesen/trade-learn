@@ -236,7 +236,7 @@
 
     .two-col {
       display: grid;
-      grid-template-columns: 1.3fr 0.7fr;
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
       gap: 24px;
       align-items: start;
     }
@@ -313,6 +313,8 @@
         grid-template-columns: 1fr;
       }
     }
+
+    .two-col > section { min-width: 0; overflow-x: auto; }
 
     .table-scroll {
       width: 100%;
@@ -425,6 +427,8 @@
       .meta-item {
         text-align: left;
       }
+
+      .two-col { grid-template-columns: minmax(0, 1fr); }
 
       .chart-grid {
         grid-template-columns: 1fr;

@@ -1,3 +1,5 @@
+> 当前源码组合：TL 0.3.0 / TL-Store 0.2.1a3，实际实现与 native 统一为 `tl_store.ctrader` / `tl_store.ctrader._native`。本机 Mac 干净安装及离线组合通过；Linux 新 wheel 和公网安装未合格。下文带版本/日期的旧候选仅为各自历史证据。
+
 # 实盘协议
 
 > **待实现目标（2026-11-11）**：收敛共同策略/流水线与运行产物、历史资格/截面/调仓恢复、数量与在途订单处理；不新增执行引擎或自动扩展venue资格。当前唯一NautilusStore和真实SQS/IAM合同继续有效，讨论中的endpoint+token不是可用接口；本页候选/发行/真实验收状态分别保留。见[统一改造状态](../concepts/api-boundary.md#pending-unification-20261111)。
@@ -160,7 +162,7 @@ TL extra 候选锁定 `tl-store==0.2.1a2`；准确目标命令仍为
 
 固定版本证据入口：TL `tradelearn/backtest/strategy.py`、`engine/strategy.py`、
 `tradelearn_runtime/{broker,execution,store}.py`，NA安装包 `common.OrderFactory`公开签名，
-TL-Store `lq_adapter_ctrader/execution.py` 的实际提交/拒绝分支。
+TL-Store `tl_store/ctrader/execution.py` 的实际提交/拒绝分支。
 [官方订单说明](https://nautilustrader.io/docs/nightly/concepts/orders/)仅作模型参考，
 其nightly能力不能代替固定2.0.0rc7及具体adapter/产品的验证。
 

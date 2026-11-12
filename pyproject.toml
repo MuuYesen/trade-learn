@@ -72,7 +72,7 @@ nautilus = [
 ]
 
 tl-store = [
-    "tl-store==0.2.1a2; python_version == '3.13' and ((sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and platform_machine == 'x86_64'))",
+    "tl-store==0.2.1a3; python_version == '3.13' and ((sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and platform_machine == 'x86_64'))",
 ]
 
 [dependency-groups]
@@ -88,6 +88,7 @@ docs = [
     "mkdocstrings-python",
 ]
 ci = [
+    "build>=1.4.4; python_version < '3.11'",
     "certifi>=2026.10.19",
     "urllib3>=2.8.0,<3",
     "idna>=3.15,<4",
@@ -114,6 +115,7 @@ ci = [
     "numba>=0.65.1",
 ]
 oracle = [
+    "pytz",
     "backtesting>=0.6.5",
     "backtrader",
     "opentdx; python_version >= '3.12'",

@@ -21,8 +21,8 @@ class MACD(bt.Indicator):
         line = self.data.close if hasattr(self.data, "close") else self.data
         macd = bt.talib.MACD(line)
         self.lines.macd = macd.macd
-        self.lines.signal = macd.signal
-        self.lines.histo = macd.hist
+        self.lines.signal = macd.macdsignal
+        self.lines.histo = macd.macdhist
 
 
 class AlignmentStrategy(bt.Strategy):

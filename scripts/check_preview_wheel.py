@@ -47,6 +47,10 @@ run_checked(
 assert Path(_rust.__file__).is_relative_to(Path(sys.prefix)), _rust.__file__
 tests = [Path(__file__).resolve().parents[1] / "tests/test_filesystem_identity.py"]
 if sys.platform == "win32":
+    # The base proof above must run with AWS absent. The second phase tests
+    # explicitly configured sender preflight and real Windows DACL rejection.
+    run_checked([sys.executable, "-m", "pip", "install",
+                 "boto3==1.41.2", "botocore==1.41.6"])
     tests.append(Path(__file__).resolve().parents[1] / "tests/test_windows_delivery.py")
 with tempfile.TemporaryDirectory() as directory:
     config = Path(directory) / "pytest.ini"

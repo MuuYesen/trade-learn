@@ -402,7 +402,7 @@ def run_expected_job(
 ) -> dict[str, Any]:
     """Run one TV subset golden adapter and return expected payload."""
 
-    from tradelearn.engine import Cerebro
+    from tradelearn.engine import Cerebro, feeds
 
     path = dataset_path(dataset, datasets_root)
     if not path.exists():
@@ -411,7 +411,7 @@ def run_expected_job(
     bars = _utc_index(pd.read_parquet(path))
     cerebro = Cerebro()
     cerebro.broker.setcash(100_000.0)
-    cerebro.adddata(bars, name=dataset["symbol"])
+    cerebro.adddata(feeds.PandasData(dataname=bars), name=dataset["symbol"])
     cerebro.addstrategy(strategy_cls)
     [strategy] = cerebro.run()
     stats = strategy.stats
