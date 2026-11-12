@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import feed as _as_feed
+
+from tests.unit.backtest._engine_config import configured_engine
+
 import pandas as pd
 
 from tradelearn.engine import Cerebro, Strategy
 from tradelearn.research import ResearchResult
+from tradelearn.backtest.targets import target_weights
+from tradelearn.research.run import bind_research_result
 import tradelearn.research.portfolio as pf
 
 
@@ -34,12 +40,12 @@ def test_engine_strategy_targets_weights_from_user_next() -> None:
             )
             self.score_snapshots.append(scores.copy())
             winner = str(scores.idxmax())
-            self.target_weights(pd.Series({winner: 0.5}))
+            target_weights(self, pd.Series({winner: 0.5}))
 
-    cerebro = Cerebro(trade_on_close=True)
-    cerebro.setcash(100_000.0)
-    cerebro.adddata(_frame([10, 11, 12, 13, 14, 15]), name="AAA")
-    cerebro.adddata(_frame([20, 19, 18, 17, 16, 15]), name="BBB")
+    cerebro = configured_engine(trade_on_close=True)
+    cerebro.broker.setcash(100_000.0)
+    cerebro.adddata(_as_feed(_frame([10, 11, 12, 13, 14, 15])), name="AAA")
+    cerebro.adddata(_as_feed(_frame([20, 19, 18, 17, 16, 15])), name="BBB")
     cerebro.addstrategy(MonthlyTopClose)
 
     strategy = cerebro.run()[0]
@@ -61,10 +67,10 @@ def test_engine_strategy_allows_user_defined_rebalance_frequency() -> None:
             if len(self) % 2 != 0:
                 return
             self.calls += 1
-            self.target_weights({"AAA": 0.25})
+            target_weights(self, {"AAA": 0.25})
 
-    cerebro = Cerebro(trade_on_close=True)
-    cerebro.adddata(_frame([10, 11, 12, 13, 14]), name="AAA")
+    cerebro = configured_engine(trade_on_close=True)
+    cerebro.adddata(_as_feed(_frame([10, 11, 12, 13, 14])), name="AAA")
     cerebro.addstrategy(EveryTwoBars)
 
     strategy = cerebro.run()[0]
@@ -81,12 +87,12 @@ def test_engine_strategy_can_consume_research_weight_functions() -> None:
             )
             selected = pf.select_top(scores, k=1)
             weights = pf.equal_weight(selected, gross=0.5)
-            self.target_weights(weights.to_dict())
+            target_weights(self, weights.to_dict())
 
-    cerebro = Cerebro(trade_on_close=True)
-    cerebro.setcash(100_000.0)
-    cerebro.adddata(_frame([10, 10, 10]), name="AAA")
-    cerebro.adddata(_frame([20, 20, 20]), name="BBB")
+    cerebro = configured_engine(trade_on_close=True)
+    cerebro.broker.setcash(100_000.0)
+    cerebro.adddata(_as_feed(_frame([10, 10, 10])), name="AAA")
+    cerebro.adddata(_as_feed(_frame([20, 20, 20])), name="BBB")
     cerebro.addstrategy(ResearchWeights)
 
     strategy = cerebro.run()[0]
@@ -105,17 +111,20 @@ def test_engine_strategy_can_consume_research_result_current_weights() -> None:
     )
 
     class ResearchWeights(Strategy):
+        params=(("research_result",None),)
+        def __init__(self):
+            self.research_result=bind_research_result(self.p.research_result,self)
         def next(self) -> None:
-            self.target_weights(self.research_result.weights[0])
+            target_weights(self, self.research_result.weights[0])
 
-    cerebro = Cerebro(trade_on_close=True)
-    cerebro.setcash(100_000.0)
-    cerebro.adddata(_frame([10, 10, 10]), name="AAA")
-    cerebro.adddata(_frame([20, 20, 20]), name="BBB")
+    cerebro = configured_engine(trade_on_close=True)
+    cerebro.broker.setcash(100_000.0)
+    cerebro.adddata(_as_feed(_frame([10, 10, 10])), name="AAA")
+    cerebro.adddata(_as_feed(_frame([20, 20, 20])), name="BBB")
     cerebro.addstrategy(ResearchWeights, research_result=research)
 
     strategy = cerebro.run()[0]
 
     assert strategy.research_result.raw is research
-    assert [item.raw for item in strategy.research_results_history] == [research]
+    assert not hasattr(strategy,"research_results_history")
     assert strategy.getpositionbyname("BBB").size > 0

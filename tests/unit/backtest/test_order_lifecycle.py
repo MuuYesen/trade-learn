@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import feed as _as_feed
+
+from tests.unit.backtest._engine_config import configured_engine
+
 import datetime as dt
 
 import pandas as pd
@@ -44,27 +48,26 @@ class RecordingStrategy(Strategy):
     def init(self):
         self.bar = 0
         self.events = []
-        self.positions = []
+        self.position_history = []
 
     def next(self):
         self.bar += 1
-        self.positions.append(self.position.size)
+        self.position_history.append(self.position.size)
         self.act()
 
     def notify_order(self, order):
-        # Keep object identity and immutable status snapshots: refs may be bound
-        # to Rust IDs after Submitted/Accepted callbacks have already happened.
+        # BT callbacks receive immutable phase snapshots with the admitted ref.
         self.events.append((order, order.status, self.bar))
 
     def statuses(self, order):
-        return [status for event_order, status, _ in self.events if event_order is order]
+        return [status for event_order, status, _ in self.events if event_order.ref == order.ref]
 
 
 def _run(strategy, match_mode, feed_count, trade_on_close, *, wide=False):
-    cerebro = Cerebro(match_mode=match_mode, trade_on_close=trade_on_close)
+    cerebro = configured_engine(match_mode=match_mode, trade_on_close=trade_on_close)
     cerebro.broker.setcash(10_000)
     for i in range(feed_count):
-        cerebro.adddata(_bars(wide=wide), name=f"asset{i}")
+        cerebro.adddata(_as_feed(_bars(wide=wide)), name=f"asset{i}")
     cerebro.addstrategy(strategy)
     [result] = cerebro.run()
     if feed_count == 2:
@@ -91,7 +94,7 @@ def test_active_cancel_never_fills(match_mode, feed_count, trade_on_close):
     s = _run(Cancel, match_mode, feed_count, trade_on_close)
     _terminal(s, s.order, Order.Canceled)
     assert s.position.size == 0
-    assert s.positions == [0] * 6
+    assert s.position_history == [0] * 6
     assert s.order.executed.size == 0
 
 
@@ -118,7 +121,7 @@ def test_submit_cancel_same_callback_has_no_ghost_fill_or_ref_collision(
     assert s.replacement.executed.size == 2
     assert s.later.executed.size == 3
     assert s.position.size == 5
-    assert max(s.positions) <= 5
+    assert max(s.position_history) <= 5
 
 
 @pytest.mark.parametrize("gtc_first", [False, True])
@@ -177,7 +180,7 @@ def test_expiry_is_based_on_creation_and_happens_before_matching(
     _terminal(s, s.order, Order.Expired)
     assert s.order.executed.size == 0
     assert s.position.size == 0
-    assert s.positions == [0] * 6
+    assert s.position_history == [0] * 6
 
 
 def test_bracket_oco_cancels_sibling_before_same_bar_match(
@@ -202,7 +205,7 @@ def test_bracket_oco_cancels_sibling_before_same_bar_match(
     for order in (stop, limit):
         _terminal(s, order, order.status)
     assert s.position.size == 0
-    assert min(s.positions) >= 0
+    assert min(s.position_history) >= 0
     assert sum(abs(o.executed.size) for o in (stop, limit)) == 1
 
 
@@ -227,7 +230,7 @@ def test_explicit_non_bracket_oco_pair_only_fills_once(
     for order in (s.stop_order, s.limit):
         _terminal(s, order, order.status)
     assert s.position.size == 0
-    assert min(s.positions) >= 0
+    assert min(s.position_history) >= 0
 
 
 def test_cancel_parent_cancels_deferred_children(match_mode, feed_count, trade_on_close):
@@ -249,7 +252,7 @@ def test_cancel_parent_cancels_deferred_children(match_mode, feed_count, trade_o
         _terminal(s, order, Order.Canceled)
         assert order.executed.size == 0
     assert s.position.size == 0
-    assert s.positions == [0] * 6
+    assert s.position_history == [0] * 6
 
 
 def test_order_tag_and_info_survive_in_stats(match_mode, feed_count, trade_on_close):
@@ -269,7 +272,7 @@ def test_order_tag_and_info_survive_in_stats(match_mode, feed_count, trade_on_cl
     assert row["info"]["rank"] == 2
 
 
-def test_public_order_execution_constants_retain_existing_values():
+def test_public_order_execution_constants_match_backtrader():
     assert {
         name: getattr(Order, name)
         for name in (
@@ -282,11 +285,11 @@ def test_public_order_execution_constants_retain_existing_values():
             "StopTrailLimit",
         )
     } == {
-        "Market": 1,
+        "Market": 0,
         "Limit": 2,
         "Stop": 3,
         "StopLimit": 4,
-        "Close": 5,
-        "StopTrail": 6,
-        "StopTrailLimit": 7,
+        "Close": 1,
+        "StopTrail": 5,
+        "StopTrailLimit": 6,
     }

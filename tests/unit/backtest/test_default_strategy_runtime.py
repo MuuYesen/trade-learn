@@ -1,9 +1,22 @@
+from tests.unit.backtest._engine_config import feed as _as_feed
+from tests.unit.backtest._engine_config import configured_engine
 """The default/native research paths share the public lifecycle coordinator."""
 import pandas as pd
 import pytest
-from tradelearn.engine import Cerebro, Strategy, StrategyRuntime
+from tradelearn.engine import Cerebro, Strategy
+from tradelearn.backtest.event_runtime import StrategyRuntime
 from tradelearn.backtest import engine
 from tradelearn.backtest.models import Order
+
+
+def _stream_mean(name, calls=None):
+    from tradelearn.indicators.base import FunctionIndicator
+    def step(buffers,state,params):
+        if calls is not None: calls.append(1)
+        values=buffers['close']
+        return float('nan') if len(values)<params['period'] else sum(values)/len(values)
+    return FunctionIndicator(name,lambda values,period=2:values.rolling(period).mean(),
+        {'period':2},('close',),step,history_capacity=2,warmup=2)
 
 
 def _cleanup_messages(error, recorded_warnings):
@@ -32,10 +45,10 @@ def test_default_runner_owns_strategy_lifecycle(runner, cash_notify, monkeypatch
         def stop(self): self.trace.append(('stop', self._runtime))
     if cash_notify:
         Probe.notify_cashvalue = lambda self, cash, value: self.cash.append(self._runtime)
-    c = Cerebro(trade_on_close=runner == 'close')
+    c = configured_engine(trade_on_close=runner == 'close')
     bars = pd.DataFrame(dict(open=[1.,2.,3.], high=[1.,2.,3.], low=[1.,2.,3.], close=[1.,2.,3.], volume=[10.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))
-    c.adddata(bars, name='a')
-    if runner in ('multi', 'python'): c.adddata(bars, name='b')
+    c.adddata(_as_feed(bars), name='a')
+    if runner in ('multi', 'python'): c.adddata(_as_feed(bars), name='b')
     c.addstrategy(Probe)
     strategy = c.run()[0]
     assert isinstance(strategy._runtime, StrategyRuntime)
@@ -54,14 +67,14 @@ def test_default_runner_owns_strategy_lifecycle(runner, cash_notify, monkeypatch
     assert all(runtime is strategy._runtime for runtime in strategy.cash)
     assert observed.count(('business.notify_cashvalue', 'after')) == len(strategy.cash)
 
-def test_batch_indicator_is_precomputed_once_and_not_recomputed_per_prefix():
+def test_persistent_indicator_advances_once_per_delivered_bar():
     from tradelearn.engine import Indicator
     from tradelearn.indicators.base import FunctionIndicator
     calls = []
     def mean(values):
         calls.append(len(values))
         return values.rolling(2).mean()
-    sma = FunctionIndicator('mean', mean)
+    sma = _stream_mean('mean', calls)
     class Mean(Indicator):
         lines = ('value',)
         def __init__(self): self.lines.value = sma(self.data.close)
@@ -72,18 +85,18 @@ def test_batch_indicator_is_precomputed_once_and_not_recomputed_per_prefix():
             self.addminperiod(2)
         def next(self): self.seen.append(self.mean[0])
     c = Cerebro()
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC')))
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))))
     c.addstrategy(Probe)
     s = c.run()[0]
     assert s.seen == [3., 5.]
-    assert calls == [3]
+    assert calls == [1,1,1]
 
 
-def test_lite_uses_batch_runtime_with_original_I_setup():
+def test_lite_uses_shared_persistent_runtime():
     from tradelearn.lite import Backtest, Strategy as LiteStrategy
     class Probe(LiteStrategy):
         def init(self):
-            self.mean = self.I(lambda s: pd.Series(s).rolling(2).mean(), self.data.close)
+            self.mean = _stream_mean("lite_mean")(self.data.close)
             self.addminperiod(2)
             self.seen = []
         def next(self): self.seen.append(float(self.mean[0]))
@@ -98,8 +111,8 @@ def test_warmup_callback_orders_use_the_same_backend_buffer(on_close):
         def init(self): self.addminperiod(3)
         def prenext(self):
             if len(self.data) == 1: self.order = self.buy(size=1)
-    c = Cerebro(trade_on_close=on_close)
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC')))
+    c = configured_engine(trade_on_close=on_close)
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))))
     c.addstrategy(Probe)
     s = c.run()[0]
     assert s.order.status == s.order.Completed
@@ -112,12 +125,12 @@ def test_initialization_broker_notifications_share_runtime_before_start():
             self.order = self.buy(size=1)
         def notify_order(self, order): self.notified.append(order.status)
     c = Cerebro()
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC')))
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))))
     c.addstrategy(Probe)
     s = c.run()[0]
     assert s.order.Completed in s.notified
 
-def test_stop_can_cancel_orders_and_dispatch_terminal_notification():
+def test_bt_stop_cancel_updates_fact_without_another_notification_cycle():
     class Probe(Strategy):
         def init(self): self.notified = []
         def next(self):
@@ -125,10 +138,11 @@ def test_stop_can_cancel_orders_and_dispatch_terminal_notification():
         def notify_order(self, order): self.notified.append(order.status)
         def stop(self): self.cancel(self.order)
     c = Cerebro()
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC')))
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))))
     c.addstrategy(Probe)
     s = c.run()[0]
-    assert s.order.Canceled in s.notified
+    assert s.order.status == Order.Canceled
+    assert s.notified == [Order.Submitted,Order.Accepted]
 
 @pytest.mark.parametrize('runner', ['single', 'multi', 'close', 'python'])
 def test_default_stateful_indicator_nested_and_dynamic_current_output(runner, monkeypatch):
@@ -153,10 +167,10 @@ def test_default_stateful_indicator_nested_and_dynamic_current_output(runner, mo
         def next(self):
             dynamic = Counter(self.data)
             self.seen.append((self.counter.calls, self.counter[0], self.counter[-1], self.outer[0], dynamic[0], dynamic[-1]))
-    c = Cerebro(trade_on_close=runner == 'close')
+    c = configured_engine(trade_on_close=runner == 'close')
     if runner in ('multi', 'python'):
-        c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC')), name='secondary')
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC')))
+        c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))), name='secondary')
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))))
     c.addstrategy(Probe)
     s = c.run()[0]
     assert [row[0] for row in s.seen] == [1, 2, 3]
@@ -166,24 +180,16 @@ def test_default_stateful_indicator_nested_and_dynamic_current_output(runner, mo
     assert pd.isna(s.seen[0][2]) and s.seen[1][2] == 2.
     assert all(pd.isna(row[5]) for row in s.seen)
 
-def test_default_dynamic_function_indicator_uses_visible_prefix():
+def test_batchonly_function_rejected_before_delivery():
     from tradelearn.indicators.base import FunctionIndicator
-    calls = []
-    def mean(values, period=2):
-        calls.append(len(values))
-        return values.rolling(period).mean()
-    sma = FunctionIndicator('dynamic_mean', mean)
+    calls=[]
+    f=FunctionIndicator('batchonly',lambda values:calls.append(1) or values)
     class Probe(Strategy):
-        def init(self): self.seen = []
-        def next(self):
-            line = sma(self.data.close, period=2)
-            self.seen.append(line[0])
-    c = Cerebro()
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC')))
-    c.addstrategy(Probe)
-    s = c.run()[0]
-    assert calls == [2, 3]
-    assert pd.isna(s.seen[0]) and s.seen[1:] == [3., 5.]
+        def __init__(self):self.line=f(self.data.close)
+    c=Cerebro();c.adddata(_as_feed(pd.DataFrame({key:[2.,4.] for key in ['open','high','low','close','volume']},index=pd.date_range('2026-01-01',periods=2))));c.addstrategy(Probe)
+    with pytest.raises(NotImplementedError,match='persistent'):c.run()
+    assert calls==[]
+
 
 def test_core_strategy_constructor_receives_bound_data_and_broker():
     from tradelearn.backtest.strategy import Strategy as CoreStrategy
@@ -192,7 +198,7 @@ def test_core_strategy_constructor_receives_bound_data_and_broker():
             super().__init__()
             self.constructed = (self.data is not None, len(self.datas), self.broker is not None)
     c = Cerebro()
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC')))
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))))
     c.addstrategy(Probe)
     s = c.run()[0]
     r = StrategyRuntime(Probe, feeds={'a':'bar'}, broker=object())
@@ -205,8 +211,8 @@ def test_engine_constructor_user_args_and_multiple_feeds_remain_bound():
             self.constructed = (label, self.data0 is self.datas[0], self.data1 is self.datas[1], self.broker is not None)
     bars = pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))
     c = Cerebro()
-    c.adddata(bars, name='a')
-    c.adddata(bars, name='b')
+    c.adddata(_as_feed(bars), name='a')
+    c.adddata(_as_feed(bars), name='b')
     c.addstrategy(Probe, 'user-label')
     s = c.run()[0]
     r = StrategyRuntime(Probe, strategy_args=('user-label',), feeds={'a':'bar','b':'bar'}, broker=object())
@@ -222,11 +228,11 @@ def test_batch_function_depending_on_stateful_output_remains_incremental():
     class Probe(Strategy):
         def init(self):
             self.counter = Counter(self.data)
-            self.combined = combine(self.data.close, self.counter)
+            self.combined = self.data.close + self.counter
             self.seen = []
         def next(self): self.seen.append(self.combined[0])
     c = Cerebro()
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC')))
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))))
     c.addstrategy(Probe)
     s = c.run()[0]
     assert s.seen == [3., 6., 9.]
@@ -240,7 +246,7 @@ def test_default_business_lines_expose_only_current_prefix():
             with pytest.raises(ValueError): line[1]
             with pytest.raises(ValueError): line.get(ago=1)
     c = Cerebro()
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC')))
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))))
     c.addstrategy(Probe)
     s = c.run()[0]
     expected = [[2.], [2.,4.], [2.,4.,6.]]
@@ -263,7 +269,7 @@ def test_default_nested_indicator_output_alias_tracks_child_once():
         def init(self): self.alias, self.seen = Alias(self.data), []
         def next(self): self.seen.append((self.alias[0], self.alias.inner.calls))
     c = Cerebro()
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC')))
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))))
     c.addstrategy(Probe)
     s = c.run()[0]
     assert s.seen == [(1.,1),(2.,2),(3.,3)]
@@ -280,7 +286,7 @@ def test_default_stateful_indicator_prenext_and_warmup_match_stream():
         def prenext(self): self.seen.append(('pre', self.warm[0]))
         def next(self): self.seen.append(('next', self.warm[0]))
     c = Cerebro()
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC')))
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))))
     c.addstrategy(Probe)
     s = c.run()[0]
     r = StrategyRuntime(Probe, feeds={'a':'bar'})
@@ -291,12 +297,12 @@ def test_default_stateful_indicator_prenext_and_warmup_match_stream():
 
 def test_compiled_function_warmup_uses_same_rule_as_stream_without_manual_period():
     from tradelearn.indicators.base import FunctionIndicator
-    mean = FunctionIndicator('warm_mean', lambda values, period=2: values.rolling(period).mean())
+    mean = _stream_mean('warm_mean')
     class Probe(Strategy):
         def init(self): self.mean, self.seen = mean(self.data.close), []
         def next(self): self.seen.append(self.mean[0])
     c = Cerebro()
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC')))
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))))
     c.addstrategy(Probe)
     s = c.run()[0]
     r = StrategyRuntime(Probe, feeds={'a':'bar'})
@@ -316,8 +322,8 @@ def test_sparse_secondary_warmup_counts_received_bars_not_primary_cursor():
         def next(self): self.seen.append((len(self.data0), self.warm[0]))
     bars = pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))
     c = Cerebro()
-    c.adddata(bars,name='a')
-    c.adddata(bars.iloc[[0,2]],name='b')
+    c.adddata(_as_feed(bars),name='a')
+    c.adddata(_as_feed(bars.iloc[[0,2]]),name='b')
     c.addstrategy(Probe)
     s = c.run()[0]
     r = StrategyRuntime(Probe, feeds={'a':'bar','b':'bar'})
@@ -337,7 +343,7 @@ def test_strategy_setup_runs_once_after_construction_in_both_profiles():
         def init(self): self.trace.append('init')
         def start(self): self.trace.append('start')
     c = Cerebro()
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC')))
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))))
     c.addstrategy(Probe)
     s = c.run()[0]
     r = StrategyRuntime(Probe, feeds={'a':'bar'})
@@ -350,8 +356,8 @@ def test_batch_context_retains_actual_active_source_bars_without_invented_fields
         def next(self): self.contexts.append(self.runtime_context)
     bars = pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))
     c = Cerebro()
-    c.adddata(bars,name='a')
-    c.adddata(bars.iloc[[0,2]],name='b')
+    c.adddata(_as_feed(bars),name='a')
+    c.adddata(_as_feed(bars.iloc[[0,2]]),name='b')
     c.addstrategy(Probe)
     s = c.run()[0]
     first, second, third = s.contexts
@@ -368,7 +374,7 @@ def test_explicit_market_groups_match_default_clock_trace_and_preserve_sparse_fe
     from tradelearn.engine import Indicator
     from tradelearn.indicators.base import FunctionIndicator
     from tradelearn.core.strategy_events import ObserverSpec
-    mean = FunctionIndicator('group_mean', lambda values, period=2: values.rolling(period).mean())
+    mean = _stream_mean('group_mean')
     class Counter(Indicator):
         lines = ('value',)
         def __init__(self): self.calls = 0
@@ -397,8 +403,8 @@ def test_explicit_market_groups_match_default_clock_trace_and_preserve_sparse_fe
             return Order(ref=1,data=data,ordtype=side,size=size,price=price,exectype=exectype)
     bars = pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01', periods=3, tz='UTC'))
     c = Cerebro()
-    c.adddata(bars,name='a')
-    c.adddata(bars.iloc[[0,2]],name='b')
+    c.adddata(_as_feed(bars),name='a')
+    c.adddata(_as_feed(bars.iloc[[0,2]]),name='b')
     c.addstrategy(Probe)
     default = c.run()[0]
     grouped = StrategyRuntime(Probe,feeds={'a':'bar','b':'bar'},broker=IntentBroker())
@@ -448,9 +454,9 @@ def test_default_failure_stops_once_preserves_original_error_and_does_not_build_
             if stop_fails: raise cleanup_error
     if runner == 'python': monkeypatch.setattr(engine,'_build_clocked_multi_data_runner',lambda datas:None)
     bars = pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3), index=pd.date_range('2026-01-01',periods=3,tz='UTC'))
-    c = Cerebro(trade_on_close=runner == 'close')
-    c.adddata(bars,name='a')
-    if runner in ('multi','python'): c.adddata(bars,name='b')
+    c = configured_engine(trade_on_close=runner == 'close')
+    c.adddata(_as_feed(bars),name='a')
+    if runner in ('multi','python'): c.adddata(_as_feed(bars),name='b')
     c.addstrategy(Probe)
     with pytest.warns(RuntimeWarning,match='observer'):
         with pytest.raises(LookupError) as raised: c.run()
@@ -529,7 +535,7 @@ def test_default_partial_lifecycle_errors_cleanup_without_masking(phase, recwarn
             trace.append('stop')
             raise RuntimeError('default cleanup error')
     c = Cerebro()
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3),index=pd.date_range('2026-01-01',periods=3,tz='UTC')))
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3),index=pd.date_range('2026-01-01',periods=3,tz='UTC'))))
     c.addstrategy(Probe)
     with pytest.raises(LookupError) as raised: c.run()
     assert raised.value is primary and trace == ['stop']
@@ -545,7 +551,7 @@ def test_component_failure_uses_the_same_runtime_cleanup():
         is_streaming = True
         def on_bar(self, bar): raise primary
     c = Cerebro()
-    c.adddata(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3),index=pd.date_range('2026-01-01',periods=3,tz='UTC')))
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3),index=pd.date_range('2026-01-01',periods=3,tz='UTC'))))
     c.addstrategy(Probe)
     c.addanalyzer(Analyzer)
     with pytest.raises(LookupError) as raised: c.run()
@@ -593,8 +599,8 @@ def test_event_driver_primary_error_survives_stop_and_observer_failures(failure_
     class BadBar:
         def keys(self): return ('ts',)
         def __getitem__(self,key): raise primary
-    c = Cerebro(mode='live',live_poller=poller) if failure_phase == 'poller' else Cerebro(mode='paper',event_bars=source() if failure_phase == 'source' else [BadBar()])
-    c.adddata(pd.DataFrame(dict(open=[2.],high=[2.],low=[2.],close=[2.],volume=[1.]),index=pd.date_range('2026-01-01',periods=1,tz='UTC')),name='a')
+    c = configured_engine(mode='live',live_poller=poller) if failure_phase == 'poller' else configured_engine(mode='paper',event_bars=source() if failure_phase == 'source' else [BadBar()])
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.],high=[2.],low=[2.],close=[2.],volume=[1.]),index=pd.date_range('2026-01-01',periods=1,tz='UTC'))),name='a')
     c.addstrategy(Probe)
     with pytest.warns(RuntimeWarning,match='observer'):
         with pytest.raises(LookupError) as raised: c.run()
@@ -613,9 +619,9 @@ def test_default_runstop_from_warmup_stops_before_another_callback(runner,monkey
         def stop(self): trace.append('stop')
     if runner == 'python': monkeypatch.setattr(engine,'_build_clocked_multi_data_runner',lambda datas:None)
     bars = pd.DataFrame(dict(open=[2.,4.,6.],high=[2.,4.,6.],low=[2.,4.,6.],close=[2.,4.,6.],volume=[1.]*3),index=pd.date_range('2026-01-01',periods=3,tz='UTC'))
-    c = Cerebro(trade_on_close=runner == 'close')
-    c.adddata(bars,name='a')
-    if runner in ('multi','python'): c.adddata(bars,name='b')
+    c = configured_engine(trade_on_close=runner == 'close')
+    c.adddata(_as_feed(bars),name='a')
+    if runner in ('multi','python'): c.adddata(_as_feed(bars),name='b')
     c.addstrategy(Probe)
     c.run()
     assert trace == ['pre','stop']
@@ -655,8 +661,8 @@ def test_event_component_failures_share_cleanup_even_before_strategy_start(phase
         def stop(self): self.check('stop')
         def get_analysis(self): return {}
     bar = dict(symbol='a',ts=pd.Timestamp('2026-01-01',tz='UTC'),open=2.,high=2.,low=2.,close=2.,volume=1.)
-    c = Cerebro(mode='paper',event_bars=[bar],broker_event_poller=lambda:[BrokerEvent('status',order_id=1)])
-    c.adddata(pd.DataFrame(dict(open=[2.],high=[2.],low=[2.],close=[2.],volume=[1.]),index=pd.date_range('2026-01-01',periods=1,tz='UTC')),name='a')
+    c = configured_engine(mode='paper',event_bars=[bar],broker_event_poller=lambda:[BrokerEvent('status',order_id=1)])
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.],high=[2.],low=[2.],close=[2.],volume=[1.]),index=pd.date_range('2026-01-01',periods=1,tz='UTC'))),name='a')
     c.addstrategy(Probe)
     c.addanalyzer(Analyzer)
     with pytest.raises(LookupError) as raised: c.run()
@@ -679,14 +685,14 @@ def test_event_components_use_runtime_context_and_observer_cannot_invoke_them():
         def stop(self): self.record('stop')
         def get_analysis(self): return {}
     bar = dict(symbol='a',ts=pd.Timestamp('2026-01-01',tz='UTC'),open=2.,high=2.,low=2.,close=2.,volume=1.)
-    c = Cerebro(mode='paper',event_bars=[bar],broker_event_poller=lambda:[BrokerEvent('status',order_id=1)])
-    c.adddata(pd.DataFrame(dict(open=[2.],high=[2.],low=[2.],close=[2.],volume=[1.]),index=pd.date_range('2026-01-01',periods=1,tz='UTC')),name='a')
+    c = configured_engine(mode='paper',event_bars=[bar],broker_event_poller=lambda:[BrokerEvent('status',order_id=1)])
+    c.adddata(_as_feed(pd.DataFrame(dict(open=[2.],high=[2.],low=[2.],close=[2.],volume=[1.]),index=pd.date_range('2026-01-01',periods=1,tz='UTC'))),name='a')
     c.addstrategy(Probe)
     c.addanalyzer(Analyzer)
     with pytest.warns(RuntimeWarning,match='observer'): strategy = c.run()[0]
     assert [name for name,*_ in calls] == ['on_start','start','on_broker_event','on_end','stop']
     assert all(strategy_bound and data_bound and runtime is strategy._runtime for _,strategy_bound,data_bound,runtime in calls)
-    assert forbidden == [] and strategy.observation_failures().total == 1
+    assert forbidden == [] and strategy._observation_failures().total == 1
     assert strategy._runtime.invoke_component(lambda *,value:value,value=3) == 3
 
 @pytest.mark.parametrize('primary_kind',['no_note','bad_note','bad_note_lookup','normal'])

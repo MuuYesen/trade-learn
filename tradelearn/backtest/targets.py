@@ -179,3 +179,12 @@ def _round_down_lot(qty: float, lot_size: int) -> float:
     if lot_size <= 1:
         return float(int(qty))
     return float(int(qty // lot_size) * lot_size)
+
+
+def target_weights(strategy, weights, *, close_missing=True, constraints=None):
+    """Explicit portfolio-intent integration for Engine strategies.
+
+    Lite exposes this operation as a convenience method. The shared strategy
+    core retains execution; this function adds no broker or loop.
+    """
+    return strategy._target_weights(weights, close_missing=close_missing, constraints=constraints)

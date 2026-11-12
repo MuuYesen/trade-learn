@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import feed as _as_feed
+
+from tests.unit.backtest._engine_config import configured_engine
+
 import pandas as pd
 import pytest
 
@@ -57,10 +61,10 @@ def test_cerebro_runtime_binds_named_feeds_before_strategy_init():
             super().__init__()
             self.constructed_feed = self.data
 
-    cerebro = Cerebro(mode='paper', event_bars=[bar()])
+    cerebro = configured_engine(mode='paper', event_bars=[bar()])
     frame = pd.DataFrame([dict(open=1, high=1, low=1, close=1, volume=1)],
                          index=pd.to_datetime(['2026-01-01'], utc=True))
-    cerebro.adddata(frame, name='AAPL')
+    cerebro.adddata(_as_feed(frame), name='AAPL')
     cerebro.addstrategy(Constructed)
     [strategy] = cerebro.run()
     assert strategy.constructed_feed is strategy.data
@@ -112,10 +116,10 @@ def test_named_live_feed_polls_after_start_and_stops_on_failure():
         assert lifecycle == ['start']
         raise RuntimeError('source failed')
 
-    cerebro = Cerebro(mode='live', live_poller=poller)
+    cerebro = configured_engine(mode='live', live_poller=poller)
     frame = pd.DataFrame([dict(open=1, high=1, low=1, close=1, volume=1)],
                          index=pd.to_datetime(['2026-01-01'], utc=True))
-    cerebro.adddata(frame, name='AAPL')
+    cerebro.adddata(_as_feed(frame), name='AAPL')
     cerebro.addstrategy(Failing)
     with pytest.raises(RuntimeError, match='source failed'):
         cerebro.run()

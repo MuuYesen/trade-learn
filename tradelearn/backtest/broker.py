@@ -35,11 +35,15 @@ class _CommissionInfoView:
     def getcommission(self, size: float, price: float) -> float:
         return abs(size) * price * self.p.commission
 
+    def getsize(self, price, cash):
+        return int(cash // price)
+
 
 class RustBroker:
     """Proxy for the high-performance Rust backtesting engine."""
 
     _RUST_MATCH_MODES = {"exact", "smart"}
+    _supports_event_clock = True
 
     def __init__(
         self,
@@ -69,7 +73,9 @@ class RustBroker:
         self._close_prices = None
         self._curr_idx = 0
         self._orders: list[Order] = []
+        self._active_orders: dict[int,Order] = {}
         self._orders_by_ref: dict[int, Order] = {}
+        self._orders_by_native_ref: dict[int, Order] = {}
         self._fills: list[dict[str, Any]] = []
         self._fills_frame_cache: Any = None
         self._fills_frame_cache_len = -1
@@ -86,6 +92,10 @@ class RustBroker:
         self._active_datas: list[Any] = []
         self._buffer_order_submissions = False
         self._terminal_order_suppression = False
+        self._bt_notifications = False
+        self._order_notifications = []
+        self._trade_notifications = []
+        self._notification_cycle = None
         self._order_submit_buffer: list[OrderPayload] = []
         # 缓冲旁路：按 order.ref 携带 trail 参数，保持 OrderPayload 7 元组契约不变
         self._trail_params_by_ref: dict[int, tuple[float | None, float | None]] = {}
@@ -101,8 +111,10 @@ class RustBroker:
         # For 'bt' mode, we maintain state in Python
         self._pos = Position(size=0.0, price=0.0)
         self._positions: dict[Any, Position] = {}
+        self._position_views: dict[Any, Position] = {}
         self._active_cash = cash
         self._comminfo: Any = None
+        self._comminfo_factory = None
         self._slippage_model: Any = None
         self._commission_model: Any = None
         self._storage: dict[str, Any] | None = None
@@ -159,14 +171,36 @@ class RustBroker:
         self.setcash(cash)
 
     @observer_mutation_guard
-    def setcommission(
-        self, commission: float = 0.0, margin: float = 0.0, mult: float = 1.0
-    ) -> None:
-        self.commission_ratio = float(commission)
-        self._mult = float(mult)
+    def set_coc(self, coc):
+        self.configure_matching(trade_on_close=bool(coc))
 
     @observer_mutation_guard
-    def set_comminfo(self, comminfo: Any) -> None:
+    def setcommission(self, commission=0.0, margin=None, mult=1.0, commtype=None,
+                      percabs=True, stocklike=False, interest=0.0,
+                      interest_long=False, leverage=1.0, automargin=False, name=None):
+        factory = self._comminfo_factory
+        if callable(factory):
+            if self._engine is not None:
+                raise NotImplementedError("commission changes after native initialization are not implemented")
+            info = factory(commission=commission, margin=margin, mult=mult,
+                           commtype=commtype, percabs=percabs, stocklike=stocklike,
+                           interest=interest, interest_long=interest_long,
+                           leverage=leverage, automargin=automargin)
+            self.addcommissioninfo(info,name=name)
+            return
+        if (margin not in (None,0) or commtype is not None or not percabs or stocklike
+                or interest or interest_long or leverage != 1 or automargin or name is not None):
+            raise NotImplementedError("commission economics require a qualified broker profile")
+        self._configure_commission(commission=commission, mult=mult)
+
+    def _configure_commission(self, commission=0.0, margin=0.0, mult=1.0):
+        """Internal legacy Rust economics; not a BT broker configuration facade."""
+        self.commission_ratio = float(commission)
+        self._mult = float(mult)
+        self._comminfo = None
+
+    @observer_mutation_guard
+    def _set_comminfo(self, comminfo: Any) -> None:
         self._comminfo = comminfo
         if hasattr(comminfo, "p") and hasattr(comminfo.p, "mult"):
             self._mult = comminfo.p.mult
@@ -174,8 +208,21 @@ class RustBroker:
             self.commission_ratio = comminfo.p.commission
 
     @observer_mutation_guard
-    def addcommissioninfo(self, comminfo: Any, name: str | None = None) -> None:
-        self.set_comminfo(comminfo)
+    def addcommissioninfo(self, comminfo, name=None):
+        if callable(self._comminfo_factory):
+            factory = self._comminfo_factory
+            custom = any(getattr(type(comminfo), method) is not getattr(factory, method)
+                         for method in ("getcommission", "_getcommission", "confirmexec",
+                                        "getoperationcost", "getvaluesize", "getvalue",
+                                        "profitandloss", "cashadjust"))
+            if (custom or self._engine is not None or name is not None or not comminfo.stocklike
+                    or comminfo._commtype != comminfo.COMM_PERC or comminfo.p.mult != 1
+                    or comminfo.p.leverage != 1 or comminfo.p.interest
+                    or comminfo.p.automargin):
+                raise NotImplementedError("commission economics are not qualified for this native backtest broker")
+        elif name is not None:
+            raise NotImplementedError("named commission economics are not implemented")
+        self._set_comminfo(comminfo)
 
     def getcash(self) -> float:
         if self._engine is not None:
@@ -249,6 +296,13 @@ class RustBroker:
     def get_value(self) -> float:
         return self.getvalue()
 
+    def _position_view(self,data,size,price):
+        if data is None and self._active_datas:
+            data=self._active_datas[0]
+        view=self._position_views.setdefault(data,Position())
+        view.size,view.price=size,price
+        return view
+
     def getposition(self, data: Any = None) -> Position:
         if self._engine is not None:
             if (
@@ -257,7 +311,7 @@ class RustBroker:
                 and len(self._active_datas) <= 1
             ):
                 _, _cash, size, price = self._rust_state_cache
-                return Position(size=size, price=price)
+                return self._position_view(data,size,price)
             if (
                 self._buffer_order_submissions
                 and self._rust_state_cache is not None
@@ -266,20 +320,20 @@ class RustBroker:
             ):
                 position = self._positions.get(data)
                 if position is not None:
-                    return Position(size=position.size, price=position.price)
-                return Position(size=0.0, price=0.0)
+                    return self._position_view(data,position.size,position.price)
+                return self._position_view(data,0.0,0.0)
             get_position_for_symbol = getattr(self._engine, "get_position_for_symbol", None)
             if callable(get_position_for_symbol):
                 symbol = self._rust_symbol(data)
                 cached = self._position_state_cache.get(symbol)
                 if cached is not None and cached[0] == self._curr_idx:
                     _, size, price = cached
-                    return Position(size=size, price=price)
+                    return self._position_view(data,size,price)
                 size, price = get_position_for_symbol(symbol)
                 self._position_state_cache[symbol] = (self._curr_idx, size, price)
-                return Position(size=size, price=price)
+                return self._position_view(data,size,price)
             _, _cash, size, price = self._get_rust_state()
-            return Position(size=size, price=price)
+            return self._position_view(data,size,price)
         if data is None:
             return self._pos
         return self._positions.setdefault(data, Position(size=0.0, price=0.0))
@@ -294,6 +348,12 @@ class RustBroker:
         return self.get_position_size()
 
     @observer_mutation_guard
+    @property
+    def positions(self):
+        for data in self._active_datas:
+            self.getposition(data)
+        return self._position_views if self._engine is not None else self._positions
+
     def bind_datas(self, datas: list[Any]) -> None:
         self._active_datas = list(datas)
 
@@ -370,6 +430,15 @@ class RustBroker:
     def trade_summary(self) -> tuple[int, int]:
         return self._closed_trade_count, self._winning_trade_count
 
+    def _event_bar_vectors(self):
+        vectors = self._current_bar_vectors(self._active_datas)
+        clock = getattr(self, "_event_clock_timestamp", None)
+        if clock is None or not vectors[1] or vectors[1][0] == clock:
+            return vectors
+        active = vectors[1].index(clock)
+        order = [active, *range(active), *range(active + 1, len(vectors[1]))]
+        return tuple([[column[i] for i in order] for column in vectors])
+
     def _fill_datetime(self, data: Any) -> Any:
         timestamps = getattr(data, "_datetime", None)
         if timestamps is None:
@@ -412,10 +481,21 @@ class RustBroker:
         )
 
     def _notify_order_event(self, owner: Strategy, order: Order) -> None:
+        if order.alive():self._active_orders[order.ref]=order
+        else:self._active_orders.pop(order.ref,None)
+        if self._bt_notifications:
+            self._order_notifications.append((owner, order, order.clone()))
+            return
+        self._deliver_order_notification(owner, order)
+
+    def _deliver_order_notification(self, owner, order):
         if (getattr(type(owner), "notify_order", None) is not CoreStrategy.notify_order
                 or has_observers(owner,"business.notify_order")):
             _notify_order(owner, order)
         for analyzer in getattr(owner, "analyzers", {}).values():
+            callback = getattr(analyzer,"notify_order",None)
+            if callable(callback):
+                invoke_component(owner,callback,order)
             on_order = getattr(analyzer, "on_order", None)
             if callable(on_order):
                 invoke_component(owner,on_order,order)
@@ -442,20 +522,36 @@ class RustBroker:
             invoke_component(owner,on_fill,fill)
 
     def _notify_trade_event(self, owner: Strategy, trade: Trade) -> None:
+        if self._bt_notifications:
+            from copy import copy
+            self._trade_notifications.append((owner, copy(trade)))
+            return
+        self._deliver_trade_notification(owner, trade)
+
+    def _deliver_trade_notification(self, owner, trade):
         notify_trade = getattr(owner, "notify_trade", None)
         if callable(notify_trade):
             dispatch_callback(owner,"notify_trade",trade)
         for on_trade in self._trade_callbacks(owner):
             invoke_component(owner,on_trade,trade)
 
+    def _dispatch_cycle_notifications(self):
+        if not self._bt_notifications or self._notification_cycle == self._curr_idx:
+            return
+        self._notification_cycle = self._curr_idx
+        orders, self._order_notifications = self._order_notifications, []
+        trades, self._trade_notifications = self._trade_notifications, []
+        for owner, original, snapshot in orders:
+            snapshot.ref = original.ref
+            self._deliver_order_notification(owner, snapshot)
+        for owner, trade in trades:
+            self._deliver_trade_notification(owner, trade)
+
     @staticmethod
     def _trade_callbacks(owner: Strategy) -> tuple[Any, ...]:
-        return tuple(
-            on_trade
-            for analyzer in getattr(owner, "analyzers", {}).values()
-            if "on_trade" in type(analyzer).__dict__
-            and callable(on_trade := getattr(analyzer, "on_trade", None))
-        )
+        return tuple(callback for analyzer in getattr(owner,"analyzers",{}).values()
+                     for name in ("notify_trade","on_trade")
+                     if callable(callback := getattr(analyzer,name,None)))
 
     @staticmethod
     def _strategy_wants_trade(owner: Strategy) -> bool:
@@ -491,10 +587,15 @@ class RustBroker:
     def get_orders_history(self) -> list[Order]:
         return list(self._orders)
 
-    def get_orders_open(self, safe: bool = False) -> list[Order]:
-        open_statuses = {Order.Submitted, Order.Accepted, Order.Partial}
-        orders = [order for order in self._orders if order.status in open_statuses]
-        return list(orders) if safe else orders
+    _supports_order_owner = True
+
+    def get_orders_open(self, safe: bool = False, *, owner=None):
+        orders = [order for order in self._active_orders.values() if order.alive()
+                  and (self._order_owners.get(id(order)) is owner if owner is not None
+                       else order.status in (Order.Accepted, Order.Partial))]
+        if safe:
+            orders = [order.clone() for order in orders]
+        return tuple(orders) if owner is not None else orders
 
     def begin_order_buffering(self) -> None:
         """Delay Rust order submission until callbacks return."""
@@ -545,7 +646,7 @@ class RustBroker:
             self._clear_state_caches()
             if self._active_datas and self._step_close_bars_compact is not None:
                 fills, cash, size, price = self._step_close_bars_compact(
-                    *self._current_bar_vectors(self._active_datas)
+                    *self._event_bar_vectors()
                 )
                 self._step_fills_from_collect = fills
                 self._rust_state_cache = (self._curr_idx, cash, size, price)
@@ -581,10 +682,10 @@ class RustBroker:
         return self._trail_params_by_ref.pop(provisional_ref, (None, None))
 
     def bind_rust_order_ref(self, provisional_ref: int, rust_ref: int) -> None:
-        """Replace a provisional Python order ref with the Rust-assigned ref."""
-        order = self._orders_by_ref.pop(provisional_ref)
-        order.ref = rust_ref
-        self._orders_by_ref[order.ref] = order
+        """Bind native identity without changing the public order reference."""
+        order = self._orders_by_ref[provisional_ref]
+        order._native_ref = rust_ref
+        self._orders_by_native_ref[rust_ref] = order
         self._bound_orders.add(id(order))
         self._control_updates[id(order)] = order
         for other in self._orders if self._oco_order_count else ():
@@ -592,16 +693,12 @@ class RustBroker:
                 self._control_updates[id(other)] = other
 
     def bind_rust_order_refs(self, bindings: list[tuple[int, int]]) -> None:
-        """Replace multiple provisional Python order refs with Rust-assigned refs."""
-        orders = [(self._orders_by_ref.pop(provisional), native) for provisional, native in bindings]
-        for order, native in orders:
-            order.ref = native
-            self._orders_by_ref[native] = order
-            self._bound_orders.add(id(order))
-            self._control_updates[id(order)] = order
-        for order in self._orders if self._oco_order_count else ():
-            if order.oco is not None and id(order) in self._bound_orders:
-                self._control_updates[id(order)] = order
+        for public_ref, native_ref in bindings:
+            self.bind_rust_order_ref(public_ref, native_ref)
+
+    def _public_order_ref(self, native_ref):
+        order = self._orders_by_native_ref.get(int(native_ref))
+        return order.ref if order is not None else int(native_ref)
 
     @observer_mutation_guard
     def submit_drained_order(
@@ -745,7 +842,7 @@ class RustBroker:
         actual_size = float(size if size is not None else 1.0)
 
         order = Order(
-            ref=self._order_count + ((1 << 32) if hasattr(self._engine, "configure_order") else 0),
+            ref=self._order_count,
             data=data,
             ordtype=side,
             size=actual_size,
@@ -761,6 +858,7 @@ class RustBroker:
             info={**dict(kwargs.get("info", {})), **({"tag": kwargs["tag"]} if "tag" in kwargs else {})},
         )
         if self._terminal_order_suppression:
+            self._stage_terminal_order(owner, order)
             return order
         self._register_and_route_order(owner, order, is_buy, actual_size, price)
 
@@ -783,7 +881,7 @@ class RustBroker:
         exectype = exectype or Order.Market
 
         order = Order(
-            ref=self._order_count + ((1 << 32) if hasattr(self._engine, "configure_order") else 0),
+            ref=self._order_count,
             data=data,
             ordtype=side,
             size=actual_size,
@@ -791,6 +889,7 @@ class RustBroker:
             exectype=exectype,
         )
         if self._terminal_order_suppression:
+            self._stage_terminal_order(owner, order)
             return order
         self._register_and_route_order(owner, order, is_buy, actual_size, price)
 
@@ -809,6 +908,23 @@ class RustBroker:
         """Public fast path for facade orders without optional metadata."""
         return self._submit_basic(owner, data, side, size, price, exectype)
 
+    def _submission_datetime(self, owner, data):
+        runtime = getattr(owner, "_runtime", None)
+        if runtime is not None and runtime.profile == "batch" and runtime._cursor >= 0:
+            return int(runtime._clock.timestamps[runtime._cursor])
+        clock = getattr(owner, "data", None)
+        return self._fill_datetime(clock if clock is not None else data)
+
+    def _stage_terminal_order(self, owner, order):
+        """Keep a submitted intent when no next broker cycle remains."""
+        order._initialize_clock(owner, self._submission_datetime(owner, order.data))
+        order.status = Order.Submitted
+        self._order_owners[id(order)] = owner
+        self._order_deadlines[id(order)] = self._normalize_deadline(order)
+        self._orders.append(order)
+        self._orders_by_ref[order.ref] = order
+        self._active_orders[order.ref] = order
+
     def _register_and_route_order(
         self,
         owner: Strategy,
@@ -817,8 +933,7 @@ class RustBroker:
         actual_size: float,
         price: float | None,
     ) -> None:
-        clock = getattr(owner, "data", None)
-        order.created_ts = self._fill_datetime(clock if clock is not None else order.data)
+        order._initialize_clock(owner, self._submission_datetime(owner, order.data))
         self._order_owners[id(order)] = owner
         self._order_deadlines[id(order)] = self._normalize_deadline(order)
         order.status = Order.Submitted
@@ -871,6 +986,7 @@ class RustBroker:
     @observer_mutation_guard
     def cancel(self, order: Order) -> None:
         """Cancel an intent, including children that have not reached the kernel."""
+        order = self._orders_by_ref.get(order.ref, order)
         if order.ref in self._authoritative_terminal_refs:
             return
         if not self._cancel_order_mirror(order):
@@ -894,7 +1010,7 @@ class RustBroker:
         owner = owner or self._order_owners.get(id(order))
         if owner is not None:
             pending = owner._pending_size.get(order.data, 0.0)
-            size = order.size if order.isbuy() else -order.size
+            size = order.size
             owner._pending_size[order.data] = pending - size
             self._notify_order_event(owner, order)
 
@@ -927,7 +1043,7 @@ class RustBroker:
             # The primary runtime clock defines submission time, not the last
             # available secondary-feed bar.
             data = getattr(self._order_owners.get(id(order)), "data", None) or order.data
-            ts = self._fill_datetime(data)
+            ts = order.created_ts if order.created_ts is not None else self._fill_datetime(data)
             if ts is None:
                 raise ValueError("relative order.valid requires a submission timestamp")
             base = pd.Timestamp(ts, unit="s", tz="UTC") if isinstance(ts, numbers.Real) else pd.Timestamp(ts)
@@ -944,11 +1060,11 @@ class RustBroker:
         updates = []
         for order in self._control_updates.values():
             peer = order.oco
-            peer_ref = peer.ref if peer is not None and id(peer) in self._bound_orders else None
-            updates.append((order.ref, self._order_deadlines.get(id(order)), peer_ref))
+            peer_ref = peer._native_ref if peer is not None and id(peer) in self._bound_orders else None
+            updates.append((order._native_ref, self._order_deadlines.get(id(order)), peer_ref))
         self._control_updates.clear()
         cancels, self._cancel_buffer = self._cancel_buffer, []
-        return cancels, updates
+        return [getattr(self._orders_by_ref[ref], "_native_ref", ref) for ref in cancels], updates
 
     def _flush_order_controls(self) -> None:
         if self._engine is None:
@@ -964,7 +1080,7 @@ class RustBroker:
                 cancel(ref)
 
     def receive_order_events(self, events: list[tuple[int, str]]) -> None:
-        self._native_order_events.extend(events)
+        self._native_order_events.extend((self._public_order_ref(ref), status) for ref, status in events)
 
     def _process_order_events(self, strategy: Strategy) -> None:
         events, self._native_order_events = self._native_order_events, []
@@ -1025,7 +1141,7 @@ class RustBroker:
         if self._engine is not None:
             if self._active_datas and self._step_open_bars_compact is not None:
                 fills, cash, size, price = self._step_open_bars_compact(
-                    *self._current_bar_vectors(self._active_datas)
+                    *self._event_bar_vectors()
                 )
                 self._step_fills_from_collect = fills
                 self._rust_state_cache = (self._curr_idx, cash, size, price)
@@ -1098,15 +1214,17 @@ class RustBroker:
                     self._reconcile_unfilled_market_orders(strategy, filled_order_refs)
             elif self._pending_orders:
                 raise RuntimeError("RustBroker requires a Rust engine for order matching")
+            self._dispatch_cycle_notifications()
         finally:
             self._authoritative_terminal_refs = previous_terminal_refs
 
     def _iter_rust_fills(self, fills: Any):
         if self._is_compact_fill_batch(fills):
             order_ids, sizes, prices, comms, _slippages, pnls = fills
-            return zip(order_ids, sizes, prices, comms, pnls, strict=True)
+            return ((self._public_order_ref(ref), size, price, comm, pnl)
+                    for ref, size, price, comm, pnl in zip(order_ids, sizes, prices, comms, pnls, strict=True))
         return (
-            (fill[0], fill[2], fill[3], fill[4], fill[6])
+            (self._public_order_ref(fill[0]), fill[2], fill[3], fill[4], fill[6])
             for fill in fills
         )
 
@@ -1129,14 +1247,15 @@ class RustBroker:
             abs_size = abs(signed_size)
             order.executed = ExecutedInfo(
                 price=price,
-                size=abs_size,
+                size=signed_size,
                 comm=comm,
                 value=abs_size * price * mult,
-                dt=self._fill_datetime(order.data),
+                remsize=0.0,
             )
 
+            order._set_execution_clock(self._fill_datetime(order.data))
             data = order.data
-            requested_size = float(order.size if order.isbuy() else -order.size)
+            requested_size = float(order.size)
             pending = pending_size.get(data, 0.0) - requested_size
             pending_size[data] = 0.0 if abs(pending) < 1e-9 else pending
 
@@ -1191,7 +1310,7 @@ class RustBroker:
                 continue
             if int(order.ref) in filled_order_refs:
                 continue
-            requested_size = float(order.size if order.isbuy() else -order.size)
+            requested_size = float(order.size)
             pending = pending_size.get(order.data, 0.0) - requested_size
             pending_size[order.data] = 0.0 if abs(pending) < 1e-9 else pending
             order.status = Order.Margin

@@ -1,10 +1,10 @@
 # Strategy observers
 
-本页定义0.2.9的通用策略观察API（`OBSERVER_API_VERSION = 1`）。它是Python domain API，不是日志wire协议，不提供商业SDK、持久化、发送器或账户金融计算。发布与外部SDK联合验收是独立步骤。
+本页描述本轮未发布候选的通用策略观察API；已发行0.2.9不会因此在线切换。（`OBSERVER_API_VERSION = 1`）。它是Python domain API，不是日志wire协议，不提供商业SDK、持久化、发送器或账户金融计算。发布与外部SDK联合验收是独立步骤。
 
 ## 唯一运行协调
 
-`engine.StrategyRuntime`负责策略构造、setup/init/start、数据与指标推进、warmup、业务通知和stop。默认Cerebro/Backtest/Lite研究路径与增量事件路径均委托同一协调器；Rust撮合、预载数组和纯批量指标一次预计算仍是优化后端，不是另一个策略生命周期。批量研究profile允许初始化时编译完整指标数组，业务回调只见当前prefix。增量profile可接外部执行器；Lite.I继续属于批量研究，不据此宣称Lite完整实盘。
+内部`tradelearn.backtest.event_runtime.StrategyRuntime`负责策略构造、setup/init/start、数据与指标推进、warmup、业务通知和stop。默认Cerebro/Backtest/Lite研究路径与增量事件路径均委托同一协调器；Rust撮合与预载存储是后端，不是另一套生命周期。初始化建立共享持久指标依赖，公共视图只见已交付prefix；不保留Lite.I任意批量包装。Lite与Engine可接共同Runtime，真实broker能力仍需逐来源验收。
 
 匹配后端及事件源决定实际输入次序。默认模拟可能在当前bar推进后同步交付匹配报告，外部执行器则独立交付异步报告。观察器记录真实发生顺序，不缓存/延迟/重排业务回调。比较两种运行的trace时，必须同时固定行情/时钟及执行报告输入和撮合假设；相同OHLCV不保证现实成交顺序或收益相同。
 
@@ -41,7 +41,7 @@ class UserStrategy(ExternalBase):
 
 这是接缝示意，`application_observer`、context校验与持久实现由外部提供，不是某个SDK薄基类的实现。Runtime在构造并绑定策略后、初始化前按MRO从基类到派生类收集`strategy_observer_factories`，同一个factory仅装配一次；用户覆盖`__init__`或`notify_order`且不调用super，不会漏装，也不会让薄基类重跑业务callback。factory只返回callable或`ObserverSpec`，不负责推进数据/指标或调用生命周期。无效factory/配置在启动前显式抛错，不自动降级。
 
-运行前/运行间隙可调用`strategy.add_observer(callback, events=None, phases=('after','error'), context=None, error_handler=None)`，返回不透明订阅句柄；`remove_observer(handle)`移除。Runtime也提供同名转接。events是精确domain名称集合，None订阅全部；phases可选before/after/error。不得在观察回调内新增/移除订阅或重入框架。无观察器或没有匹配过滤器时，不生成快照/完整日志。
+运行前/运行间隙可调用内部`strategy._add_observer(callback, events=None, phases=('after','error'), context=None, error_handler=None)`，返回不透明订阅句柄；`_remove_observer(handle)`移除。高级Runtime保留add_observer/remove_observer转接，Engine不扩展BT策略公开方法。events是精确domain名称集合，None订阅全部；phases可选before/after/error。不得在观察回调内新增/移除订阅或重入框架。无观察器或没有匹配过滤器时，不生成快照/完整日志。
 
 ## 事件与来源
 
@@ -63,7 +63,7 @@ run/environment/业务身份由外部显式context绑定；缺失保持缺失，
 
 观察期间Runtime步进、策略业务方法（包括用户override的next/start/stop/notify）、买卖撤单、指标写入/重算及其他框架变更入口受guard约束。类声明期的幂等guard只检查观察上下文，不再派一次业务，不改正常方法签名或订单行为。观察器仅拿冻结事件；trusted Python扩展仍可持有外部引用，本API不宣称能沙箱化任意反射或恶意属性赋值。
 
-业务callback执行一次。callback失败时发error观察并重新抛原异常；观察器/快照/error handler失败不替换主异常、不回滚已执行订单、不阻止真实execution fact持久化。错误可通过`strategy.observation_failures()`读取：累计total、omitted计数和最近64条诊断；首次失败有RuntimeWarning，error handler可接外部告警政策。诊断环形保留不是源事件durable存储，累计/截断明确可见；真正本地持久失败处理、补传、告警和停止政策属于外部SDK/宿主，不应把本接口当可靠发送队列。
+业务callback执行一次。callback失败时发error观察并重新抛原异常；观察器/快照/error handler失败不替换主异常、不回滚已执行订单、不阻止真实execution fact持久化。错误可通过内部`strategy._observation_failures()`读取：累计total、omitted计数和最近64条诊断；首次失败有RuntimeWarning，error handler可接外部告警政策。诊断环形保留不是源事件durable存储，累计/截断明确可见；真正本地持久失败处理、补传、告警和停止政策属于外部SDK/宿主，不应把本接口当可靠发送队列。
 
 ## 市场批次与异常结束
 
@@ -76,3 +76,5 @@ run/environment/业务身份由外部显式context绑定；缺失保持缺失，
 ## 版本识别
 
 实际distribution为 `trade-learn`、import为 `tradelearn`。0.2.9的 `OBSERVER_API_VERSION == 1`；Python包、native版本、目标ABI与平台必须一致，文件摘要取实际发行来源，不按同名版本猜测。旧候选与日期化安装证据保留在[发布记录](../reviews/2026-11-03-runtime-release.md)。
+
+Engine批量订单通知按下一Broker周期交付快照，订单ref公开稳定，内部native ID单独映射；观察器不改写该实际顺序。多Feed批量时钟为真实时间并集，各指标只随所属Feed的新Bar推进；nextstart边界以固定BT逐Feed最小周期实测为准，不外推为全局恰一次。自定义nextstart现归入business.next；默认nextstart直接委托next，避免双层dispatch。默认/自定义回调及共同观察回归已验证不双计。

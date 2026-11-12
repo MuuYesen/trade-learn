@@ -11,16 +11,16 @@
 | 层级 | 对齐目标 (Oracle) | 容忍度 (Tolerance) | 技术说明 |
 |---|---|---|---|
 | **核心指标 (Metrics)** | empyrical / pyfolio / alphalens | `rtol=1e-10` | 纯数学计算，要求零误差 |
-| **标准指标 (tl.pta)** | pandas-ta-classic | `rtol=1e-10` | 算法口径完全一致 |
-| **A 股口径 (tl.tdx)** | MyTT / 通达信软件 | `rtol=1e-10` | 针对 A 股修正的平滑系数对齐 |
-| **海外口径 (tl.tv)** | pyneCore / TradingView | `rtol=1e-6` | 由于 TV 内部闭源算法，允许微小浮点偏差 |
+| **默认技术指标 (`indicators.talib`)** | 固定 TA-Lib 0.8.3 | 逐项测试容忍度 | 官方批量与持久流式种子、暖机及缺失行为对照；PTA已退出 |
+| **MyTT口径 (`indicators.tdx`)** | MyTT / 通达信软件 | `rtol=1e-10` | 针对 A 股修正的平滑系数对齐 |
+| **PyneCore口径 (`indicators.tv`)** | pyneCore / TradingView | `rtol=1e-6` | 由于 TV 内部闭源算法，允许微小浮点偏差 |
 | **决策执行 (Trades)** | **Backtrader (Oracle)** | **0 差异** | 时间、方向、Size 必须完美吻合 |
 | **账户净值 (Equity)** | Backtrader (Oracle) | `rtol=1e-6` | 允许由于撮合引擎精度产生的累积差 |
 ---
 
 ## 0 差异决策对齐：Golden Test 机制
 
-为了确保 `engine` 模式在逻辑上完全等价于 Backtrader，我们维护了一个 **Golden Test 集**（位于 `tests/golden/`）：
+Engine按固定Backtrader公开契约逐项验收，不承诺全部BT功能。Golden Test位于 `tests/golden/`；当前源码/新wheel/平台是否通过分别见[整合记录](../../../../../docs/参考资料/paseo-session-records/20261112-two-goals/TL-INTEGRATION/STATUS.json)。下列是验收目标，CI尚受公开TL-Store依赖缺失影响，不能据测试目录存在声称CI成功：
 
 1.  **策略样本**：包含双均线、RSI 逆势、海龟法则、组合调仓等 10+ 个标准策略。
 2.  **对照执行**：每一版代码提交前，CI 都会在同一组行情数据上同时运行 `trade-learn` 和 `Backtrader`。

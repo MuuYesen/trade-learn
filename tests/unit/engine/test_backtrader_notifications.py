@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import configured_engine
+
 import pandas as pd
 
 import tradelearn.engine as bt
@@ -40,7 +42,7 @@ def test_notify_order_receives_backtrader_style_order_helpers() -> None:
                 )
             )
 
-    cerebro = bt.Cerebro(trade_on_close=True)
+    cerebro = configured_engine(trade_on_close=True)
     cerebro.adddata(bt.feeds.PandasData(dataname=bars()))
     cerebro.addstrategy(BuyAndClose)
 
@@ -79,7 +81,7 @@ def test_notify_trade_receives_backtrader_style_trade_status() -> None:
                 )
             )
 
-    cerebro = bt.Cerebro(trade_on_close=True)
+    cerebro = configured_engine(trade_on_close=True)
     cerebro.adddata(bt.feeds.PandasData(dataname=bars()))
     cerebro.addstrategy(BuyAndClose)
 

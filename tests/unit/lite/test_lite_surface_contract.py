@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from tradelearn.lite import Backtest, Strategy
+import tradelearn.lite as tl
 
 
 def _data() -> pd.DataFrame:
@@ -32,16 +33,8 @@ def test_lite_facade_accepts_lite_strategy_surface() -> None:
             seen["index"] = self.data.index
             seen["ticker"] = self.data.the_ticker
             self.start_on_day(2)
-            self.direct = self.I(
-                pd.Series([1, 2, 3, 4, 5], index=self.data.index, name="direct"),
-                name="Direct",
-                plot=False,
-            )
-            self.callable = self.I(
-                lambda close, n=2: pd.Series(close).rolling(n).mean(),
-                self.data.close,
-                n=2,
-            )
+            self.direct = self.data.close - 9
+            self.callable = tl.talib.SMA(self.data.close, timeperiod=2)
 
         def next(self) -> None:
             seen["first_next_len"] = seen.setdefault("first_next_len", len(self.data.close))
@@ -50,7 +43,7 @@ def test_lite_facade_accepts_lite_strategy_surface() -> None:
             if len(self.data.close) == 3:
                 assert self.data.close[0] == 12.0
                 assert self.data.close[-1] == 11.0
-                assert self.data.close.df.index.equals(self.data.index)
+                assert len(self.data.close.to_series())==len(self.data.index)
                 assert self.direct[0] == 3
                 assert self.position().size == 0
                 assert self.position().is_long is False
@@ -63,7 +56,7 @@ def test_lite_facade_accepts_lite_strategy_surface() -> None:
     stats = Backtest(_data(), SurfaceStrategy, cash=1000.0, storage=storage).run(threshold=13)
 
     assert stats["final_value"] > 0
-    assert seen["init_len"] == 5
+    assert seen["init_len"] == 0
     assert seen["first_next_len"] == 3
     assert seen["df_columns"] == ["open", "high", "low", "close", "volume"]
     assert seen["ticker"] == "Asset"
@@ -96,14 +89,5 @@ def test_lite_facade_rejects_unknown_strategy_params() -> None:
         Backtest(_data(), ParamStrategy).run(unknown=2)
 
 
-def test_lite_facade_validates_indicator_index() -> None:
-    class BadIndicatorStrategy(Strategy):
-        def init(self) -> None:
-            bad = pd.Series([1, 2, 3], index=pd.date_range("2025-01-01", periods=3, tz="UTC"))
-            self.I(bad)
-
-        def next(self) -> None:
-            pass
-
-    with pytest.raises(ValueError, match="same index"):
-        Backtest(_data(), BadIndicatorStrategy).run()
+def test_lite_facade_retired_I_not_exposed() -> None:
+    assert not hasattr(Strategy, "I")

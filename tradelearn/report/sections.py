@@ -97,12 +97,20 @@ def collect_excel_sheets(
             continue
         if isinstance(value, pd.DataFrame | pd.Series):
             name = str(getattr(section, "name", "custom"))
-            sheets[_excel_sheet_name(name)] = _as_frame(value)
+            _add_sheet(sheets, name, value)
             continue
         if isinstance(value, Mapping):
             for name, table in value.items():
-                sheets[_excel_sheet_name(str(name))] = _as_frame(table)
+                _add_sheet(sheets, str(name), table)
     return sheets
+
+
+def _add_sheet(sheets: dict[str, pd.DataFrame], name: str, value: Any) -> None:
+    """Reject duplicate worksheet identities instead of silently overwriting."""
+    safe_name = _excel_sheet_name(name)
+    if safe_name.casefold() in {key.casefold() for key in sheets}:
+        raise ValueError(f"duplicate custom sheet name: {name}")
+    sheets[safe_name] = _as_frame(value)
 
 
 def _as_frame(value: Any) -> pd.DataFrame:

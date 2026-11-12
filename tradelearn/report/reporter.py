@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -31,13 +32,21 @@ from tradelearn.report.analytics import (
 )
 from tradelearn.report.excel import write_excel_report
 from tradelearn.report.explore import explore_trades
-from tradelearn.report.html import write_html_report
 
 LOGGER = get_logger("report")
 
 
 class Reporter:
     """Build report-ready summaries and series from backtest stats."""
+
+    @classmethod
+    def from_analysis(cls, result: Any) -> Reporter:
+        """Render completed domain tables/metrics without re-running analysis."""
+        from tradelearn.report.domain import snapshot
+
+        reporter = cls({"returns": pd.Series(dtype=float), "summary": {}})
+        reporter._analysis = snapshot(result)
+        return reporter
 
     @classmethod
     def from_returns(
@@ -74,9 +83,21 @@ class Reporter:
         self.stats = stats
         self.periods = periods
         self.market_data = self._market_data_copy(market_data)
+        self._summary_cache: dict[Any, dict[str, Any]] = {}
 
     def summary(self, benchmark: pd.Series | None = None) -> dict[str, float | int | str]:
         """Return report summary statistics."""
+        benchmark_key = (
+            None
+            if benchmark is None
+            else (
+                sha256(pd.util.hash_pandas_object(benchmark, index=True).values.tobytes()).digest(),
+                str(benchmark.dtype),
+            )
+        )
+        key = (self.periods, benchmark_key)
+        if key in self._summary_cache:
+            return self._summary_cache[key].copy()
         returns = self._get("returns")
         trades = self._trades()
         summary = dict(self._get("summary", default={}) or {})
@@ -85,7 +106,9 @@ class Reporter:
         # Consolidated set of high-level metrics
         computed: dict[str, float | int] = {
             "annual_return": metrics.annual_return(returns, periods=self.periods),
-            "cumulative_return": metrics.cum_returns(returns).iloc[-1],
+            "cumulative_return": (
+                metrics.cum_returns(returns).iloc[-1] if len(returns) else np.nan
+            ),
             "annual_volatility": metrics.volatility(returns, periods=self.periods),
             "sharpe_ratio": metrics.sharpe(returns, periods=self.periods),
             "calmar_ratio": metrics.calmar(returns, periods=self.periods),
@@ -117,11 +140,18 @@ class Reporter:
 
         # Merge with engine summary, but avoid redundant keys
         redundant = {
-            "sharpe", "sortino", "calmar", "volatility", "win_rate_pct",
-            "max_drawdown", "max_dd_duration", "total_trades", "annual_return",
-            "return_pct", # Handled by cumulative_return
+            "sharpe",
+            "sortino",
+            "calmar",
+            "volatility",
+            "win_rate_pct",
+            "max_drawdown",
+            "max_dd_duration",
+            "total_trades",
+            "annual_return",
+            "return_pct",  # Handled by cumulative_return
         }
-        
+
         # Keys to rename for consistency if they come from engine
         renames = {
             "exposure_pct": "exposure_time",
@@ -136,7 +166,66 @@ class Reporter:
                 merged[new_key] = value
 
         merged.update(self._factor_summary())
+        self._summary_cache[key] = merged.copy()
         return merged
+
+    def metric_facts(self, benchmark: pd.Series | None = None) -> pd.DataFrame:
+        """Expose unrounded values with units and explicit missing reasons."""
+        ratios = {
+            "annual_return",
+            "cumulative_return",
+            "annual_volatility",
+            "max_drawdown",
+            "win_rate",
+            "alpha",
+            "active_return",
+            "tracking_error",
+        }
+        dimensionless = {
+            "sharpe_ratio",
+            "calmar_ratio",
+            "sortino_ratio",
+            "profit_factor",
+            "beta",
+            "information_ratio",
+            "turnover",
+        }
+        supplied = self._get("metric_metadata", default={}) or {}
+        rows = []
+        for name, value in self.summary(benchmark).items():
+            metadata = supplied.get(name, {})
+            unit = (
+                "ratio"
+                if name in ratios
+                else "dimensionless"
+                if name in dimensionless
+                else "count"
+                if name == "total_trades"
+                else "percent"
+                if name.endswith("_pct")
+                else "unspecified"
+            )
+            missing = value is None or (
+                isinstance(value, (float, np.floating)) and not np.isfinite(value)
+            )
+            rows.append(
+                {
+                    "name": name,
+                    "value": value,
+                    "unit": metadata.get("unit", unit),
+                    "reason": metadata.get(
+                        "reason",
+                        "not_provided"
+                        if name == "turnover" and missing
+                        else "not_calculable"
+                        if missing
+                        else "",
+                    ),
+                    "periods": self.periods,
+                    "pnl_basis": metadata.get("pnl_basis", ""),
+                }
+            )
+        return pd.DataFrame(rows)
 
     def equity_curve(self) -> pd.Series:
         """Return normalized equity curve starting at 1.0."""
@@ -458,6 +547,10 @@ class Reporter:
         sections: list[Any] | tuple[Any, ...] | None = None,
     ) -> Any:
         """Write an Excel report."""
+        if hasattr(self, "_analysis"):
+            from tradelearn.report.domain import write_excel
+
+            return write_excel(self, path, sections=sections)
         return write_excel_report(self, path, benchmark=benchmark, sections=sections)
 
     def html(
@@ -467,6 +560,12 @@ class Reporter:
         sections: list[Any] | tuple[Any, ...] | None = None,
     ) -> Any:
         """Write an HTML report."""
+        if hasattr(self, "_analysis"):
+            from tradelearn.report.domain import write_html
+
+            return write_html(self, path, sections=sections)
+        from tradelearn.report.html import write_html_report
+
         return write_html_report(self, path, benchmark=benchmark, sections=sections)
 
     def report(
@@ -568,6 +667,13 @@ class Reporter:
         trades = self._get("trades", default=pd.DataFrame())
         if isinstance(trades, pd.DataFrame) and trades.empty and "pnl" not in trades:
             return pd.DataFrame({"pnl": pd.Series(dtype="float64")})
+        metadata = self._get("metric_metadata", default={}) or {}
+        if (
+            isinstance(trades, pd.DataFrame)
+            and metadata.get("profit_factor", {}).get("pnl_basis") == "pnlcomm"
+            and "pnlcomm" in trades
+        ):
+            return trades.assign(pnl=trades["pnlcomm"])
         return trades
 
     def _turnover(self) -> float:
@@ -589,10 +695,7 @@ class Reporter:
         factor_analyzer = self._factor_analyzer()
         if factor_analyzer is None or not hasattr(factor_analyzer, "summary"):
             return {}
-        return {
-            f"factor_{key}": float(value)
-            for key, value in factor_analyzer.summary().items()
-        }
+        return {f"factor_{key}": float(value) for key, value in factor_analyzer.summary().items()}
 
     @staticmethod
     def _positions_frame(positions: pd.DataFrame | None) -> pd.DataFrame:

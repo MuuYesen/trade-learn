@@ -33,7 +33,7 @@ MIGRATION_CHECKPOINTS: tuple[MigrationCheckpoint, ...] = (
     MigrationCheckpoint(
         "indicator_registration",
         "self.I(func, ...)",
-        "bt.pta / bt.talib / bt.tdx / bt.tv",
+        "tradelearn.indicators.talib / tdx / tv",
     ),
     MigrationCheckpoint(
         "factor_analyzer",
@@ -49,7 +49,8 @@ def run_migration_smoke() -> dict[str, Any]:
     line = LineSeries([1.0, 2.0, 3.0])
     line._advance(2)
 
-    cerebro = bt.Cerebro(trade_on_close=True)
+    cerebro = bt.Cerebro()
+    cerebro.broker.set_coc(True)
     cerebro.adddata(bt.feeds.PandasData(dataname=_bars(), name="demo"))
     cerebro.addstrategy(MigratedSmaCross, size=2)
     [strategy] = cerebro.run()

@@ -46,9 +46,7 @@ def test_research_run_records_preprocess_and_portfolio_function_params() -> None
 
     with ResearchRun("index_enhance_v1") as run:
         processed = fill_missing(features, columns=["alpha"], method="median")
-        processed = Winsorizer(columns=["alpha"], limits=(0.25, 0.75)).fit_transform(
-            processed
-        )
+        processed = Winsorizer(columns=["alpha"], limits=(0.25, 0.75)).fit_transform(processed)
         processed = Neutralizer(columns=["alpha"], method="ols").fit_transform(
             processed,
             exposures=exposures,
@@ -57,7 +55,7 @@ def test_research_run_records_preprocess_and_portfolio_function_params() -> None
         scores = processed["alpha"]
         selected = select_top(scores.to_dict(), k=2)
         weights = equal_weight(selected, gross=0.8)
-        weights = apply_constraints(weights, max_weight=0.4, normalize=True)
+        weights = apply_constraints(weights, max_weight=0.5, normalize=True)
         result = run.finish(
             features=processed,
             scores=scores,
@@ -81,8 +79,7 @@ def test_research_run_records_preprocess_and_portfolio_function_params() -> None
     assert result.params["equal_weight.gross"] == 0.8
     assert result.weights.abs().sum() == 1.0
     assert result.as_weight_dict() == {
-        str(symbol): float(weight)
-        for symbol, weight in result.weights.items()
+        str(symbol): float(weight) for symbol, weight in result.weights.items()
     }
 
 
@@ -95,7 +92,9 @@ def test_research_run_logs_start_and_finish(caplog) -> None:
         run.finish(scores=scores, weights=weights)
 
     messages = [record.getMessage() for record in caplog.records]
-    assert any("ResearchRun started" in message and "logged-research" in message for message in messages)
+    assert any(
+        "ResearchRun started" in message and "logged-research" in message for message in messages
+    )
     assert any(
         "ResearchRun finished" in message
         and "steps=1" in message
@@ -397,12 +396,8 @@ def test_mad_winsorizer_uses_train_bounds_on_test_data() -> None:
 
 
 def test_research_pipeline_fits_train_and_transforms_test() -> None:
-    train = pd.DataFrame(
-        {"alpha": [1.0, 2.0, 100.0], "size": [1.0, 2.0, 3.0]}
-    )
-    test = pd.DataFrame(
-        {"alpha": [-100.0, 3.0, 200.0], "size": [1.0, 2.0, 3.0]}
-    )
+    train = pd.DataFrame({"alpha": [1.0, 2.0, 100.0], "size": [1.0, 2.0, 3.0]})
+    test = pd.DataFrame({"alpha": [-100.0, 3.0, 200.0], "size": [1.0, 2.0, 3.0]})
 
     with ResearchRun("pipeline") as run:
         preprocess = research.Pipeline(

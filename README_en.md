@@ -39,7 +39,7 @@ You can define the depth of your strategy based on the research stage:
 - **Engine Mode (Deep Research)**: Fully aligns with Backtrader semantics, supporting the complete Analyzer/Sizer/Signal ecosystem. Ideal for building complex backtest strategies with precise logic.
 - **Lite Mode (Agile Validation)**: Follows the minimalism of `backtesting.py`, supporting direct connection to model weights. Perfect for high-frequency iteration and prototype validation during the factor mining stage.
 
-In terms of ecosystem, **trade-learn** provides comprehensive indicator support, compatible with TA-Lib, Pandas-TA-Classic, TDX, and TradingView, while allowing flexible expansion of custom indicators and data sources.
+In terms of ecosystem, **trade-learn** provides comprehensive indicator support, compatible with TA-Lib, TDX, and TradingView/PyneCore, while allowing flexible expansion of custom indicators and data sources.
 
 ## Core Highlights
 
@@ -57,11 +57,11 @@ In terms of ecosystem, **trade-learn** provides comprehensive indicator support,
 
 #### 📦 Modular Platform: Lightweight Core, On-Demand Expansion
 - **Decoupled Core**: The default installation includes Engine, Lite, and basic data handling; reports, factors, Parquet, ML, and indicator backends are optional extras.
-- **Elastic Expansion**: One-click activation of the integrated research environment (**JupyterLab + MLflow + AI Assistant**) via `[research,lab]` extras.
+- **Elastic Expansion**: One-click activation of the integrated research environment (**JupyterLab + MLflow + AI Assistant**) via `[research]` extras.
 
 #### 🌍 Global Vision: Multi-Standard Indicators & Modern Ecosystem
-- **Dual-Market Standards**: Explicit support for TDX (China) and TradingView (International) indicator standards, with deep compatibility for TA-Lib and Pandas-TA-Classic.
-- **Modern Tools**: Out-of-the-box HTML interactive reports, MLflow experiment tracking, and deep JupyterLab/MCP integration.
+- **Dual-Market Standards**: Explicit support for TDX (China) and TradingView (International) indicator standards, with persistent TA-Lib state handles.
+- **Modern Tools**: Out-of-the-box HTML interactive reports, MLflow experiment tracking, and JupyterLab / AI Lite / Skills research environment.
 
 ## Causal Quant: Bridging the "Pseudo-Correlation" Trap
 
@@ -105,18 +105,22 @@ Optional extras:
 | extra | Usage |
 |---|---|
 | `[research]` | Data, indicators, factors, ML, Parquet/DuckDB, reports and optimization |
-| `[lab]` | JupyterLab, interactive tools and MLflow; research libraries remain separate |
 | `[nautilus]` | Official NT 2.0.0rc7 and AWS SDK; execution requires Python 3.13/3.14 |
+| `[tl-store]` | Unpublished local cTrader candidate; CPython3.13 Mac arm64/Linux x86_64 |
 
-The current source exposes only these three groups. From this source root (Rust/maturin required), use `pip install ".[research,lab]"` for the research workbench or `pip install ".[nautilus]"` for execution/sending dependencies; matching local wheels also work. Base use needs no AWS. Sending still requires explicit restricted configuration and never starts trading automatically. Python 3.10–3.12 gets only the SDK from nautilus; NT is skipped by its marker and the execution entry rejects unsupported Python.
+Current source provides default plus research, nautilus and tl-store extras. From this source root (Rust/maturin required), use `pip install ".[research]"` for the research workbench or `pip install ".[nautilus]"` for execution/sending dependencies; matching local wheels also work. Base use needs no AWS. Sending still requires explicit restricted configuration and never starts trading automatically. Python 3.10–3.12 gets only the SDK from nautilus; NT is skipped by its marker and the execution entry rejects unsupported Python.
 
-Published PyPI 0.2.9 retains its old extras and dependencies; these three groups describe current source, not a new release. Developer/docs tools use `uv sync --group dev` / `uv sync --group docs`. `[lab]` provides JupyterLab/MLflow; combine `[research]` for the full workbench.
+Published PyPI 0.2.9 retains its old extras and dependencies; these profiles describe current source, not a new release. Developer/docs tools use `uv sync --group dev` / `uv sync --group docs`. `[research]` includes JupyterLab, AI Lite, Skills and MLflow. The CLI contains only new/lab/doctor and help/version. Lab starts only JupyterLab; MLflow defaults to local `sqlite:///mlflow.db` without a server. TL MCP and service wrappers are removed. Base help/version/doctor needs no Typer or PyYAML; existing YAML configuration requires the research dependency. HTTP data clients belong to research; Nautilus retains the urllib3 security bound needed by AWS.
+
+The research profile selects KunQuant 0.1.12 on Python 3.12+. Its official abi3 wheel starts at CPython 3.12 and requires macOS 14+ on ARM. Formula qualification follows the indicator guide; installing the dependency does not qualify all formulas.
+
+The universal `uv.lock` is not updated for these profiles: tl-store 0.2.1a2 is unpublished and full resolution fails. Use the selected source installation above (`pip install ".[research]"`) for research; the existing lock does not freeze the new dependency set.
 
 ### Native wheels and platforms
 
 | Capability | Python / platform |
 |---|---|
-| Research, backtesting, native kernel | Python 3.10–3.14: Linux x86_64, macOS arm64, Windows x86_64; Linux aarch64: CPython 3.13 |
+| Research, backtesting, native kernel | Source baseline Python >=3.10; local macOS ARM CPython3.12 installation verified. TA-Lib0.8.3 has no Python3.10 binary wheel; ARM binary dependencies require macOS14+. Other runtime targets await final artifact acceptance. |
 | Optional Nautilus execution | Python 3.13/3.14, matching official rc7 wheel; venue, product and order qualification remain separate |
 | Strategy logging | Matching Recorder required; local persistence and remote delivery are verified separately by platform |
 
@@ -137,7 +141,7 @@ class LiteSmaCross(tl.Strategy):
     def init(self):
         self.fast_ma = tl.tdx.MA(self.data.close, N=self.fast)
         self.slow_ma = tl.tdx.MA(self.data.close, N=self.slow)
-        self.start_on_bar(self.slow + 1)
+        self.addminperiod(self.slow + 2)
 
     def next(self):
         if self.fast_ma[0] > self.slow_ma[0] and not self.position():
@@ -164,13 +168,14 @@ bt.report("report.html")
 ```python
 import tradelearn.engine as bt
 from tradelearn.data import TradingViewProvider
+from tradelearn.indicators import tdx
 
 class SmaCross(bt.Strategy):
     params = (("fast", 10), ("slow", 20))
 
     def __init__(self):
-        self.fast = bt.tdx.MA(self.data.close, N=self.p.fast)
-        self.slow = bt.tdx.MA(self.data.close, N=self.p.slow)
+        self.fast = tdx.MA(self.data.close, N=self.p.fast)
+        self.slow = tdx.MA(self.data.close, N=self.p.slow)
 
     def next(self):
         if not self.position and self.fast[0] > self.slow[0]:
@@ -181,131 +186,33 @@ class SmaCross(bt.Strategy):
 provider = TradingViewProvider(n_bars=5000)
 bars = provider.history_ohlc("NASDAQ:AAPL", start="2023-01-01", end="2024-01-01")
 
-cerebro = bt.Cerebro(trade_on_close=True)
-cerebro.setcash(100_000)
-cerebro.setcommission(0.0003)
-cerebro.adddata(bars, name="AAPL")
+cerebro = bt.Cerebro()
+cerebro.broker.setcash(100_000)
+cerebro.broker.setcommission(commission=0.0003)
+cerebro.broker.set_coc(True)
+cerebro.adddata(bt.feeds.PandasData(dataname=bars), name="AAPL")
 cerebro.addstrategy(SmaCross)
 
 [strategy] = cerebro.run()
 print(strategy.stats.summary)
 
 cerebro.plot()
-cerebro.report("report.html")
+from tradelearn.report import Reporter
+Reporter(strategy.stats).report("report.html")
 ```
 
 > [!TIP]
 > **Multi-asset logic:** In multi-asset backtests, the strategy binds to `self.data` by default (the primary data feed). The example above therefore makes decisions from the first asset even if multiple assets are provided. To trade multiple assets independently, iterate over `self.datas` in `init` and create indicators for each feed.
 
-## Optional execution and strategy logging
+## Intended use
 
-Engine/Lite retain their research and backtest roles. The optional bridge connects Engine `StrategyRuntime` to Nautilus; its adapter supplies authoritative orders, fills and account facts. Lite's batch indicator lifecycle is not a complete live integration. See the [execution guide](docs/guides/live.md).
-
-```bash
-python -m tradelearn_runtime.support
-```
-
-The command discovers the fixed official package's bundled adapters and public data/execution factory declarations. A directory is not proof of order, paper, live or platform acceptance; some providers are data-only. Private cTrader, strategies, credentials and account state are not shipped.
-
-Logging and remote monitoring are optional. Remote sending requires explicit restricted authorization; execution identity, routing, owned positions and unresolved-intent protection remain active without logging. Installation does not trade, and validation cannot guarantee against trading losses. See [runtime and logging](docs/concepts/runtime.md#nautilus-logging).
+TradeLearn is intended for research and backtesting. We do not recommend using it for live trading. Backtest results do not guarantee future performance.
 
 ## Research Pipeline Example
 
-The README keeps the shortest readable version. Full scripts are available at [`examples/research/index_enhance_lite_pipeline.py`](examples/research/index_enhance_lite_pipeline.py) and [`examples/research/index_enhance_engine_pipeline.py`](examples/research/index_enhance_engine_pipeline.py).
+The maintained [Lite pipeline](examples/research/index_enhance_lite_pipeline.py) and [Engine pipeline](examples/research/index_enhance_engine_pipeline.py) share the fitted research workflow. They use actual label_end for purge, independent preprocessing columns, explicit ResearchRun registration/calls and a complete local deployment bundle. Reports and `tradelearn.integrations.mlflow.log` consume completed results. Model publication and attachments remain explicit.
 
-**1. Research: build features from raw bars and split train/test data**
-
-```python
-import tradelearn.research as research
-import tradelearn.research.preprocess as pp
-
-feature_set = research.FeatureSet(
-    {
-        "alpha": lambda p: p.close.pct_change(20)
-        / p.close.pct_change().rolling(20).std(),
-        "size": lambda p: p.close,
-    },
-    target={"label": lambda p: p.close.shift(-20) / p.close - 1.0},
-)
-
-features = feature_set.fit_transform(bars, include_target=True).dropna()
-train, test = research.time_split(features, split="2023-09-01", level="timestamp")
-```
-
-**2. Pipeline: preprocess, score with a model, and generate weights**
-
-```python
-from sklearn.ensemble import GradientBoostingRegressor
-import tradelearn.research.portfolio as pf
-
-pipe = research.Pipeline(
-    [
-        pp.Winsorizer(columns=["alpha"], limits=(0.05, 0.95)),
-        pp.Neutralizer(columns=["alpha"], exposures=["size"]),
-        pp.StandardScaler(columns=["alpha"]),
-    ]
-)
-train = pipe.fit_transform(train)
-test = pipe.transform(test)
-
-model = GradientBoostingRegressor(random_state=7)
-model.fit(train[["alpha"]], train["label"])
-scores = research.ModelScorer(model, features=("alpha",), current=False).predict(test)
-
-weights = pf.Allocator(
-    select=pf.TopK(k=2),
-    weight=pf.EqualWeight(gross=0.95),
-    constrain=pf.Constraints(max_weight=0.5, normalize=True),
-).build(scores)
-```
-
-**3. Portfolio: hand target weights to Lite / Engine for execution**
-
-```python
-class LitePortfolio(tl.Strategy):
-    def next(self):
-        if len(self.data) % 20 == 0:
-            self.target_weights(self.research_result.weights[0], close_missing=True)
-
-
-test_bars = research.split_bars(bars, split="2023-09-01")
-stats = tl.Backtest(test_bars, LitePortfolio, cash=100_000).run(
-    research_result=research_result
-)
-```
-
-**4. Live-style: infer only from the currently visible window inside the strategy**
-
-Offline research pipelines are useful for training and review. For semantics closer to live trading, pass the model and allocator into strategy parameters and use `history_panel()` inside `next()` so the strategy only reads data that has already happened.
-
-```python
-class LiveStylePortfolio(tl.Strategy):
-    lookback = 20
-
-    def init(self):
-        self.start_on_bar(self.lookback)
-
-    def next(self):
-        if len(self.data) % 20 != 0:
-            return
-
-        panel = self.history_panel(self.lookback)
-        features = self.feature_set.transform(panel).dropna()
-        scores = self.scorer.predict(features)
-        weights = self.allocator.build(scores)
-        self.target_weights(weights, close_missing=True)
-```
-
-Full versions:
-
-| Goal | Full script |
-|---|---|
-| Lite research + backtest + report + MLflow | [`examples/research/index_enhance_lite_pipeline.py`](examples/research/index_enhance_lite_pipeline.py) |
-| Engine research + backtest + report + MLflow | [`examples/research/index_enhance_engine_pipeline.py`](examples/research/index_enhance_engine_pipeline.py) |
-| Lite live-style current-window inference | [`examples/research/index_enhance_lite_live.py`](examples/research/index_enhance_lite_live.py) |
-| Engine live-style current-window inference | [`examples/research/index_enhance_engine_live.py`](examples/research/index_enhance_engine_live.py) |
-| Engine Backtrader-style portfolio rebalancing | [`examples/engine/11_target_percent_portfolio.py`](examples/engine/11_target_percent_portfolio.py) |
-| Asset-class portfolio strategy | [`examples/engine/12_asset_class_portfolios.py`](examples/engine/12_asset_class_portfolios.py) |
+See the [research guide](docs/guides/research.md) and [MLflow guide](docs/guides/mlflow-lab-mcp.md). Data acquisition and inference use the examples' explicit CLI inputs; no implicit provider/paid model or live strategy starts from importing them.
 
 ## Alignment & Performance
 
@@ -335,7 +242,6 @@ Local baselines focus on two core checks: **whether results align** and **whethe
 
 *   **Financial metrics parity**: `metrics` (Sharpe, MaxDD, Sortino, etc.) match `empyrical` within `rtol=1e-10`.
 *   **Multi-source indicator parity**:
-    *   `tl.pta` (classic indicators) matches `pandas-ta-classic` within `rtol=1e-10`.
     *   `tl.tdx` (TDX semantics) matches `MyTT` within `rtol=1e-10`.
     *   `tl.tv` (TradingView semantics) matches `pyneCore` within `rtol=1e-6`.
 *   **Backtest engine parity**:
@@ -356,7 +262,7 @@ Local baselines focus on two core checks: **whether results align** and **whethe
 | Lite / Engine usage | [Lite Guide](docs/guides/lite.md) · [Engine Guide](docs/guides/engine.md) |
 | Architecture and boundaries | [Architecture](docs/concepts/architecture.md) |
 | Factor / ML / weight research pipeline | [Research Guide](docs/guides/research.md) |
-| Dual-standard indicators (`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`) | [Indicators Guide](docs/guides/indicators.md) |
+| Dual-standard indicators (`tl.talib` / `tl.tdx` / `tl.tv`) | [Indicators Guide](docs/guides/indicators.md) |
 | Performance baseline | [Benchmarks](docs/benchmarks.md) |
 | Kernel internals (contracts / matching / portfolio / event loop) | [Design Notes](docs/internals/contracts.md) |
 | Full API | [API Reference](docs/api/reference.md) |
@@ -379,7 +285,7 @@ Based on the current engineering plan, **trade-learn** evolves along these core 
 - [ ] **Causal Closed Loop**: Automate the loop across causal analysis, parameter optimization, and risk control.
 
 #### Agent & AI Capabilities
-- [x] **MCP Knowledge Gateway**: **MCP Server is live**, enabling structured API understanding and code generation for AI.
+- [x] **Research entry points**: new/lab/doctor and version-matched AI Lite Skills. TL MCP is retired; provider qualification is tracked separately.
 - [ ] **Agentic Strategy Diagnosis**: Use LLMs to analyze backtest results, identify loss drivers, and suggest logic improvements.
 - [ ] **LLM Factor Interpreter**: Translate causal discovery results into intuitive financial investment logic.
 

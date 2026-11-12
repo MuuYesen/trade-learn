@@ -14,6 +14,9 @@ class Sizer:
         self.strategy = strategy
         self.broker = broker
 
+    def set(self, strategy, broker):
+        self._set(strategy, broker)
+
     def getsizing(self, data: Any, isbuy: bool, **kwargs: Any) -> float:
         """Calculate the size for an order."""
         return 1.0

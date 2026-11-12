@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import feed as _as_feed
+
+from tests.unit.backtest._engine_config import configured_engine
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -13,10 +17,11 @@ from tradelearn.backtest.engine import _build_bar_advancers, _build_data_advance
 from tradelearn.backtest.lines import LineSeries
 from tradelearn.backtest.models import Order, Stats
 from tradelearn.core.broker_contracts import Fill, OrderRequest
-from tradelearn.engine import Cerebro, DataFeed, Strategy
+from tradelearn.engine import Cerebro, Strategy
+from tradelearn.engine.datafeed import DataFeed
 from tradelearn.lite.backtest import Backtest
 from tradelearn.lite.data import LiteDataProxy
-from tradelearn.lite.indicator import IndicatorProxy
+from tradelearn.backtest.lines import LineSeries
 from tradelearn.lite.position import PositionProxy
 from tradelearn.lite.strategy import Strategy as LiteStrategy
 
@@ -92,9 +97,9 @@ def test_exact_broker_routes_order_prices_to_rust_exact_engine() -> None:
             if order.status == Order.Completed:
                 self.filled_prices.append(order.executed.price)
 
-    cerebro = Cerebro(match_mode="exact")
+    cerebro = configured_engine(match_mode="exact")
     cerebro.broker.setcash(100.0)
-    cerebro.adddata(data)
+    cerebro.adddata(_as_feed(data))
     cerebro.addstrategy(BuyStop)
 
     [strategy] = cerebro.run()
@@ -131,9 +136,9 @@ def test_smart_broker_still_routes_to_rust_engine() -> None:
             if order.status == Order.Completed:
                 self.filled_prices.append(order.executed.price)
 
-    cerebro = Cerebro(match_mode="smart")
+    cerebro = configured_engine(match_mode="smart")
     cerebro.broker.setcash(100.0)
-    cerebro.adddata(data)
+    cerebro.adddata(_as_feed(data))
     cerebro.addstrategy(BuyStop)
 
     [strategy] = cerebro.run()
@@ -238,8 +243,9 @@ def test_rust_broker_can_buffer_order_submissions_for_rust_driven_callbacks() ->
 
     broker.flush_order_buffer()
 
-    assert order.ref == 42
-    assert broker._orders_by_ref[42] is order
+    assert order.ref == 1
+    assert broker._orders_by_ref[1] is order
+    assert broker._orders_by_native_ref[42] is order
     assert engine.submissions == [("buy", "limit", 2.0, 9.5, None)]
 
 
@@ -262,9 +268,9 @@ def test_rust_broker_can_drain_buffer_without_reentering_engine() -> None:
 
     broker.bind_rust_order_ref(1, 77)
 
-    assert order.ref == 77
-    assert 1 not in broker._orders_by_ref
-    assert broker._orders_by_ref[77] is order
+    assert order.ref == 1
+    assert broker._orders_by_ref[1] is order
+    assert broker._orders_by_native_ref[77] is order
 
 
 def test_rust_broker_reuses_empty_order_buffer_result() -> None:
@@ -291,12 +297,11 @@ def test_rust_broker_can_bind_order_refs_in_batch() -> None:
 
     broker.bind_rust_order_refs([(first.ref, 11), (second.ref, 12)])
 
-    assert first.ref == 11
-    assert second.ref == 12
-    assert 1 not in broker._orders_by_ref
-    assert 2 not in broker._orders_by_ref
-    assert broker._orders_by_ref[11] is first
-    assert broker._orders_by_ref[12] is second
+    assert first.ref == 1 and second.ref == 2
+    assert broker._orders_by_ref[1] is first
+    assert broker._orders_by_ref[2] is second
+    assert broker._orders_by_native_ref[11] is first
+    assert broker._orders_by_native_ref[12] is second
 
 
 def test_rust_broker_processes_rust_fills_with_batch_sync() -> None:
@@ -556,7 +561,7 @@ def test_stats_lazy_artifacts_materialize_once() -> None:
     assert calls == {"fills": 1, "returns": 1}
 
 
-def test_lite_strategy_uses_public_basic_submit_fast_path() -> None:
+def test_lite_strategy_uses_shared_submission_path() -> None:
     class FakeData:
         _cursor = 0
 
@@ -573,11 +578,11 @@ def test_lite_strategy_uses_public_basic_submit_fast_path() -> None:
             return 1000.0
 
         def submit_basic(self, *args):
-            self.basic_calls.append(args)
-            return "order"
+            raise AssertionError("lite must preserve shared submission observations")
 
         def _submit(self, *args, **kwargs):
-            raise AssertionError("lite facade should use submit_basic when available")
+            self.basic_calls.append(args)
+            return "order"
 
     strategy = LiteStrategy()
     data = FakeData()
@@ -655,8 +660,8 @@ def test_backtest_order_adapts_to_core_order_request_and_fill() -> None:
     )
     data = object()
 
-    order = Order.from_request(7, request, data=data)
-    fill = order.to_fill(qty=-3.0, price=8.0, commission=0.5, broker_oid="broker-7")
+    order = Order._from_request(7, request, data=data)
+    fill = order._to_fill(qty=-3.0, price=8.0, commission=0.5, broker_oid="broker-7")
 
     assert order.ref == 7
     assert order.ordtype == Order.Sell
@@ -670,7 +675,7 @@ def test_backtest_order_adapts_to_core_order_request_and_fill() -> None:
     assert fill.price == 8.0
     assert fill.commission == 0.5
 
-    stop_limit = Order.from_request(
+    stop_limit = Order._from_request(
         8,
         OrderRequest(
             symbol="data0",
@@ -709,8 +714,8 @@ def test_backtest_engine_buffers_orders_while_strategy_next_runs() -> None:
                 self.saw_buffering = self.broker._buffer_order_submissions
                 self.buy(size=1)
 
-    cerebro = Cerebro(match_mode="exact")
-    cerebro.adddata(data)
+    cerebro = configured_engine(match_mode="exact")
+    cerebro.adddata(_as_feed(data))
     cerebro.addstrategy(BufferAwareStrategy)
 
     [strategy] = cerebro.run()
@@ -814,18 +819,14 @@ def test_rust_bar_loop_allows_none_when_callback_has_no_orders() -> None:
 
 
 def test_backtest_engine_does_not_advance_data_twice_from_strategy_attrs() -> None:
-    class CountingDataFeed:
+    class CountingDataFeed(DataFeed):
         def __init__(self) -> None:
+            super().__init__(pd.DataFrame({k:[10.,11.,12.] for k in ("open","high","low","close","volume")},index=pd.date_range("2026-01-01",periods=3)))
             self.advance_calls: list[int] = []
-            self._datetime = [1, 2, 3]
-            self._open = [10.0, 11.0, 12.0]
-            self._high = [10.0, 11.0, 12.0]
-            self._low = [10.0, 11.0, 12.0]
-            self._close = [10.0, 11.0, 12.0]
-            self._volume = [1000.0, 1000.0, 1000.0]
 
         def _advance(self, cursor: int) -> None:
             self.advance_calls.append(cursor)
+            super()._advance(cursor)
 
         def buflen(self) -> int:
             return 3
@@ -835,8 +836,8 @@ def test_backtest_engine_does_not_advance_data_twice_from_strategy_attrs() -> No
             pass
 
     data = CountingDataFeed()
-    cerebro = Cerebro(match_mode="exact")
-    cerebro.adddata(data)
+    cerebro = configured_engine(match_mode="exact")
+    cerebro.adddata(_as_feed(data))
     cerebro.addstrategy(NoopStrategy)
 
     cerebro.run()
@@ -916,18 +917,14 @@ def test_strategy_pre_next_runs_static_bar_advance_plan() -> None:
 
 
 def test_backtest_engine_calls_strategy_pre_next_hook() -> None:
-    class CountingDataFeed:
+    class CountingDataFeed(DataFeed):
         def __init__(self) -> None:
-            self._datetime = [1, 2]
-            self._open = [10.0, 11.0]
-            self._high = [10.0, 11.0]
-            self._low = [10.0, 11.0]
-            self._close = [10.0, 11.0]
-            self._volume = [1000.0, 1000.0]
+            super().__init__(pd.DataFrame({k:[10.,11.] for k in ("open","high","low","close","volume")},index=pd.date_range("2026-01-01",periods=2)))
             self.advance_calls: list[int] = []
 
         def _advance(self, cursor: int) -> None:
             self.advance_calls.append(cursor)
+            super()._advance(cursor)
 
         def buflen(self) -> int:
             return 2
@@ -944,8 +941,8 @@ def test_backtest_engine_calls_strategy_pre_next_hook() -> None:
 
     data = CountingDataFeed()
     PreNextStrategy.seen = []
-    cerebro = Cerebro(match_mode="exact")
-    cerebro.adddata(data)
+    cerebro = configured_engine(match_mode="exact")
+    cerebro.adddata(_as_feed(data))
     cerebro.addstrategy(PreNextStrategy)
 
     cerebro.run()
@@ -1159,9 +1156,9 @@ def test_backtest_engine_uses_rust_plan_for_secondary_data_clock() -> None:
         def next(self) -> None:
             self.rows.append((self.data.close[0], self.datas[1].close[0]))
 
-    cerebro = Cerebro(match_mode="exact")
-    cerebro.adddata(primary)
-    cerebro.adddata(secondary)
+    cerebro = configured_engine(match_mode="exact")
+    cerebro.adddata(_as_feed(primary))
+    cerebro.adddata(_as_feed(secondary))
     cerebro.addstrategy(MultiDataStrategy)
 
     [strategy] = cerebro.run()
@@ -1196,9 +1193,9 @@ def test_backtest_engine_fills_secondary_data_orders_with_open_matching() -> Non
             if len(self) == 1:
                 self.buy(data=self.datas[1], size=1)
 
-    cerebro = Cerebro(match_mode="exact", trade_on_close=False)
-    cerebro.adddata(primary, name="AAA")
-    cerebro.adddata(secondary, name="BBB")
+    cerebro = configured_engine(match_mode="exact", trade_on_close=False)
+    cerebro.adddata(_as_feed(primary), name="AAA")
+    cerebro.adddata(_as_feed(secondary), name="BBB")
     cerebro.addstrategy(SecondaryOrderStrategy)
 
     [strategy] = cerebro.run()
@@ -1241,9 +1238,9 @@ def test_backtest_engine_multi_data_uses_clocked_runner_without_python_bar_vecto
             if len(self) == 1:
                 self.buy(data=self.datas[1], size=1)
 
-    cerebro = Cerebro(match_mode="exact", trade_on_close=False)
-    cerebro.adddata(primary, name="AAA")
-    cerebro.adddata(secondary, name="BBB")
+    cerebro = configured_engine(match_mode="exact", trade_on_close=False)
+    cerebro.adddata(_as_feed(primary), name="AAA")
+    cerebro.adddata(_as_feed(secondary), name="BBB")
     cerebro.addstrategy(SecondaryOrderStrategy)
 
     [strategy] = cerebro.run()
@@ -1290,9 +1287,9 @@ def test_backtest_engine_trade_on_close_clocked_runner_only_uses_python_vectors_
             if len(self) == 1:
                 self.buy(data=self.datas[1], size=1)
 
-    cerebro = Cerebro(match_mode="exact", trade_on_close=True)
-    cerebro.adddata(primary, name="AAA")
-    cerebro.adddata(secondary, name="BBB")
+    cerebro = configured_engine(match_mode="exact", trade_on_close=True)
+    cerebro.adddata(_as_feed(primary), name="AAA")
+    cerebro.adddata(_as_feed(secondary), name="BBB")
     cerebro.addstrategy(SecondaryOrderStrategy)
 
     [strategy] = cerebro.run()
@@ -1412,7 +1409,7 @@ def test_backtrader_datafeed_lines_read_shared_bar_buffer_without_copy() -> None
     assert feed.close._buffer is feed.shared_bar_buffer()
     assert feed.close[0] == 4.0
     assert feed.close[-1] == 3.0
-    assert feed.datetime[0] == pd.Timestamp("2026-01-02", tz="UTC")
+    assert feed.datetime.datetime(0) == pd.Timestamp("2026-01-02")
 
 
 def test_runtime_data_feed_lines_share_feed_cursor_source() -> None:
@@ -1541,99 +1538,42 @@ def test_lite_position_proxy_uses_public_current_position_size() -> None:
     assert strategy.broker.size_calls == 2
 
 
-def test_lite_indicator_proxy_relative_indexing() -> None:
-    class Feed:
-        _cursor = 2
-
-    indicator = IndicatorProxy([10.0, 20.0, 30.0], Feed())
-
-    assert indicator[0] == 30.0
-    assert indicator.current() == 30.0
-    assert indicator[-1] == 20.0
-    assert indicator.previous() == 20.0
-    assert indicator[-2] == 10.0
-
-    Feed._cursor = 0
-    assert indicator[0] == 10.0
-    assert indicator.current() == 10.0
-    with pytest.raises(IndexError):
-        indicator[-1]
-    with pytest.raises(IndexError):
-        indicator.previous()
+def test_shared_line_relative_indexing_uses_feed_cursor():
+    feed=type("Feed",(),{"_cursor":2})()
+    line=LineSeries([10.,20.,30.]);line._cursor_source=feed
+    assert [line[0],line[-1],line[-2]]==[30.,20.,10.]
+    feed._cursor=0
+    assert line[0]==10 and pd.isna(line[-1])
 
 
-def test_lite_data_proxy_exposes_fixed_line_proxy_before_cursor_starts() -> None:
-    class Feed:
-        def __init__(self) -> None:
-            self._cursor = -1
-            self.arrays = {
-                "open": [1.0, 2.0, 3.0],
-                "high": [1.0, 2.0, 3.0],
-                "low": [1.0, 2.0, 3.0],
-                "close": [4.0, 5.0, 6.0],
-                "volume": [1.0, 2.0, 3.0],
-            }
-
-        def get_array(self, name: str):
-            return self.arrays[name]
-
-    proxy = LiteDataProxy(Feed())
-
-    assert isinstance(proxy.close, IndicatorProxy)
+def test_lite_data_proxy_exposes_fixed_line_proxy_before_cursor_starts():
+    from tradelearn.backtest.feed import RuntimeDataFeed
+    frame=pd.DataFrame({key:[1.,2.,3.] for key in ['open','high','low','close','volume']},index=pd.date_range('2026-01-01',periods=3))
+    feed=RuntimeDataFeed(frame,name='A');feed._advance(-1)
+    proxy=LiteDataProxy(feed)
+    assert proxy.close is feed.close
     assert proxy.close is proxy.close
-    assert pd.Series(proxy.close).tolist() == [4.0, 5.0, 6.0]
+    assert len(proxy.df)==0
 
 
-def test_lite_data_proxy_reuses_line_proxy_after_cursor_starts() -> None:
-    class Feed:
-        def __init__(self) -> None:
-            self._cursor = 0
-            self.arrays = {
-                "open": [1.0, 2.0, 3.0],
-                "high": [1.0, 2.0, 3.0],
-                "low": [1.0, 2.0, 3.0],
-                "close": [1.0, 2.0, 3.0],
-                "volume": [1.0, 2.0, 3.0],
-            }
-
-        def get_array(self, name: str):
-            return self.arrays[name]
-
-    proxy = LiteDataProxy(Feed())
-
-    first = proxy.close
-    second = proxy.close
-
-    assert isinstance(first, IndicatorProxy)
-    assert first is second
+def test_lite_data_proxy_reuses_line_proxy_after_cursor_starts():
+    from tradelearn.backtest.feed import RuntimeDataFeed
+    frame=pd.DataFrame({key:[1.,2.,3.] for key in ['open','high','low','close','volume']},index=pd.date_range('2026-01-01',periods=3))
+    feed=RuntimeDataFeed(frame,name='A');feed._advance(0)
+    proxy=LiteDataProxy(feed)
+    assert proxy.close is feed.close
+    assert proxy.close is proxy.close
+    assert len(proxy.df)==1
 
 
-def test_lite_data_proxy_caches_extra_line_proxy_after_cursor_starts() -> None:
-    class Feed:
-        def __init__(self) -> None:
-            self._cursor = 0
-            self.arrays = {
-                "open": [1.0, 2.0, 3.0],
-                "high": [1.0, 2.0, 3.0],
-                "low": [1.0, 2.0, 3.0],
-                "close": [1.0, 2.0, 3.0],
-                "volume": [1.0, 2.0, 3.0],
-                "factor": [4.0, 5.0, 6.0],
-            }
-
-        def get_array(self, name: str):
-            return self.arrays[name]
-
-    feed = Feed()
-    proxy = LiteDataProxy(feed)
-
-    first = proxy.factor
-    second = proxy.factor
-    assert isinstance(first, IndicatorProxy)
-    assert first is second
-
-    feed.arrays["factor"] = [7.0, 8.0, 9.0]
-    assert proxy.factor is not first
+def test_lite_data_proxy_caches_shared_extra_line():
+    from tradelearn.backtest.feed import RuntimeDataFeed
+    frame=pd.DataFrame({key:[1.,2.,3.] for key in ['open','high','low','close','volume','factor']},index=pd.date_range('2026-01-01',periods=3))
+    feed=RuntimeDataFeed(frame,name='A');feed._advance(1)
+    proxy=LiteDataProxy(feed)
+    assert isinstance(proxy.factor,LineSeries)
+    assert proxy.factor is proxy.factor
+    assert proxy.factor[0]==2
 
 
 def test_lite_strategy_init_runs_once() -> None:
@@ -1665,39 +1605,19 @@ def test_lite_strategy_init_runs_once() -> None:
     assert InitCountingStrategy.init_calls == 1
 
 
-def test_lite_strategy_I_caches_batch_indicator_results() -> None:
-    data = pd.DataFrame(
-        {
-            "Open": [10.0, 11.0, 12.0, 13.0],
-            "High": [10.0, 11.0, 12.0, 13.0],
-            "Low": [10.0, 11.0, 12.0, 13.0],
-            "Close": [10.0, 11.0, 12.0, 13.0],
-            "Volume": [1000.0, 1000.0, 1000.0, 1000.0],
-        },
-        index=pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"], utc=True),
-    )
-    calls = {"count": 0}
-
-    def counted_indicator(close, period: int = 2):
-        calls["count"] += 1
-        return pd.Series(close).rolling(period).mean()
-
-    class CachedIndicatorStrategy(LiteStrategy):
-        cache_seen = False
-
-        def init(self) -> None:
-            self.first = self.I(counted_indicator, self.data.close, period=2)
-            self.second = self.I(counted_indicator, self.data.close, period=2)
-
-        def next(self) -> None:
-            type(self).cache_seen = self._batch_indicator_cache is not None
-
-    CachedIndicatorStrategy.cache_seen = False
-    bt = Backtest(data, CachedIndicatorStrategy, cash=1000.0)
-    bt.run()
-
-    assert calls["count"] == 1
-    assert CachedIndicatorStrategy.cache_seen is True
+def test_lite_function_calls_have_independent_persistent_states():
+    from tradelearn.indicators.base import FunctionIndicator
+    calls=[]
+    def update(buffers,state,params):
+        calls.append(1)
+        return float(np.mean(buffers['close']))
+    f=FunctionIndicator('mean',lambda close,period=2:close.rolling(period).mean(),{'period':2},('close',),update,history_capacity=2)
+    frame=pd.DataFrame({key:[10.,11.,12.,13.] for key in ['open','high','low','close','volume']},index=pd.date_range('2026-01-01',periods=4,tz='UTC'))
+    class S(LiteStrategy):
+        def init(self):self.first=f(self.data.close);self.second=f(self.data.close)
+        def next(self):assert self.first[0]==self.second[0]
+    Backtest(frame,S,cash=1000).run()
+    assert len(calls)==8
 
 
 def test_engine_vendor_indicators_run_without_strategy_i_api() -> None:
@@ -1717,8 +1637,8 @@ def test_engine_vendor_indicators_run_without_strategy_i_api() -> None:
 
         def __init__(self) -> None:
             assert not hasattr(type(self), "I")
-            self.first = tl.pta.SMA(self.data.close, length=2)
-            self.second = tl.pta.SMA(self.data.close, length=2)
+            self.first = tl.talib.SMA(self.data.close, timeperiod=2)
+            self.second = tl.talib.SMA(self.data.close, timeperiod=2)
 
         def next(self) -> None:
             type(self).values.append(self.first[0] + self.second[0])
@@ -1750,8 +1670,8 @@ def test_lite_strategy_I_does_not_merge_distinct_lambda_indicators() -> None:
         second_seen = None
 
         def init(self) -> None:
-            self.first = self.I(lambda: pd.Series([1.0, 1.0, 1.0]))
-            self.second = self.I(lambda: pd.Series([2.0, 2.0, 2.0]))
+            self.first = self.data.close * 0 + 1
+            self.second = self.data.close * 0 + 2
 
         def next(self) -> None:
             type(self).first_seen = self.first[0]
@@ -1792,13 +1712,13 @@ def test_cashvalue_notification_only_runs_when_strategy_overrides_hook() -> None
         def next(self) -> None:
             pass
 
-    no_hook = Cerebro(match_mode="exact")
-    no_hook.adddata(data)
+    no_hook = configured_engine(match_mode="exact")
+    no_hook.adddata(_as_feed(data))
     no_hook.addstrategy(NoCashHook)
     [no_hook_strategy] = no_hook.run()
 
-    with_hook = Cerebro(match_mode="exact")
-    with_hook.adddata(data)
+    with_hook = configured_engine(match_mode="exact")
+    with_hook.adddata(_as_feed(data))
     with_hook.addstrategy(CashHook)
     [with_hook_strategy] = with_hook.run()
 
@@ -1838,9 +1758,9 @@ def test_smart_matching_prefers_stop_loss_when_exit_orders_are_ambiguous() -> No
             if order.status == Order.Completed:
                 self.completed.append(order.executed.price)
 
-    cerebro = Cerebro(match_mode="smart")
+    cerebro = configured_engine(match_mode="smart")
     cerebro.broker.setcash(100.0)
-    cerebro.adddata(data)
+    cerebro.adddata(_as_feed(data))
     cerebro.addstrategy(BracketExit)
 
     [strategy] = cerebro.run()

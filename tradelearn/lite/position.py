@@ -60,26 +60,11 @@ class PositionProxy:
     def close(self, portion: float = 1.0):
         strategy = self._strategy
         data = self._data or strategy.datas[0]
-        effective_size = self.size + strategy._pending_size.get(data, 0.0)
-        if effective_size > 0:
-            return strategy._submit_lite_order(
-                Order.Sell,
-                data,
-                abs(effective_size) * float(portion),
-                None,
-                None,
-                None,
-            )
-        if effective_size < 0:
-            return strategy._submit_lite_order(
-                Order.Buy,
-                data,
-                abs(effective_size) * float(portion),
-                None,
-                None,
-                None,
-            )
-        return None
+        if not 0 < float(portion) <= 1:
+            raise ValueError("portion must be in (0, 1]")
+        effective_size = self.size
+        return (strategy.close(ticker=self._ticker,size=abs(effective_size)*float(portion))
+                if effective_size else None)
 
     @property
     def pl(self) -> float:
@@ -87,7 +72,7 @@ class PositionProxy:
         pos = self._strategy.getposition(data)
         if pos.size == 0:
             return 0.0
-        price = data.get_array("close")[data._cursor]
+        price = data.close[0]
         return (
             (float(price) - float(pos.price))
             * float(pos.size)

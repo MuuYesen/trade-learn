@@ -1,158 +1,63 @@
-from __future__ import annotations
+import sys
 
-from pathlib import Path
+import pytest
 
 from tradelearn.core.config import TradelearnConfig
-from tradelearn.lab import (
-    build_mlflow_command,
-    build_lab_plan,
-    check_lab_dependencies,
-    check_mlflow_dependencies,
-    required_lab_packages,
-    required_mlflow_packages,
-    start_lab_stack,
-    start_mlflow_server,
-)
+from tradelearn.lab import build_lab_plan, start_lab_stack
 
 
-def test_check_lab_dependencies_reports_missing_packages() -> None:
-    missing = check_lab_dependencies(
-        find_spec=lambda module: object()
-        if module in {"jupyterlab", "ipywidgets", "mcp"}
-        else None
-    )
-
-    assert missing == ("jupyterlab-git", "jupyter-ai", "pygwalker")
-
-
-def test_check_mlflow_dependencies_reports_missing_package() -> None:
-    missing = check_mlflow_dependencies(find_spec=lambda module: None)
-
-    assert missing == ("mlflow",)
-    assert required_mlflow_packages() == ("mlflow",)
+def test_lab_plan_has_only_jupyter_and_preserves_explicit_tracking(tmp_path):
+    config = TradelearnConfig(mlflow_tracking_uri="sqlite:///chosen.db")
+    plan = build_lab_plan(config, notebook_dir=tmp_path, no_browser=True)
+    assert plan.jupyter.args[:3] == (sys.executable, "-m", "jupyterlab")
+    assert not hasattr(plan, "mcp") and not hasattr(plan, "mlflow")
+    assert plan.jupyter.env["MLFLOW_TRACKING_URI"] == "sqlite:///chosen.db"
+    with pytest.raises(TypeError):
+        build_lab_plan(config, start_mlflow=True)
 
 
-def test_build_lab_plan_sets_commands_and_mlflow_environment(tmp_path: Path) -> None:
-    config = TradelearnConfig(mlflow_tracking_uri="http://mlflow.local")
+def test_lab_keyboard_interrupt_closes_and_reaps_only_owned_jupyter():
+    calls = []
 
-    plan = build_lab_plan(
-        config,
-        host="0.0.0.0",
-        port=9999,
-        notebook_dir=tmp_path,
-        no_browser=True,
-    )
+    class Process:
+        def __init__(self):
+            self.alive = True
 
-    assert plan.mlflow_tracking_uri == "http://mlflow.local"
-    assert plan.required_packages == tuple(required_lab_packages())
-    assert plan.mlflow is not None
-    assert plan.mlflow.args[:4] == ("python", "-m", "mlflow", "server")
-    assert "--port" in plan.mlflow.args
-    assert "5050" in plan.mlflow.args
-    assert plan.jupyter.args[:3] == ("python", "-m", "jupyterlab")
-    assert "--ip=0.0.0.0" in plan.jupyter.args
-    assert "--port=9999" in plan.jupyter.args
-    assert f"--notebook-dir={tmp_path}" in plan.jupyter.args
-    assert "--no-browser" in plan.jupyter.args
-    assert plan.jupyter.env["MLFLOW_TRACKING_URI"] == "http://mlflow.local"
-    assert plan.mcp.args == (
-        "tradelearn",
-        "mcp",
-        "--transport",
-        "streamable-http",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        "8765",
-    )
-    assert plan.mcp.env["MLFLOW_TRACKING_URI"] == "http://mlflow.local"
-    assert plan.mcp.env["TRADELEARN_LOG_LEVEL"] == "INFO"
+        def poll(self):
+            return None if self.alive else -15
+
+        def wait(self, timeout=None):
+            if timeout is None:
+                raise KeyboardInterrupt
+            self.alive = False
+            calls.append("wait")
+            return -15
+
+        def terminate(self):
+            calls.append("terminate")
+
+    def popen(args, *, env):
+        calls.append(tuple(args[:3]))
+        return Process()
+
+    assert start_lab_stack(build_lab_plan(TradelearnConfig()), popen=popen) == 0
+    assert calls == [(sys.executable, "-m", "jupyterlab"), "terminate", "wait"]
 
 
-def test_build_lab_plan_skips_mlflow_when_missing(tmp_path: Path) -> None:
-    missing_plan = build_lab_plan(
-        TradelearnConfig(),
-        notebook_dir=tmp_path,
-        missing_mlflow_packages=("mlflow",),
-    )
+def test_lab_launch_failure_does_not_start_fallback_services():
+    calls = []
 
-    assert missing_plan.mlflow is None
-    assert missing_plan.missing_mlflow_packages == ("mlflow",)
+    def popen(args, **kwargs):
+        calls.append(args)
+        raise OSError("cannot launch Jupyter")
 
-
-def test_build_mlflow_command_uses_local_sqlite_and_artifacts(tmp_path: Path) -> None:
-    command = build_mlflow_command(
-        TradelearnConfig(mlflow_tracking_uri="http://127.0.0.1:5050"),
-        project_dir=tmp_path,
-        host="0.0.0.0",
-        port=5051,
-    )
-
-    assert command.args[:4] == ("python", "-m", "mlflow", "server")
-    assert command.args[command.args.index("--host") + 1] == "0.0.0.0"
-    assert command.args[command.args.index("--port") + 1] == "5051"
-    backend = command.args[command.args.index("--backend-store-uri") + 1]
-    artifacts = command.args[command.args.index("--artifacts-destination") + 1]
-    assert backend == f"sqlite:///{tmp_path / '.tradelearn' / 'mlflow' / 'mlflow.db'}"
-    assert artifacts == f"file://{(tmp_path / '.tradelearn' / 'mlflow' / 'artifacts').resolve()}"
+    with pytest.raises(OSError, match="cannot launch"):
+        start_lab_stack(build_lab_plan(TradelearnConfig()), popen=popen)
+    assert len(calls) == 1
 
 
-def test_start_lab_stack_starts_mlflow_mcp_then_jupyter() -> None:
-    started: list[tuple[str, ...]] = []
-    terminated: list[tuple[str, ...]] = []
+def test_lab_dependency_discovery_is_explicit():
+    from tradelearn.lab import check_lab_dependencies, required_lab_packages
 
-    class FakeProcess:
-        def __init__(self, args: tuple[str, ...], env: dict[str, str]) -> None:
-            self.args = args
-            self.env = env
-            self.returncode = None
-            started.append(args)
-
-        def wait(self, timeout=None) -> int:
-            self.returncode = 0
-            return 0
-
-        def terminate(self) -> None:
-            terminated.append(self.args)
-
-        def poll(self) -> int | None:
-            return self.returncode
-
-    def fake_popen(args: tuple[str, ...], *, env: dict[str, str]) -> FakeProcess:
-        return FakeProcess(args, env)
-
-    plan = build_lab_plan(TradelearnConfig(), notebook_dir=Path("."))
-
-    exit_code = start_lab_stack(plan, popen=fake_popen)
-
-    assert exit_code == 0
-    assert started[0][:4] == ("python", "-m", "mlflow", "server")
-    assert started[1][:5] == ("tradelearn", "mcp", "--transport", "streamable-http", "--host")
-    assert started[2][:3] == ("python", "-m", "jupyterlab")
-    assert terminated == [started[1], started[0]]
-
-
-def test_start_mlflow_server_waits_for_process() -> None:
-    started: list[tuple[str, ...]] = []
-
-    class FakeProcess:
-        def __init__(self, args: tuple[str, ...], env: dict[str, str]) -> None:
-            self.args = args
-            self.env = env
-            started.append(args)
-
-        def wait(self) -> int:
-            return 7
-
-        def terminate(self) -> None:
-            raise AssertionError("single MLflow command should wait, not terminate")
-
-        def poll(self) -> None:
-            return 7
-
-    command = build_mlflow_command(TradelearnConfig(), project_dir=Path("."))
-
-    exit_code = start_mlflow_server(command, popen=lambda args, *, env: FakeProcess(args, env))
-
-    assert exit_code == 7
-    assert started == [command.args]
+    assert required_lab_packages() == ("jupyterlab", "ipywidgets", "jupyter-ai-lite")
+    assert check_lab_dependencies(find_spec=lambda name: None) == required_lab_packages()

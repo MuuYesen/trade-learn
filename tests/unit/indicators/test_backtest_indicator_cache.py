@@ -5,7 +5,7 @@ import importlib.util
 import pandas as pd
 import pytest
 
-from tradelearn import ta
+from tradelearn import indicators as ta
 from tradelearn.backtest.indicator_cache import (
     BatchIndicatorCache,
     IndicatorCache,
@@ -29,7 +29,7 @@ def test_indicator_cache_precomputes_core_tdx_and_tv_namespaces() -> None:
     )
 
     cache = IndicatorCache(frame)
-    core_sma = cache.precompute("core.sma", ta.sma, "close", period=3)
+    core_sma = cache.precompute("talib.SMA", ta.talib.SMA, "close", timeperiod=3)
     tdx_ma = cache.precompute("tdx.ma", ta.tdx.ma, "close", n=3)
     tv_sma = cache.precompute("tv.sma", ta.tv.sma, "close", length=3)
 
@@ -39,7 +39,7 @@ def test_indicator_cache_precomputes_core_tdx_and_tv_namespaces() -> None:
     assert core_sma[-1] == 3.0
     assert tdx_ma[0] == 4.0
     assert tv_sma[0] == 4.0
-    assert cache.get("core.sma", period=3) is core_sma
+    assert cache.get("talib.SMA", timeperiod=3) is core_sma
 
 
 def test_batch_indicator_cache_splits_multi_output_dataframe_lines() -> None:
@@ -63,7 +63,7 @@ def test_batch_indicator_cache_splits_multi_output_dataframe_lines() -> None:
 
 def test_rolling_indicator_cache_recomputes_recent_window_without_future_data() -> None:
     cache = RollingIndicatorCache(window=3)
-    line = cache.register("core.sma", ta.sma, "close", period=3)
+    line = cache.register("talib.SMA", ta.talib.SMA, "close", timeperiod=3)
 
     for i, close in enumerate([1.0, 2.0, 3.0, 4.0]):
         cache.append_bar(

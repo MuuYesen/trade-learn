@@ -8,7 +8,7 @@ module exposes that implementation under ``tradelearn.engine``.
 from tradelearn.backtest.history import build_history_panel
 from tradelearn.backtest.models import ExecutedInfo, Order, Position, Trade
 from tradelearn.backtest.strategy import Strategy as _BaseStrategy
-from tradelearn.engine.base import _G, LineRoot, LineSeries, Params, set_current_data
+from tradelearn.engine.base import _G, LineRoot, LineSeries, Params, MetaParams, collect_param_defaults, set_current_data
 from tradelearn.engine.datafeed import DataFeed
 from tradelearn.engine.sizers import Sizer
 
@@ -16,7 +16,7 @@ from tradelearn.engine.sizers import Sizer
 class Strategy(_BaseStrategy, LineRoot):
     """Backtrader-compatible Strategy that maintains data context."""
 
-    params = (("research_result", None),)
+    params = ()
 
     def __init__(self, *args, **kwargs):
         # 1. Sync datas from global context if not already set (for BT facade)
@@ -34,24 +34,142 @@ class Strategy(_BaseStrategy, LineRoot):
         # Note: _BaseStrategy.__init__ handles internal dicts
         # LineRoot handled by metaclass already, but we ensure order
         _BaseStrategy.__init__(self, *args, **kwargs)
-        research_result = getattr(getattr(self, "p", None), "research_result", None)
-        if research_result is not None:
-            self.research_result = research_result
+    _bt_minperiods = True
 
-    def _bind_research_result(self, result):
-        from tradelearn.research.run import bind_research_result
+    def _batch_runtime(self):
+        runtime = getattr(self, "_runtime", None)
+        if runtime is None:
+            runtime = getattr(getattr(self, "data", None), "runtime", None)
+        return runtime if runtime is not None and runtime.profile == "batch" else None
 
-        return bind_research_result(result, self)
-        
+    def __len__(self):
+        runtime = self._batch_runtime()
+        return runtime._cursor + 1 if runtime is not None else super().__len__()
+
     @property
     def datetime(self):
-        """Shortcut for self.data.datetime to match backtrader behavior."""
-        return self.data.datetime
+        runtime = self._batch_runtime()
+        if runtime is None:
+            return self.data.datetime
+        line = getattr(self, "_clock_datetime_line", None)
+        if line is None:
+            from tradelearn.engine.datafeed import _DateLine
+            line = _DateLine(runtime._clock.timestamps, is_datetime=True)
+            line._cursor_source, line._runtime = runtime, runtime
+            self._clock_datetime_line = line
+        return line
 
-    def history_panel(self, lookback: int | None = None):
-        """Return recent multi-data OHLCV bars as a timestamp/symbol panel."""
+    def getposition(self, data=None, broker=None):
+        return (broker or self.broker).getposition(self._resolve_data(data))
 
-        return build_history_panel(self.datas, lookback=lookback)
+    def getpositionbyname(self, name=None, broker=None):
+        data = self.getdatabyname(name) if name else self.datas[0]
+        return self.getposition(data,broker)
+
+    positionbyname = property(getpositionbyname)
+
+    def getpositions(self, broker=None):
+        return (broker or self.broker).positions
+
+    positions = property(getpositions)
+
+    def getpositionsbyname(self, broker=None):
+        broker = broker or self.broker
+        return {data._name:broker.getposition(data) for data in self.datas}
+
+    positionsbyname = property(getpositionsbyname)
+
+    def order_target_size(self, data=None, target=0, **kwargs):
+        data = self._resolve_data(data)
+        position = self.getposition(data, self.broker).size
+        if not target and position:
+            return self.close(data=data, size=position, **kwargs)
+        if target > position:
+            return self.buy(data=data, size=target-position, **kwargs)
+        if target < position:
+            return self.sell(data=data, size=position-target, **kwargs)
+        return None
+
+    def order_target_value(self, data=None, target=0.0, price=None, **kwargs):
+        data = self._resolve_data(data)
+        position = self.getposition(data, self.broker).size
+        if not target and position:
+            return self.close(data=data, size=position, price=price, **kwargs)
+        value = self.broker.getvalue(datas=[data])
+        comminfo = self.broker.getcommissioninfo(data)
+        price = data.close[0] if price is None else price
+        if target > value:
+            return self.buy(data=data, size=comminfo.getsize(price,target-value),price=price,**kwargs)
+        if target < value:
+            return self.sell(data=data, size=comminfo.getsize(price,value-target),price=price,**kwargs)
+        return None
+
+    def setsizer(self, sizer):
+        self._sizer = sizer
+        sizer.set(self, self.broker)
+        return sizer
+
+    def close(self, data=None, size=None, **kwargs):
+        data = self._resolve_data(data)
+        if size is not None:
+            size = abs(size)
+            if not size:
+                return None
+        close = getattr(self.broker, '_close_position', None)
+        if callable(close):
+            result = close(self, data, size=size, **kwargs)
+            if result is not NotImplemented:
+                return result
+        return super().close(data=data, size=size, **kwargs)
+
+    def buy(self, data=None, size=None, price=None, plimit=None, exectype=None,
+            valid=None, tradeid=0, oco=None, trailamount=None, trailpercent=None,
+            parent=None, transmit=True, **kwargs):
+        return self._submit_bt(Order.Buy, data, size, price, plimit, exectype,
+                               valid, tradeid, oco, trailamount, trailpercent, parent, transmit, kwargs)
+
+    def sell(self, data=None, size=None, price=None, plimit=None, exectype=None,
+             valid=None, tradeid=0, oco=None, trailamount=None, trailpercent=None,
+             parent=None, transmit=True, **kwargs):
+        return self._submit_bt(Order.Sell, data, size, price, plimit, exectype,
+                               valid, tradeid, oco, trailamount, trailpercent, parent, transmit, kwargs)
+
+    def _submit_bt(self, side, data, size, price, plimit, exectype, valid, tradeid,
+                   oco, trailamount, trailpercent, parent, transmit, controls):
+        data = self._resolve_data(data)
+        size = self.getsizing(data, isbuy=side == Order.Buy) if size is None else abs(size)
+        if not size:
+            return None
+        if valid is not None:
+            import datetime
+            import numbers
+            if isinstance(valid, numbers.Real):
+                from tradelearn.engine import num2date
+                valid = num2date(valid) if valid else datetime.timedelta(0)
+            if isinstance(valid, datetime.timedelta):
+                now = data.datetime.datetime(0)
+                if now is None:
+                    raise ValueError("order validity requires a delivered strategy clock")
+                valid = (now.replace(hour=23,minute=59,second=59,microsecond=999999)
+                         if valid == datetime.timedelta(0) else now + valid)
+        if tradeid != 0:
+            raise NotImplementedError("multiple tradeid accounting is not implemented")
+        if plimit is not None:
+            if "pricelimit" in controls:
+                raise ValueError("plimit and pricelimit conflict")
+            controls["pricelimit"] = plimit
+        for name, value in dict(valid=valid, oco=oco, trailamount=trailamount,
+                                trailpercent=trailpercent, parent=parent).items():
+            if value is not None:
+                controls[name] = value
+        if not transmit:
+            controls["transmit"] = transmit
+        return super()._submit_order(side, self._resolve_data(data), size, price, exectype, **controls)
+
+    def _resolve_data(self, data=None):
+        if isinstance(data, str):
+            return self.getdatabyname(data)
+        return super()._resolve_data(data)
 
     def buy_bracket(
         self,
@@ -131,49 +249,10 @@ class Strategy(_BaseStrategy, LineRoot):
 
 
 
-class CommInfoBase:
-    """Base class for commission schemes."""
-    COMM_PERC = 0
-    COMM_CASH = 1
-    params = (
-        ("commission", 0.0),
-        ("mult", 1.0),
-        ("margin", None),
-        ("commtype", COMM_PERC),
-        ("stocklike", True),
-        ("percabs", True),
-    )
-
-    def __init__(self, *args, **kwargs):
-        self.params = self.p = Params(self.params, **kwargs)
-
-    def getcommission(self, size, price, *args):
-        if self.p.commtype == self.COMM_CASH:
-            return abs(size) * self.p.commission
-        return abs(size) * price * self.p.commission * self.p.mult
-
-    def get_margin(self, price):
-        return self.p.margin if self.p.margin is not None else price * self.p.mult
-
-    def getsize(self, price, cash):
-        margin = self.get_margin(price)
-        if margin <= 0:
-            return 0
-        return int(cash / margin)
-
-    def getoperationcost(self, size, price):
-        return abs(size) * price * self.p.mult
-
-    def getvaluesize(self, size, price):
-        return size * price * self.p.mult
-
-    def profitandloss(self, size, price, newprice):
-        return size * (newprice - price) * self.p.mult
 
 
 __all__ = [
     "DataFeed",
-    "CommInfoBase",
     "ExecutedInfo",
     "LineSeries",
     "Order",

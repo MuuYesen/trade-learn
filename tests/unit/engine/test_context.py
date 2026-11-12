@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import feed as _as_feed
+
 import tradelearn.engine as bt
 from tradelearn.engine.base import _G, engine_context
 
@@ -61,7 +63,7 @@ def test_indicator_created_inside_strategy_init_uses_strategy_data_context() -> 
     )
 
     cerebro = bt.Cerebro()
-    cerebro.adddata(frame)
+    cerebro.adddata(_as_feed(frame))
     cerebro.addstrategy(UsesCustomIndicator)
 
     [strategy] = cerebro.run()

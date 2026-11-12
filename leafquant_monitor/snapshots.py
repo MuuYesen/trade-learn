@@ -31,16 +31,20 @@ def public_value(value):
 
 def native_info_value(value):
     """Copy Params JSON without converting native floats or object keys."""
-    def check(item):
-        if isinstance(item,dict):
-            if any(not isinstance(k,str) for k in item):raise ValueError('native info JSON object key must be a string')
-            for child in item.values():check(child)
-        elif isinstance(item,list):
-            for child in item:check(child)
-        elif item is not None and type(item) not in (str,int,float,bool):
+    def copy_json(item):
+        if isinstance(item, dict):
+            if any(not isinstance(key, str) for key in item):
+                raise ValueError('native info JSON object key must be a string')
+            return {key: copy_json(child) for key, child in item.items()}
+        if isinstance(item, list):
+            return [copy_json(child) for child in item]
+        if item is not None and type(item) not in (str, int, float, bool):
             raise ValueError('native info must contain JSON values')
-    check(value)
-    return json.loads(json.dumps(value,ensure_ascii=False,allow_nan=False))
+        if type(item) is float and not math.isfinite(item):
+            raise ValueError('non-finite native info JSON value')
+        return item
+    return copy_json(value)
+
 
 def public_fields(value, names):
     return {name: public_value(getattr(value, name, None)) for name in names}

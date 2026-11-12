@@ -113,6 +113,10 @@ class DataContainer:
             return np.full(len(df), default_val, dtype=np.float64)
 
         frame = self._frame
+        if isinstance(frame.index, pd.DatetimeIndex):
+            whole_seconds = frame.index.as_unit("s").as_unit(frame.index.unit)
+            if not frame.index.equals(whole_seconds):
+                raise NotImplementedError("subsecond batch timestamps require a qualified native clock; refusing second truncation")
         if datetime_array is not None:
             self._datetime = datetime_array
         elif isinstance(frame.index, pd.DatetimeIndex):
@@ -177,7 +181,10 @@ class DataContainer:
         return float(arr[idx])
 
     def get_array(self, name: str) -> np.ndarray:
-        return self._arrays.get(name, np.array([], dtype=np.float64))
+        values = self._arrays.get(name, np.array([], dtype=np.float64))
+        if getattr(self, "runtime", None) is not None:
+            return values[:max(0,self._cursor+1)].copy()
+        return values
 
     def shared_bar_buffer(self) -> SharedBarBuffer:
         """Return the zero-copy OHLCV buffer used by line accessors."""

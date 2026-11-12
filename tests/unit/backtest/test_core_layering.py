@@ -152,6 +152,7 @@ def test_backtest_runtime_modules_are_flattened() -> None:
     expected_modules = {
         "__init__.py",
         "broker.py",
+        "clock.py",
         "data.py",
         "engine.py",
         "event_runner.py",
@@ -159,6 +160,8 @@ def test_backtest_runtime_modules_are_flattened() -> None:
         "feed.py",
         "history.py",
         "indicator_cache.py",
+        "indicator.py",
+        "parameters.py",
         "lines.py",
         "models.py",
         "_optimize.py",

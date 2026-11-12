@@ -257,3 +257,13 @@ assert 'No_Data' in selector.to_section()['html']
 """
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_causal_metadata_records_parameters_and_selected_state():
+    selector = CausalSelector(target="label", features=["x"], method="correlation")
+    assert selector.get_params()["target"] == "label"
+    selector.fit(pd.DataFrame({"x": [1.0, 2.0, 3.0], "label": [2.0, 4.0, 6.0]}))
+    artifact = selector.to_dict()
+    assert artifact["selected_features"] == ["x"]
+    assert artifact["input_columns"] == ["x"]
+    assert artifact["method"] == "correlation"

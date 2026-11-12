@@ -9,10 +9,12 @@ from tradelearn.backtest.targets import TargetOrderConstraints
 
 from .backtest import Backtest
 from .strategy import Strategy
+from tradelearn.backtest.indicator import Indicator
 
 __all__ = [
     "Backtest",
     "Strategy",
+    "Indicator",
     "TargetOrderConstraints",
 ]
 
@@ -20,8 +22,6 @@ __all__ = [
 def __getattr__(name: str) -> Any:
     if name == "ta":
         return importlib.import_module("tradelearn.indicators")
-    if name == "pta":
-        return importlib.import_module("tradelearn.indicators.pta")
     if name == "talib":
         return importlib.import_module("tradelearn.indicators.talib")
     if name == "tdx":

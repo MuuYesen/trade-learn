@@ -1,208 +1,40 @@
-"""Tests for generic indicator wrappers."""
+"""Default source migration and retained custom indicator contract."""
 
-from typing import Any
-
+import numpy as np
 import pandas as pd
-import pandas_ta_classic as pta
 import pytest
+import talib as reference
 
-from tradelearn import ta
-
-
-def test_sma_matches_pandas_ta_classic() -> None:
-    """ta.sma delegates to pandas-ta-classic SMA."""
-    close = _close()
-
-    result = ta.sma(close, period=3)
-
-    pd.testing.assert_series_equal(result, pta.sma(close, length=3))
+from tradelearn import indicators
+from tradelearn.indicators.base import FunctionIndicator
 
 
-def test_ema_matches_pandas_ta_classic() -> None:
-    """ta.ema delegates to pandas-ta-classic EMA."""
-    close = _close()
-
-    result = ta.ema(close, length=4)
-
-    pd.testing.assert_series_equal(result, pta.ema(close, length=4))
-
-
-def test_rsi_matches_pandas_ta_classic() -> None:
-    """ta.rsi delegates to pandas-ta-classic RSI."""
-    close = _close()
-
-    result = ta.rsi(close, length=4)
-
-    pd.testing.assert_series_equal(result, pta.rsi(close, length=4))
+@pytest.mark.parametrize("name,period", [("SMA", 3), ("EMA", 4), ("RSI", 4)])
+def test_default_source_matches_real_native_reference(name, period):
+    close = pd.Series([10.0, 11.0, 10.5, 12.0, 13.0, 12.5, 14.0, 15.0, 14.5, 16.0])
+    actual = getattr(indicators.talib, name)(close, timeperiod=period)
+    expected = getattr(reference, name)(close.to_numpy(), timeperiod=period)
+    np.testing.assert_allclose(actual, expected, equal_nan=True)
 
 
-def test_macd_matches_pandas_ta_classic_with_stable_column_names() -> None:
-    """ta.macd delegates to pandas-ta-classic and normalizes output columns."""
-    close = _close()
-
-    result = ta.macd(close, fast=3, slow=6, signal=2)
-    expected = pta.macd(close, fast=3, slow=6, signal=2)
-    expected.columns = ["macd", "hist", "signal"]
-
-    pd.testing.assert_frame_equal(result, expected)
+def test_retired_duplicate_shortcuts_are_not_discovered():
+    assert indicators.DEFAULT_SOURCE == "talib"
+    for name in ["sma", "ema", "rsi", "macd", "atr", "bbands", "adx", "vwap", "pta"]:
+        with pytest.raises(AttributeError):
+            getattr(indicators, name)
 
 
-def test_bbands_matches_pandas_ta_classic_with_stable_column_names() -> None:
-    """ta.bbands delegates to pandas-ta-classic and normalizes output columns."""
-    close = _close()
+def test_custom_function_retains_batch_and_explicit_incremental_protocol():
+    calls = []
 
-    result = ta.bbands(close, length=4, std=2)
-    expected = pta.bbands(close, length=4, std=2)
-    expected = expected.iloc[:, :3].copy()
-    expected.columns = ["lower", "mid", "upper"]
-
-    pd.testing.assert_frame_equal(result, expected)
-
-
-def test_atr_adx_vwap_match_pandas_ta_classic() -> None:
-    """Common OHLCV indicators delegate to pandas-ta-classic."""
-    frame = _ohlcv()
-
-    pd.testing.assert_series_equal(
-        ta.atr(frame.high, frame.low, frame.close, length=5),
-        pta.atr(frame.high, frame.low, frame.close, length=5),
-    )
-
-    adx = ta.adx(frame.high, frame.low, frame.close, length=5)
-    expected_adx = pta.adx(frame.high, frame.low, frame.close, length=5)
-    expected_adx.columns = ["adx", "dmp", "dmn"]
-    pd.testing.assert_frame_equal(adx, expected_adx)
-
-    pd.testing.assert_series_equal(
-        ta.vwap(frame.high, frame.low, frame.close, frame.volume),
-        pta.vwap(frame.high, frame.low, frame.close, frame.volume),
-    )
-
-
-def test_indicator_wrapper_exposes_compute_and_on_bar_error() -> None:
-    """Function-style indicators without bar_columns still raise NotImplementedError."""
-    from tradelearn.indicators.base import FunctionIndicator
-
-    def _dummy(close: Any) -> Any:
-        return close
-
-    no_stream = FunctionIndicator("dummy", _dummy)
-    try:
-        no_stream.on_bar(object())
-    except NotImplementedError as exc:
-        assert "streaming" in str(exc)
-    else:
-        raise AssertionError("on_bar should raise when bar_columns is not set")
-
-
-def test_sma_on_bar_streaming() -> None:
-    """ta.sma.on_bar accumulates a buffer and returns the current SMA value."""
-    from tradelearn.indicators.base import FunctionIndicator
-
-    sma_stream = FunctionIndicator("sma", ta.sma._func, {"period": 3}, bar_columns=("close",))
-
-    class _Bar:
-        def __init__(self, close: float) -> None:
-            self.close = close
-
-    prices = [10.0, 11.0, 12.0, 13.0]
-    results = [sma_stream.on_bar(_Bar(p)) for p in prices]
-
-    # After 3 bars: SMA(3) of [10, 11, 12] = 11.0
-    assert results[2] == pytest.approx(11.0)
-    # After 4 bars: SMA(3) of [10, 11, 12, 13] → last value = (11+12+13)/3 = 12.0
-    assert results[3] == pytest.approx(12.0)
-    sma_stream.reset()
-    assert sma_stream._bar_buffers is None
-
-
-def test_function_indicator_streaming_state_is_isolated() -> None:
-    """Independent streaming states do not share singleton indicator buffers."""
-    from tradelearn.indicators.base import FunctionIndicator
-
-    sma_stream = FunctionIndicator("sma", ta.sma._func, {"period": 2}, bar_columns=("close",))
-    left = sma_stream.new_state()
-    right = sma_stream.new_state()
-
-    class _Bar:
-        def __init__(self, close: float) -> None:
-            self.close = close
-
-    assert sma_stream.on_bar(_Bar(10.0), state=left) != sma_stream.on_bar(_Bar(100.0), state=right)
-    assert sma_stream.on_bar(_Bar(12.0), state=left) == pytest.approx(11.0)
-    assert sma_stream.on_bar(_Bar(104.0), state=right) == pytest.approx(102.0)
-
-    sma_stream.reset(state=left)
-    assert sma_stream.on_bar(_Bar(20.0), state=left) != pytest.approx(11.0)
-    assert sma_stream.on_bar(_Bar(106.0), state=right) == pytest.approx(105.0)
-
-
-def test_function_indicator_can_use_incremental_stream_func() -> None:
-    """Hot streaming indicators can bypass full-history batch recomputation."""
-    from tradelearn.indicators.base import FunctionIndicator
-
-    calls = {"batch": 0}
-
-    def _batch(close: pd.Series) -> pd.Series:
-        calls["batch"] += 1
-        return close
-
-    def _stream(
-        buffers: dict[str, list[float]],
-        _state: dict[str, Any],
-        _params: dict[str, Any],
-    ) -> float:
-        return buffers["close"][-1] * 2
+    def batch(close):
+        calls.append(len(close))
+        return close * 2
 
     indicator = FunctionIndicator(
-        "fast",
-        _batch,
-        bar_columns=("close",),
-        stream_func=_stream,
+        "double", batch, bar_columns=("close",), stream_func=lambda b, s, p: b["close"][-1] * 2
     )
-
-    assert indicator.on_bar({"close": 7.0}) == 14.0
-    assert calls["batch"] == 0
-
-
-def test_atr_on_bar_streaming() -> None:
-    """ta.atr.on_bar works with multi-column StreamBar-style objects."""
-    from dataclasses import dataclass
-
-    from tradelearn.indicators.base import FunctionIndicator
-
-    atr_stream = FunctionIndicator(
-        "atr", ta.atr._func, {"length": 2}, bar_columns=("high", "low", "close")
-    )
-
-    @dataclass
-    class _Bar:
-        high: float
-        low: float
-        close: float
-
-    bars = [_Bar(11, 9, 10), _Bar(12, 10, 11), _Bar(13, 11, 12)]
-    results = [atr_stream.on_bar(b) for b in bars]
-    assert results[-1] == results[-1]  # not NaN after warmup
-
-
-def _close() -> pd.Series:
-    """Return a deterministic close series."""
-    return pd.Series(
-        [10.0, 11.0, 10.5, 12.0, 13.0, 12.5, 14.0, 15.0, 14.5, 16.0],
-        name="close",
-    )
-
-
-def _ohlcv() -> pd.DataFrame:
-    """Return deterministic daily OHLCV bars."""
-    index = pd.date_range("2024-01-01", periods=40, freq="D")
-    return pd.DataFrame(
-        {
-            "high": [11.0 + i for i in range(40)],
-            "low": [9.0 + i for i in range(40)],
-            "close": [10.0 + i for i in range(40)],
-            "volume": [1000.0 + i for i in range(40)],
-        },
-        index=index,
-    )
+    assert indicator(pd.Series([1.0, 2.0])).tolist() == [2.0, 4.0]
+    state = indicator.new_state()
+    assert indicator.on_bar({"close": 7}, state=state) == 14
+    assert calls == [2]

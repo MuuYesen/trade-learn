@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import configured_engine
+
 import pandas as pd
 
 import tradelearn.engine as bt
@@ -37,7 +39,7 @@ def test_runtime_config_is_internal_and_shared_by_lite() -> None:
 
 
 def test_runtime_config_is_internal_and_shared_by_engine() -> None:
-    cerebro = bt.Cerebro(trade_on_close=True, match_mode="smart", exactbars=True, stdstats=False)
+    cerebro = configured_engine(trade_on_close=True, match_mode="smart", exactbars=True, stdstats=False)
     cerebro.broker.setcash(4321.0)
     cerebro.broker.setcommission(commission=0.002)
 

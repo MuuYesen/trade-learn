@@ -3,8 +3,8 @@
 import numpy as np
 import pandas as pd
 
-from tradelearn import ta
-from tradelearn.indicators.tdx.mytt_adapter import MyTT
+from tradelearn import indicators as ta
+from tradelearn.indicators.tdx import _mytt_upstream as MyTT
 
 RTOL = 1e-10
 

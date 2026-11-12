@@ -39,7 +39,7 @@
 - **Engine モード (高度な研究)**：Backtrader の Analyzer/Sizer/Signal エコシステムを完全サポート。論理的に精密で高精度なプロダクション級システムの構築に適しています。
 - **Lite モード (迅速な検証)**：`backtesting.py` のミニマリズムを継承し、モデルのウェイト直結をサポート。ファクターマイニング段階での高頻度な反復とプロトタイプ検証に最適です。
 
-エコシステム面では、TA-Lib、Pandas-TA-Classic、TDX、TradingView の主要指標をサポートし、カスタム指標やデータソースの柔軟な拡張が可能です。
+エコシステム面では、TA-Lib、TDX、TradingView/PyneCore の主要指標をサポートし、カスタム指標やデータソースの柔軟な拡張が可能です。
 
 ## コアハイライト
 
@@ -57,11 +57,11 @@
 
 #### 📦 モジュール化プラットフォーム：軽量コアと柔軟な拡張
 - **デカップリングされたコア**：標準インストールは Engine、Lite と基本データ処理を提供します。レポート、因子、Parquet、ML、指標バックエンドは追加オプションです。
-- **弾力的な拡張**：`[research,lab]` オプションにより、投資研究環境（**JupyterLab + MLflow + AI アシスタント**）を一括で有効化。
+- **弾力的な拡張**：`[research]` オプションにより、投資研究環境（**JupyterLab + MLflow + AI アシスタント**）を一括で有効化。
 
 #### 🌍 グローバルな視点：多基準指標とモダンなエコシステム
-- **ダブルマーケット基準**：国内 (TDX) と海外 (TradingView) の両指標基準を明示的にサポート。TA-Lib や Pandas-TA-Classic とも深く互換。
-- **モダンなツール**：HTML インタラクティブレポート、MLflow 実験管理、JupyterLab / MCP の深い統合を標準提供。
+- **ダブルマーケット基準**：国内 (TDX) と海外 (TradingView) の両指標基準を明示的にサポート。TA-Lib の永続状態ハンドルにも対応。
+- **モダンなツール**：HTML インタラクティブレポート、MLflow 実験管理、JupyterLab / AI Lite / Skills の研究環境を標準提供。
 
 ## 因果推論：偽の相関の罠を越えて
 
@@ -105,18 +105,22 @@ pip install "trade-learn[nautilus]==0.2.9"
 | Extra | 用途 |
 |---|---|
 | `[research]` | データ、指標、因子、ML、Parquet/DuckDB、レポート、最適化 |
-| `[lab]` | JupyterLab、対話ツール、MLflow；研究ライブラリとは別 |
 | `[nautilus]` | 公式NT 2.0.0rc7とAWS SDK；実行はPython 3.13/3.14のみ |
+| `[tl-store]` | ローカル候補のcTrader；CPython3.13 Mac arm64/Linux x86_64 |
 
-現在のソースはこの3組のみです。ソースルート（Rust/maturin必要）で `pip install ".[research,lab]"` は研究環境、`pip install ".[nautilus]"` は実行・送信依存関係を用意します。対応ローカルwheelも使用できます。基本機能はAWS不要で、送信は明示的な設定・権限が必要です。自動的に取引しません。Python 3.10–3.12ではnautilus組のSDKだけが入り、NTはmarkerで省略され実行入口で拒否されます。
+現在のソースは基本インストールとresearch/nautilus/tl-storeです。ソースルート（Rust/maturin必要）で `pip install ".[research]"` は研究環境、`pip install ".[nautilus]"` は実行・送信依存関係を用意します。対応ローカルwheelも使用できます。基本機能はAWS不要で、送信は明示的な設定・権限が必要です。自動的に取引しません。Python 3.10–3.12ではnautilus組のSDKだけが入り、NTはmarkerで省略され実行入口で拒否されます。
 
-公開済みPyPI 0.2.9の旧extras・依存関係は変更しません。新3組は現在のソースを説明し、新版公開ではありません。開発・文書ツールは `uv sync --group dev` / `uv sync --group docs`。`[lab]` のJupyterLab/MLflowと `[research]` を組み合わせて使用します。
+公開済みPyPI 0.2.9の旧extras・依存関係は変更しません。新3組は現在のソースを説明し、新版公開ではありません。開発・文書ツールは `uv sync --group dev` / `uv sync --group docs`。`[research]`にJupyterLab、AI Lite、Skills、MLflowを統合します。CLIはnew/lab/doctorとhelp/versionのみです。labはJupyterLabだけを起動し、MLflowはローカル`sqlite:///mlflow.db`を既定とします。TL MCPとサービス起動ラッパーは削除しました。HTTPデータクライアントはresearchに分離し、NautilusはAWSに必要なurllib3の安全バージョン制約を維持します。
+
+research は Python 3.12+ で KunQuant 0.1.12 を選択します。公式 abi3 wheel は CPython 3.12 以降、ARM Mac は macOS 14 以降が対象です。数式の適格性は指標ガイドを参照してください。依存のインストールだけで全数式の検証完了とはなりません。
+
+汎用 `uv.lock` は未更新です。tl-store 0.2.1a2 が未公開のため、全体の依存解決は失敗します。研究には上記の `pip install ".[research]"` を使ってください。既存lockは新しい依存集合の固定結果ではありません。
 
 ### 原生wheelとプラットフォーム
 
 | 機能 | Python / プラットフォーム |
 |---|---|
-| 研究・バックテスト・原生カーネル | Python 3.10–3.14：Linux x86_64、macOS arm64、Windows x86_64。Linux aarch64：CPython 3.13 |
+| 研究・バックテスト・原生カーネル | ソース基準はPython >=3.10。本機macOS ARM CPython3.12のインストールを検証済み。TA-Lib0.8.3のPython3.10 binary wheelはなく、ARM依存はmacOS14+。他の実行環境は最終成果物の検証待ちです。 |
 | 任意のNautilus実行 | Python 3.13/3.14と対応する公式rc7 wheel。venue・商品・注文の検証は個別 |
 | 戦略ログ | 対応するRecorderが必要。ローカル永続化と遠隔送信をプラットフォーム別に検証 |
 
@@ -137,7 +141,7 @@ class LiteSmaCross(tl.Strategy):
     def init(self):
         self.fast_ma = tl.tdx.MA(self.data.close, N=self.fast)
         self.slow_ma = tl.tdx.MA(self.data.close, N=self.slow)
-        self.start_on_bar(self.slow + 1)
+        self.addminperiod(self.slow + 2)
 
     def next(self):
         if self.fast_ma[0] > self.slow_ma[0] and not self.position():
@@ -164,13 +168,14 @@ bt.report("report.html")
 ```python
 import tradelearn.engine as bt
 from tradelearn.data import TradingViewProvider
+from tradelearn.indicators import tdx
 
 class SmaCross(bt.Strategy):
     params = (("fast", 10), ("slow", 20))
 
     def __init__(self):
-        self.fast = bt.tdx.MA(self.data.close, N=self.p.fast)
-        self.slow = bt.tdx.MA(self.data.close, N=self.p.slow)
+        self.fast = tdx.MA(self.data.close, N=self.p.fast)
+        self.slow = tdx.MA(self.data.close, N=self.p.slow)
 
     def next(self):
         if not self.position and self.fast[0] > self.slow[0]:
@@ -181,17 +186,19 @@ class SmaCross(bt.Strategy):
 provider = TradingViewProvider(n_bars=5000)
 bars = provider.history_ohlc("NASDAQ:AAPL", start="2023-01-01", end="2024-01-01")
 
-cerebro = bt.Cerebro(trade_on_close=True)
-cerebro.setcash(100_000)
-cerebro.setcommission(0.0003)
-cerebro.adddata(bars, name="AAPL")
+cerebro = bt.Cerebro()
+cerebro.broker.setcash(100_000)
+cerebro.broker.setcommission(commission=0.0003)
+cerebro.broker.set_coc(True)
+cerebro.adddata(bt.feeds.PandasData(dataname=bars), name="AAPL")
 cerebro.addstrategy(SmaCross)
 
 [strategy] = cerebro.run()
 print(strategy.stats.summary)
 
 cerebro.plot()
-cerebro.report("report.html")
+from tradelearn.report import Reporter
+Reporter(strategy.stats).report("report.html")
 ```
 
 > [!TIP]
@@ -211,101 +218,9 @@ python -m tradelearn_runtime.support
 
 ## 投資研究パイプライン例
 
-README には最短で読める版のみを載せています。完全なスクリプトは [`examples/research/index_enhance_lite_pipeline.py`](examples/research/index_enhance_lite_pipeline.py) と [`examples/research/index_enhance_engine_pipeline.py`](examples/research/index_enhance_engine_pipeline.py) を参照してください。
+[Lite pipeline](examples/research/index_enhance_lite_pipeline.py)と[Engine pipeline](examples/research/index_enhance_engine_pipeline.py)は共通の学習済み研究フローを使用します。実際のlabel_endによるpurge、独立columns、明示的ResearchRun登録/実行記録、完全なローカルbundleを保全します。Reporterと`tradelearn.integrations.mlflow.log`は既存結果を記録し、モデル公開や添付は明示的です。
 
-**1. Research：生の行情データから特徴量を生成し、訓練 / テストに分割**
-
-```python
-import tradelearn.research as research
-import tradelearn.research.preprocess as pp
-
-feature_set = research.FeatureSet(
-    {
-        "alpha": lambda p: p.close.pct_change(20)
-        / p.close.pct_change().rolling(20).std(),
-        "size": lambda p: p.close,
-    },
-    target={"label": lambda p: p.close.shift(-20) / p.close - 1.0},
-)
-
-features = feature_set.fit_transform(bars, include_target=True).dropna()
-train, test = research.time_split(features, split="2023-09-01", level="timestamp")
-```
-
-**2. Pipeline：前処理、モデルスコアリング、ウェイト生成**
-
-```python
-from sklearn.ensemble import GradientBoostingRegressor
-import tradelearn.research.portfolio as pf
-
-pipe = research.Pipeline(
-    [
-        pp.Winsorizer(columns=["alpha"], limits=(0.05, 0.95)),
-        pp.Neutralizer(columns=["alpha"], exposures=["size"]),
-        pp.StandardScaler(columns=["alpha"]),
-    ]
-)
-train = pipe.fit_transform(train)
-test = pipe.transform(test)
-
-model = GradientBoostingRegressor(random_state=7)
-model.fit(train[["alpha"]], train["label"])
-scores = research.ModelScorer(model, features=("alpha",), current=False).predict(test)
-
-weights = pf.Allocator(
-    select=pf.TopK(k=2),
-    weight=pf.EqualWeight(gross=0.95),
-    constrain=pf.Constraints(max_weight=0.5, normalize=True),
-).build(scores)
-```
-
-**3. Portfolio：目標ウェイトを Lite / Engine に渡して執行**
-
-```python
-class LitePortfolio(tl.Strategy):
-    def next(self):
-        if len(self.data) % 20 == 0:
-            self.target_weights(self.research_result.weights[0], close_missing=True)
-
-
-test_bars = research.split_bars(bars, split="2023-09-01")
-stats = tl.Backtest(test_bars, LitePortfolio, cash=100_000).run(
-    research_result=research_result
-)
-```
-
-**4. Live-style：戦略内では現在見えているウィンドウだけで推論**
-
-投資研究パイプラインはオフライン訓練と検証に適しています。より実盤に近いセマンティクスにする場合は、モデルと allocator を戦略パラメータとして渡し、`next()` の中で `history_panel()` を使って、すでに発生したデータだけを読み取ります。
-
-```python
-class LiveStylePortfolio(tl.Strategy):
-    lookback = 20
-
-    def init(self):
-        self.start_on_bar(self.lookback)
-
-    def next(self):
-        if len(self.data) % 20 != 0:
-            return
-
-        panel = self.history_panel(self.lookback)
-        features = self.feature_set.transform(panel).dropna()
-        scores = self.scorer.predict(features)
-        weights = self.allocator.build(scores)
-        self.target_weights(weights, close_missing=True)
-```
-
-完全版：
-
-| 目的 | 完全なスクリプト |
-|---|---|
-| Lite 投資研究 + バックテスト + report + MLflow | [`examples/research/index_enhance_lite_pipeline.py`](examples/research/index_enhance_lite_pipeline.py) |
-| Engine 投資研究 + バックテスト + report + MLflow | [`examples/research/index_enhance_engine_pipeline.py`](examples/research/index_enhance_engine_pipeline.py) |
-| Lite live-style 現在ウィンドウ推論 | [`examples/research/index_enhance_lite_live.py`](examples/research/index_enhance_lite_live.py) |
-| Engine live-style 現在ウィンドウ推論 | [`examples/research/index_enhance_engine_live.py`](examples/research/index_enhance_engine_live.py) |
-| Engine Backtrader スタイルのポートフォリオ調整 | [`examples/engine/11_target_percent_portfolio.py`](examples/engine/11_target_percent_portfolio.py) |
-| 資産クラス別ポートフォリオ戦略 | [`examples/engine/12_asset_class_portfolios.py`](examples/engine/12_asset_class_portfolios.py) |
+実際の入力とコマンドは[研究ガイド](docs/guides/research.md)と[MLflowガイド](docs/guides/mlflow-lab-mcp.md)を参照してください。importだけで外部データ/有料モデル/実取引を開始しません。
 
 ## 同期とパフォーマンス
 
@@ -335,7 +250,6 @@ class LiveStylePortfolio(tl.Strategy):
 
 *   **金融指標同期**：`metrics`（Sharpe, MaxDD, Sortino など）は `empyrical` と `rtol=1e-10` で一致。
 *   **複数ソースの指標同期**：
-    *   `tl.pta`（クラシック指標）は `pandas-ta-classic` と `rtol=1e-10` で一致。
     *   `tl.tdx`（TDX セマンティクス）は `MyTT` と `rtol=1e-10` で一致。
     *   `tl.tv`（TradingView セマンティクス）は `pyneCore` と `rtol=1e-6` で一致。
 *   **バックテストエンジン同期**：
@@ -356,7 +270,7 @@ class LiveStylePortfolio(tl.Strategy):
 | Lite / Engine の使い方 | [Lite ガイド](docs/guides/lite.md) · [Engine ガイド](docs/guides/engine.md) |
 | アーキテクチャと境界 | [アーキテクチャ](docs/concepts/architecture.md) |
 | Factor / ML / Weight 研究パイプライン | [Research ガイド](docs/guides/research.md) |
-| 二重基準指標（`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`） | [Indicators ガイド](docs/guides/indicators.md) |
+| 二重基準指標（`tl.talib` / `tl.tdx` / `tl.tv`） | [Indicators ガイド](docs/guides/indicators.md) |
 | 性能基準 | [Benchmarks](docs/benchmarks.md) |
 | カーネル内部（契約 / マッチング / portfolio / イベントループ） | [設計ノート](docs/internals/contracts.md) |
 | 完全 API | [API リファレンス](docs/api/reference.md) |
@@ -379,7 +293,7 @@ class LiveStylePortfolio(tl.Strategy):
 - [ ] **因果駆動クローズドループ**：因果分析、パラメータ最適化、リスク管理を自動化された研究ループとして接続。
 
 #### エージェントと AI 能力
-- [x] **MCP 知識ゲートウェイ**：**MCP Server は公開済み**。AI による API の構造理解と自動コード生成を可能にします。
+- [x] **研究入口**：new/lab/doctorとバージョン対応AI Lite Skills。TL MCPは廃止し、providerの実証は別途記録します。
 - [ ] **Agentic 戦略診断**：LLM でバックテスト結果を解析し、損失要因を特定してロジック改善案を提示。
 - [ ] **LLM ファクター解釈器**：因果発見の結果を直感的な金融投資ロジックへ翻訳。
 

@@ -70,7 +70,7 @@ def test_user_docs_include_runtime_boundaries_and_extension_guides() -> None:
     contracts = Path("docs/internals/contracts.md").read_text(encoding="utf-8")
 
     assert "RustBroker 仅用于回测" in architecture
-    assert "Cerebro.adddata(bars)" in data
+    assert "cerebro.adddata(bt.feeds.PandasData(dataname=" in data
     assert "NASDAQ:AAPL" in data
     assert "自定义 Engine 指标" in extensions
     assert "broker-neutral 协议" in extensions

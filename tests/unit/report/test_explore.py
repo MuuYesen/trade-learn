@@ -39,7 +39,7 @@ def test_reporter_explore_has_install_hint_when_missing(monkeypatch) -> None:
 
     monkeypatch.setattr(builtins, "__import__", missing_pygwalker)
 
-    with pytest.raises(ImportError, match=r"trade-learn\[lab\]"):
+    with pytest.raises(ImportError, match=r"pip install pygwalker"):
         Reporter({"trades": pd.DataFrame({"pnl": [1.0]})}).explore()
 
 

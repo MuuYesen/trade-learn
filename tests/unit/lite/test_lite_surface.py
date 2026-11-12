@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import feed as _as_feed
+
+from tests.unit.backtest._engine_config import configured_engine
+
 import logging
 from pathlib import Path
 
@@ -11,6 +15,8 @@ import tradelearn.lite as tl
 from tradelearn.lite import Backtest, Strategy
 from tradelearn.lite.backtest import _can_skip_normalize_data
 from tradelearn.research import ResearchResult
+from tradelearn.research.run import bind_research_result
+from tradelearn.backtest.targets import target_weights
 
 
 def _data() -> pd.DataFrame:
@@ -142,7 +148,7 @@ def test_lite_uses_backtrader_bar_indexing_with_lite_position_call() -> None:
 
     class LiteStrategy(Strategy):
         def init(self) -> None:
-            self.line = self.I(pd.Series([1.0, 2.0, 3.0, 4.0, 5.0], index=self.data.index))
+            self.line = self.data.close - 9
             self.sma = tl.talib.SMA(self.data.close, timeperiod=2)
             self.start_on_bar(2)
 
@@ -253,7 +259,7 @@ def test_lite_fractional_size_is_order_quantity_not_equity_fraction() -> None:
     assert stats.fills.iloc[0]["size"] == 0.5
 
 
-def test_lite_ignores_orders_created_on_terminal_bar() -> None:
+def test_lite_retains_unfilled_submissions_on_terminal_bar() -> None:
     class LiteStrategy(Strategy):
         def init(self) -> None:
             self.start_on_bar(2)
@@ -265,7 +271,8 @@ def test_lite_ignores_orders_created_on_terminal_bar() -> None:
     stats = Backtest(_data(), LiteStrategy, cash=1000.0, trade_on_close=True).run()
 
     assert stats["final_value"] == 1000.0
-    assert stats.orders.empty
+    assert len(stats.orders)==1
+    assert stats.orders.iloc[0]["status"]=="Submitted"
     assert stats.fills.empty
 
 
@@ -328,30 +335,8 @@ def test_lite_data_ta_returns_current_bar_line_proxy() -> None:
     assert "macd_prev" in seen
 
 
-def test_lite_i_accepts_dataframe_indicator_and_slice_columns() -> None:
-    seen: dict[str, float] = {}
-
-    class LiteStrategy(Strategy):
-        def init(self) -> None:
-            frame = pd.DataFrame(
-                {
-                    "DIF": [0.0, 0.1, 0.3, 0.2, 0.4],
-                    "DEA": [0.0, 0.0, 0.2, 0.25, 0.3],
-                },
-                index=self.data.index,
-            )
-            self.macd = self.I(frame, name="macd")
-            self.start_on_bar(2)
-
-        def next(self) -> None:
-            dif = self.macd[:, 0]
-            dea = self.macd[:, 1]
-            seen["dif_now"] = dif[0]
-            seen["dea_prev"] = dea[-1]
-
-    Backtest(_data(), LiteStrategy, cash=1000.0).run()
-
-    assert seen == {"dif_now": 0.4, "dea_prev": 0.25}
+def test_lite_retires_vector_array_I():
+    assert not hasattr(Strategy, "I")
 
 
 def test_lite_records_are_exposed_from_run_result() -> None:
@@ -385,7 +370,7 @@ def test_lite_rejects_sl_tp_until_bracket_orders_are_implemented() -> None:
                 self.buy(size=1, sl=9.0, tp=13.0)
 
     stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
-    orders = stats.strategy.orders
+    orders = stats.strategy.broker.get_orders_history()
 
     assert len(orders) == 3
     assert orders[1].parent is orders[0]
@@ -429,7 +414,7 @@ def test_lite_supports_explicit_bracket_helpers() -> None:
 
     stats = Backtest(_data(), LiteStrategy, cash=1000.0).run()
 
-    assert len(stats.strategy.orders) == 3
+    assert len(stats.strategy.broker.get_orders_history()) == 3
 
 
 def test_lite_does_not_export_mlstrategy() -> None:
@@ -514,7 +499,7 @@ def test_lite_target_weights_targets_multi_asset_weights() -> None:
                 self.target_weights({"AAA": 0.25, "BBB": 0.50, "cash": 0.25})
 
     stats = Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run()
-    orders = stats.strategy.orders
+    orders = stats.strategy.broker.get_orders_history()
 
     assert [(order.data._name, order.size) for order in orders] == [("AAA", 22.0), ("BBB", 23.0)]
 
@@ -538,7 +523,7 @@ def test_lite_target_weights_submit_shared_intents_without_recomputing_targets()
 
     stats = Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run()
 
-    assert [(order.data._name, order.size) for order in stats.strategy.orders] == [
+    assert [(order.data._name, order.size) for order in stats.strategy.broker.get_orders_history()] == [
         ("AAA", 22.0),
         ("BBB", 23.0),
     ]
@@ -577,7 +562,7 @@ def test_lite_target_weights_match_engine_when_previous_order_is_pending() -> No
             if len(self) == 2:
                 self.buy(data=self.getdatabyname("BBB"), size=20)
             elif len(self) == 3:
-                self.target_weights({"AAA": 0.5, "BBB": 0.5})
+                target_weights(self, {"AAA": 0.5, "BBB": 0.5})
 
     lite_stats = Backtest(
         data,
@@ -587,11 +572,11 @@ def test_lite_target_weights_match_engine_when_previous_order_is_pending() -> No
         trade_on_close=True,
     ).run()
 
-    cerebro = bt.Cerebro(trade_on_close=True)
-    cerebro.setcash(1000.0)
-    cerebro.setcommission(0.0)
+    cerebro = configured_engine(trade_on_close=True)
+    cerebro.broker.setcash(1000.0)
+    cerebro.broker.setcommission(0.0)
     for name, frame_data in data.items():
-        cerebro.adddata(frame_data, name=name)
+        cerebro.adddata(_as_feed(frame_data), name=name)
     cerebro.addstrategy(EnginePortfolio)
     [engine_strategy] = cerebro.run()
     engine_stats = engine_strategy.stats
@@ -630,7 +615,9 @@ def test_lite_research_result_weights_current_bar_slice_records_result() -> None
     research = ResearchResult(name="panel-weights", weights=weights)
 
     class LiteStrategy(Strategy):
+        bundle = None
         def init(self) -> None:
+            self.research_result=bind_research_result(self.bundle,self)
             self.start_on_bar(1)
 
         def next(self) -> None:
@@ -638,12 +625,12 @@ def test_lite_research_result_weights_current_bar_slice_records_result() -> None
                 self.target_weights(self.research_result.weights[0], close_missing=True)
 
     stats = Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run(
-        research_result=research
+        bundle=research
     )
 
     assert stats.strategy.research_result.raw is research
-    assert [item.raw for item in stats.strategy.research_results_history] == [research]
-    assert [(order.data._name, order.size) for order in stats.strategy.orders] == [
+    assert not hasattr(stats.strategy,"research_results_history")
+    assert [(order.data._name, order.size) for order in stats.strategy.broker.get_orders_history()] == [
         ("AAA", 9.0),
         ("BBB", 19.0),
     ]
@@ -684,7 +671,9 @@ def test_lite_stats_equity_aligns_short_multi_asset_feeds() -> None:
     research = ResearchResult(name="short-feed-weights", weights=weights)
 
     class LiteStrategy(Strategy):
+        bundle = None
         def init(self) -> None:
+            self.research_result=bind_research_result(self.bundle,self)
             self.start_on_bar(0)
 
         def next(self) -> None:
@@ -692,12 +681,12 @@ def test_lite_stats_equity_aligns_short_multi_asset_feeds() -> None:
                 self.target_weights(self.research_result.weights[0], close_missing=True)
 
     stats = Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=False).run(
-        research_result=research
+        bundle=research
     )
 
     assert stats.equity.nunique() > 1
     assert stats.equity.loc[full_dates[3]] == 900.0
-    assert stats.summary["max_drawdown"] > 0.0
+    assert stats.summary["max_drawdown"] < 0.0
     assert stats.summary["volatility"] > 0.0
 
 
@@ -712,7 +701,9 @@ def test_lite_research_result_weights_current_bar_requires_time_panel() -> None:
     )
 
     class LiteStrategy(Strategy):
+        bundle = None
         def init(self) -> None:
+            self.research_result=bind_research_result(self.bundle,self)
             self.start_on_bar(1)
 
         def next(self) -> None:
@@ -721,7 +712,7 @@ def test_lite_research_result_weights_current_bar_requires_time_panel() -> None:
 
     with pytest.raises(ValueError, match="MultiIndex"):
         Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run(
-            research_result=research
+            bundle=research
         )
 
 
@@ -744,7 +735,7 @@ def test_lite_strategy_history_panel_returns_current_window() -> None:
 
         def next(self) -> None:
             if len(self.data) == 3:
-                self.history = self.history_panel(lookback=2)
+                self.history = self.window(2, data=self.datas)
 
     stats = Backtest(data, LiteStrategy, cash=1000.0, trade_on_close=True).run()
     history = stats.strategy.history
@@ -769,7 +760,7 @@ def test_lite_target_equal_and_close_all_are_target_position_sugar() -> None:
 
         def next(self) -> None:
             if len(self.data) == 2:
-                self.target_equal(["AAA", "BBB"], weight=0.8)
+                self.target_weights({"AAA":0.4,"BBB":0.4})
             elif len(self.data) == 3:
                 self.close_all()
 
@@ -777,13 +768,13 @@ def test_lite_target_equal_and_close_all_are_target_position_sugar() -> None:
 
     submitted_orders = [
         (order.data._name, order.isbuy(), order.size)
-        for order in stats.strategy.orders
+        for order in stats.strategy.broker.get_orders_history()
     ]
     assert submitted_orders == [
         ("AAA", True, 36.0),
         ("BBB", True, 19.0),
-        ("AAA", False, 36.0),
-        ("BBB", False, 19.0),
+        ("AAA", False, -36.0),
+        ("BBB", False, -19.0),
     ]
 
 

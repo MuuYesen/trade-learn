@@ -875,3 +875,22 @@ def _collect_titles(layout) -> set[str]:
             titles.add(title)
         titles.update(_collect_titles(item))
     return titles
+
+
+def test_factor_completed_analysis_uses_common_reporter(tmp_path):
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, periods=12, quantiles=2)
+    analysis = analyzer.to_analysis()
+    assert "Mean Return by Quantile" in analysis["tables"]
+    assert analysis["metadata"]["evaluation"] == "cross_sectional"
+    assert analyzer.report(str(tmp_path / "factor.xlsx")).read_bytes()[:2] == b"PK"
+
+
+def test_factor_report_tables_keep_time_and_quantile_identity():
+    factor, forward = _factor_and_forward_returns()
+    analyzer = FactorAnalyzer(factor, forward_returns=forward, quantiles=2)
+    result = analyzer.to_analysis()
+    ic = analyzer.ic()
+    assert (ic.index.name or "index") in result["tables"]["Information Coefficient"].columns
+    stats = analyzer.quantile_stats()
+    assert (stats.index.name or "index") in result["tables"]["Quantile Statistics"].columns

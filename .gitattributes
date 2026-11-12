@@ -1,4 +1,10 @@
+# Freeze release input bytes across checkout platforms.
+* -text
+
 reference/tradelearn_1x/**/*.py text eol=lf
 
 # Preserve upstream license notices verbatim.
 THIRD_PARTY_LICENSES/** whitespace=-blank-at-eof
+
+# Fixed upstream formula snapshot; retain its original whitespace.
+tradelearn/indicators/tdx/_mytt_upstream.py -whitespace

@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-__version__ = "0.2.9"
+__version__ = "0.3.0"
 
 __all__ = [
     "__version__",
@@ -15,10 +15,6 @@ __all__ = [
 
 def __getattr__(name: str) -> Any:
     """Lazily expose public namespace aliases."""
-    if name == "ta":
-        return importlib.import_module("tradelearn.indicators")
-    if name == "pta":
-        return importlib.import_module("tradelearn.indicators.pta")
     if name == "talib":
         return importlib.import_module("tradelearn.indicators.talib")
     if name == "tdx":

@@ -12,7 +12,31 @@ import re
 import time
 import uuid
 
+from tradelearn.core.observation_clock import monotonic_ns
+
 from .snapshots import account_evidence, framework_snapshot, public_fields, public_value, native_info_value
+
+
+class _AccountEventScan:
+    """Single-owner resumable fact validation, with a synchronous drain at shutdown."""
+    def __init__(self, steps):
+        self.steps=steps;self.done=False;self.result=None
+
+    def step(self):
+        if self.done:return False
+        try:
+            next(self.steps)
+            return True
+        except StopIteration as end:
+            self.result=end.value;self.done=True;self.steps=None
+            return False
+        except BaseException:
+            self.done=True;self.steps.close();self.steps=None
+            raise
+
+    def finish(self):
+        while self.step():pass
+        return self.result
 
 
 @dataclass(frozen=True)
@@ -93,7 +117,7 @@ class TradeLogger:
         self.recorder = recorder
         self.run_id = json.loads(recorder.status())['run_id']
         self._sequence = 0
-        self._monotonic_ns = time.monotonic_ns
+        self._monotonic_ns = monotonic_ns
         self._error = None
         self._order_traces = {}
         self._order_references = {}
@@ -103,6 +127,7 @@ class TradeLogger:
         self._fills = OrderedDict()
         self._account_events = OrderedDict()
         self._account_info_carriers = {}
+        self._pending_account_scan = None
         self._account_last_event = None
         self._account_gap_reason = None
         self._account_recovery_ambiguous = False
@@ -218,9 +243,8 @@ class TradeLogger:
                     account_id=self.settings.account_id, run_id=self.run_id,
                     record_id=f'{self.run_id}:{self._sequence}', kind=kind, source_ts_ns=source_ts_ns,
                     observed_ts_ns=observed_ts_ns, observed_mono_ns=observed_mono_ns, fields=encoded_fields)
-        from leafquant_monitor.codec import encode_fact
-        fact = encode_fact(fact)
-        raw = json.dumps(fact, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+        from leafquant_monitor.codec import _encode_fact_and_json
+        fact, raw = _encode_fact_and_json(fact)
         if len(raw.encode()) + 1 > 96 * 1024:
             self._error = 'RecordExceedsTransportLineLimit'
             raise ValueError('fact exceeds shared complete log-line transport limit')
@@ -432,12 +456,36 @@ class TradeLogger:
                 reason=reason,coverage='retained_framework_cache_only'),observed_ts_ns=observed_ts_ns)
             self._account_gap_reason=reason
 
+    def _begin_account_event_scan(self, cache, observed_ts_ns):
+        scan=self._pending_account_scan
+        if scan is None or scan.done:
+            scan=_AccountEventScan(self._iter_account_events(cache,observed_ts_ns))
+            self._pending_account_scan=scan
+        return scan
+
+    def _release_account_event_scan(self, scan):
+        if self._pending_account_scan is scan:self._pending_account_scan=None
+
+    def _drain_account_event_scan(self):
+        scan=self._pending_account_scan
+        if scan is None:return None
+        try:return scan.finish()
+        finally:self._release_account_event_scan(scan)
+
     def _sample_account_events(self, cache, observed_ts_ns):
+        # Explicit synchronous sampling observes a fresh view after any older scan.
+        self._drain_account_event_scan()
+        scan=self._begin_account_event_scan(cache,observed_ts_ns)
+        try:return scan.finish()
+        finally:self._release_account_event_scan(scan)
+
+    def _iter_account_events(self, cache, observed_ts_ns):
         from nautilus_trader.model import AccountId
         native_id=AccountId(self.settings.framework_account_id or self.settings.account_id)
         try:
             account=cache.account(native_id)
             if account is None:raise LookupError()
+            yield
             events=getattr(account,'events',None)
             if not isinstance(events,list):raise LookupError()
         except Exception:
@@ -446,7 +494,11 @@ class TradeLogger:
             self._account_event_gap('account_events_empty',observed_ts_ns);return
         if len(events)>self.settings.max_event_history:
             self._account_event_gap('account_events_budget_exceeded',observed_ts_ns);return
-        ids=[public_value(getattr(event,'event_id',None)) for event in events]
+        yield
+        ids=[]
+        for event in events:
+            ids.append(public_value(getattr(event,'event_id',None)))
+            yield
         if any(not isinstance(i,str) or not i for i in ids) or len(set(ids))!=len(ids):
             self._account_event_gap('account_event_identity_invalid',observed_ts_ns);return
         if self._account_recovery_ambiguous:
@@ -458,7 +510,9 @@ class TradeLogger:
         retained=set(ids)
         self._account_events=OrderedDict((k,v) for k,v in self._account_events.items() if k in retained)
         self._account_info_carriers={k:v for k,v in self._account_info_carriers.items() if k in retained}
+        changed = False
         for event,event_id in zip(events,ids):
+            yield
             account_id=public_value(getattr(event,'account_id',None))
             timestamp=getattr(event,'ts_event',None);initial=getattr(event,'ts_init',None)
             reported=getattr(event,'is_reported',None)
@@ -487,11 +541,16 @@ class TradeLogger:
                 self._account_event_gap('account_event_record_rejected',observed_ts_ns);return
             self._remember_account_event(fields,digest)
             self._account_info_carriers[event_id]=carrier
+            changed = True
+        return changed
 
     def sample_account(self, cache, *, observed_ts_ns):
         if self.settings.account_source == 'external':
             return None
         self._sample_account_events(cache, observed_ts_ns)
+        return self._record_account_snapshot(cache, observed_ts_ns=observed_ts_ns)
+
+    def _record_account_snapshot(self, cache, *, observed_ts_ns):
         fields = framework_snapshot(cache, self.settings.account_id, self.settings.strategy_id,
                                     observed_ts_ns=observed_ts_ns,
                                     framework_strategy_id=self.settings.framework_strategy_id,
@@ -609,9 +668,12 @@ class TradeLogger:
     def close(self):
         # Seal local raw data. Network sending stops asynchronously; no network
         # wait is added to the framework lifecycle callback.
-        result = json.loads(self.recorder.close())
-        if self.sender is not None:
-            self.sender.stop.set()
+        try:
+            self._drain_account_event_scan()
+        finally:
+            result = json.loads(self.recorder.close())
+            if self.sender is not None:
+                self.sender.stop.set()
         return result
 
     def finish_delivery(self, timeout=30):

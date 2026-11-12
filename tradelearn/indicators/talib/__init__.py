@@ -1,25 +1,25 @@
-"""TA-Lib indicator namespace backed by the real TA-Lib package."""
+"""Qualified persistent TA-Lib source (requires exactly 0.8.3).
 
-from __future__ import annotations
+Display-shifted/repainting outputs stay internal until confirmation-time
+semantics are separately qualified. No arbitrary upstream fallback export.
+"""
 
-from tradelearn.indicators.base import FunctionIndicator
+from talib import get_functions as _get_functions
 
-from .ta_lib_adapter import _atr, _ema, _macd, _rsi, _sma
+from .persistent import make_indicator as _make_indicator
+from .persistent import require_backend as _require_backend
 
-SMA = FunctionIndicator("talib.SMA", _sma, {"timeperiod": 30})
-EMA = FunctionIndicator("talib.EMA", _ema, {"timeperiod": 30})
-RSI = FunctionIndicator("talib.RSI", _rsi, {"timeperiod": 14})
-MACD = FunctionIndicator(
-    "talib.MACD",
-    _macd,
-    {"fastperiod": 12, "slowperiod": 26, "signalperiod": 9},
-)
-ATR = FunctionIndicator("talib.ATR", _atr, {"timeperiod": 14})
-
-sma = SMA
-ema = EMA
-rsi = RSI
-macd = MACD
-atr = ATR
-
-__all__ = ["ATR", "EMA", "MACD", "RSI", "SMA", "atr", "ema", "macd", "rsi", "sma"]
+_require_backend()
+EXCLUDED = {
+    "DPO": "display-shifted output; confirmation-time API not qualified",
+    "FRACTAL": "display-shifted pattern; confirmation-time API not qualified",
+    "ICHIMOKU": "display-shifted outputs; confirmation-time API not qualified",
+    "ZIGZAG": "pivot/revision semantics not qualified",
+}
+QUALIFIED = tuple(name for name in _get_functions() if name not in EXCLUDED)
+BACKEND = "TA-Lib==0.8.3"
+for _name in QUALIFIED:
+    globals()[_name] = _make_indicator(_name)
+    globals()[_name.lower()] = globals()[_name]
+__all__ = ["BACKEND", "QUALIFIED"] + [name for item in QUALIFIED for name in (item, item.lower())]
+del _name

@@ -85,6 +85,10 @@ class BarsCache:
         ttl: timedelta | int | float | None = None,
         offline: bool | None = None,
         now: pd.Timestamp | datetime | str | None = None,
+        symbols: str | list[str] | None = None,
+        start: str | pd.Timestamp | None = None,
+        end: str | pd.Timestamp | None = None,
+        columns: list[str] | None = None,
     ) -> pd.DataFrame:
         """Read cached Bars data and restore attrs."""
         data_path = self._data_path(engine, symbol, freq)
@@ -95,7 +99,13 @@ class BarsCache:
         if stale and not allow_stale:
             raise CacheExpiredError(f"Bars cache entry is stale: {engine}/{symbol}/{freq}")
 
-        bars = pd.read_parquet(data_path)
+        if symbols is not None or start is not None or end is not None or columns is not None:
+            from tradelearn.data.dataset import open_dataset
+
+            with open_dataset(data_path) as dataset:
+                bars = dataset.read(symbols=symbols, start=start, end=end, columns=columns)
+        else:
+            bars = pd.read_parquet(data_path)
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         bars.attrs.update(meta["attrs"])
         if stale:
@@ -112,11 +122,14 @@ class BarsCache:
 
     def exists(self, engine: str, symbol: str, freq: str) -> bool:
         """Return whether both parquet data and metadata exist for a cache key."""
-        return self._data_path(engine, symbol, freq).exists() and self._meta_path(
-            engine,
-            symbol,
-            freq,
-        ).exists()
+        return (
+            self._data_path(engine, symbol, freq).exists()
+            and self._meta_path(
+                engine,
+                symbol,
+                freq,
+            ).exists()
+        )
 
     def is_fresh(
         self,

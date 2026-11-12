@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "trade-learn"
-version = "0.2.9"
+version = "0.3.0"
 description = "Python quantitative research framework for traditional and ML strategies."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,15 +23,10 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "certifi>=2026.10.19",
-    "urllib3>=2.8.0,<3",
-    "idna>=3.15,<4",
     "numpy>=1.26",
     "pandas>=2.1",
     "tqdm",
-    "typer",
-    "pyyaml",
-    "requests>=2.31",
+    "TA-Lib==0.8.3",
 ]
 
 [project.urls]
@@ -43,10 +38,15 @@ tradelearn = "tradelearn.cli:main"
 
 [project.optional-dependencies]
 research = [
+    "certifi>=2026.10.19",
+    "urllib3>=2.8.0,<3",
+    "idna>=3.15,<4",
+    "requests>=2.31",
+    "pyyaml",
     "opentdx; python_version >= '3.12'",
     "websocket-client>=1.8",
-    "pynesys-pynecore; python_version >= '3.11'",
-    "TA-Lib",
+    "pynesys-pynecore==6.13.3; python_version >= '3.11'",
+    "KunQuant==0.1.12; python_version >= '3.12'",
     "scikit-learn",
     "causal-learn",
     "scipy",
@@ -56,23 +56,23 @@ research = [
     "jinja2",
     "numba>=0.65.1",
     "duckdb",
-    "pandas-ta-classic",
     "Riskfolio-Lib",
     "optuna",
-]
-lab = [
-    "jupyterlab",
-    "jupyterlab-git",
+    "gplearn",
+    "jupyterlab>=4.5",
     "ipywidgets",
-    "jupyter-ai",
-    "pygwalker",
-    "mcp>=1.8.0,<2",
+    "jupyter-ai-lite==0.21.0",
     "mlflow",
 ]
 nautilus = [
+    "urllib3>=2.8.0,<3",
     "nautilus_trader==2.0.0rc7; python_version >= '3.13' and python_version < '3.15'",
     "boto3==1.41.2",
     "botocore==1.41.6",
+]
+
+tl-store = [
+    "tl-store==0.2.1a2; python_version == '3.13' and ((sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and platform_machine == 'x86_64'))",
 ]
 
 [dependency-groups]
@@ -88,17 +88,21 @@ docs = [
     "mkdocstrings-python",
 ]
 ci = [
-    "mcp>=1.8,<2",
+    "certifi>=2026.10.19",
+    "urllib3>=2.8.0,<3",
+    "idna>=3.15,<4",
+    "requests>=2.31",
+    "pyyaml",
+    "mlflow",
     "openpyxl",
     "statsmodels",
     "tomli; python_version < '3.11'",
     "boto3==1.41.2",
     "botocore==1.41.6",
-    "pandas-ta-classic",
     "opentdx; python_version >= '3.12'",
     "websocket-client>=1.8",
-    "TA-Lib",
-    "pynesys-pynecore; python_version >= '3.11'",
+    "pynesys-pynecore==6.13.3; python_version >= '3.11'",
+    "KunQuant==0.1.12; python_version >= '3.12'",
     "scipy",
     "pyarrow",
     "bokeh",
@@ -122,13 +126,39 @@ python-source = "."
 python-packages = ["tradelearn", "tradelearn_runtime", "leafquant_monitor"]
 features = ["extension-module"]
 include = [
+    { path = "scripts/build_release.py", format = "sdist" },
+    { path = "scripts/finalize_wheel.py", format = "sdist" },
+    { path = "scripts/check_release_closure.py", format = "sdist" },
+    { path = "scripts/generate_api_reference.py", format = "sdist" },
+    { path = "scripts/check_preview_wheel.py", format = "sdist" },
+    { path = "scripts/check_order_lifecycle_wheel.py", format = "sdist" },
+    { path = "scripts/check_public_runtime_wheel.py", format = "sdist" },
+    { path = "scripts/check_public_bridge_wheel.py", format = "sdist" },
+    { path = "scripts/native_recorder_smoke.py", format = "sdist" },
+    { path = "scripts/check_recorder_platform.py", format = "sdist" },
+    { path = "tests/test_filesystem_identity.py", format = "sdist" },
+    { path = "tests/test_windows_delivery.py", format = "sdist" },
+    { path = "docs/api/reference.md", format = "sdist" },
+    { path = "docs/api/reference/*.md", format = "sdist" },
+    { path = "scripts/examples/ml_strategy.py", format = "sdist" },
+    { path = "docs/guides/*.md", format = "sdist" },
+    { path = "docs/quickstart.md", format = "sdist" },
+    { path = "docs/release/evaluation.md", format = "sdist" },
+    { path = "examples/__init__.py", format = "sdist" },
+    { path = "examples/research/*.py", format = "sdist" },
+    { path = "examples/engine/*.py", format = "sdist" },
+    { path = "scripts/check_research_environment.py", format = "sdist" },
+    { path = "scripts/check_kunquant_artifact.py", format = "sdist" },
     { path = "LICENSE", format = "sdist" },
     { path = "NOTICE", format = "sdist" },
     { path = "THIRD_PARTY_LICENSES/**/*", format = ["sdist", "wheel"] },
     { path = "tradelearn_runtime/official_adapters.json", format = ["sdist", "wheel"] },
+    { path = "tradelearn/indicators/native/kunquant_split_state.hpp", format = ["sdist", "wheel"] },
+    { path = "tradelearn/indicators/capabilities.json", format = ["sdist", "wheel"] },
 ]
 
 [tool.cibuildwheel]
+environment = { CARGO_ENCODED_RUSTFLAGS = "$(python scripts/build_release.py --print-cargo-flags)" }
 test-requires = ["pytest"]
 build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
 skip = "*-musllinux_*"
@@ -154,6 +184,10 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Fixed MyTT upstream snapshot: preserve its exact formula/source bytes.
+"tradelearn/indicators/tdx/_mytt_upstream.py" = ["E501", "E701", "E702", "E703", "I001"]
 
 [tool.interrogate]
 ignore-init-method = true

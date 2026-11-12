@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tradelearn.ml.artifacts import load_bundle, save_bundle
 from tradelearn.ml.causal import CausalSelector
 from tradelearn.ml.registry import ModelLoader, ModelRegistry, model_uri
 
@@ -11,3 +12,5 @@ __all__ = [
     "ModelRegistry",
     "model_uri",
 ]
+
+__all__ += ["save_bundle", "load_bundle"]

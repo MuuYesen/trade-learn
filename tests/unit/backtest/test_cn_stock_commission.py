@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import feed as _as_feed
+
+from tests.unit.backtest._engine_config import configured_engine
+
 import pandas as pd
 import pytest
 
 import tradelearn.engine as bt
+from tradelearn.core.costs import CNAStockCommission
 
 
 def test_engine_facade_exports_cn_stock_commission() -> None:
-    assert bt.CNAStockCommission.__name__ == "CNAStockCommission"
-    assert "CNAStockCommission" in bt.__all__
+    assert CNAStockCommission.__name__ == "CNAStockCommission"
+    assert not hasattr(bt,"CNAStockCommission")
 
 
 def test_engine_applies_cn_stock_commission_minimum_transfer_and_stamp_tax() -> None:
@@ -29,9 +34,9 @@ def test_engine_applies_cn_stock_commission_minimum_transfer_and_stamp_tax() -> 
         },
         index=pd.date_range("2025-01-01", periods=4),
     )
-    cerebro = bt.Cerebro(trade_on_close=False, commission=bt.CNAStockCommission())
-    cerebro.setcash(100_000.0)
-    cerebro.adddata(bars)
+    cerebro = configured_engine(trade_on_close=False, commission=CNAStockCommission())
+    cerebro.broker.setcash(100_000.0)
+    cerebro.adddata(_as_feed(bars))
     cerebro.addstrategy(RoundTrip)
 
     [strategy] = cerebro.run()

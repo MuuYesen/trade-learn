@@ -1,165 +1,81 @@
 # 组件调用速查
 
-本页只列当前代码中已经实现、适合作为用户入口的调用方式。规划中或兼容层内部接口不会放在这里。
+本页对应未发布源码候选。Engine以固定Backtrader源码为对照；实际已支持和明确拒绝的能力见[Engine指南](engine.md)。Lite共用Runtime、Lines、指标状态与订单事实，保留便利外观。
 
-外部执行的本地新增入口为 `bt.stores.DefaultStore`（已安装的 TL 适配器）和 `bt.stores.NautilusStore`（官方 NA 适配器），保留 `Cerebro.adddata/addstrategy/setbroker/run`。官方适配器配置、完整示例及未发布边界见[执行接入指南](live.md#nautilusstorecerebro-组装入口)；可选 `run(monitor=...)` 使用已有受限 SQS 发送配置，详情见该页监控章节。
+实时使用`from tradelearn_runtime import NautilusStore`，沿`getdata/getbroker`组装Cerebro，通常`engine.run()`；额外监控参数使用`store.run(engine, monitor=...)`。只有一个官方NA宿主，配置与能力边界见[执行接入指南](live.md)。
 
 ## Lite / Engine 总览
 
-Lite 和 Engine 共用 `tradelearn.backtest` runtime、Rust broker 和 `Stats`，区别只在用户语法：
-
 | 能力 | Lite | Engine |
 |---|---|---|
-| 推荐导入 | `import tradelearn.lite as tl` | `import tradelearn.engine as bt` |
+| 导入 | `import tradelearn.lite as tl` | `import tradelearn.engine as bt` |
 | 策略基类 | `tl.Strategy` | `bt.Strategy` |
-| 运行器 | `tl.Backtest(data, Strategy)` | `bt.Cerebro()` |
-| 初始化 hook | `init()` | `__init__()` |
-| 主循环 | `next()` | `next()` |
-| 数据访问 | `self.data.close[0]` | `self.data.close[0]` |
-| 多标的数据 | `self.datas["AAPL"]` / ticker 参数 | `self.datas[0]` / `getdatabyname()` |
-| 指标入口 | `tl.tdx` / `tl.talib` / `tl.tv` / `tl.pta` | `bt.tdx` / `bt.talib` / `bt.tv` / `bt.pta` |
-| 自定义指标 | `self.I(func, ...)` | `class MyInd(bt.Indicator)` |
-| 目标权重 | `target_weights()` / `target_equal()` | `target_weights()` / `order_target_percent()` |
-| Analyzer / Sizer / Signal | 不暴露 | Backtrader 风格扩展入口 |
-| 结果对象 | `stats = bt.run()` | `[strategy] = cerebro.run(); strategy.stats` |
-| 绘图 / 报告 | `bt.plot()` / `bt.report()` | `cerebro.plot()` / `cerebro.report()` |
+| 初始化 | `init()`、类属性参数 | `__init__()`、`params` |
+| 数据 | `self.data.close[0]`、`self.datas["AAPL"]` | `self.data.close[0]`、`getdatabyname()` |
+| 来源指标 | `tradelearn.indicators.talib/tv/tdx` | 同一来源对象；`bt.talib`保BT入口 |
+| 自定义指标 | `class MyInd(tl.Indicator)` | `class MyInd(bt.Indicator)`；同一基类 |
+| 组合调仓 | `target_weights(weights)` | 逐标的`order_target_percent()`或独立`backtest.targets.target_weights` |
+| 结果 | `stats = backtest.run()` | `[strategy] = cerebro.run(); stats = strategy.stats` |
+| 报告 | `Reporter(stats).report(path)` | 同一独立Reporter |
 
 ## 数据输入
 
-### 单标的 OHLCV
+Lite直接接单标的OHLCV、symbol映射或`MultiIndex(timestamp, symbol)`面板。Engine显式注册Feed：
 
 ```python
-bars = provider.history_ohlc("NASDAQ:AAPL", start="2023-01-01", end="2024-01-01")
-
-stats = tl.Backtest(bars, MyLiteStrategy).run()
-
 cerebro = bt.Cerebro()
-cerebro.adddata(bars, name="AAPL")
+cerebro.adddata(bt.feeds.PandasData(dataname=bars), name="AAPL")
+# 多标的面板由调用方按symbol拆分，每个Feed单独登记。
+for symbol, frame in panel.groupby(level="symbol"):
+    cerebro.adddata(bt.feeds.PandasData(
+        dataname=frame.droplevel("symbol")), name=str(symbol))
 ```
 
-### 多标的 panel
+## 暖机与窗口
 
-`provider.history_ohlc(["AAPL", "MSFT"], ...)` 返回 `MultiIndex(timestamp, symbol)` panel 时，Engine 和 Lite 都会自动识别多标的数据形态。
+在初始化中建立指标依赖。共享Runtime按各依赖minimum_period调用prenext、nextstart、next。Engine多Feed恰处最小周期边界时可连续调用nextstart，符合固定BT；Lite首次可运行回调只调一次nextstart。Lite可用`addminperiod(20)`显式要求20条数据；旧`start_on_bar(n)`对应n+1条。
 
-```python
-bars = provider.history_ohlc(["NASDAQ:AAPL", "NASDAQ:MSFT"], start="2023-01-01")
-
-# Lite: 构造时直接传 panel
-stats = tl.Backtest(bars, MyPortfolio).run()
-
-# Engine: adddata 直接传 panel，会按 symbol 自动拆 feed
-cerebro = bt.Cerebro()
-cerebro.adddata(bars)
-```
-
-规则：
-
-- 普通 OHLCV DataFrame：注册为单个 feed。
-- MultiIndex panel 且 index 包含 `symbol` / `ticker` 层：按 symbol 自动拆成多个 feed。
-- feed name 默认使用 symbol；也可以在单标的场景显式传 `name=`。
-
-## Warm-up 与历史窗口
-
-Lite:
-
-```python
-class S(tl.Strategy):
-    def init(self):
-        self.start_on_bar(20)
-```
-
-Engine:
-
-```python
-class S(bt.Strategy):
-    def __init__(self):
-        self.addminperiod(20)
-```
-
-`history_panel(lookback)` 是 tradelearn 增强接口，不是 Backtrader 原生接口。它返回当前已经可见的最近窗口：
-
-```python
-panel = self.history_panel(20)
-# index: timestamp, symbol
-# columns: open, high, low, close, volume, 以及额外小写列
-```
-
-第一次触发 `next()` 时只能返回 1 根；第 20 根后才可能返回完整 20 根。需要满窗口时请配合 `start_on_bar()` 或 `addminperiod()`。
+Lite的`self.window(20)`返回当前已交付前缀的独立快照，单feed为时间索引，多feed为timestamp/symbol面板。Engine窗口使用独立`tradelearn.backtest.history.window(strategy, size=20)`，不扩展BT策略基类。正ago、未来数据和无效窗口参数拒绝；详细语义见[Lite指南](lite.md)。
 
 ## 下单与持仓
 
 | 目标 | Lite | Engine |
 |---|---|---|
-| 买入 | `self.buy(size=100)` | `self.buy(size=100)` |
-| 卖出 | `self.sell(size=100)` | `self.sell(size=100)` |
-| 平仓 | `self.position().close()` | `self.close()` |
-| 当前持仓 | `self.position()` | `self.position` / `self.getposition()` |
-| 目标数量 | `self.order_target_size(target=100)` | `self.order_target_size(target=100)` |
-| 目标比例 | `self.order_target_percent(target=0.6)` | `self.order_target_percent(target=0.6)` |
-| 多标的目标权重 | `self.target_weights({"AAPL": 0.5, "MSFT": 0.4})` | `self.target_weights({"AAPL": 0.5, "MSFT": 0.4})` |
+| 买入/卖出 | `self.buy(size=100)` / `self.sell(size=100)` | 同名BT参数 |
+| 平仓 | `self.position().close()` / `self.close()` | `self.close()` |
+| 当前持仓 | `self.position(ticker=None)` | `self.position` / `self.getposition()` |
+| 组合目标权重 | `self.target_weights({"AAPL": 0.5})` | 独立`tradelearn.backtest.targets.target_weights(self, weights)` |
 
-Lite 的 `position()` 是方法，Engine 的 `position` 是 Backtrader 风格属性。
+position只表达已成交状态；Lite.orders是当前活动订单tuple。调仓会考虑活动根订单剩余量，关联止盈止损单不重复当目标仓位。
 
-A 股实盘或仿真需要整手买入、可卖数量限制时，可以通过 facade 创建约束对象再传给 `target_weights`：`tl.TargetOrderConstraints(buy_lot_size=100, sell_lot_size=100, max_sell_qty_by_symbol=...)`。
-
-## 指标写法
-
-内置指标口径在 Lite 和 Engine 中保持一致：
+## 共享指标
 
 ```python
-self.ma20 = tl.tdx.MA(self.data.close, N=20)
-self.rsi14 = tl.talib.RSI(self.data.close, timeperiod=14)
-self.tv_rsi = tl.tv.RSI(self.data.close, length=14)
+from tradelearn.indicators import talib, tv, tdx
+
+# 在Engine.__init__或Lite.init中定义；实际资格见指标指南。
+self.ma20 = talib.SMA(self.data.close, timeperiod=20)
+self.rsi14 = talib.RSI(self.data.close, timeperiod=14)
+self.tv_rsi = tv.rsi(self.data.close, length=14)
+self.mixed = (self.data.high + self.data.low) / 2
 ```
 
-Engine 中只需要把 `tl` 换成 `bt`：
+每个调用创建独立持久状态；多输出共用一次事件更新。任意Pandas函数不自动编译成流式指标；旧I/PTA路径已退出。自定义类声明共享Lines或显式实现持久后端，不能读取未来全量数据。
+
+## Stats 与报告
+
+两入口共享`summary/equity/returns/fills/trades/positions/orders/config`；Lite附加`records/strategy`，底层结果可用`stats.stats`读取。
+
+完整已平仓交易摘要使用含费用`pnlcomm`，并在metric_metadata显式标记；无亏损分母的profit_factor不可计算，保NaN。Reporter仅沿生产者显式基准消费，保原gross列。
+
+摘要`annual_return`、`volatility`使用小数比例；`max_drawdown`是带负号的小数比例。不可计算的Sharpe/Sortino/Calmar等保NaN，不补零。底层`Stats.metric_metadata`记录单位、缺失原因和年化参数。当前摘要使用252的逐Bar默认profile，不能据此宣称输入已满足交易日日历；其他频率应在独立`Reporter(stats, periods=...)`明确提供年化参数。价格与收益样本须由调用方先核资格。
 
 ```python
-self.ma20 = bt.tdx.MA(self.data.close, N=20)
-self.rsi14 = bt.talib.RSI(self.data.close, timeperiod=14)
+from tradelearn.report import Reporter
+report = Reporter(stats, periods=252)
+facts = report.metric_facts()  # 原始值、单位、原因
+report.report("report.html")
 ```
-
-自定义指标按入口区分：
-
-```python
-# Lite: 函数式
-self.z = self.I(zscore, self.data.close, window=20)
-
-# Engine: Backtrader 风格 class
-class MidPrice(bt.Indicator):
-    lines = ("mid",)
-
-    def __init__(self):
-        self.lines.mid = (self.data.high + self.data.low) / 2
-```
-
-## Stats 结果对象
-
-Lite:
-
-```python
-stats = bt.run()
-stats["final_value"]
-stats.summary
-stats.equity
-stats.trades
-stats.records
-stats.strategy
-stats.config
-```
-
-Engine:
-
-```python
-[strategy] = cerebro.run()
-stats = strategy.stats
-stats.summary
-stats.equity
-stats.trades
-stats.config
-```
-
-两边共享 `Stats` 字段：`summary`、`equity`、`returns`、`fills`、`trades`、`positions`、`orders`、`config`。Lite 额外提供 `records` 和 `strategy` 便捷入口。
 
 ## Research 组件
 

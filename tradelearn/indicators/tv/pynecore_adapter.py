@@ -9,10 +9,19 @@ from threading import RLock
 import pandas as pd
 import pynecore.lib as pyne_lib
 import pynecore.lib.ta as pyne_ta
-from pynecore.core.function_isolation import isolate_function
-from pynecore.core.function_isolation import reset as reset_pyne_functions
-from pynecore.core.series import inline_series
+from pynecore.core.instance_state import _bind_target
 from pynecore.types.na import NA
+
+
+def isolate_function(func, name, scope):
+    """Bind a fresh 6.13.3 state vector for this batch invocation."""
+    return _bind_target(func)
+
+
+def reset_pyne_functions():
+    """No shared global cache is reset by the state-vector adapter."""
+    return None
+
 
 _PYNE_LOCK = RLock()
 
@@ -565,7 +574,7 @@ def _run_source_values(
     for index, value in enumerate(series):
         pyne_lib.bar_index = index
         source_value = _pyne_value(value)
-        source_series = inline_series(source_value, 0)
+        source_series = source_value
         values.append(_to_pandas_value(call(source_series, fn)))
     return values
 

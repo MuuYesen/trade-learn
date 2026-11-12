@@ -1,6 +1,6 @@
 # Indicators Reference
 
-Technical indicator facade for core indicators and optional pandas-ta-classic, TA-Lib, TDX, and TradingView styles.
+Qualified TA-Lib, TDX and TradingView indicators with stateful execution.
 
 [Back to API Reference](../reference.md)
 

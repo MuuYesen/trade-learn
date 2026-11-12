@@ -28,6 +28,7 @@ def test_reporter_excel_writes_spec_sheets(tmp_path) -> None:
         "positions",
         "orders",
         "config",
+        "metric_facts",
     ]
 
 
@@ -53,9 +54,7 @@ def test_reporter_excel_appends_custom_section_sheets(tmp_path) -> None:
             assert ctx.stats is not None
             assert not ctx.returns.empty
             return {
-                "custom_exposure": pd.DataFrame(
-                    {"symbol": ["AAA", "BBB"], "weight": [0.6, 0.4]}
-                )
+                "custom_exposure": pd.DataFrame({"symbol": ["AAA", "BBB"], "weight": [0.6, 0.4]})
             }
 
     Reporter(_stats(), periods=252).excel(path, sections=[ExposureSection()])
@@ -340,7 +339,9 @@ class _FactorAnalyzerStub:
 
 
 def test_reporter_excel_accepts_direct_mapping_section(tmp_path):
-    path = tmp_path/'dict-section.xlsx'
-    Reporter(_stats(), periods=252).excel(path, sections=[{'excel': {'causal_features': pd.DataFrame({'feature': ['alpha']})}}])
-    assert 'causal_features' in _sheet_names(path)
-    assert 'alpha' in _shared_strings(path)
+    path = tmp_path / "dict-section.xlsx"
+    Reporter(_stats(), periods=252).excel(
+        path, sections=[{"excel": {"causal_features": pd.DataFrame({"feature": ["alpha"]})}}]
+    )
+    assert "causal_features" in _sheet_names(path)
+    assert "alpha" in _shared_strings(path)

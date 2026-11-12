@@ -8,11 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from tradelearn.core.errors import ConfigurationError
 
-DEFAULT_MLFLOW_TRACKING_URI = "http://127.0.0.1:5050"
+DEFAULT_MLFLOW_TRACKING_URI = "sqlite:///mlflow.db"
 DEFAULT_DATA_CACHE_DIR = Path("./data")
 DEFAULT_LOG_LEVEL = "INFO"
 
@@ -64,6 +62,12 @@ def _merge_yaml(values: dict[str, Any], path: Path) -> None:
     """Load an existing YAML mapping into resolved values; reject malformed configuration."""
     if not path.exists():
         return
+    try:
+        import yaml
+    except ImportError as exc:
+        raise ConfigurationError(
+            "Reading YAML configuration requires trade-learn[research] (PyYAML)"
+        ) from exc
     try:
         loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as exc:

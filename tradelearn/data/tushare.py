@@ -8,9 +8,12 @@ import time
 
 import numpy as np
 import pandas as pd
-import requests
 
 from tradelearn.data.bars import normalize_bars
+
+
+class _RequestsUnavailable(ImportError):
+    pass
 
 
 class TushareProvider:
@@ -51,6 +54,8 @@ class TushareProvider:
             if not isinstance(result, pd.DataFrame):
                 raise TypeError("Invalid response")
             return result.copy()
+        except _RequestsUnavailable:
+            raise
         except Exception:
             # Do not chain upstream exceptions: request bodies can contain tokens.
             raise ConnectionError(
@@ -60,6 +65,12 @@ class TushareProvider:
     def _request(self, api, params, fields):
         if not self._token:
             raise ConnectionError("TUSHARE_TOKEN is required")
+        try:
+            import requests
+        except ImportError:
+            raise _RequestsUnavailable(
+                "Tushare HTTP transport requires `pip install trade-learn[research]`."
+            ) from None
         for attempt in range(2):
             remaining = self._deadline - time.monotonic() if self._deadline is not None else 20.0
             if remaining <= 0:

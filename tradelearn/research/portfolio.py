@@ -102,10 +102,7 @@ def _select_top_single(
             continue
         items.append((key, score))
 
-    return [
-        key
-        for key, _ in sorted(items, key=lambda item: item[1], reverse=reverse)[:k]
-    ]
+    return [key for key, _ in sorted(items, key=lambda item: item[1], reverse=reverse)[:k]]
 
 
 def _select_top_panel(
@@ -276,6 +273,8 @@ def _apply_constraints_single(
         gross = adjusted.abs().sum()
         if gross > 0:
             adjusted = adjusted / gross
+    if max_weight is not None and (adjusted.abs() > float(max_weight) + 1e-10).any():
+        raise ValueError("normalization violates max_weight; constraints are infeasible")
     return adjusted
 
 
@@ -302,6 +301,8 @@ def _apply_constraints_panel(
     if normalize:
         gross = adjusted.abs().groupby(level=time_level, sort=False).transform("sum")
         adjusted = adjusted.where(gross <= 0, adjusted / gross)
+    if max_weight is not None and (adjusted.abs() > float(max_weight) + 1e-10).any():
+        raise ValueError("normalization violates max_weight; constraints are infeasible")
     adjusted.index = pd.MultiIndex.from_arrays(
         [
             adjusted.index.get_level_values(time_level),
@@ -401,12 +402,15 @@ class Constraints:
 
     def apply(self, weights: Mapping[Hashable, float] | pd.Series) -> pd.Series:
         """Apply clipping, pruning, and optional gross normalization."""
-        return apply_constraints(
+        result = apply_constraints(
             weights,
             max_weight=self.max_weight,
             min_abs_weight=self.min_abs_weight,
             normalize=self.normalize,
         )
+        if self.max_weight is not None and (result.abs() > self.max_weight + 1e-10).any():
+            raise ValueError("normalization violates max_weight; constraints are infeasible")
+        return result
 
     def get_params(self) -> dict[str, Any]:
         """Return serializable constraint parameters."""
@@ -432,14 +436,32 @@ class Allocator:
         self.weight = weight
         self.constrain = constrain
 
-    def build(self, scores: Mapping[Hashable, float] | pd.Series) -> pd.Series:
+    def build(
+        self,
+        scores: Mapping[Hashable, float] | pd.Series,
+        *,
+        returns: pd.DataFrame | None = None,
+        previous_weights: pd.Series | None = None,
+    ) -> pd.Series:
         """Build target weights from scores."""
         _record_allocator_step(self)
         with suspend_tracking():
             selected = self.select.select(scores)
-            weights = self.weight.allocate(selected)
+            if isinstance(self.weight, RiskfolioWeight):
+                weights = self.weight.allocate(
+                    selected, returns=returns, previous_weights=previous_weights
+                )
+            else:
+                if returns is not None or previous_weights is not None:
+                    raise ValueError("this weighter does not consume returns/previous_weights")
+                weights = self.weight.allocate(selected)
             if self.constrain is not None:
                 weights = self.constrain.apply(weights)
+            if (
+                isinstance(self.weight, RiskfolioWeight)
+                and abs(weights.abs().sum() - self.weight.gross) > 1e-8
+            ):
+                raise ValueError("constraints violate Riskfolio target gross")
         return pd.Series(weights, dtype="float64", name="weight")
 
     def get_params(self) -> dict[str, Any]:
@@ -529,6 +551,64 @@ class RiskfolioOptimizer:
         return params
 
 
+class RiskfolioWeight:
+    """Riskfolio-backed long-only minimum-variance allocation.
+
+    Scores select assets only. Returns must be a strictly historical finite
+    matrix; no expected return, transaction-cost or turnover model is inferred.
+    """
+
+    def __init__(
+        self, *, objective: str = "min_variance", covariance: str = "historical", gross: float = 1.0
+    ) -> None:
+        if objective != "min_variance" or covariance != "historical":
+            raise ValueError("supported objective/covariance: min_variance/historical")
+        if not math.isfinite(gross) or gross <= 0:
+            raise ValueError("gross must be positive and finite")
+        self.objective, self.covariance, self.gross = objective, covariance, float(gross)
+        self.optimizer = RiskfolioOptimizer(obj="MinRisk", rm="MV", method_cov="hist")
+
+    def allocate(
+        self,
+        selected: Any,
+        *,
+        returns: pd.DataFrame | None = None,
+        previous_weights: pd.Series | None = None,
+    ) -> pd.Series:
+        if returns is None:
+            raise ValueError("RiskfolioWeight requires explicit historical returns")
+        if previous_weights is not None:
+            raise ValueError(
+                "previous_weights requires an explicit turnover/cost model; unsupported"
+            )
+        if isinstance(selected, pd.Series) and isinstance(selected.index, pd.MultiIndex):
+            raise ValueError("RiskfolioWeight requires one decision cross section")
+        symbols = [str(x) for x in selected]
+        if not symbols or len(set(symbols)) != len(symbols):
+            raise ValueError("RiskfolioWeight requires nonempty unique selected assets")
+        frame = returns.loc[:, symbols].astype(float)
+        if len(frame) < 2 or frame.isna().any().any() or not frame.map(math.isfinite).all().all():
+            raise ValueError("returns require at least two complete finite observations")
+        result = self.optimizer.optimize(frame)
+        if (
+            set(result.index) != set(symbols)
+            or result.index.has_duplicates
+            or not result.map(math.isfinite).all()
+            or (result < 0).any()
+            or abs(result.sum() - 1.0) > 1e-5
+        ):
+            raise ValueError("Riskfolio returned an invalid or infeasible solution")
+        return (result * self.gross).rename("weight")
+
+    def get_params(self) -> dict[str, Any]:
+        return {
+            "type": type(self).__name__,
+            "objective": self.objective,
+            "covariance": self.covariance,
+            "gross": self.gross,
+        }
+
+
 def _import_optional(module: str, *, package: str):
     extra = "research"
     try:
@@ -573,6 +653,7 @@ __all__ = [
     "Constraints",
     "EqualWeight",
     "RiskfolioOptimizer",
+    "RiskfolioWeight",
     "Selector",
     "TopK",
     "Allocator",

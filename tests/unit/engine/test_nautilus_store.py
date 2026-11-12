@@ -1,3 +1,6 @@
+from tests.unit.backtest._engine_config import feed as _as_feed
+from tradelearn.backtest.event_runtime import StrategyRuntime
+from tradelearn.strategy_logging.tradelearn import TradeLogStrategy
 """Store assembly is offline; native callbacks remain owned by ExecutionHost."""
 import asyncio
 from types import SimpleNamespace
@@ -5,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 pytest.importorskip('nautilus_trader')
+from tradelearn_runtime import NautilusStore
 from nautilus_trader.adapters.binance import (
     BinanceDataClientConfig, BinanceDataClientFactory, BinanceEnvironment,
     BinanceExecutionClientConfig, BinanceExecutionClientFactory,
@@ -24,7 +28,7 @@ def store(tmp_path, account='BINANCE-001', **kwargs):
         exec_clients={'BINANCE': BinanceExecutionClientConfig(
             account_id=AccountId(account), environment=BinanceEnvironment.TESTNET)},
     )
-    return bt.stores.NautilusStore(
+    return NautilusStore(
         config, data_factories={'BINANCE': BinanceDataClientFactory()},
         exec_factories={'BINANCE': BinanceExecutionClientFactory()},
         state_dir=tmp_path, **kwargs)
@@ -33,7 +37,7 @@ def store(tmp_path, account='BINANCE-001', **kwargs):
 def engine_for(value, strategy=bt.Strategy, **parameters):
     engine = bt.Cerebro()
     engine.setbroker(value.getbroker())
-    engine.adddata(value.getdata('BTCUSDT.BINANCE-1-MINUTE-LAST-EXTERNAL'))
+    engine.adddata(_as_feed(value.getdata('BTCUSDT.BINANCE-1-MINUTE-LAST-EXTERNAL')))
     engine.addstrategy(strategy, **parameters)
     return engine
 
@@ -67,7 +71,7 @@ def test_conflicting_drivers_rejected_before_node_build(tmp_path, monkeypatch, c
     if conflict == 'foreign_broker':
         engine.setbroker(store(tmp_path, 'BINANCE-002').getbroker())
     elif conflict == 'foreign_feed':
-        engine.adddata(SimpleNamespace(_name='other', is_live=True))
+        engine.adddata(_as_feed(SimpleNamespace(_name='other', is_live=True)))
     elif conflict == 'poller':
         engine.kwargs['live_poller'] = lambda: ()
     elif conflict == 'paper':
@@ -75,7 +79,7 @@ def test_conflicting_drivers_rejected_before_node_build(tmp_path, monkeypatch, c
     elif conflict == 'two_strategies':
         engine.addstrategy(bt.Strategy)
     monkeypatch.setattr(a, '_build_node', lambda: pytest.fail('conflict reached node build'))
-    with pytest.raises((ValueError, NotImplementedError)):
+    with pytest.raises((ValueError, TypeError, NotImplementedError)):
         engine.run(**({'monitor': {'endpoint': 'https://example.invalid', 'token': 'test'}} if conflict == 'monitor' else {}))
 
 
@@ -169,7 +173,7 @@ def test_official_bar_replay_uses_one_runtime_and_existing_params(tmp_path, monk
                          i * 60_000_000_000, i * 60_000_000_000) for i in range(1, 4)])
     calls = []
     stopped = []
-    class Business(bt.TradeLogStrategy if logged else bt.Strategy):
+    class Business(TradeLogStrategy if logged else bt.Strategy):
         params = (('period', 2),)
         def __init__(self, label):
             calls.append(('init', label, self.p.period, self.data._name))
@@ -184,7 +188,7 @@ def test_official_bar_replay_uses_one_runtime_and_existing_params(tmp_path, monk
     a = store(tmp_path)
     engine = bt.Cerebro()
     engine.setbroker(a.getbroker())
-    engine.adddata(a.getdata(bar_type))
+    engine.adddata(_as_feed(a.getdata(bar_type)))
     engine.addstrategy(Business, 'hello', period=3)
     class ReplayNode:
         def add_strategy(self, actor):
@@ -211,7 +215,7 @@ def test_tradelog_strategy_no_super_has_generated_local_context(tmp_path, monkey
     # Recorder is part of the installed wheel. Source-tree tests may supply the
     # matching prebuilt extension on the package path; no Rust rebuild required.
     pytest.importorskip('tradelearn._rust')
-    class Business(bt.TradeLogStrategy):
+    class Business(TradeLogStrategy):
         def __init__(self):
             ...
         def next(self):
@@ -223,7 +227,7 @@ def test_tradelog_strategy_no_super_has_generated_local_context(tmp_path, monkey
     async def run():
         # Constructing the real Runtime exercises the unchanged param metaclass
         # and observer assembly; no broker or network calls are made.
-        node.actor.frontend = bt.StrategyRuntime(
+        node.actor.frontend = StrategyRuntime(
             node.actor._business_cls, feeds={'BTCUSDT.BINANCE': 'bar'},
             broker=a.getbroker(), parameters=node.actor._parameters)
         node.actor.frontend.start()
@@ -262,7 +266,7 @@ def test_drain_waits_for_all_workers_and_closes_on_failure(tmp_path):
 def test_logged_host_cleanup_at_each_node_failure(tmp_path, monkeypatch, phase):
     pytest.importorskip('tradelearn._rust')
     a = store(tmp_path)
-    engine = engine_for(a, bt.TradeLogStrategy)
+    engine = engine_for(a, TradeLogStrategy)
     node = FakeNode([])
     def fail(*args):
         raise RuntimeError(phase + ' failed')
@@ -356,9 +360,9 @@ def test_engine_monitor_assembles_one_logger_and_joins_sender(tmp_path, monkeypa
         return settings, lambda current, flush: Sender()
     monkeypatch.setattr(MonitorConnection, 'bind', bind)
     a = store(tmp_path)
-    engine = engine_for(a, bt.TradeLogStrategy)
+    engine = engine_for(a, TradeLogStrategy)
     monkeypatch.setattr(a, '_build_node', lambda: FakeNode([]))
-    engine.run(monitor=dict(endpoint='https://sqs.ap-southeast-1.amazonaws.com/123456789012/test.fifo',
+    a.run(engine, monitor=dict(endpoint='https://sqs.ap-southeast-1.amazonaws.com/123456789012/test.fifo',
         credentials=dict(access_key_id='synthetic',secret_access_key='synthetic'),
         receipt_origin='https://receipt.invalid',archive_binding_id='test'))
     assert calls == ['bootstrap', 'sender-start', 'sender-close']
@@ -371,10 +375,10 @@ def test_monitor_denial_prevents_native_node_and_local_state(tmp_path, monkeypat
         raise RuntimeError('denied')
     monkeypatch.setattr(MonitorConnection, 'bind', denied)
     a = store(tmp_path)
-    engine = engine_for(a, bt.TradeLogStrategy)
+    engine = engine_for(a, TradeLogStrategy)
     monkeypatch.setattr(a, '_build_node', lambda: pytest.fail('denied monitor reached Node'))
     with pytest.raises(RuntimeError, match='denied'):
-        engine.run(monitor=dict(endpoint='https://sqs.ap-southeast-1.amazonaws.com/123456789012/test.fifo',
+        a.run(engine, monitor=dict(endpoint='https://sqs.ap-southeast-1.amazonaws.com/123456789012/test.fifo',
             credentials=dict(access_key_id='synthetic',secret_access_key='synthetic'),
             receipt_origin='https://receipt.invalid',archive_binding_id='test'))
     assert not list(tmp_path.iterdir())
@@ -383,6 +387,6 @@ def test_monitor_denial_prevents_native_node_and_local_state(tmp_path, monkeypat
 def test_private_factories_are_not_accepted_by_official_store(tmp_path):
     official = store(tmp_path)
     with pytest.raises(ValueError, match='official adapter'):
-        bt.stores.NautilusStore(official.config,
+        NautilusStore(official.config,
             data_factories={'BINANCE': object()}, exec_factories=official.exec_factories,
             state_dir=tmp_path)

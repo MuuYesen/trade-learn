@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +17,7 @@ class DataExplorer:
     def __init__(self, data: pd.DataFrame) -> None:
         """Create an explorer from a Bars contract frame or raw DataFrame."""
         self.data = _as_bars_like(data)
+        self._analysis_cache = None
 
     def summary(self) -> dict[str, Any]:
         """Return compact dataset-level diagnostics."""
@@ -51,7 +51,7 @@ class DataExplorer:
                 "unique": frame.nunique(dropna=True),
             }
         )
-        result.index.name = "column"
+        result.index = result.index.rename("column")
         return result
 
     def missing(self) -> pd.DataFrame:
@@ -99,9 +99,8 @@ class DataExplorer:
         frame["previous"] = frame.groupby("symbol")["timestamp"].shift()
         frame["gap"] = frame["timestamp"] - frame["previous"]
         result = frame.dropna(subset=["previous"])[["symbol", "previous", "timestamp", "gap"]]
-        return (
-            result.rename(columns={"previous": "start", "timestamp": "end"})
-            .reset_index(drop=True)
+        return result.rename(columns={"previous": "start", "timestamp": "end"}).reset_index(
+            drop=True
         )
 
     def returns(self, column: str = "close") -> pd.Series:
@@ -149,12 +148,45 @@ class DataExplorer:
         ).pivot(index="timestamp", columns="symbol", values="return")
         return panel.corr()
 
+    def to_analysis(self) -> dict[str, Any]:
+        """Compute domain tables once for the shared Reporter."""
+        from tradelearn.research._analysis_snapshot import analysis_key, copy_analysis
+
+        key = analysis_key([self.data], ("DataExplorer",))
+        if self._analysis_cache is not None and self._analysis_cache[0] == key:
+            return copy_analysis(self._analysis_cache[1])
+        tables = {
+            "schema": self.schema(),
+            "describe": self.describe(),
+            "missing": self.missing(),
+            "gaps": self.gaps(),
+        }
+        if set(REQUIRED_COLUMNS) <= set(self.data):
+            tables["OHLCV Quality"] = self.ohlcv_quality()
+            tables["return_correlation"] = self.correlation()
+        result = {
+            "title": "TradeLearn Data Exploration Report",
+            "tables": {
+                name: table.reset_index()
+                if not isinstance(table.index, pd.RangeIndex) or table.index.name is not None
+                else table.copy()
+                for name, table in tables.items()
+            },
+            "metadata": {
+                **self.summary(),
+                "source": dict(self.data.attrs),
+                "non_missing": tables["schema"]["non_missing"].to_dict(),
+            },
+        }
+        self._analysis_cache = (key, result)
+        return copy_analysis(result)
+
     def report(self, path: str | Path) -> Path:
-        """Write a standalone HTML data exploration report."""
-        output = Path(path)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(_html_report(self), encoding="utf-8")
-        return output
+        """Render computed exploration tables through the shared Reporter."""
+        from tradelearn.report import Reporter
+
+        return Reporter.from_analysis(self.to_analysis()).report(path)
+
 
 def _as_bars_like(data: pd.DataFrame) -> pd.DataFrame:
     frame = pd.DataFrame(data).copy()
@@ -225,49 +257,6 @@ def _close_outside_valid_range(frame: pd.DataFrame) -> pd.Series | bool:
     valid_range = frame["high"] >= frame["low"]
     outside = (frame["close"] < frame["low"]) | (frame["close"] > frame["high"])
     return valid_range & outside
-
-
-def _html_report(explorer: DataExplorer) -> str:
-    summary = explorer.summary()
-    body = [
-        "<h1>Data Exploration Report</h1>",
-        "<h2>Overview</h2>",
-        _mapping_table(summary),
-        "<h2>Schema</h2>",
-        explorer.schema().to_html(),
-        "<h2>Missing Values</h2>",
-        explorer.missing().to_html(),
-        "<h2>Descriptive Statistics</h2>",
-        explorer.describe().to_html(),
-        "<h2>OHLCV Quality</h2>",
-        explorer.ohlcv_quality().to_html(),
-        "<h2>Return Correlation</h2>",
-        explorer.correlation().to_html(),
-    ]
-    return (
-        "<!doctype html><html><head><meta charset='utf-8'>"
-        "<title>Data Exploration Report</title>"
-        "<style>"
-        "body{font-family:Arial,sans-serif;margin:32px;color:#1f2933}"
-        "table{border-collapse:collapse;margin:12px 0 24px;width:100%}"
-        "th,td{border:1px solid #d8dee4;padding:6px 8px;text-align:right}"
-        "th{background:#f6f8fa}td:first-child,th:first-child{text-align:left}"
-        "h1,h2{color:#102a43}"
-        "</style></head><body>"
-        + "\n".join(body)
-        + "</body></html>"
-    )
-
-
-def _mapping_table(values: dict[str, Any]) -> str:
-    rows = []
-    for key, value in values.items():
-        if isinstance(value, dict):
-            value = ", ".join(
-                f"{inner_key}: {inner_value}" for inner_key, inner_value in value.items()
-            )
-        rows.append(f"<tr><th>{escape(str(key))}</th><td>{escape(str(value))}</td></tr>")
-    return "<table><tbody>" + "".join(rows) + "</tbody></table>"
 
 
 __all__ = ["DataExplorer"]

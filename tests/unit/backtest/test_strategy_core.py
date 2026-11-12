@@ -36,7 +36,7 @@ def test_strategy_submit_order_is_shared_core_order_entrypoint() -> None:
     strategy.data = data
     strategy.broker = RecordingBroker()
 
-    submitted = strategy.submit_order(Order.Sell, size=4, price=9.5, exectype=Order.Limit)
+    submitted = strategy._submit_order(Order.Sell, size=4, price=9.5, exectype=Order.Limit)
 
     assert submitted[2:6] == (Order.Sell, 4.0, 9.5, Order.Limit)
     assert strategy._pending_size[data] == -4.0
@@ -76,7 +76,8 @@ def test_strategy_position_uses_broker_before_fallback_state() -> None:
     assert strategy.getposition() is broker_position
 
     strategy.broker = None
-    assert strategy.getposition().size == 99.0
+    with pytest.raises(AttributeError):
+        strategy.getposition()  # BT requires a bound broker.
 
 
 def test_strategy_close_uses_current_position_not_pending_size() -> None:

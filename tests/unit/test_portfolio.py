@@ -44,7 +44,7 @@ def test_portfolio_functions_compose_without_pipeline_classes() -> None:
     selected = ["MSFT", "GOOG"]
 
     weights = equal_weight(selected, gross=0.8)
-    adjusted = apply_constraints(weights, max_weight=0.4, normalize=True)
+    adjusted = apply_constraints(weights, max_weight=0.5, normalize=True)
 
     assert adjusted.to_dict() == {"MSFT": 0.5, "GOOG": 0.5}
 
@@ -56,7 +56,7 @@ def test_portfolio_topk_equal_weights_records_function_params() -> None:
     )
     scores = pd.Series([0.10, 0.25, 0.18], index=index)
 
-    weights = topk_equal_weights(scores, k=2, gross=0.8, max_weight=0.4, normalize=True)
+    weights = topk_equal_weights(scores, k=2, gross=0.8, max_weight=0.5, normalize=True)
 
     assert weights.droplevel("timestamp").to_dict() == {"GOOG": 0.5, "MSFT": 0.5}
 
@@ -65,7 +65,7 @@ def test_riskfolio_optimizer_requires_optional_dependency(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "riskfolio", None)
     optimizer = RiskfolioOptimizer()
 
-    with pytest.raises(ImportError, match="trade-learn\\[riskfolio\\]"):
+    with pytest.raises(ImportError, match="trade-learn\\[research\\]"):
         optimizer.optimize(pd.DataFrame({"A": [0.01], "B": [0.02]}))
 
 

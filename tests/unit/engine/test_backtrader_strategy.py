@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import feed as _as_feed
+
+from tests.unit.backtest._engine_config import configured_engine
+
 import logging
 
 import pandas as pd
@@ -34,7 +38,7 @@ def test_backtrader_strategy_import_path_preserves_params_and_line_indexing() ->
             self.values.append((self.data.close[0], previous))
 
     cerebro = Cerebro()
-    cerebro.adddata(bars(), name="daily")
+    cerebro.adddata(_as_feed(bars()), name="daily")
     cerebro.addstrategy(RecordingStrategy, threshold=11.0)
 
     [strategy] = cerebro.run()
@@ -58,11 +62,11 @@ def test_backtrader_strategy_history_panel_returns_multi_data_window() -> None:
 
         def next(self) -> None:
             if len(self.data) == 3:
-                self.history = self.history_panel(lookback=2)
+                self.history = __import__("tradelearn.backtest.history", fromlist=["window"]).window(self, size=2, data=self.datas)
 
     cerebro = Cerebro()
-    cerebro.adddata(bars(), name="AAA")
-    cerebro.adddata(data_b, name="BBB")
+    cerebro.adddata(_as_feed(bars()), name="AAA")
+    cerebro.adddata(_as_feed(data_b), name="BBB")
     cerebro.addstrategy(RecordingStrategy)
 
     [strategy] = cerebro.run()
@@ -84,9 +88,9 @@ def test_engine_cerebro_logs_run_start_and_summary(caplog) -> None:
 
     caplog.set_level(logging.INFO, logger="tradelearn.engine.cerebro")
     cerebro = Cerebro()
-    cerebro.setcash(1000.0)
-    cerebro.setcommission(0.001)
-    cerebro.adddata(bars(), name="daily")
+    cerebro.broker.setcash(1000.0)
+    cerebro.broker.setcommission(0.001)
+    cerebro.adddata(_as_feed(bars()), name="daily")
     cerebro.addstrategy(LoggingStrategy)
 
     cerebro.run()
@@ -110,19 +114,20 @@ def test_backtrader_strategy_module_exports_order_and_line_types() -> None:
     assert bt.Order.Completed == 4
 
 
-def test_engine_ignores_orders_created_on_terminal_bar() -> None:
+def test_engine_retains_unfilled_submissions_on_terminal_bar() -> None:
     class TerminalOrderStrategy(bt.Strategy):
         def next(self) -> None:
             if len(self.data) == 3:
                 self.buy(size=1)
 
-    cerebro = Cerebro(trade_on_close=True)
-    cerebro.setcash(1000.0)
-    cerebro.adddata(bars(), name="daily")
+    cerebro = configured_engine(trade_on_close=True)
+    cerebro.broker.setcash(1000.0)
+    cerebro.adddata(_as_feed(bars()), name="daily")
     cerebro.addstrategy(TerminalOrderStrategy)
 
     [strategy] = cerebro.run()
 
     assert strategy.stats.summary["final_value"] == 1000.0
-    assert strategy.stats.orders.empty
+    assert len(strategy.stats.orders)==1
+    assert strategy.stats.orders.iloc[0]["status"]=="Submitted"
     assert strategy.stats.fills.empty

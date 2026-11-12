@@ -1,3 +1,5 @@
+from tests.unit.backtest._engine_config import feed as _as_feed
+from tests.unit.backtest._engine_config import configured_engine
 """Regressions reproduced while reviewing PR #6 against current master."""
 import pandas as pd
 import pytest
@@ -12,9 +14,9 @@ def bars():
 
 
 def run(strategy, mode, feeds=1, on_close=False):
-    engine = Cerebro(match_mode=mode, trade_on_close=on_close)
+    engine = configured_engine(match_mode=mode, trade_on_close=on_close)
     for i in range(feeds):
-        engine.adddata(bars(), name=f'asset{i}')
+        engine.adddata(_as_feed(bars()), name=f'asset{i}')
     engine.addstrategy(strategy)
     return engine.run()[0]
 
@@ -85,8 +87,8 @@ def test_sparse_target_uses_submission_clock_and_actual_fill_bar(monkeypatch,mod
             if self.bar==3: self.order=self.buy(data=self.datas[1],size=1)
     primary=pd.concat([bars(),bars().iloc[:2].set_axis(pd.date_range('2026-01-07',periods=2,tz='UTC'))])
     secondary=primary.loc[pd.to_datetime(['2026-01-01','2026-01-02','2026-01-04','2026-01-06','2026-01-07','2026-01-08'],utc=True)]
-    engine=Cerebro(match_mode=mode)
-    engine.adddata(primary,name='clock');engine.adddata(secondary,name='target');engine.addstrategy(Sparse)
+    engine=configured_engine(match_mode=mode)
+    engine.adddata(_as_feed(primary),name='clock');engine.adddata(_as_feed(secondary),name='target');engine.addstrategy(Sparse)
     s=engine.run()[0]
     row=_orders_frame(s.broker).iloc[0]
     assert row['datetime']==pd.Timestamp('2026-01-03',tz='UTC')

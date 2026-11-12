@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import feed as _as_feed
+
 import pandas as pd
 
 from tradelearn import engine as bt
@@ -20,7 +22,7 @@ def _data() -> pd.DataFrame:
 
 def _run_with_signal(sigtype: int, signal_cls: type, *, strategy: type | None = None, **kwargs):
     cerebro = bt.Cerebro()
-    cerebro.adddata(_data(), name="primary")
+    cerebro.adddata(_as_feed(_data()), name="primary")
     if strategy is not None:
         cerebro.addstrategy(strategy)
     cerebro.add_signal(sigtype, signal_cls, **kwargs)
@@ -103,7 +105,7 @@ def test_signal_strategy_preserves_registered_args_and_kwargs() -> None:
             super().__init__()
 
     cerebro = bt.Cerebro()
-    cerebro.adddata(_data())
+    cerebro.adddata(_as_feed(_data()))
     cerebro.signal_strategy(CustomSignalStrategy, "custom", threshold=7)
     cerebro.add_signal(bt.SIGNAL_LONG, LongSignal)
     strategy = cerebro.run()[0]
@@ -114,7 +116,7 @@ def test_signal_strategy_preserves_registered_args_and_kwargs() -> None:
 
 def test_signal_strategy_resolves_string_data_target() -> None:
     cerebro = bt.Cerebro()
-    data = cerebro.adddata(_data(), name="primary")
+    data = cerebro.adddata(_as_feed(_data()), name="primary")
     cerebro.signal_strategy(bt.SignalStrategy, _data="primary")
     cerebro.add_signal(bt.SIGNAL_LONG, LongSignal)
     strategy = cerebro.run()[0]
@@ -131,7 +133,7 @@ def test_signal_strategy_subclass_next_runs_after_signal_processing() -> None:
             seen.append(len(self.data))
 
     cerebro = bt.Cerebro()
-    cerebro.adddata(_data())
+    cerebro.adddata(_as_feed(_data()))
     cerebro.signal_strategy(CustomSignalStrategy)
     cerebro.add_signal(bt.SIGNAL_LONG, LongSignal)
     strategy = cerebro.run()[0]
@@ -142,7 +144,7 @@ def test_signal_strategy_subclass_next_runs_after_signal_processing() -> None:
 
 def test_signal_strategy_auto_insertion_does_not_mutate_registered_strategies() -> None:
     cerebro = bt.Cerebro()
-    cerebro.adddata(_data())
+    cerebro.adddata(_as_feed(_data()))
     cerebro.add_signal(bt.SIGNAL_LONG, LongSignal)
 
     cerebro.run()

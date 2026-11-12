@@ -1,6 +1,13 @@
 # API 边界
 
+<a id="pending-unification-20261111"></a>
+> **统一改造待实现（2026-11-12 修订）**：Engine目标严格对齐Backtrader公共接口，Lite保留init、类属性参数和任务便利外观，两者共享计算/执行语义，不要求任意策略原样互换。Lite window、共享Indicator、旧I退出及活动订单查询尚未实现；旧API正文和签名仍按现有代码解释。StrategyRuntime/RuntimeContext保内部能力并计划迁出Engine公共导出；现有Cerebro报告便利入口目标迁至独立Reporter。唯一职责、迁移及验收见[Lite与Engine外观规范](../../../../../docs/系统规范/交易/TradeLearn框架规范.md#engine-lite-facade-20261112)。
+
 Tradelearn 的用户 API 通过 facade 模块暴露；实现层和基础设施层不作为用户入口。
+
+Python接口不限定底层必须是Python。后续原生化保持用户策略语法，旧路线图中的`Engine(runtime="rust")`不是现行入口；不据原生化新增实盘执行框架。当前/目标及旧稿处理见[原生运行时说明](rust-live-runtime-roadmap.md)。
+
+报告统一目标是各领域分析器产出结果、Reporter统一展示；既有各类report()方法保便捷入口，组合/扩展不另造DSL。本轮仅文档，当前能力见[报告指南](../guides/report.md)，实施资格唯一见[报告规范](../../../../../docs/系统规范/交易/TradeLearn框架规范.md#unified-reporter-20261111)。
 
 ## 公开入口
 
@@ -51,7 +58,7 @@ cash_flow_return(begin, finish, *, net_flow=None, events=(), start=None, end=Non
 | `tradelearn.utils` | 内部工具 |
 | `tradelearn.query` | 数据查询实现细节 |
 | `tradelearn.strategy` | 旧策略/实验性实现 |
-| `tradelearn.cli` / `tradelearn.mcp` | 命令行和集成入口实现 |
+| `tradelearn.cli` | new/lab/doctor命令行实现；TL自建MCP已退役 |
 
 ## 实盘适配器边界
 

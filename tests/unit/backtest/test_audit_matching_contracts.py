@@ -1,5 +1,8 @@
+from tests.unit.backtest._engine_config import feed as _as_feed
+from tests.unit.backtest._engine_config import configured_engine
 """Orders expire on the runtime clock, including while their feed is inactive."""
 import pandas as pd
+from datetime import timedelta
 import pytest
 
 from tradelearn.backtest import engine as engine_module
@@ -27,18 +30,18 @@ def test_expiry_uses_primary_clock_without_a_target_bar(monkeypatch, runner, mod
             if len(self) == 1:
                 self.order = self.buy(
                     data=self.datas[-1], size=1, price=1,
-                    exectype=Order.Limit, valid=86400,
+                    exectype=Order.Limit, valid=timedelta(days=1),
                 )
             self.states.append((self.order.status, self._pending_size.get(self.datas[-1], 0)))
 
         def notify_order(self, order):
             if order.status == Order.Expired:
-                self.events.append(self.data.datetime[0])
+                self.events.append(pd.Timestamp(self.data.datetime.datetime(0), tz="UTC"))
 
-    cerebro = Cerebro(match_mode=mode, trade_on_close=on_close)
-    cerebro.adddata(_bars(["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"]), name="clock")
+    cerebro = configured_engine(match_mode=mode, trade_on_close=on_close)
+    cerebro.adddata(_as_feed(_bars(["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"])), name="clock")
     if runner != "single":
-        cerebro.adddata(_bars(["2026-01-01"]), name="target")
+        cerebro.adddata(_as_feed(_bars(["2026-01-01"])), name="target")
     if runner == "python-multi":
         monkeypatch.setattr(engine_module, "_build_clocked_multi_data_runner", lambda datas: None)
     cerebro.addstrategy(Expiry)

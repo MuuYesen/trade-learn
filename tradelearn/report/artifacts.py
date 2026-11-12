@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from bokeh.embed import file_html
-from bokeh.resources import INLINE
 
 from tradelearn.report.reporter import Reporter
 
@@ -54,19 +51,23 @@ def write_artifact_bundle(
     output_dir.mkdir(parents=True, exist_ok=True)
     reporter = Reporter(stats, market_data=market_data)
 
-    _write_tables(output_dir, stats, strategy, benchmark=benchmark, timeframe=timeframe)
+    files = _write_tables(output_dir, stats, strategy, benchmark=benchmark, timeframe=timeframe)
 
     if log_report:
         reporter.report(output_dir / "report.html", benchmark=benchmark)
+        files.extend([output_dir / "report.html", output_dir / "stats.json"])
     if log_plot:
+        from bokeh.embed import file_html
+        from bokeh.resources import INLINE
+
         chart = reporter.market_replay_chart()
         if chart is not None:
             (output_dir / "plot.html").write_text(
                 file_html(chart, INLINE, "Tradelearn Market Replay")
             )
+            files.append(output_dir / "plot.html")
 
-    _remove_report_sidecars(output_dir)
-    return sorted(output_dir.iterdir())
+    return sorted(path for path in files if path.is_file())
 
 
 def market_data_from_strategy(strategy: Any) -> pd.DataFrame | None:
@@ -77,17 +78,6 @@ def market_data_from_strategy(strategy: Any) -> pd.DataFrame | None:
     if frame is None:
         return None
     return pd.DataFrame(frame).copy()
-
-
-def _remove_report_sidecars(output_dir: Path) -> None:
-    """Remove obsolete report sidecars while retaining core report files."""
-    keep = {"artifacts.xlsx", "report.html", "plot.html"}
-    keep.update(path.name for path in output_dir.glob("*.csv"))
-    for path in output_dir.iterdir():
-        if path.is_file() and path.name not in keep:
-            path.unlink()
-        elif path.is_dir():
-            shutil.rmtree(path)
 
 
 def _write_core_tables(output_dir: Path, stats: Any) -> None:
@@ -102,16 +92,20 @@ def _write_tables(
     *,
     benchmark: pd.Series | None = None,
     timeframe: str | None = None,
-) -> None:
-    """Export available result tables to workbook and CSV files."""
+) -> list[Path]:
+    """Export only owned result tables, never remove unrelated files."""
     sheets = _artifact_sheets(stats, strategy, benchmark=benchmark, timeframe=timeframe)
     if not sheets:
-        return
+        return []
+    files = [output_dir / "artifacts.xlsx"]
     with pd.ExcelWriter(output_dir / "artifacts.xlsx") as writer:
         for name, frame in sheets.items():
             safe = _excel_safe_frame(frame)
             safe.to_excel(writer, sheet_name=name, index=False)
-            safe.to_csv(output_dir / f"{_csv_name(name)}.csv", index=False)
+            csv = output_dir / f"{_csv_name(name)}.csv"
+            safe.to_csv(csv, index=False)
+            files.append(csv)
+    return files
 
 
 def _csv_name(name: str) -> str:
@@ -127,11 +121,14 @@ def _artifact_sheets(
     timeframe: str | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Assemble result, metadata, and optional research tables."""
+    from tradelearn import __version__
+
     sheets: dict[str, pd.DataFrame] = {
         "metadata": pd.DataFrame(
             [
                 {"key": "artifact_schema_version", "value": ARTIFACT_SCHEMA_VERSION},
                 {"key": "artifact_kind", "value": ARTIFACT_KIND},
+                {"key": "tradelearn_version", "value": __version__},
             ]
         )
     }

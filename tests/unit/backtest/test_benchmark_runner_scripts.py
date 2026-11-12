@@ -318,3 +318,28 @@ def test_benchmark_controllers_preserve_valid_results_with_cleanup_warning(monke
     assert len(collected) == 4
     assert output.count("WARNING: forced cleanup") == 4
     assert "FAILED" not in output
+
+
+def test_migrated_bt_workers_run_bounded_real_constructor_fixtures():
+    # Functional migration budget: one process, 90 + 5*90 bars, <=30 seconds.
+    # No archived full benchmark, repeats, warmups, or speed gate is run here.
+    code = '''
+import json
+from queue import Queue
+from benchmarks.runners import benchmark_bt as b
+bars = b.make_portfolio_data()['SPY']
+b.load_benchmark_data = lambda: bars
+results = []
+q = Queue()
+b.run_strategy_in_process('Tradelearn', '02_sma_cross', 'SmaCross', q, 'exact')
+results.append(q.get_nowait())
+q = Queue()
+b.run_portfolio_strategy_in_process('Tradelearn', '11_target_percent_portfolio', 'TargetPercentPortfolioStrategy', q, 'exact')
+results.append(q.get_nowait())
+assert all(row['status'] == 'success' for row in results), results
+print(json.dumps({'workers':len(results),'ok':True}))
+'''
+    result = subprocess.run([sys.executable, '-c', code], cwd=ROOT, capture_output=True,
+                            text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '"ok": true' in result.stdout

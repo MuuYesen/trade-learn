@@ -10,8 +10,8 @@ from .base import BaseAnalyzer, MetaParams, Params
 class Analyzer(BaseAnalyzer, metaclass=MetaParams):
     """Base analyzer class attached through Cerebro.addanalyzer."""
 
-    metric_key = ""  # Subclasses should define this
-    is_streaming = False  # Set to True for real-time analyzers
+    _metric_key = ""  # Subclasses should define this
+    _is_streaming = False  # Set to True for real-time analyzers
 
     def _base_init(self, **kwargs: Any) -> None:
         params = []
@@ -22,6 +22,7 @@ class Analyzer(BaseAnalyzer, metaclass=MetaParams):
             elif isinstance(cls_params, (list, tuple)):
                 params.extend(cls_params)
         self.params = self.p = Params(params, **kwargs)
+        self.create_analysis()
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -43,33 +44,35 @@ class Analyzer(BaseAnalyzer, metaclass=MetaParams):
                 strat.metrics_engine = MetricsEngine()
 
             # Register this metric with the engine if it has a key
-            if self.metric_key and not self.is_streaming:
+            if self._metric_key and not self._is_streaming:
                 # Use self.p (params) which is now handled by MetaParams
                 strat.metrics_engine.request(
                     self._instance_id,
-                    self.metric_key,
+                    self._metric_key,
                     getattr(self, "p", None),
                 )
 
-    def on_bar(self, bar: Any) -> None:
-        """Deprecated for Post Analyzers. Kept for Streaming Analyzers."""
-        pass
+    def create_analysis(self):
+        from collections import OrderedDict
+        self.rets = OrderedDict()
 
-    def on_start(self) -> None:
-        pass
-
-    def on_end(self, stats: Stats) -> None:
-        pass
+    def start(self): pass
+    def next(self): pass
+    def prenext(self): self.next()
+    def nextstart(self): self.next()
+    def notify_order(self, order): pass
+    def notify_trade(self, trade): pass
+    def notify_cashvalue(self, cash, value): pass
 
     def get_analysis(self) -> dict[str, Any]:
         if (
-            not self.is_streaming
-            and self.metric_key
+            not self._is_streaming
+            and self._metric_key
             and self.strategy is not None
             and hasattr(self.strategy, "metrics_engine")
         ):
             return self.strategy.metrics_engine.results.get(self._instance_id, {})
-        return {}
+        return self.rets
 
 
 class AnalyzerCollection(dict):

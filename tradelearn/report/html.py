@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from html import escape
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -63,6 +62,14 @@ def write_html_report(
     custom_sections = render_html_sections(
         sections,
         build_context(reporter, benchmark=benchmark_returns),
+    )
+    facts = reporter.metric_facts(benchmark_returns)
+    custom_sections += (
+        "<section id='metric-facts'><h2>Metric facts</h2>"
+        + facts.to_html(
+            index=False, escape=True, na_rep="NA", float_format=lambda value: format(value, ".17g")
+        )
+        + "</section>"
     )
     metadata = _metadata(summary, returns, config)
     top_drawdowns = reporter.top_drawdowns(limit=5)
@@ -179,6 +186,7 @@ def write_html_report(
         config=config,
         metadata=metadata,
         summary=summary,
+        metric_facts=facts,
     )
     return output
 
@@ -189,6 +197,7 @@ def _write_artifacts(
     config: dict[str, Any],
     metadata: dict[str, str],
     summary: dict[str, Any],
+    metric_facts: pd.DataFrame,
 ) -> None:
     """Write colocated machine-readable report metadata."""
     (directory / "stats.json").write_text(
@@ -197,6 +206,7 @@ def _write_artifacts(
                 "config": _json_safe(config),
                 "metadata": metadata,
                 "summary": _json_safe(summary),
+                "metric_facts": _json_safe(metric_facts.to_dict(orient="records")),
             },
             indent=2,
             sort_keys=True,
@@ -284,13 +294,13 @@ def _closed_trade_count(trades: pd.DataFrame) -> int:
 def _summary_table(values: dict[str, Any]) -> str:
     """Render a dict as an HTML table."""
     if not values:
-        return "<div class=\"table-scroll\"><table><tbody></tbody></table></div>"
+        return '<div class="table-scroll"><table><tbody></tbody></table></div>'
     rows = "".join(
         f"<tr><td>{escape(str(key))}</td><td>{escape(_format_value(value))}</td></tr>"
         for key, value in values.items()
     )
     return (
-        "<div class=\"table-scroll\"><table><thead><tr><th>metric</th><th>value</th></tr></thead>"
+        '<div class="table-scroll"><table><thead><tr><th>metric</th><th>value</th></tr></thead>'
         f"<tbody>{rows}</tbody></table></div>"
     )
 
@@ -300,26 +310,52 @@ def _summary_cards(values: dict[str, Any]) -> str:
     # Keep the KPI grid readable by grouping metrics by how users scan a report:
     # core performance, risk, trade quality, trade behavior, then account context.
     priority = [
-        "cumulative_return", "annual_return", "final_value",
-        "max_drawdown", "sharpe_ratio", "calmar_ratio", "win_rate",
-        "annual_volatility", "sortino_ratio", "avg_drawdown",
-        "max_dd_duration", "avg_dd_duration", "exposure_time", "final_margin_used",
-        "total_trades", "profit_factor", "expectancy",
-        "avg_win", "avg_loss", "best_trade_pct", "worst_trade_pct",
-        "avg_trade_pct", "max_trade_duration", "avg_trade_duration",
-        "sqn", "kelly_criterion", "total_orders", "total_fills",
-        "start", "end", "duration", "bars",
-        "peak_value", "final_cash", "final_realized_pnl", "final_unrealized_pnl",
+        "cumulative_return",
+        "annual_return",
+        "final_value",
+        "max_drawdown",
+        "sharpe_ratio",
+        "calmar_ratio",
+        "win_rate",
+        "annual_volatility",
+        "sortino_ratio",
+        "avg_drawdown",
+        "max_dd_duration",
+        "avg_dd_duration",
+        "exposure_time",
+        "final_margin_used",
+        "total_trades",
+        "profit_factor",
+        "expectancy",
+        "avg_win",
+        "avg_loss",
+        "best_trade_pct",
+        "worst_trade_pct",
+        "avg_trade_pct",
+        "max_trade_duration",
+        "avg_trade_duration",
+        "sqn",
+        "kelly_criterion",
+        "total_orders",
+        "total_fills",
+        "start",
+        "end",
+        "duration",
+        "bars",
+        "peak_value",
+        "final_cash",
+        "final_realized_pnl",
+        "final_unrealized_pnl",
         "turnover",
     ]
-    
+
     # Filter and sort keys
     keys = [
         k
         for k, value in values.items()
         if str(k) != "strategy_name" and not _is_empty_metric_value(value)
     ]
-    
+
     def sort_key(k: str) -> int:
         try:
             return priority.index(k)
@@ -327,16 +363,16 @@ def _summary_cards(values: dict[str, Any]) -> str:
             return len(priority)
 
     sorted_keys = sorted(keys, key=sort_key)
-    
+
     cards = "".join(
-        "<div class=\"kpi-card\""
-        f" data-metric=\"{escape(str(key))}\">"
-        f"<div class=\"kpi-label\">{escape(_metric_label(str(key)))}</div>"
-        f"<div class=\"kpi-value\">{escape(_format_metric_value(str(key), values[key]))}</div>"
+        '<div class="kpi-card"'
+        f' data-metric="{escape(str(key))}">'
+        f'<div class="kpi-label">{escape(_metric_label(str(key)))}</div>'
+        f'<div class="kpi-value">{escape(_format_metric_value(str(key), values[key]))}</div>'
         "</div>"
         for key in sorted_keys
     )
-    return f"<div class=\"kpi-grid\">{cards}</div>"
+    return f'<div class="kpi-grid">{cards}</div>'
 
 
 def _research_section(config: dict[str, Any]) -> str:
@@ -369,17 +405,15 @@ def _flatten_display(prefix: str, values: dict[str, Any]) -> dict[str, Any]:
 def _frame_table(frame: pd.DataFrame) -> str:
     """Render a frame as an HTML table."""
     if frame.empty:
-        return "<div class=\"table-scroll\"><table><tbody></tbody></table></div>"
+        return '<div class="table-scroll"><table><tbody></tbody></table></div>'
     headers = "".join(f"<th>{escape(str(column))}</th>" for column in frame.columns)
     rows = "".join(
-        "<tr>"
-        + "".join(f"<td>{escape(_format_value(value))}</td>" for value in row)
-        + "</tr>"
+        "<tr>" + "".join(f"<td>{escape(_format_value(value))}</td>" for value in row) + "</tr>"
         for row in frame.itertuples(index=False, name=None)
     )
     return (
         f'<div class="table-scroll"><table><thead><tr>{headers}</tr></thead>'
-        f'<tbody>{rows}</tbody></table></div>'
+        f"<tbody>{rows}</tbody></table></div>"
     )
 
 
@@ -420,11 +454,7 @@ def _benchmark_section(benchmark: pd.Series | None, metrics: dict[str, Any]) -> 
         return ""
     name = escape(str(benchmark.name or "benchmark"))
     table = _summary_table(metrics) if metrics else ""
-    return (
-        "<section><h2>Benchmark-Aware Metrics</h2>"
-        f"<p>Benchmark: {name}</p>"
-        f"{table}</section>"
-    )
+    return f"<section><h2>Benchmark-Aware Metrics</h2><p>Benchmark: {name}</p>{table}</section>"
 
 
 def _factor_section(factor_quantile_returns: pd.DataFrame) -> str:
@@ -554,11 +584,10 @@ def _json_safe(value: Any) -> Any:
 
 
 def _package_version() -> str:
-    """Return installed package version for report footer."""
-    try:
-        return version("trade-learn")
-    except PackageNotFoundError:
-        return "unknown"
+    """Identify the code actually loaded, not stale source-tree egg metadata."""
+    from tradelearn import __version__
+
+    return __version__
 
 
 def _format_value(value: Any) -> str:
@@ -610,29 +639,28 @@ def _format_metric_value(key: str, value: Any) -> str:
         # Fix double-scaling: engine provides 25.0 for 25%, but :.2% expects 0.25
         if lowered in {"return_pct", "win_rate_pct", "exposure_time"} or lowered.endswith("_pct"):
             return f"{value / 100.0:.2%}"
-            
+
         if any(
-            token in lowered
-            for token in ("return", "drawdown", "rate", "turnover", "volatility")
+            token in lowered for token in ("return", "drawdown", "rate", "turnover", "volatility")
         ):
             # A value already above 1.0 might be pre-scaled.
             # This is unlikely for QS metrics but safe to check.
             # Usually QuantStats returns decimal (0.05), but native return_pct returns 5.0
             return f"{value:.2%}"
-            
+
         # 3. Handle Ratios (Sharpe, Calmar, Sortino, Alpha, Beta)
         if "ratio" in lowered or lowered in {"alpha", "beta", "sharpe"}:
             return f"{value:.3f}"
-            
+
         # 4. Handle Currency/PnL (Final Cash, Value, PnL)
         if any(token in lowered for token in ("cash", "value", "pnl")):
             return f"{value:,.2f}"
-            
+
         # Default float formatting
         if abs(value) >= 1000:
             return f"{value:,.2f}"
         return f"{value:.4f}"
-        
+
     return str(value)
 
 

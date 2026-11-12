@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from tradelearn.engine import Cerebro, Strategy
+from tradelearn.engine import Cerebro, Strategy, feeds
 
 
 @dataclass(frozen=True)
@@ -54,10 +54,11 @@ def build_bars(count: int, *, offset: float = 0.0) -> pd.DataFrame:
 
 def run_case(*, bars: int, symbols: int, max_ms: float) -> BenchmarkResult:
     def make_engine() -> Cerebro:
-        cerebro = Cerebro(stdstats=False, progress=False)
+        cerebro = Cerebro(stdstats=False)
         for symbol_index in range(symbols):
             cerebro.adddata(
-                build_bars(bars, offset=float(symbol_index)), name=f"S{symbol_index:04d}"
+                feeds.PandasData(dataname=build_bars(bars, offset=float(symbol_index))),
+                name=f"S{symbol_index:04d}",
             )
         cerebro.addstrategy(NoopStrategy)
         return cerebro

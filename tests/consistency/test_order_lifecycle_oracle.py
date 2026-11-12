@@ -9,8 +9,10 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from tests.unit.backtest._engine_config import configured_engine
+from tests.unit.backtest._engine_config import feed as _as_feed
 from tradelearn.backtest.models import Order
-from tradelearn.engine import Cerebro, Strategy
+from tradelearn.engine import Strategy
 
 bt = pytest.importorskip("backtrader")
 
@@ -82,8 +84,8 @@ def _run(scenario, *, backtrader):
         cerebro = bt.Cerebro(stdstats=False)
         cerebro.adddata(bt.feeds.PandasData(dataname=_bars(scenario)))
     else:
-        cerebro = Cerebro(match_mode="exact", trade_on_close=False, stdstats=False)
-        cerebro.adddata(_bars(scenario))
+        cerebro = configured_engine(match_mode="exact", trade_on_close=False, stdstats=False)
+        cerebro.adddata(_as_feed(_bars(scenario)))
     cerebro.broker.setcash(10_000.0)
     cerebro.broker.setcommission(commission=0.0)
     cerebro.addstrategy(OracleStrategy)

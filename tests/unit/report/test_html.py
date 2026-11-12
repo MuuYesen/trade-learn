@@ -1,7 +1,7 @@
 """Tests for HTML report export."""
 
 import json
-from pathlib import Path
+from importlib.resources import files
 from types import SimpleNamespace
 
 import pandas as pd
@@ -13,7 +13,7 @@ from tradelearn.report.html import _market_timezone
 
 def test_html_template_exists() -> None:
     """HTML report uses the spec's tear sheet template file."""
-    template = Path("tradelearn/report/templates/tear_sheet.html")
+    template = files("tradelearn.report").joinpath("templates/tear_sheet.html")
 
     assert template.exists()
     assert "Summary Stats" in template.read_text()
@@ -21,7 +21,7 @@ def test_html_template_exists() -> None:
 
 def test_html_template_uses_modern_responsive_report_layout() -> None:
     """HTML template keeps summary metrics readable in narrow report columns."""
-    text = Path("tradelearn/report/templates/tear_sheet.html").read_text()
+    text = files("tradelearn.report").joinpath("templates/tear_sheet.html").read_text()
 
     assert "kpi-grid" in text
     assert "report-layout" in text

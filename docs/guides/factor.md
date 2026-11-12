@@ -1,5 +1,7 @@
 # 因子指南
 
+> **待实现目标（2026-11-11）**：因子生成、单因子/多期限/多因子评价汇总、挖掘/筛选、联合建模与组合评价须明确区分；共用metrics及结果/报告，不以MultiFactorAnalyzer存在证明联合模型已完成。具体API仍按当前实现，见[统一改造状态](../concepts/api-boundary.md#pending-unification-20261111)。
+
 `tradelearn.factor` 提供 alphalens 风格的因子清洗、分组收益、IC、换手和多周期报告。
 
 ## 标准入口

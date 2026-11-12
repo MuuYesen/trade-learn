@@ -7,6 +7,28 @@ import numpy as np
 import pandas as pd
 
 
+class _ProgramHistory(list):
+    """Snapshot each generated population before gplearn prunes ancestors."""
+
+    def __init__(self):
+        super().__init__()
+        self.candidates = []
+
+    def append(self, population):
+        generation = len(self)
+        self.candidates.extend(
+            {
+                "generation": generation,
+                "index": index,
+                "expression": str(program),
+                "length": int(program.length_),
+                "fitness": float(program.raw_fitness_),
+            }
+            for index, program in enumerate(population)
+        )
+        super().append(population)
+
+
 class SymbolicFeatureGenerator:
     """Generate symbolic features through optional gplearn.
 
@@ -60,11 +82,36 @@ class SymbolicFeatureGenerator:
             feature_names=feature_columns,
             **self.kwargs,
         )
+        # A fresh transformer is fitted each time. Capture populations at the
+        # append boundary before upstream's memory pruning. No global patch or
+        # parallel worker instrumentation; qualified against gplearn 0.4.3.
+        if hasattr(transformer, "warm_start"):
+            transformer.warm_start = True
+            transformer._programs = _ProgramHistory()
+            transformer.run_details_ = {
+                key: []
+                for key in (
+                    "generation",
+                    "average_length",
+                    "average_fitness",
+                    "best_length",
+                    "best_fitness",
+                    "best_oob_fitness",
+                    "generation_time",
+                )
+            }
         transformer.fit(clean[feature_columns], clean[target_name])
         self.transformer_ = transformer
         self.input_columns_ = feature_columns
         self.feature_names_ = [f"symbolic_{i + 1}" for i in range(self.n_features)]
         self.fill_values_ = clean[feature_columns].median()
+        self.input_dtypes_ = {column: str(clean[column].dtype) for column in feature_columns}
+        self.training_ = {
+            "rows": len(clean),
+            "dropped_rows": len(frame) - len(clean),
+            "start": str(clean.index.min()),
+            "end": str(clean.index.max()),
+        }
         return self
 
     def transform(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -76,12 +123,8 @@ class SymbolicFeatureGenerator:
         fill_values = self.fill_values_
         if fill_values is not None:
             feature_frame = feature_frame.fillna(fill_values)
-        values = np.asarray(
-            self.transformer_.transform(feature_frame)
-        )
-        columns_out = self.feature_names_ or [
-            f"symbolic_{i + 1}" for i in range(values.shape[1])
-        ]
+        values = np.asarray(self.transformer_.transform(feature_frame))
+        columns_out = self.feature_names_ or [f"symbolic_{i + 1}" for i in range(values.shape[1])]
         return pd.DataFrame(values, index=frame.index, columns=columns_out)
 
     def fit_transform(
@@ -93,6 +136,53 @@ class SymbolicFeatureGenerator:
     ) -> pd.DataFrame:
         """Fit the symbolic transformer and return generated features."""
         return self.fit(data, columns=columns, target=target).transform(data)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Describe fitted expressions and retained search evidence.
+
+        Exact inference restore requires the fitted object and gplearn; these
+        strings are inspectable evidence, not a dependency-free evaluator.
+        gplearn prunes ancestral programs; missing ancestors stay explicit.
+        """
+        if self.transformer_ is None:
+            raise RuntimeError("fit() must be called before to_dict()")
+        generations = getattr(self.transformer_, "_programs", [])
+        candidates = []
+        for generation, programs in enumerate(generations):
+            if programs is None:
+                continue
+            for index, program in enumerate(programs):
+                if program is not None:
+                    candidates.append(
+                        {
+                            "generation": generation,
+                            "index": index,
+                            "expression": str(program),
+                            "length": int(program.length_),
+                            "fitness": float(program.raw_fitness_),
+                        }
+                    )
+        captured = getattr(generations, "candidates", None)
+        if captured is not None:
+            candidates = captured
+        selected = getattr(self.transformer_, "_best_programs", [])
+        return {
+            "params": self.get_params(),
+            "input_columns": self.input_columns_,
+            "input_dtypes": self.input_dtypes_,
+            "training": self.training_,
+            "fill_values": self.fill_values_.to_dict(),
+            "expressions": [str(program) for program in selected],
+            "candidates": candidates,
+            "candidate_capture": "complete" if captured is not None else "retained_only",
+            "pruned_candidates": 0
+            if captured is not None
+            else sum(
+                sum(p is None for p in programs) for programs in generations if programs is not None
+            ),
+            "runtime_dependency": "gplearn",
+            "feature_names": self.feature_names_,
+        }
 
     def get_params(self) -> dict[str, Any]:
         """Return serializable generator parameters for tracking artifacts."""

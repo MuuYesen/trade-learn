@@ -98,6 +98,8 @@ class _Monitor:
         self.owned = owned
         self.closed = False
         self.error_handler = error_handler
+        from .tl_timing import TLBoundaryTiming
+        self.timing = TLBoundaryTiming(logger)
 
     def failed(self, failure):
         logging.getLogger(__name__).error('TL monitor observation failed category=%s', failure.error_type)
@@ -205,7 +207,20 @@ def _errors(strategy):
                         error_handler=monitor.failed)
 
 
+def _timing_callbacks(strategy):
+    monitor = strategy._leafquant_tl_monitor
+    return ObserverSpec(observer=monitor.timing.observe, events=frozenset({
+        'business.next', 'business.prenext', 'business.notify_order'}),
+        phases=('before',), context=monitor.context, error_handler=monitor.failed)
+
+
+def _timing_submissions(strategy):
+    monitor = strategy._leafquant_tl_monitor
+    return ObserverSpec(observer=monitor.timing.observe, events=frozenset({'intent.submit_order'}),
+        phases=('before','after','error'), context=monitor.context, error_handler=monitor.failed)
+
+
 class TradeLogStrategy(Strategy):
     """Business callbacks belong entirely to TradeLearn, including no-super users."""
     monitor_config = None
-    strategy_observer_factories = (_assemble, _errors)
+    strategy_observer_factories = (_assemble, _errors, _timing_callbacks, _timing_submissions)

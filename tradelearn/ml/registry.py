@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
+from tradelearn.ml.artifacts import load_bundle, save_bundle
+
 
 @runtime_checkable
 class ModelLoader(Protocol):
@@ -32,6 +34,8 @@ def model_uri(reference: str) -> str:
     return f"models:/{reference}/Production"
 
 
+
+
 @dataclass
 class ModelRegistry:
     """Small MLflow Model Registry facade."""
@@ -54,3 +58,6 @@ def _import_mlflow() -> Any:
 
 
 __all__ = ["ModelLoader", "ModelRegistry", "model_uri"]
+
+# Local artifacts are deliberately separate from the remote ModelRegistry.
+__all__ += ["save_bundle", "load_bundle"]

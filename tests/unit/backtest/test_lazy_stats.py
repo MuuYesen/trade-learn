@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import feed as _as_feed
+
+from tests.unit.backtest._engine_config import configured_engine
+
 import pandas as pd
 
 from tradelearn.engine import Cerebro, Strategy
@@ -24,9 +28,9 @@ def test_engine_lazy_stats_defer_pandas_artifacts_until_access() -> None:
             if len(self.data) == 2:
                 self.buy(size=1)
 
-    cerebro = Cerebro(stats_mode="lazy")
-    cerebro.setcash(1000.0)
-    cerebro.adddata(_bars())
+    cerebro = configured_engine(stats_mode="lazy")
+    cerebro.broker.setcash(1000.0)
+    cerebro.adddata(_as_feed(_bars()))
     cerebro.addstrategy(BuyOnce)
 
     [strategy] = cerebro.run()

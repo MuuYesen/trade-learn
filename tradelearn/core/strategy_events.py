@@ -7,6 +7,7 @@ is created here. External observers bind their own validated run/environment.
 from __future__ import annotations
 
 import inspect
+import time
 import warnings
 from collections import deque
 from collections.abc import Callable, Mapping
@@ -18,15 +19,27 @@ from numbers import Integral, Real
 from types import MappingProxyType
 from typing import Any
 
+from .observation_clock import monotonic_ns
+
 OBSERVER_API_VERSION = 1
 
 _ACTIVE_OBSERVER = ContextVar("tradelearn_strategy_observer", default=False)
+_ACTIVE_CALLBACK = ContextVar("tradelearn_observed_callback", default=None)
+_CLOCK_UNSET = object()
+
+
+def _callback_context():
+    current = _ACTIVE_CALLBACK.get()
+    return current[0] if current is not None and current[1][0] else None
+
+
 _CALLBACK_NAMES = {
     "_setup": "lifecycle.setup",
     "init": "lifecycle.init",
     "start": "lifecycle.start",
     "stop": "lifecycle.stop",
     "next": "business.next",
+    "nextstart": "business.next",
     "prenext": "business.prenext",
     "notify_order": "business.notify_order",
     "notify_trade": "business.notify_trade",
@@ -152,17 +165,22 @@ def _freeze(value, depth=0):
 @dataclass(frozen=True)
 class StrategyEvent:
     """Describe one read-only lifecycle, business, or intent observation."""
+
     name: str
     phase: str
     details: Mapping[str, Any]
     context: Mapping[str, Any]
     error_type: str | None = None
     error_message: str | None = None
+    observed_mono_ns: int | None = None
+    observed_ts_ns: int | None = None
+    callback_context: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
 class ObserverSpec:
     """Configure an observer, event filters, context, and error handler."""
+
     observer: Callable[[StrategyEvent], None]
     events: frozenset[str] | None = None
     phases: tuple[str, ...] = ("after", "error")
@@ -173,6 +191,7 @@ class ObserverSpec:
 @dataclass(frozen=True)
 class ObservationFailure:
     """Record an observer or snapshot failure for diagnostics."""
+
     event: StrategyEvent
     observer: str
     error_type: str
@@ -183,6 +202,7 @@ class ObservationFailure:
 @dataclass(frozen=True)
 class ObservationFailures:
     """Summarize retained and omitted observation failures."""
+
     total: int
     omitted: int
     retained: tuple[ObservationFailure, ...]
@@ -191,12 +211,14 @@ class ObservationFailures:
 @dataclass(eq=False)
 class _Subscription:
     """Hold a registered observer specification and warning state."""
+
     spec: ObserverSpec
     warned: bool = False
 
 
 class _State:
     """Track observer subscriptions and bounded failure diagnostics."""
+
     def __init__(self):
         self.subscriptions = []
         self.failures = deque(maxlen=64)
@@ -320,7 +342,18 @@ def _record_failure(state, subscription, event, error, source="observer"):
     return failure
 
 
-def emit_domain(strategy, name, phase, details=None, *, error=None):
+def capture_observation_clock(strategy, name, phase="before"):
+    """Capture an interested observer boundary before preparing its snapshot."""
+    state = _state(strategy)
+    if state is None or not any(
+        phase in s.spec.phases and (s.spec.events is None or name in s.spec.events)
+        for s in state.subscriptions
+    ):
+        return None
+    return monotonic_ns(), time.time_ns()
+
+
+def emit_domain(strategy, name, phase, details=None, *, error=None, observed_clock=_CLOCK_UNSET):
     """Dispatch an immutable domain snapshot to matching observers."""
     assert_observer_allows_mutation()
     if not isinstance(name, str) or not name.startswith(("lifecycle.", "business.", "intent.")):
@@ -337,6 +370,8 @@ def emit_domain(strategy, name, phase, details=None, *, error=None):
     )
     if not interested:
         return
+    if observed_clock is _CLOCK_UNSET:
+        observed_clock = capture_observation_clock(strategy, name, phase)
     token = _ACTIVE_OBSERVER.set(True)
     try:
         frozen = _freeze(details or {})
@@ -355,6 +390,9 @@ def emit_domain(strategy, name, phase, details=None, *, error=None):
             subscription.spec.context,
             type(error).__name__ if error is not None else None,
             _error_message(error) if error is not None else None,
+            observed_clock[0] if observed_clock is not None else None,
+            observed_clock[1] if observed_clock is not None else None,
+            _callback_context(),
         )
         token = _ACTIVE_OBSERVER.set(True)
         try:
@@ -391,18 +429,46 @@ def invoke_callback(strategy, callback_name, *args, **kwargs):
     if state is None or not state.subscriptions:
         return callback(*args, **kwargs)
     name = _CALLBACK_NAMES.get(callback_name, "business." + callback_name)
+    clock = capture_observation_clock(strategy, name)
     details = {"args": args, "kwargs": kwargs}
     runtime_context = getattr(strategy, "runtime_context", None)
     if runtime_context is not None:
         details["runtime_context"] = runtime_context
-    emit_domain(strategy, name, "before", details)
+    boundary = (
+        dict(callback=name, observed_mono_ns=clock[0], observed_ts_ns=clock[1])
+        if clock
+        else dict(callback=name)
+    )
+    if runtime_context is not None:
+        boundary.update(
+            {
+                key: getattr(runtime_context, key, None)
+                for key in (
+                    "symbol",
+                    "sequence",
+                    "ts_event_ns",
+                    "market_entry_clock",
+                    "market_callback",
+                )
+            }
+        )
+    if not getattr(getattr(strategy, "_runtime", None), "_stepping", False):
+        boundary.pop("market_entry_clock", None)
+        boundary.pop("market_callback", None)
+    alive = [True]
+    token = _ACTIVE_CALLBACK.set((MappingProxyType(boundary), alive))
     try:
-        result = callback(*args, **kwargs)
-    except BaseException as error:
-        emit_domain(strategy, name, "error", details, error=error)
-        raise
-    emit_domain(strategy, name, "after", details)
-    return result
+        emit_domain(strategy, name, "before", details, observed_clock=clock)
+        try:
+            result = callback(*args, **kwargs)
+        except BaseException as error:
+            emit_domain(strategy, name, "error", details, error=error)
+            raise
+        emit_domain(strategy, name, "after", details)
+        return result
+    finally:
+        alive[0] = False  # Copied async contexts cannot borrow an expired market callback.
+        _ACTIVE_CALLBACK.reset(token)
 
 
 def dispatch_callback(strategy, callback_name, *args, **kwargs):

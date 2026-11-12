@@ -8,6 +8,7 @@ from tradelearn.backtest.targets import TargetWeightSnapshot, build_target_weigh
 from tradelearn.core.strategy_events import (
     add_observer,
     assert_observer_allows_mutation,
+    capture_observation_clock,
     dispatch_callback,
     emit_domain,
     observation_failures,
@@ -66,12 +67,12 @@ class Strategy:
             self._research_result = None
 
     @property
-    def research_result(self) -> Any:
+    def _bound_research_result(self) -> Any:
         """Return the current strategy-bound research result."""
         return getattr(self, "_research_result", None)
 
-    @research_result.setter
-    def research_result(self, result: Any) -> None:
+    @_bound_research_result.setter
+    def _bound_research_result(self, result: Any) -> None:
         bound = self._bind_research_result(result) if result is not None else None
         self._research_result = bound
         if bound is not None:
@@ -86,13 +87,13 @@ class Strategy:
         """
         return result
 
-    def add_observer(self, observer, **options):
+    def _add_observer(self, observer, **options):
         return add_observer(self, observer, **options)
 
-    def remove_observer(self, subscription):
+    def _remove_observer(self, subscription):
         return remove_observer(self, subscription)
 
-    def observation_failures(self):
+    def _observation_failures(self):
         return observation_failures(self)
 
     @observer_mutation_guard
@@ -100,7 +101,7 @@ class Strategy:
         pass
 
     @observer_mutation_guard
-    def init(self):
+    def _init(self):
         pass
 
     @observer_mutation_guard
@@ -111,14 +112,17 @@ class Strategy:
     def next(self):
         pass
 
+    def nextstart(self):
+        self.next()
+
     @observer_mutation_guard
     def stop(self):
         pass
 
-    def record_research_result(self, result: Any) -> Any:
+    def _record_research_result(self, result: Any) -> Any:
         """Expose the research result executed on the current bar to analyzers."""
-        self.research_result = result
-        return self.research_result
+        self._bound_research_result = result
+        return self._bound_research_result
 
     def _append_research_result(self, result: Any) -> None:
         history = getattr(self, "research_results_history", None)
@@ -152,6 +156,21 @@ class Strategy:
     @property
     def position(self) -> Position:
         return self.getposition()
+
+    def _decision_datetime(self):
+        runtime = getattr(self,"_runtime",None)
+        if runtime is not None and runtime.profile == "batch" and self.datas:
+            import pandas as pd
+            if runtime._cursor < 0:
+                return None
+            stamp = pd.Timestamp(int(runtime._clock.timestamps[runtime._cursor]), unit="s")
+            timezone = self.datas[0]._frame.index.tz
+            return stamp.tz_localize("UTC").tz_convert(timezone) if timezone is not None else stamp
+        context = getattr(self, "runtime_context", None)
+        if context is not None:
+            import pandas as pd
+            return pd.Timestamp(context.ts_event_ns, unit="ns", tz="UTC")
+        return self.datas[0].datetime.datetime(0) if self.datas else None
 
     def _resolve_data(self, data: Any = None) -> Any:
         resolved = self.data if data is None else data
@@ -199,7 +218,7 @@ class Strategy:
             return 1.0
         return sizer.getsizing(data, isbuy)
 
-    def submit_order(
+    def _submit_order(
         self,
         side: int,
         data: Any = None,
@@ -210,6 +229,7 @@ class Strategy:
     ):
         """Submit a shared event-driven order through the bound broker."""
         assert_observer_allows_mutation()
+        entry_clock = capture_observation_clock(self, "intent.submit_order")
         runtime = getattr(self, "_runtime", None)
         if runtime is not None:
             runtime.assert_can_submit()
@@ -219,16 +239,19 @@ class Strategy:
         isbuy = side == Order.Buy
         if size is None:
             size = self.getsizing(data, isbuy=isbuy)
-        actual_size = float(abs(size))
+        import math
+        if isinstance(size, bool) or not math.isfinite(float(size)) or float(size) <= 0:
+            raise ValueError("size must be a positive finite order quantity")
+        actual_size = float(size)
         pending_delta = actual_size if isbuy else -actual_size
         self._pending_size[data] = self._pending_size.get(data, 0.0) + pending_delta
         details = dict(
             side=side, data=data, size=actual_size, price=price, exectype=exectype, controls=kwargs
         )
-        emit_domain(self, "intent.submit_order", "before", details)
+        emit_domain(self, "intent.submit_order", "before", details, observed_clock=entry_clock)
         try:
             order = self.broker._submit(self, data, side, actual_size, price, exectype, **kwargs)
-            emit_domain(self, "intent.submit_order", "after", dict(details, order=order))
+            emit_domain(self, "intent.submit_order", "after", dict(details, order=order, entry_clock=entry_clock))
             return order
         except Exception as error:
             emit_domain(self, "intent.submit_order", "error", details, error=error)
@@ -247,7 +270,7 @@ class Strategy:
         exectype: int | None = None,
         **kwargs,
     ):
-        return self.submit_order(Order.Buy, data, size, price, exectype, **kwargs)
+        return self._submit_order(Order.Buy, data, size, price, exectype, **kwargs)
 
     def sell(
         self,
@@ -257,7 +280,7 @@ class Strategy:
         exectype: int | None = None,
         **kwargs,
     ):
-        return self.submit_order(Order.Sell, data, size, price, exectype, **kwargs)
+        return self._submit_order(Order.Sell, data, size, price, exectype, **kwargs)
 
     def _buy_data(
         self,
@@ -313,9 +336,17 @@ class Strategy:
             return float(getattr(getattr(comminfo, "p", comminfo), "mult", 1.0))
         return float(getattr(self.broker, "_mult", 1.0))
 
+    def _target_pending_size(self, data):
+        getter = getattr(self.broker,"get_orders_open",None)
+        if callable(getter):
+            orders = getter(owner=self) if getattr(self.broker,"_supports_order_owner",False) else getter()
+            return sum((1 if order.isbuy() else -1)*(abs(order.size)-abs(order.executed.size))
+                       for order in orders if order.data is data and order.parent is None)
+        return self._pending_size.get(data,0.0)
+
     def order_target_size(self, data: Any = None, target: float = 0, **kwargs):
         data = self._resolve_data(data)
-        possize = self.getposition(data).size + self._pending_size.get(data, 0.0)
+        possize = self.getposition(data).size + self._target_pending_size(data)
         delta = float(target) - float(possize)
         if delta > 0:
             return self._buy_data(data=data, size=delta, **kwargs)
@@ -331,12 +362,14 @@ class Strategy:
         **kwargs,
     ):
         data = self._resolve_data(data)
-        possize = self.getposition(data).size + self._pending_size.get(data, 0.0)
+        possize = self.getposition(data).size + self._target_pending_size(data)
         if not target and possize:
-            return self.close(data=data, price=price, **kwargs)
+            if possize > 0:
+                return self._sell_data(data, size=possize, price=price, **kwargs)
+            return self._buy_data(data, size=abs(possize), price=price, **kwargs)
         price = float(price if price is not None else self._current_price(data))
         mult = self._position_mult(data)
-        current_value = float(self.broker.getvalue(datas=[data]))
+        current_value = float(self.broker.getvalue(datas=[data])) + self._target_pending_size(data) * price * mult
         delta = float(target) - current_value
         if abs(delta) < 1e-12:
             return None
@@ -355,7 +388,7 @@ class Strategy:
             **kwargs,
         )
 
-    def target_weights(
+    def _target_weights(
         self,
         weights: Mapping[str, float],
         *,
@@ -367,7 +400,7 @@ class Strategy:
         snapshots = {
             name: TargetWeightSnapshot(
                 price=self._current_price(data),
-                size=float(self.getposition(data).size + self._pending_size.get(data, 0.0)),
+                size=float(self.getposition(data).size + self._target_pending_size(data)),
                 mult=self._position_mult(data),
             )
             for name, data in data_by_name.items()

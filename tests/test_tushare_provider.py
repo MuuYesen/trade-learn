@@ -110,11 +110,12 @@ def test_monthly_aggregation_and_empty_history():
 
 def test_default_transport_retries_are_bounded_and_redacted(monkeypatch):
     mod = importlib.import_module('tradelearn.data.tushare')
+    import requests
     calls = []
     def request(url, **kwargs):
         calls.append((url, kwargs))
-        raise mod.requests.Timeout('SECRET')
-    monkeypatch.setattr(mod.requests, 'post', request)
+        raise requests.Timeout('SECRET')
+    monkeypatch.setattr(requests, 'post', request)
     monkeypatch.setattr(mod.time, 'sleep', lambda _: None)
     with pytest.raises(ConnectionError, match='Tushare') as exc:
         mod.TushareProvider(token='SECRET').history_ohlc('600000.SH', start='2024-01-01', end='2024-01-04')

@@ -3,6 +3,14 @@
 from tradelearn.research import derive, explore, portfolio, preprocess, split
 from tradelearn.research.features import FeatureBuilder, FeatureSet
 from tradelearn.research.pipeline import Pipeline, Transformer
+from tradelearn.research.portfolio import (
+    Allocator,
+    Constraints,
+    EqualWeight,
+    RiskfolioOptimizer,
+    RiskfolioWeight,
+    TopK,
+)
 from tradelearn.research.run import (
     ResearchResult,
     ResearchRun,
@@ -32,3 +40,7 @@ __all__ = [
     "time_split",
     "tracked",
 ]
+
+__all__ += ["Allocator", "TopK", "EqualWeight", "Constraints", "RiskfolioOptimizer"]
+
+__all__ += ["RiskfolioWeight"]

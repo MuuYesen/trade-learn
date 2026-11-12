@@ -5,5 +5,5 @@ from ..analyzer import Analyzer
 
 class Returns(Analyzer):
     """Calculates returns (total, average, etc.)"""
-    metric_key = "returns"
+    _metric_key = "returns"
 

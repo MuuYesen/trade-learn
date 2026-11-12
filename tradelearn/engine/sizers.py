@@ -1,46 +1,45 @@
-from __future__ import annotations
-
-from typing import Any
-
-from tradelearn.backtest.sizer import FixedSize as CoreFixedSize
+"""Backtrader sizing protocol; execution stays in the bound broker."""
 from tradelearn.backtest.sizer import Sizer as CoreSizer
-from tradelearn.engine.base import Params
+from tradelearn.engine.base import MetaParams, Params, collect_param_defaults
 
 
-class Sizer(CoreSizer):
-    """Backtrader-style Sizer with params support."""
+class Sizer(CoreSizer, metaclass=MetaParams):
+    params = ()
 
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-        cls_params = getattr(self.__class__, "params", [])
-        self.params = self.p = Params(cls_params, **kwargs)
+    def _base_init(self, **kwargs):
+        self.params = self.p = Params(collect_param_defaults(type(self))[1], **kwargs)
+
+    def __init__(self):
+        super().__init__()
+
+    def getsizing(self, data, isbuy):
+        return self._getsizing(self.broker.getcommissioninfo(data), self.broker.getcash(), data, isbuy)
+
+    def _getsizing(self, comminfo, cash, data, isbuy):
+        raise NotImplementedError('Sizer subclasses must implement _getsizing')
 
 
-class FixedSize(Sizer, CoreFixedSize):
-    params = (("stake", 1),)
+class FixedSize(Sizer):
+    params = (("stake", 1), ("tranches", 1))
 
-    def getsizing(self, data: Any, isbuy: bool, **kwargs: Any) -> float:
-        return float(self.p.stake)
+    def _getsizing(self, comminfo, cash, data, isbuy):
+        return abs(int(self.p.stake/self.p.tranches)) if self.p.tranches > 1 else self.p.stake
+
+    def setsizing(self, stake):
+        self.p.stake = abs(int(self.p.stake/self.p.tranches)) if self.p.tranches > 1 else stake
 
 
 class PercentSizer(Sizer):
-    params = (("percents", 10.0),)
+    params = (("percents", 20), ("retint", False))
 
-    def getsizing(self, data: Any, isbuy: bool, **kwargs: Any) -> float:
-        value = self.broker.getvalue()
-        price = data.close[0]
-        if price <= 0:
-            return 0.0
-        return (value * self.p.percents / 100.0) / price
+    def _getsizing(self, comminfo, cash, data, isbuy):
+        position = self.broker.getposition(data)
+        size = position.size if position else cash/data.close[0]*self.p.percents/100
+        return int(size) if self.p.retint else size
 
 
-class AllInSizer(Sizer):
-    def getsizing(self, data: Any, isbuy: bool, **kwargs: Any) -> float:
-        cash = self.broker.getcash()
-        price = data.close[0]
-        if price <= 0:
-            return 0.0
-        return cash / price
+class AllInSizer(PercentSizer):
+    params = (("percents", 100),)
 
 
 __all__ = ["AllInSizer", "FixedSize", "PercentSizer", "Sizer"]

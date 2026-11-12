@@ -36,7 +36,6 @@ def test_optional_backends_are_not_required_for_core_install() -> None:
         "opentdx",
         "tradingview-datafeed",
         "websocket-client",
-        "TA-Lib",
         "pynesys-pynecore",
         "causal-learn",
         "numba",
@@ -49,7 +48,7 @@ def test_optional_backends_are_not_required_for_core_install() -> None:
     # TradingView transport is maintained in-tree and uses websocket-client.
     assert any(dep.startswith("websocket-client") for dep in extras["research"])
     assert any(dep.startswith("pynesys-pynecore") for dep in extras["research"])
-    assert any(dep.startswith("TA-Lib") for dep in extras["research"])
+    assert "TA-Lib==0.8.3" in dependencies
     assert any(dep.startswith("causal-learn") for dep in extras["research"])
     assert any(dep.startswith("numba") for dep in extras["research"])
 
@@ -64,7 +63,7 @@ def test_default_dependencies_exclude_research_and_export_stacks() -> None:
     assert any(dep.startswith("scikit-learn") for dep in extras["research"])
     assert any(dep.startswith("scipy") for dep in extras["research"])
     assert any(dep.startswith("pyarrow") for dep in extras["research"])
-    assert any(dep.startswith("pandas-ta-classic") for dep in extras["research"])
+    assert not any("pandas-ta" in dep.lower() for dep in base + extras["research"])
     assert any(dep.startswith("bokeh") for dep in extras["research"])
     assert any(dep.startswith("xlsxwriter") for dep in extras["research"])
 
@@ -77,13 +76,19 @@ import sys
 class BlockOptional(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         optional = {'scipy', 'sklearn', 'pyarrow', 'pandas_ta_classic',
-                    'bokeh', 'xlsxwriter', 'jinja2'}
+                    'bokeh', 'xlsxwriter', 'jinja2', 'typer', 'yaml',
+                    'requests', 'certifi', 'urllib3', 'idna'}
         if fullname.split('.')[0] in optional:
             raise ImportError(f'optional package imported by core: {fullname}')
 
 sys.meta_path.insert(0, BlockOptional())
 import tradelearn.engine
 import tradelearn.lite
+import tradelearn.cli
+from tradelearn.data import TushareProvider
+import pandas as pd
+provider = TushareProvider(transport=lambda *args: pd.DataFrame({"value": [1]}))
+assert provider._call("fixture", {}, "value").value.tolist() == [1]
 """
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, capture_output=True, text=True, check=False

@@ -186,6 +186,38 @@ def bind_research_result(result: Any, strategy: Any) -> Any:
     return result
 
 
+def _metadata_safe(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(k): _metadata_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_metadata_safe(v) for v in value]
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    return {"type": type(value).__name__, "module": type(value).__module__}
+
+
+def _data_summary(value: Any) -> Any:
+    if isinstance(value, (pd.DataFrame, pd.Series)):
+        result = {
+            "type": type(value).__name__,
+            "rows": len(value),
+            "index_names": list(value.index.names),
+        }
+        if isinstance(value, pd.DataFrame):
+            result["columns"] = [str(x) for x in value.columns]
+            result["dtypes"] = [str(x) for x in value.dtypes]
+        else:
+            result["name"] = str(value.name)
+            result["dtype"] = str(value.dtype)
+        index = value.index.get_level_values(0)
+        if isinstance(index, pd.DatetimeIndex) and len(index):
+            result.update(start=index.min().isoformat(), end=index.max().isoformat())
+        return result
+    if hasattr(value, "shape"):
+        return {"type": type(value).__name__, "shape": list(value.shape)}
+    return _metadata_safe(value)
+
+
 def _object_size(value: Any) -> int | str:
     if value is None:
         return "none"
@@ -201,6 +233,8 @@ class ResearchRun:
     def __init__(self, name: str) -> None:
         self.name = str(name)
         self.steps: list[ResearchStep] = []
+        self.components: dict[str, Any] = {}
+        self.component_metadata: dict[str, Any] = {}
         self._token: contextvars.Token[ResearchRun | None] | None = None
 
     def __enter__(self) -> ResearchRun:
@@ -216,6 +250,47 @@ class ResearchRun:
     def record_step(self, name: str, category: str, params: dict[str, Any]) -> None:
         """Append a recorded step."""
         self.steps.append(ResearchStep(name=name, category=category, params=params))
+
+    def register(self, name: str, component: Any) -> Any:
+        """Register an external definition; this does not imply execution."""
+        name = str(name)
+        if name in self.components and self.components[name] is not component:
+            raise ValueError(f"component {name!r} already registered")
+        self.components[name] = component
+        params = component.get_params() if hasattr(component, "get_params") else {}
+        self.component_metadata[name] = {
+            "type": type(component).__name__,
+            "module": type(component).__module__,
+            "params": _metadata_safe(params),
+        }
+        return component
+
+    def call(self, name: str, method: str, *args: Any, **kwargs: Any) -> Any:
+        """Execute and record a registered component, including failures.
+
+        Use this explicitly for sklearn and external objects. Merely entering
+        the context never instruments arbitrary external fit/predict calls.
+        """
+        component = self.components[name]
+        operation = getattr(component, method)
+        params = {
+            "method": method,
+            "component": self.component_metadata[name],
+            "inputs": {
+                "args": [_data_summary(x) for x in args],
+                "kwargs": {k: _data_summary(v) for k, v in kwargs.items()},
+            },
+        }
+        try:
+            with suspend_tracking():
+                result = operation(*args, **kwargs)
+        except Exception as exc:
+            params.update(status="failed", error=type(exc).__name__)
+            self.record_step(name, "execution", params)
+            raise
+        params.update(status="completed", output=_data_summary(result))
+        self.record_step(name, "execution", params)
+        return result
 
     def finish(
         self,
@@ -239,13 +314,16 @@ class ResearchRun:
             selected_features=selected_features,
             model=model,
             scores=(
-                None
-                if scores is None
-                else pd.Series(scores, name=getattr(scores, "name", "score"))
+                None if scores is None else pd.Series(scores, name=getattr(scores, "name", "score"))
             ),
             selected=_coerce_selected(selected),
             weights=None if weights is None else pd.Series(weights, dtype="float64", name="weight"),
-            artifacts=dict(artifacts or {}),
+            artifacts={
+                **dict(artifacts or {}),
+                **(
+                    {"components": dict(self.component_metadata)} if self.component_metadata else {}
+                ),
+            },
         )
         LOGGER.info(
             "ResearchRun finished name=%s steps=%s features=%s scores=%s weights=%s",
@@ -332,7 +410,9 @@ def suspend_tracking():
 
 
 def _strategy_timestamp(strategy: Any) -> pd.Timestamp:
-    current_datetime = getattr(strategy, "current_datetime", None)
+    current_datetime = getattr(strategy, "_decision_datetime", None)
+    if not callable(current_datetime):
+        current_datetime = getattr(strategy, "current_datetime", None)
     if callable(current_datetime):
         try:
             return pd.Timestamp(current_datetime())
@@ -415,7 +495,12 @@ def _select_weight_timestamp(
     unique_values = pd.Index(values).drop_duplicates()
     if len(unique_values) == 0:
         return None
-    date_matches = [value for value in unique_values if _same_date(value, timestamp)]
+    date_matches = [
+        value
+        for value in unique_values
+        if _same_date(value, timestamp)
+        and _timestamp_sort_key(value) <= _timestamp_sort_key(timestamp)
+    ]
     if date_matches:
         ordered = sorted(date_matches, key=_timestamp_sort_key)
         idx = len(ordered) - 1 + offset
@@ -440,7 +525,11 @@ def _same_date(value: Any, timestamp: pd.Timestamp) -> bool:
 
 
 def _has_weight_date(values: pd.Index, timestamp: pd.Timestamp) -> bool:
-    return any(_same_date(value, timestamp) for value in values.drop_duplicates())
+    return any(
+        _same_date(value, timestamp)
+        and _timestamp_sort_key(value) <= _timestamp_sort_key(timestamp)
+        for value in values.drop_duplicates()
+    )
 
 
 def _timestamp_sort_key(value: Any) -> pd.Timestamp:

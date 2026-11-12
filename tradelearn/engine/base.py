@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import inspect
 from typing import Any
+from tradelearn.backtest.parameters import Params, collect_param_defaults, split_param_kwargs
 
-from tradelearn.backtest.lines import DelayedLine, IndicatorLine, Lines, LineSeries
+from tradelearn.backtest.lines import DelayedLine, IndicatorLine, Lines, LineSeries, line_names
 from tradelearn.backtest.models import _notify_order
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
 from tradelearn.core.strategy_context import (
@@ -37,55 +38,23 @@ __all__ = [
 ]
 
 
-class Params:
-    """Backtrader-style parameter storage object."""
-
-    def __init__(self, defaults: Any = (), **kwargs):
-        self._keys: list[str] = []
-        if isinstance(defaults, dict):
-            for name, val in defaults.items():
-                if name not in self._keys:
-                    self._keys.append(name)
-                setattr(self, name, val)
-        elif isinstance(defaults, (list, tuple)):
-            for name, val in defaults:
-                if isinstance(name, (list, tuple)):  # tuple of (name, val)
-                    if name[0] not in self._keys:
-                        self._keys.append(name[0])
-                    setattr(self, name[0], name[1])
-                else:
-                    if name not in self._keys:
-                        self._keys.append(name)
-                    setattr(self, name, val)
-        for name, val in kwargs.items():
-            if name not in self._keys:
-                self._keys.append(name)
-            setattr(self, name, val)
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        if not name.startswith("_") and hasattr(self, "_keys") and name not in self._keys:
-            self._keys.append(name)
-        super().__setattr__(name, value)
-
-    def __getitem__(self, index: int) -> Any:
-        return getattr(self, self._keys[index])
-
-    def asdict(self) -> dict[str, Any]:
-        return {key: getattr(self, key) for key in self._keys}
-
-
 class TimeFrame:
-    (NoTimeFrame, MicroSeconds, Seconds, Minutes, Days, Weeks, Months, Years) = range(8)
-    Names = ["", "MicroSeconds", "Seconds", "Minutes", "Days", "Weeks", "Months", "Years"]
+    (Ticks, MicroSeconds, Seconds, Minutes, Days, Weeks, Months, Years, NoTimeFrame) = range(1, 10)
+    Names = ["", "Ticks", "MicroSeconds", "Seconds", "Minutes", "Days", "Weeks", "Months", "Years", "NoTimeFrame"]
+    names = Names
 
     @classmethod
-    def getname(cls, tf: int, compression: int = 1) -> str:
-        if tf < len(cls.Names):
-            name = cls.Names[tf]
-            if compression > 1:
-                name = f"{compression}{name}"
-            return name
-        return ""
+    def getname(cls, tframe, compression=None):
+        name = cls.Names[tframe]
+        return name if compression > 1 or tframe == cls.NoTimeFrame else name[:-1]
+
+    @classmethod
+    def TFrame(cls, name):
+        return getattr(cls, name)
+
+    @classmethod
+    def TName(cls, tframe):
+        return cls.Names[tframe]
 
 
 class BaseBroker:
@@ -119,59 +88,30 @@ class BaseAnalyzer:
     def __init__(self, **kwargs):
         self.strategy = None
 
-    def on_order(self, order: Any):
+    def _on_order(self, order: Any):
         pass
 
-    def on_bar(self, bar: Any) -> None:
+    def _on_bar(self, bar: Any) -> None:
         pass
 
-    def on_start(self) -> None:
+    def _on_start(self) -> None:
         pass
 
-    def on_fill(self, fill: Any) -> None:
+    def _on_fill(self, fill: Any) -> None:
         pass
 
-    def on_trade(self, trade: Any) -> None:
+    def _on_trade(self, trade: Any) -> None:
         pass
 
     def stop(self):
         pass
 
-    def on_end(self, stats: Any) -> None:
+    def _on_end(self, stats: Any) -> None:
         pass
 
     def get_analysis(self) -> dict[str, Any]:
         return {}
 
-
-
-def collect_param_defaults(cls: type) -> tuple[list[str], list[tuple[str, Any]]]:
-    names: list[str] = []
-    defaults: list[tuple[str, Any]] = []
-    for base_cls in reversed(cls.mro()):
-        param_defaults = getattr(base_cls, "params", [])
-        if isinstance(param_defaults, dict):
-            names.extend(param_defaults.keys())
-            defaults.extend(param_defaults.items())
-        elif isinstance(param_defaults, (list, tuple)):
-            for item in param_defaults:
-                if isinstance(item, (list, tuple)) and len(item) >= 2:
-                    names.append(item[0])
-                    defaults.append((item[0], item[1]))
-    return names, defaults
-
-
-def split_param_kwargs(cls: type, kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    param_names, _defaults = collect_param_defaults(cls)
-    param_name_set = set(param_names)
-    param_kwargs = {}
-    other_kwargs = {}
-    for key, value in kwargs.items():
-        if key in param_name_set:
-            param_kwargs[key] = value
-        else:
-            other_kwargs[key] = value
-    return param_kwargs, other_kwargs
 
 
 class MetaParams(type):
@@ -259,9 +199,9 @@ class LineRoot(metaclass=MetaParams):
         self.l = self.lines
         
         # Initialize line placeholders if class defines 'lines'
-        line_names = getattr(self.__class__, 'lines', [])
-        if isinstance(line_names, (list, tuple)):
-            for name in line_names:
+        declared_lines = line_names(type(self))
+        if isinstance(declared_lines, (list, tuple)):
+            for name in declared_lines:
                 if not hasattr(self.lines, name):
                     setattr(self.lines, name, None)
 

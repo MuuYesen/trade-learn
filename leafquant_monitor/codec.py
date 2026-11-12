@@ -14,21 +14,48 @@ def _info(fact):
     if not isinstance(fields,dict) or fields.get('scope') not in ('framework_account_event','framework_cache'):return None
     return fields.get('native_info')
 
-def encode_fact(fact):
+def _encode_fact_and_json(fact, *, sort_keys=False):
+    """Validate and serialize once; preserve the logger wire key order."""
+    def render(value):
+        return json.dumps(value,ensure_ascii=False,sort_keys=sort_keys,separators=(',',':'),allow_nan=False)
     info=_info(fact)
     if isinstance(info,dict) and KEY in info:
         decode_fact(fact)  # Same bounded integrity check for a native cache carrier.
-        if len(_bytes(fact))+1>MAX_LINE:raise ValueError('compressed account fact exceeds log-line limit')
-        return fact
-    if len(_bytes(fact))+1<=MAX_LINE:return fact
-    if not isinstance(info,dict):raise ValueError('oversize unencodable log fact')
+        text=render(fact)
+        if len(text.encode('utf-8'))+1>MAX_LINE:raise ValueError('compressed account fact exceeds log-line limit')
+        return fact,text
+    if not isinstance(info,dict):
+        text=render(fact)
+        if len(text.encode('utf-8'))+1>MAX_LINE:raise ValueError('oversize unencodable log fact')
+        return fact,text
+    # Serialize the native JSON once. Object key order carries no source facts;
+    # canonical native info is also the exact established compression input.
     raw=_bytes(info)
+    def object_text(value, override_key, override_text):
+        items=sorted(value.items()) if sort_keys else value.items()
+        parts=[]
+        for key,child in items:
+            # Preserve JSON's existing key coercion/escaping without a sentinel.
+            prefix=render({key:None})[1:-5]
+            parts.append(prefix+(override_text if key==override_key else render(child)))
+        return '{'+','.join(parts)+'}'
+    field_template=object_text(fact['fields'],'native_info','null')
+    template=object_text(fact,'fields',field_template)
+    if len(template.encode('utf-8'))-4+len(raw)+1<=MAX_LINE:
+        fields_text=object_text(fact['fields'],'native_info',raw.decode('utf-8'))
+        return fact,object_text(fact,'fields',fields_text)
     if len(raw)>MAX_RAW:raise ValueError('expanded account info budget exceeded')
     encoded=base64.b64encode(gzip.compress(raw,compresslevel=6,mtime=0)).decode('ascii')
-    result=copy.deepcopy(fact)
+    # Clone retained fields, never clone the large value being replaced.
+    result={key:copy.deepcopy(value) for key,value in fact.items() if key!='fields'}
+    result['fields']={key:copy.deepcopy(value) for key,value in fact['fields'].items() if key!='native_info'}
     result['fields']['native_info']={KEY:{'codec':'gzip-base64','raw_length':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'data':encoded}}
-    if len(_bytes(result))+1>MAX_LINE:raise ValueError('compressed account fact exceeds log-line limit')
-    return result
+    text=render(result)
+    if len(text.encode('utf-8'))+1>MAX_LINE:raise ValueError('compressed account fact exceeds log-line limit')
+    return result,text
+
+def encode_fact(fact):
+    return _encode_fact_and_json(fact,sort_keys=True)[0]
 
 def _unique(pairs):
     out={}

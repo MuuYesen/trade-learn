@@ -33,13 +33,15 @@
 
 ## 实现路径
 
+> **待实现的接口统一目标（2026-11-11）**：Engine与Lite将收敛为同一策略语义的完整/轻量入口，保留sklearn风格投研流水线，完善DuckDB研究查询、运行产物、评价/报告与日志；research/lab拟合并，AI研究环境拟验证后采用Jupyter AI Lite与Skills。以下现行安装组、API和示例仍描述各自实际状态，不能据目标假定同策略双入口或新window/Dataset已经可用。见[API状态说明](docs/concepts/api-boundary.md#pending-unification-20261111)。
+
 **trade-learn** 拒绝功能的简单堆砌，而是通过独特的“双模双核”设计，在专业深度与研发效率之间构建了平衡。底层通过 **Engine** 深度对齐 Backtrader 语义以夯实逻辑正确性，上层则由 **Lite** 提供极简的 Pythonic 接口，确保了“快”与“准”的统一。
 
 您可以根据研发阶段，自由定义策略的深度：
 - **Engine 模式 (深度研发)**：深度对齐 Backtrader 语义，支持 Analyzer/Sizer/Signal 完整生态，适合逐项研究订单、指标与分析器行为的复杂回测策略。
 - **Lite 模式 (敏捷验证)**：沿袭 backtesting.py 的极简主义，支持模型权重直连，极其适合在因子挖掘阶段进行高频迭代与原型验证。
 
-在生态层面，**trade-learn** 提供完善的指标支持。框架兼容 TA-Lib、Pandas-TA-Classic、TDX、TradingView 等主流指标库，并支持灵活扩展自定义指标与数据源，满足不同研究场景的需求。
+在生态层面，**trade-learn** 提供完善的指标支持。框架兼容 TA-Lib、TDX、TradingView/PyneCore 等主流指标库，并支持灵活扩展自定义指标与数据源，满足不同研究场景的需求。
 
 ## 核心亮点
 
@@ -57,12 +59,12 @@
 
 #### 📦 模块化平台：轻量核心，按需扩展
 - **核心解耦**：默认安装包含 Engine、Lite 与基础数据处理；报告、因子、Parquet、机器学习和指标后端按需安装。
-- **弹性扩展**：通过 `[research,lab]` 扩展，可一键激活 **JupyterLab + MLflow + AI 助手** 组成的集成投研环境，实现“按需加载、随处运行”。
+- **弹性扩展**：通过 `[research]` 扩展，可一键激活 **JupyterLab + MLflow + AI 助手** 组成的集成投研环境，实现“按需加载、随处运行”。
 
 
 #### 🌍 全球视野：多口径指标与现代生态
-- **双市场口径**：显式支持 TDX (国内) 和 TradingView (国外) 指标口径，同时深度兼容 TA-Lib 与 Pandas-TA-Classic。
-- **现代投研工具**：开箱即用的 HTML 交互式报告、MLflow 实验追踪以及 JupyterLab / MCP 深度集成。
+- **双市场口径**：显式支持 TDX (国内) 和 TradingView (国外) 指标口径，同时接入 TA-Lib 持续状态句柄。
+- **现代投研工具**：开箱即用的 HTML 交互式报告、MLflow 实验追踪以及 JupyterLab / AI Lite / Skills 研究环境。
 
 ## 因果投研：跨越“伪相关”陷阱
 
@@ -92,7 +94,7 @@
 
 ## 安装
 
-默认安装提供研究、回测、通用策略生命周期及策略日志组件；不自动连接账户、启用策略或发送日志。研究与回测支持 Python 3.10–3.14，原生扩展须匹配操作系统和 Python ABI。
+默认安装提供研究、回测、通用策略生命周期及策略日志组件；不自动连接账户、启用策略或发送日志。源码基线为 Python >=3.10，原生扩展和依赖二进制须匹配操作系统与 Python ABI；本轮实际资格及未验范围见下表。
 
 ```bash
 pip install trade-learn==0.2.9
@@ -111,18 +113,22 @@ pip install "trade-learn[nautilus]==0.2.9"
 | extra | 用途 |
 |---|---|
 | `[research]` | 数据源、指标、因子、机器学习、Parquet/DuckDB、报表与优化 |
-| `[lab]` | JupyterLab、交互工具与MLflow；不重复安装研究库 |
 | `[nautilus]` | 官方NT 2.0.0rc7与AWS SDK；执行桥仍需Python 3.13/3.14 |
+| `[tl-store]` | 按需安装TL-Store当前cTrader独立组件；仅已验证的Python3.13、Mac arm64/Linux x86_64 |
 
-当前源码只提供这三组；完整研究工作台组合为 `pip install ".[research,lab]"`，执行/发送使用 `pip install ".[nautilus]"`（从源码根目录安装需要Rust/maturin，亦可使用对应本地wheel）。基础安装仍无AWS；发送必须另配受限授权，不自动联网或交易。Python 3.10–3.12安装nautilus组只得到SDK，NT会被marker跳过，执行入口明确拒绝。
+当前源码提供默认安装及research、nautilus、tl-store三个extras；完整研究工作台组合为 `pip install ".[research]"`，执行/发送使用 `pip install ".[nautilus]"`（从源码根目录安装需要Rust/maturin，亦可使用对应本地wheel）。基础安装仍无AWS；发送必须另配受限授权，不自动联网或交易。Python 3.10–3.12安装nautilus组只得到SDK，NT会被marker跳过，执行入口明确拒绝。
 
-已发布PyPI 0.2.9保留原有extras与依赖；这里的新三组只描述当前源码，不代表新版本已发行。开发与文档工具用 `uv sync --group dev` / `uv sync --group docs`，不再作为公开extras。`tradelearn lab`在安装 `[lab]` 后提供JupyterLab/MLflow，完整研究还需组合 `[research]`。
+已发布PyPI 0.2.9保留原有extras与依赖；这里的源码安装组只描述当前源码，不代表新版本已发行。通过TL使用cTrader的推荐发行目标命令统一为 `pip install "trade-learn[nautilus,tl-store]"`；tl-store是本包extra，自动安装已验证的独立组件，实际选择本地构建的tl-store发行包。用户不用另写adapter版本；完整依赖锁定由metadata维护，当前组合仅验Python3.13 Mac arm64/Linux x86_64。旧公开0.2.9没有统一Store API2和此extra，须使用对应本地候选，待TL正式兼容版本实际发布后才能使用公网命令。独立NA用户不反向依赖TL。开发与文档工具用 `uv sync --group dev` / `uv sync --group docs`，不再作为公开extras。`tradelearn lab`使用 `[research]` 的JupyterLab/AI Lite/Skills，只启动JupyterLab；CLI仅保留new/lab/doctor与help/version，默认MLflow为本地`sqlite:///mlflow.db`，不启动服务。默认安装保留tqdm和TA-Lib；CLI不再依赖Typer；PyYAML只用于显式YAML配置，HTTP数据客户端归research，Nautilus组保留AWS所需urllib3安全约束；基础CLI help/version/doctor无需这两项，读取已有YAML需PyYAML。
+
+研究组在 Python 3.12+ 安装 KunQuant 0.1.12；官方 abi3 wheel 从 CPython 3.12 起，macOS ARM 需 14+。图资格以指标指南为准，不由依赖安装推定全部公式已合格。
+
+当前通用 `uv.lock` 尚未闭合：tl-store 0.2.1a2 尚未公开，完整解析会失败。源码研究安装可先使用上述 `pip install ".[research]"`；不要把现有锁文件视为本轮新依赖的冻结结果。
 
 ### 原生产物与平台
 
 | 能力 | Python / 平台 |
 |---|---|
-| 研究、回测与原生内核 | Python 3.10–3.14：Linux x86_64、macOS arm64、Windows x86_64；Linux aarch64 提供 CPython 3.13 wheel |
+| 研究、回测与原生内核 | 源码基线 Python >=3.10；本机 macOS ARM CPython3.12 安装已验。TA-Lib0.8.3 无 Python3.10 二进制 wheel，ARM 二进制依赖需 macOS14+；其他运行平台待最终产物验收。 |
 | 可选 Nautilus 执行 | Python 3.13/3.14，须存在官方 rc7 对应平台 wheel；订单、产品及真实 venue 的支持另行验收 |
 | 策略日志 | 需匹配的本包 native Recorder；本地持久化与远程发送按平台分别验证，详情见[运行说明](docs/concepts/runtime.md#nautilus-logging) |
 
@@ -144,7 +150,7 @@ class LiteSmaCross(tl.Strategy):
     def init(self):
         self.fast_ma = tl.tdx.MA(self.data.close, N=self.fast)
         self.slow_ma = tl.tdx.MA(self.data.close, N=self.slow)
-        self.start_on_bar(self.slow + 1)
+        self.addminperiod(self.slow + 2)
 
     def next(self):
         if self.fast_ma[0] > self.slow_ma[0] and not self.position():
@@ -172,14 +178,15 @@ bt.report("report.html")
 ```python
 import tradelearn.engine as bt
 from tradelearn.data import TradingViewProvider
+from tradelearn.indicators import tdx
 
 
 class SmaCross(bt.Strategy):
     params = (("fast", 10), ("slow", 20))
 
     def __init__(self):
-        self.fast = bt.tdx.MA(self.data.close, N=self.p.fast)
-        self.slow = bt.tdx.MA(self.data.close, N=self.p.slow)
+        self.fast = tdx.MA(self.data.close, N=self.p.fast)
+        self.slow = tdx.MA(self.data.close, N=self.p.slow)
 
     def next(self):
         if not self.position and self.fast[0] > self.slow[0]:
@@ -191,132 +198,33 @@ class SmaCross(bt.Strategy):
 provider = TradingViewProvider(n_bars=5000)
 bars = provider.history_ohlc("NASDAQ:AAPL", start="2023-01-01", end="2024-01-01")
 
-cerebro = bt.Cerebro(trade_on_close=True)
-cerebro.setcash(100_000)
-cerebro.setcommission(0.0003)
-cerebro.adddata(bars, name="AAPL")
+cerebro = bt.Cerebro()
+cerebro.broker.setcash(100_000)
+cerebro.broker.setcommission(commission=0.0003)
+cerebro.broker.set_coc(True)
+cerebro.adddata(bt.feeds.PandasData(dataname=bars), name="AAPL")
 cerebro.addstrategy(SmaCross)
 
 [strategy] = cerebro.run()
 print(strategy.stats.summary)
 
 cerebro.plot()
-cerebro.report("report.html")
+from tradelearn.report import Reporter
+Reporter(strategy.stats).report("report.html")
 ```
 
 > [!TIP]
 > **关于多标的逻辑：** 在多标的回测场景下，策略默认会绑定到 `self.data`（主数据源）。这意味着上述代码即使传入了多个标的，也仅会根据第一个标的的信号进行决策。若要实现多标的独立并行交易，需在策略 `init` 中遍历 `self.datas` 为每个标的建立指标。
 
-## 可选执行与策略日志
+## 使用范围
 
-研究和回测继续使用 Engine / Lite；需要外部执行时，通用桥把 Engine `StrategyRuntime` 接到 Nautilus，由其适配器提供权威订单、成交与账户事实。Lite 的批量指标生命周期不等于完整实盘接入。具体用法见[执行接入指南](docs/guides/live.md)。
-
-```bash
-python -m tradelearn_runtime.support
-```
-
-该命令展示固定官方版本实际内置的适配器及行情/执行 factory 分类；行情源不因此具有下单能力，目录存在也不表示全部订单、paper、实盘或平台已验收。自研券商扩展应独立安装，私有 cTrader、策略与账户配置不在本包内。
-
-策略日志按需装配，共用本地记录器；远程发送须显式配置受限授权。关闭日志或不接商业监控，不会关闭账户、路由、持仓归属与未决提交恢复保护。安装不是自动交易许可，软件校验不能保证避免交易损失。API、原生平台与发送边界见[运行与日志说明](docs/concepts/runtime.md#nautilus-logging)。
+TradeLearn 面向策略研究与回测，不推荐用于真实资金的实盘交易。回测结果不保证未来表现。
 
 ## 投研流水线示例
 
-README 只放最短可读版本，完整脚本见 [`examples/research/index_enhance_lite_pipeline.py`](./examples/research/index_enhance_lite_pipeline.py) 和 [`examples/research/index_enhance_engine_pipeline.py`](./examples/research/index_enhance_engine_pipeline.py)。
+[Lite pipeline](examples/research/index_enhance_lite_pipeline.py)与[Engine pipeline](examples/research/index_enhance_engine_pipeline.py)沿共同拟合流程：真实label_end统一purge、各预处理步骤独立columns、显式ResearchRun组件登记/实际调用、完整本地部署bundle。Reporter与`tradelearn.integrations.mlflow.log`只消费已有结果，模型发布和附件显式选择。
 
-**1. Research：从原始行情生成特征、切分训练集 / 测试集**
-
-```python
-import tradelearn.research as research
-import tradelearn.research.preprocess as pp
-
-feature_set = research.FeatureSet(
-    {
-        "alpha": lambda p: p.close.pct_change(20)
-        / p.close.pct_change().rolling(20).std(),
-        "size": lambda p: p.close,
-    },
-    target={"label": lambda p: p.close.shift(-20) / p.close - 1.0},
-)
-
-features = feature_set.fit_transform(bars, include_target=True).dropna()
-train, test = research.time_split(features, split="2023-09-01", level="timestamp")
-```
-
-**2. Pipeline：预处理、模型打分、生成权重**
-
-```python
-from sklearn.ensemble import GradientBoostingRegressor
-import tradelearn.research.portfolio as pf
-
-pipe = research.Pipeline(
-    [
-        pp.Winsorizer(columns=["alpha"], limits=(0.05, 0.95)),
-        pp.Neutralizer(columns=["alpha"], exposures=["size"]),
-        pp.StandardScaler(columns=["alpha"]),
-    ]
-)
-train = pipe.fit_transform(train)
-test = pipe.transform(test)
-
-model = GradientBoostingRegressor(random_state=7)
-model.fit(train[["alpha"]], train["label"])
-scores = research.ModelScorer(model, features=("alpha",), current=False).predict(test)
-
-weights = pf.Allocator(
-    select=pf.TopK(k=2),
-    weight=pf.EqualWeight(gross=0.95),
-    constrain=pf.Constraints(max_weight=0.5, normalize=True),
-).build(scores)
-```
-
-**3. Portfolio：把目标权重交给 Lite / Engine 执行**
-
-```python
-class LitePortfolio(tl.Strategy):
-    def next(self):
-        if len(self.data) % 20 == 0:
-            self.target_weights(self.research_result.weights[0], close_missing=True)
-
-
-test_bars = research.split_bars(bars, split="2023-09-01")
-stats = tl.Backtest(test_bars, LitePortfolio, cash=100_000).run(
-    research_result=research_result
-)
-```
-
-**4. Live-style：在策略里只用当前可见窗口推理**
-
-投研流水线适合离线训练和复盘；如果要让策略语义更接近实盘，可以把模型和 allocator 放进策略参数，在 `next()` 中用 `history_panel()` 只读取当前已经发生的窗口。
-
-```python
-class LiveStylePortfolio(tl.Strategy):
-    lookback = 20
-
-    def init(self):
-        self.start_on_bar(self.lookback)
-
-    def next(self):
-        if len(self.data) % 20 != 0:
-            return
-
-        panel = self.history_panel(self.lookback)
-        features = self.feature_set.transform(panel).dropna()
-        scores = self.scorer.predict(features)
-        weights = self.allocator.build(scores)
-        self.target_weights(weights, close_missing=True)
-```
-
-完整版本：
-
-| 目标 | 完整脚本 |
-|---|---|
-| Lite 投研 + 回测 + report + MLflow | [`examples/research/index_enhance_lite_pipeline.py`](./examples/research/index_enhance_lite_pipeline.py) |
-| Engine 投研 + 回测 + report + MLflow | [`examples/research/index_enhance_engine_pipeline.py`](./examples/research/index_enhance_engine_pipeline.py) |
-| Lite live-style 当前窗口推理 | [`examples/research/index_enhance_lite_live.py`](./examples/research/index_enhance_lite_live.py) |
-| Engine live-style 当前窗口推理 | [`examples/research/index_enhance_engine_live.py`](./examples/research/index_enhance_engine_live.py) |
-| Engine Backtrader 风格组合调仓 | [`examples/engine/11_target_percent_portfolio.py`](./examples/engine/11_target_percent_portfolio.py) |
-| 资产类别组合策略 | [`examples/engine/12_asset_class_portfolios.py`](./examples/engine/12_asset_class_portfolios.py) |
-
+输入、CLI与恢复流程见[研究指南](docs/guides/research.md)和[MLflow指南](docs/guides/mlflow-lab-mcp.md)。按脚本显式选择离线数据和推理输入；导入不自动获取行情、调用付费模型或启动实盘。README不复制另一套可能落后的研究流水线实现。
 
 ## 对齐与性能
 
@@ -346,7 +254,6 @@ class LiveStylePortfolio(tl.Strategy):
 
 *   **金融指标对齐**：`metrics`（Sharpe, MaxDD, Sortino 等）完全对标 `empyrical`，误差控制在 `rtol=1e-10`。
 *   **多源指标对齐**：
-    *   `tl.pta` (经典指标) 对标 `pandas-ta-classic`：`rtol=1e-10`。
     *   `tl.tdx` (通达信口径) 对标 `MyTT`：`rtol=1e-10`。
     *   `tl.tv` (TradingView 口径) 对标 `pyneCore` 实现：`rtol=1e-6`。
 *   **回测引擎对齐**：
@@ -368,7 +275,7 @@ class LiveStylePortfolio(tl.Strategy):
 | 外部执行与日志 | [执行接入](docs/guides/live.md) · [运行与日志](docs/concepts/runtime.md#nautilus-logging) |
 | 架构与边界 | [架构](./docs/concepts/architecture.md)                                   |
 | 因子 / ML / 权重研究流水线 | [Research 指南](./docs/guides/research.md)                                |
-| 双口径指标（`tl.talib` / `tl.pta` / `tl.tdx` / `tl.tv`） | [Indicators 指南](./docs/guides/indicators.md)                            |
+| 双口径指标（`tl.talib` / `tl.tdx` / `tl.tv`） | [Indicators 指南](./docs/guides/indicators.md)                            |
 | 性能基线 | [性能基准](./docs/benchmarks.md)                                            |
 | 内核（契约 / 撮合 / portfolio / 事件循环） | [设计笔记](./docs/internals/contracts.md)                                   |
 | 完整 API | [API 参考](./docs/api/reference.md)                                       |
@@ -391,7 +298,7 @@ class LiveStylePortfolio(tl.Strategy):
 - [ ] **因果驱动闭环**：将因果分析与参数优化、风险控制形成自动化的研发闭环。
 
 #### 智能体与 AI 能力
-- [x] **MCP 知识网关**：**MCP Server 已上线**，实现 AI 对 API 的结构化理解与自动代码生成。
+- [x] **研究入口**：CLI仅new/lab/doctor，AI Lite使用版本匹配Skills；TL自建MCP已退役。AI/provider真实资格另行记录。
 - [ ] **Agentic 策略诊断**：利用 LLM 自动解析回测结果，识别亏损动因并给出逻辑优化建议。
 - [ ] **LLM 因子解释器**：利用大模型将因果发现结果转化为直观的金融投资逻辑。
 

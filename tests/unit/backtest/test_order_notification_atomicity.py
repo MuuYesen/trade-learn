@@ -36,7 +36,7 @@ def test_native_batch_terminal_outcomes_are_atomic(
             elif (
                 trigger == "fill-peer"
                 and order.status == Order.Completed
-                and order is self.first_fill
+                and order.ref == self.first_fill.ref
             ):
                 self.cancel(self.second_fill)
 
@@ -51,7 +51,7 @@ def test_native_batch_terminal_outcomes_are_atomic(
 @pytest.mark.parametrize("match_mode", ["exact", "smart"])
 @pytest.mark.parametrize("feed_count", [1, 2])
 @pytest.mark.parametrize("trade_on_close", [False, True])
-def test_submitted_notification_can_cancel_before_routing(
+def test_submitted_callback_cannot_retroactively_cancel_matched_market(
     match_mode,
     feed_count,
     trade_on_close,
@@ -67,9 +67,9 @@ def test_submitted_notification_can_cancel_before_routing(
                 self.cancel(order)
 
     s = _run(CancelSubmitted, match_mode, feed_count, trade_on_close)
-    _terminal(s, s.order, Order.Canceled)
-    assert s.statuses(s.order) == [Order.Submitted, Order.Canceled]
-    assert s.position.size == 0
+    _terminal(s, s.order, Order.Completed)
+    assert s.statuses(s.order) == [Order.Submitted, Order.Accepted, Order.Completed]
+    assert s.position.size == 2
     assert s._pending_size.get(s.data, 0) == 0
 
 
@@ -96,6 +96,6 @@ def test_parent_canceled_during_submission_cancels_later_bracket_children(
     s = _run(CancelParent, match_mode, feed_count, trade_on_close)
     for order in s.bracket:
         _terminal(s, order, Order.Canceled)
-        assert s.statuses(order) == [Order.Submitted, Order.Canceled]
+        assert s.statuses(order) == [Order.Submitted, Order.Accepted, Order.Canceled]
     assert s.position.size == 0
     assert s._pending_size.get(s.data, 0) == 0

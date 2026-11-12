@@ -6,6 +6,18 @@ import numpy as np
 import pandas as pd
 
 
+def line_names(cls):
+    names=[]
+    for base in reversed(cls.__mro__):
+        if vars(base).get("_reset_line_aliases", False):
+            names = []
+        declared=vars(base).get("lines",())
+        if isinstance(declared,(tuple,list)):
+            for name in declared:
+                if name not in names:names.append(name)
+    return tuple(names)
+
+
 class Lines:
     def __init__(self, owner: Any) -> None:
         self._owner = owner
@@ -16,13 +28,13 @@ class Lines:
             super().__setattr__(name, value)
         else:
             self.__dict__[name] = value
-            cls_lines = getattr(self._owner.__class__, "lines", [])
+            cls_lines = line_names(type(self._owner))
             if isinstance(cls_lines, (list, tuple)) and name in cls_lines:
                 idx = list(cls_lines).index(name)
                 while len(self._lines) <= idx:
                     self._lines.append(None)
                 self._lines[idx] = value
-            elif value not in self._lines:
+            elif not any(value is line for line in self._lines):
                 self._lines.append(value)
 
     def __getitem__(self, i: int) -> Any:
@@ -32,6 +44,18 @@ class Lines:
         return iter(self._lines)
 
     def __len__(self):
+        return len(self._lines)
+
+    def getlinealiases(self):
+        return line_names(type(self._owner))
+
+    def getlinealias(self, index):
+        return self.getlinealiases()[index]
+
+    def size(self):
+        return len(self._lines)
+
+    def fullsize(self):
         return len(self._lines)
 
 
@@ -65,10 +89,10 @@ class LineSeries:
     def to_series(self) -> pd.Series:
         """Return the full line as a pandas Series for vector indicators."""
         runtime = getattr(self, "_runtime", None)
-        if runtime is not None and runtime._started:
+        if runtime is not None:
             feed = runtime._feed_for(self)
-            if feed is not None:
-                return pd.Series(self._values[:feed.received].copy())
+            count = feed.received if feed is not None else len(self)
+            return pd.Series(self._values[:count].copy())
         cached = self._series_cache
         if cached is None:
             cached = pd.Series(self._values)
@@ -83,7 +107,7 @@ class LineSeries:
         Missing leading values are omitted.
         """
         runtime = getattr(self, "_runtime", None)
-        if runtime is not None and runtime._started and ago > 0:
+        if runtime is not None and ago > 0:
             raise ValueError("runtime lines cannot address future observations")
         cursor_source = getattr(self, "_cursor_source", None)
         cursor = cursor_source._cursor if cursor_source is not None else self._cursor
@@ -91,16 +115,16 @@ class LineSeries:
         start = max(0, end - int(size))
         if end <= 0:
             return np.asarray([], dtype=np.float64)
-        return self._values[start:end]
+        return self._values[start:end].copy()
 
     def _runtime_function(self, function, args, kwargs, *, history="full"):
         runtime = getattr(self, "_runtime", None)
         from tradelearn.backtest.event_runtime import RuntimeLine
         def target(value):
             return value.lines[0] if hasattr(value, "lines") else value
-        incremental = any(isinstance(target(value), RuntimeLine)
+        incremental = getattr(function, "supports_streaming", False) or any(isinstance(target(value), RuntimeLine)
                           for value in (*args, *kwargs.values()))
-        if runtime is not None and (runtime._started or incremental):
+        if runtime is not None:
             def causal(value):
                 target = value.lines[0] if hasattr(value, "lines") else value
                 return runtime.causal_line(target) if isinstance(target, LineSeries) else target
@@ -153,18 +177,19 @@ class LineSeries:
         buffer = self._buffer
         if buffer is not None:
             return buffer.cursor + 1
-        return self._cursor + 1
+        source = getattr(self, "_cursor_source", self)
+        return source._cursor + 1
 
     def __getitem__(self, ago: Any) -> Any:
         values = self._values
         runtime = getattr(self, "_runtime", None)
-        if runtime is not None and runtime._started:
+        if runtime is not None:
             if isinstance(ago, (int, np.integer)) and ago > 0:
                 raise ValueError("runtime lines cannot address future observations")
             if isinstance(ago, slice):
                 feed = runtime._feed_for(self)
-                if feed is not None:
-                    return values[:feed.received][ago].copy()
+                count = feed.received if feed is not None else len(self)
+                return values[:count][ago].copy()
         buffer = self._buffer
         if ago == 0:
             if not self._is_datetime:
@@ -191,7 +216,8 @@ class LineSeries:
             return self
         if isinstance(ago, slice):
             return values[ago]
-        cursor = buffer.cursor if buffer is not None else self._cursor
+        source = getattr(self, "_cursor_source", self)
+        cursor = buffer.cursor if buffer is not None else source._cursor
         idx = cursor + int(ago)
         if idx < 0 or idx >= len(values):
             return np.nan
@@ -203,7 +229,7 @@ class LineSeries:
     def _current_value(self, ago: int) -> Any:
         if self._buffer is not None and self._buffer_name is not None:
             return self._buffer.value(self._buffer_name, ago=ago)
-        idx = self._cursor - ago
+        idx = getattr(self, "_cursor_source", self)._cursor - ago
         if idx < 0 or idx >= len(self._values):
             return np.nan
         return self._values[idx]
@@ -217,7 +243,7 @@ class LineSeries:
 
     def __call__(self, ago: int = 0) -> LineSeries:
         runtime = getattr(self, "_runtime", None)
-        if runtime is not None and runtime._started:
+        if runtime is not None:
             return runtime.causal_line(self)(ago)
         return DelayedLine(self, ago)
 
@@ -234,19 +260,22 @@ class LineSeries:
         return bool(val) and not np.isnan(val)
 
     def __lt__(self, other):
-        return self[0] < (other[0] if hasattr(other, "__getitem__") else other)
+        return self._math_op(other, np.less)
 
     def __gt__(self, other):
-        return self[0] > (other[0] if hasattr(other, "__getitem__") else other)
+        return self._math_op(other, np.greater)
 
     def __le__(self, other):
-        return self[0] <= (other[0] if hasattr(other, "__getitem__") else other)
+        return self._math_op(other, np.less_equal)
 
     def __ge__(self, other):
-        return self[0] >= (other[0] if hasattr(other, "__getitem__") else other)
+        return self._math_op(other, np.greater_equal)
 
     def __eq__(self, other):
-        return self[0] == (other[0] if hasattr(other, "__getitem__") else other)
+        return self._math_op(other, np.equal)
+
+    def __ne__(self, other):
+        return self._math_op(other, np.not_equal)
 
     def __add__(self, other):
         return self._math_op(other, np.add)
@@ -260,11 +289,26 @@ class LineSeries:
     def __truediv__(self, other):
         return self._math_op(other, np.divide)
 
+    def __radd__(self, other):
+        return self._math_op(other, np.add)
+
+    def __rsub__(self, other):
+        return self._math_op(other, lambda a, b: np.subtract(b, a))
+
+    def __rmul__(self, other):
+        return self._math_op(other, np.multiply)
+
+    def __rtruediv__(self, other):
+        return self._math_op(other, lambda a, b: np.divide(b, a))
+
+    def __neg__(self):
+        return self * -1
+
     def _math_op(self, other, op):
         runtime = getattr(self, "_runtime", None)
         target = other.lines[0] if hasattr(other, "lines") else other
         from tradelearn.backtest.event_runtime import RuntimeLine
-        if runtime is not None and (runtime._started or isinstance(target, RuntimeLine)):
+        if runtime is not None:
             target = runtime.causal_line(target) if isinstance(target, LineSeries) else target
             return runtime.causal_line(self)._math_op(target, op)
         v1 = self._values
@@ -285,9 +329,8 @@ class LineSeries:
         else:
             res = LineSeries(op(v1, target))
             res.min_period = getattr(self, "min_period", 0)
-        source = getattr(self, "_cursor_source", None)
-        if source is not None:
-            res._cursor_source = source
+        source = getattr(self, "_cursor_source", self)
+        res._cursor_source = source
         if runtime is not None:
             res._runtime, res._bound_feed = runtime, runtime._feed_for(self)
             runtime._register_precomputed(res, res.min_period)
@@ -304,7 +347,7 @@ class DelayedLine(LineSeries):
         cursor_source = getattr(source, "_cursor_source", None)
         if cursor_source is not None:
             self._cursor_source = cursor_source
-        self.min_period = source.min_period + abs(ago)
+        self.min_period = max(1, source.min_period) + abs(ago)
         runtime = getattr(source, "_runtime", None)
         if runtime is not None:
             self._runtime, self._bound_feed = runtime, runtime._feed_for(source)

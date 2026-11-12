@@ -10,7 +10,7 @@ from tradelearn.core.costs import FixedCommission, FixedSlippage
 from tradelearn.core.logging import get_logger
 from tradelearn.core.strategy_events import invoke_component
 from tradelearn.engine.analyzer import AnalyzerCollection
-from tradelearn.engine.base import TimeFrame
+from tradelearn.engine.base import TimeFrame, Params
 from tradelearn.engine.datafeed import DataFeed
 from tradelearn.engine.observers import ObserverCollection, Value
 from tradelearn.engine.sizers import FixedSize
@@ -40,7 +40,33 @@ def _feed_rows(datas: list[Any]) -> int:
 
 class Cerebro:
     """Main orchestrator for backtesting (Backtrader facade)."""
-    def __init__(
+    _bt_defaults = dict(preload=True, runonce=True, maxcpus=None, stdstats=True,
+        oldbuysell=False, oldtrades=False, lookahead=0, exactbars=False,
+        optdatas=True, optreturn=True, objcache=False, live=False, writer=False,
+        tradehistory=False, oldsync=False, tz=None, cheat_on_open=False,
+        broker_coo=True, quicknotify=False)
+
+    @classmethod
+    def _validate_options(cls, options):
+        unknown = options.keys() - cls._bt_defaults.keys()
+        if unknown:
+            raise TypeError(f"unknown Cerebro parameters: {sorted(unknown)}")
+        supported = {"stdstats", "optreturn", "runonce", "maxcpus"}
+        for key, value in options.items():
+            if key not in supported and value != cls._bt_defaults[key]:
+                raise NotImplementedError(f"Cerebro {key}={value!r} is not implemented")
+        if options.get("maxcpus") not in (None, 1):
+            raise NotImplementedError("parallel optimization is not implemented; use maxcpus=1")
+
+    def __init__(self, *args, **kwargs):
+        if args:
+            raise TypeError("Cerebro accepts keyword parameters")
+        self._validate_options(kwargs)
+        options = {**self._bt_defaults, **kwargs}
+        self._initialize(stdstats=options["stdstats"], optreturn=options["optreturn"])
+        self.p = self.params = Params(options)
+
+    def _initialize(
         self,
         match_mode: str = 'exact',
         callback_batch: int = 1,
@@ -67,10 +93,10 @@ class Cerebro:
         if stats_mode not in {"full", "lazy"}:
             raise ValueError("stats_mode must be one of 'full' or 'lazy'")
         self.stats_mode = stats_mode
-        self.optreturn = bool(kwargs.pop("optreturn", False))
+        self.optreturn = bool(kwargs.pop("optreturn", True))
         self.kwargs = kwargs
         from tradelearn.backtest.broker import RustBroker
-        self.broker = RustBroker(match_mode=match_mode)
+        self.setbroker(RustBroker(match_mode=match_mode))
         self.broker.configure_matching(
             trade_on_close=self.trade_on_close,
             slippage=slippage or FixedSlippage(),
@@ -92,97 +118,67 @@ class Cerebro:
         self._dooptimize = False
         self.optcbs: list[Any] = []
 
-    def setcash(self, cash: float) -> None:
+    def _setcash(self, cash: float) -> None:
         self.broker.setcash(cash)
 
     def getbroker(self) -> Any:
         return self.broker
 
-    def setbroker(self, broker: Any) -> None:
+    def setbroker(self, broker: Any) -> Any:
+        from tradelearn.backtest.broker import RustBroker
+        if isinstance(broker, RustBroker):
+            from tradelearn.engine.comminfo import CommInfoBase
+            if broker._mult != 1:
+                raise NotImplementedError("commission economics with a contract multiplier are not qualified")
+            broker._bt_notifications = True
+            broker._comminfo_factory = CommInfoBase
+            if broker._comminfo is None:
+                broker._set_comminfo(CommInfoBase(commission=broker.commission_ratio,percabs=True))
         self.broker = broker
+        broker.cerebro = self
+        return broker
 
-    def setcommission(self, commission: float = 0.0, margin: float = 0.0, mult: float = 1.0, 
+    def _setcommission(self, commission: float = 0.0, margin: float = 0.0, mult: float = 1.0,
                       comminfo: Any = None, name: str | None = None) -> None:
         """Set commission parameters or a custom CommInfo object."""
         if comminfo:
-            self.broker.set_comminfo(comminfo)
+            self.broker._set_comminfo(comminfo)
         else:
             self.broker.setcommission(commission=commission, margin=margin, mult=mult)
 
-    def set_coc(self, coc: bool = True) -> None:
+    def _set_coc(self, coc: bool = True) -> None:
         self.trade_on_close = bool(coc)
         self.broker.configure_matching(trade_on_close=self.trade_on_close)
 
     def adddata(self, data: Any, name: Any | None = None) -> Any:
-        if is_panel_ohlcv_frame(data):
-            first = None
-            symbol_level = panel_symbol_level(data)
-            symbols = data.index.get_level_values(symbol_level).unique()
-            for symbol in symbols:
-                symbol_name = str(symbol)
-                feed_name = (
-                    str(name[symbol])
-                    if isinstance(name, dict) and symbol in name
-                    else symbol_name
-                )
-                frame = data.xs(symbol, level=symbol_level, drop_level=True)
-                added = self.adddata(frame, name=feed_name)
-                if first is None:
-                    first = added
-            return first
-        if hasattr(data, 'columns') and hasattr(data, 'index'):
-            data = DataFeed(data, name=name)
-        elif name: 
-            data._name = name
+        if hasattr(data,"columns") and hasattr(data,"index"):
+            raise TypeError("Cerebro.adddata requires a feed; use feeds.PandasData(dataname=frame)")
+        if not hasattr(data,"lines") and not getattr(data,"is_live",False):
+            raise TypeError("Cerebro.adddata requires a data feed")
+        if name is not None:
+            data._name=name
+        data._id=len(self.datas)+1
         self.datas.append(data)
         data_name = getattr(data, "_name", None)
         if data_name is not None:
-            self.datasbyname[str(data_name)] = data
+            self.datasbyname[data_name] = data
         return data
 
-    def chaindata(self, *args: Any, **kwargs: Any) -> Any:
-        if not args:
-            raise ValueError("chaindata requires at least one data feed")
-        first = None
-        for data in args:
-            added = self.adddata(data, name=kwargs.get("name") if len(args) == 1 else None)
-            if first is None:
-                first = added
-        return first
+    def chaindata(self, *args, **kwargs):
+        raise NotImplementedError("chaindata requires native feed lifecycle semantics; no multi-feed substitution")
 
-    def rolloverdata(self, *args: Any, **kwargs: Any) -> Any:
-        if not args:
-            raise ValueError("rolloverdata requires at least one data feed")
-        first = None
-        for data in args:
-            added = self.adddata(data, name=kwargs.get("name") if len(args) == 1 else None)
-            if first is None:
-                first = added
-        return first
+    def rolloverdata(self, *args, **kwargs):
+        raise NotImplementedError("rolloverdata requires native feed lifecycle semantics; no multi-feed substitution")
 
-    def resampledata(
-        self,
-        data: Any,
-        timeframe: int,
-        compression: int = 1,
-        name: str | None = None,
-        **kwargs: Any,
-    ) -> DataFeed:
-        from tradelearn.data.resampler import resample_frame
+    def resampledata(self, dataname, name=None, **kwargs):
+        raise NotImplementedError("resampledata incremental feed semantics are not implemented; prepare explicit source feeds")
 
-        source_frame = data if hasattr(data, "columns") and hasattr(data, "index") else data._frame
-        resampled = resample_frame(source_frame, timeframe=timeframe, compression=compression)
-        source_name = name or getattr(data, "_name", None) or "data"
-        tf_name = TimeFrame.getname(timeframe, compression)
-        return self.adddata(DataFeed(resampled, name=f"{source_name}_{tf_name}"), **kwargs)
+    def replaydata(self, data, **kwargs):
+        raise NotImplementedError("replaydata incremental replay is not implemented")
 
-    def replaydata(self, data: Any, *args: Any, **kwargs: Any) -> Any:
-        if args or {"timeframe", "compression"} & set(kwargs):
-            return self.resampledata(data, *args, **kwargs)
-        return self.adddata(data, name=kwargs.get("name"))
-
-    def addstrategy(self, strategy: type[Strategy], *args: Any, **kwargs: Any) -> None:
+    def addstrategy(self, strategy: type[Strategy], *args: Any, **kwargs: Any) -> int:
         self.strats.append((strategy, args, kwargs))
+        return len(self.strats)-1
 
     def optstrategy(self, strategy: type[Strategy], *args: Any, **kwargs: Any) -> None:
         from itertools import product
@@ -211,7 +207,7 @@ class Cerebro:
         self.observers[name] = (observer, kwargs)
 
     def addwriter(self, writer: type[Any], *args: Any, **kwargs: Any) -> None:
-        self.writers.append((writer, args, kwargs))
+        raise NotImplementedError("writer lifecycle is not implemented; use an independent Reporter")
 
     def _writer_results(self, method: str) -> list[Any]:
         results: list[Any] = []
@@ -227,28 +223,28 @@ class Cerebro:
                 results.append(value)
         return results
 
-    def getwriterheaders(self) -> list[Any]:
+    def _getwriterheaders(self) -> list[Any]:
         return self._writer_results("getheaders")
 
-    def getwriterinfo(self) -> list[Any]:
+    def _getwriterinfo(self) -> list[Any]:
         return self._writer_results("getinfo")
 
-    def getwritervalues(self) -> list[Any]:
+    def _getwritervalues(self) -> list[Any]:
         return self._writer_results("getvalues")
 
     def addstore(self, store: Any) -> None:
         self.stores.append(store)
 
-    def addtimer(self, *args: Any, **kwargs: Any) -> None:
-        self.timers.append((args, kwargs))
+    def add_timer(self, when, offset=__import__("datetime").timedelta(0), repeat=__import__("datetime").timedelta(0), weekdays=[], weekcarry=False, monthdays=[], monthcarry=True, allow=None, tzdata=None, cheat=False, *args, **kwargs):
+        raise NotImplementedError("timer scheduling is not implemented")
 
     def addcalendar(self, calendar: Any) -> None:
-        self.calendars.append(calendar)
+        raise NotImplementedError("calendar scheduling is not implemented")
 
     def addsizer(self, sizer: type[Any], **kwargs: Any) -> None:
         self._sizer_spec = (sizer, kwargs)
 
-    def setsizer(self, sizer: type[Any], **kwargs: Any) -> None:
+    def _setsizer(self, sizer: type[Any], **kwargs: Any) -> None:
         self.addsizer(sizer, **kwargs)
 
     def add_signal(self, sigtype: int, sigcls: type, *sigargs: Any, **sigkwargs: Any) -> None:
@@ -270,12 +266,10 @@ class Cerebro:
             driver.stop()
 
     def plot(self, *args: Any, **kwargs: Any) -> list[Any]:
-        """Return market replay charts for the most recent run."""
-        reporter = self._last_reporter()
-        chart = reporter.market_replay_chart()
-        return [] if chart is None else [chart]
+        """Reject the unqualified BT plotting backend explicitly."""
+        raise NotImplementedError("BT plot is not qualified; use tradelearn.report.Reporter explicitly")
 
-    def report(
+    def _report(
         self,
         path: str = "report.html",
         benchmark: Any | None = None,
@@ -285,13 +279,15 @@ class Cerebro:
         return self._last_reporter().report(path, benchmark=benchmark, sections=sections)
 
     def run(self, **kwargs: Any) -> list[Strategy]:
-        from tradelearn.engine.stores import select_driver
+        self._validate_options(kwargs)
+        from tradelearn_runtime.assembly import select_driver
         driver = select_driver(self)
         if kwargs.get('monitor') is not None and driver is None:
             raise ValueError('remote monitor requires a Store-owned native driver')
         if driver is not None:
             return driver._run_cerebro(self, kwargs)
         self._apply_run_kwargs(kwargs)
+        self.trade_on_close = bool(getattr(self.broker, "_trade_on_close", self.trade_on_close))
         has_live_data = any(bool(getattr(data, "is_live", False)) for data in self.datas)
         if self.mode == "backtest" and has_live_data:
             self.mode = "live"
@@ -367,19 +363,14 @@ class Cerebro:
             )
         return formatted
 
-    def _apply_run_kwargs(self, kwargs: dict[str, Any]) -> None:
-        if not kwargs:
-            return
+    def _apply_run_kwargs(self, kwargs):
+        self._validate_options(kwargs)
         if "optreturn" in kwargs:
             self.optreturn = bool(kwargs["optreturn"])
-        if "exactbars" in kwargs:
-            self.exactbars = bool(kwargs["exactbars"])
         if "stdstats" in kwargs:
             self.stdstats = bool(kwargs["stdstats"])
-        if "cheat_on_close" in kwargs:
-            self.set_coc(bool(kwargs["cheat_on_close"]))
-        if "trade_on_close" in kwargs:
-            self.set_coc(bool(kwargs["trade_on_close"]))
+        for key, value in kwargs.items():
+            setattr(self.p, key, value)
 
     def _live_data_poller(self):
         bars = []
@@ -389,22 +380,16 @@ class Cerebro:
                 bars.extend(list(poll()))
         return bars
 
-    def _format_run_results(self, results: list[Strategy]) -> list[Any]:
+    def _format_run_results(self, results):
         if not self._dooptimize:
             return results
-        for strategy in results:
+        formatted = [[OptReturn(strategy.params,
+                      analyzers=getattr(strategy,"analyzers",None), strategycls=type(strategy))
+                      if self.optreturn else strategy] for strategy in results]
+        for combination in formatted:
             for callback in self.optcbs:
-                callback(strategy)
-        if not self.optreturn:
-            return results
-        return [
-            OptReturn(
-                strategy.params,
-                analyzers=getattr(strategy, "analyzers", None),
-                strategycls=type(strategy),
-            )
-            for strategy in results
-        ]
+                callback(combination)
+        return formatted
 
     def _last_reporter(self):
         results = getattr(self, "_last_results", None)

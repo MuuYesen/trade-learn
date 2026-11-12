@@ -14,8 +14,8 @@ from typing import Any, Literal, Protocol, runtime_checkable
 import pandas as pd
 
 OrderSide = Literal["buy", "sell"]
-OrderType = Literal["market", "limit", "stop", "stop_limit"]
-TimeInForce = Literal["day", "gtc", "ioc"]
+OrderType = Literal["market", "limit", "stop", "stop_limit", "stop_trail"]
+TimeInForce = Literal["day", "gtc", "ioc", "fok", "gtd"]
 
 __all__ = [
     "AccountSnapshot",
@@ -43,6 +43,9 @@ class OrderRequest:
     stop_price: float | None = None
     tif: TimeInForce = "gtc"
     client_oid: str | None = None
+    trail_amount: float | None = None
+    trail_percent: float | None = None
+    expire_time_ns: int | None = None
 
 
 @dataclass(frozen=True)

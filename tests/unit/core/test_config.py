@@ -44,3 +44,26 @@ def test_load_config_rejects_unknown_keys(tmp_path) -> None:
 
     with pytest.raises(ConfigurationError, match="Unknown config key"):
         load_config(project_dir=project, include_user=False)
+
+
+def test_yaml_optional_for_defaults_and_required_only_for_existing_file(tmp_path):
+    import subprocess
+    import sys
+    config = tmp_path / "config.yaml"
+    config.write_text("log_level: DEBUG\n")
+    code = '''
+import sys
+class Block:
+ def find_spec(self, fullname, path=None, target=None):
+  if fullname == 'yaml': raise ImportError('yaml deliberately absent')
+sys.meta_path.insert(0, Block())
+from tradelearn.core.config import load_config
+assert load_config(include_user=False, env={}).log_level == 'INFO'
+try:
+ load_config(include_user=False,config_path=sys.argv[1],env={})
+except Exception as e:
+ assert 'trade-learn[research]' in str(e), str(e)
+else: raise AssertionError('existing YAML needs explicit dependency')
+'''
+    completed = subprocess.run([sys.executable,"-c",code,str(config)],capture_output=True,text=True)
+    assert completed.returncode == 0, completed.stderr

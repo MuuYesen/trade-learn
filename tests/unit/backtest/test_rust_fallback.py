@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import feed as _as_feed
+
 import builtins
 
 import pandas as pd
@@ -40,8 +42,8 @@ def test_default_rust_broker_fails_before_strategy_when_rust_extension_is_unavai
     monkeypatch.setattr(builtins, "__import__", import_without_tradelearn_rust)
 
     cerebro = Cerebro()
-    cerebro.setcash(1234.0)
-    cerebro.adddata(_bars())
+    cerebro.broker.setcash(1234.0)
+    cerebro.adddata(_as_feed(_bars()))
     cerebro.addstrategy(Noop)
 
     with pytest.raises(RuntimeError, match="tradelearn._rust.*RustBroker"):

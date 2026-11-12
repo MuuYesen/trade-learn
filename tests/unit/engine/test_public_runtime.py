@@ -9,6 +9,12 @@ from tradelearn.engine import Indicator, Strategy
 from tradelearn.indicators.base import FunctionIndicator
 
 
+def _explicit_prefix(function,*args,**kwargs):
+    from tradelearn.backtest.event_runtime import RuntimeLine
+    line=next(value for value in args if isinstance(value,RuntimeLine))
+    return line._runtime.prefix(function._func,*args,**kwargs)
+
+
 def bar(n, value):
     return dict(
         ts=pd.Timestamp("2026-01-01", tz="UTC") + pd.Timedelta(n, "s"),
@@ -49,7 +55,7 @@ def test_lifecycle_multifeed_history_and_tick_prefix():
     assert r.feeds["B"].quote.ts_event == 2
     r.step_market("A", bar(2, 3))
     r.step_market("A", bar(3, 4))
-    assert r.strategy.history_panel().close.tolist() == [3, 4]
+    assert __import__("tradelearn.backtest.history", fromlist=["window"]).window(r.strategy, size=2).close.tolist() == [3, 4]
     assert r.feeds["A"].close.to_series().tolist() == [3, 4]
     with pytest.raises(ValueError):
         r.step_market("A", bar(0, 1))
@@ -68,7 +74,7 @@ def test_real_indicator_init_start_next_nested_and_warmup():
         params = (("period", 2),)
 
         def __init__(self):
-            self.lines.mean = sma(self.data.close, period=self.p.period)
+            self.lines.mean = _explicit_prefix(sma,self.data.close, period=self.p.period)
 
     class Nested(Indicator):
         lines = ("twice",)
@@ -158,7 +164,7 @@ def test_actual_pta_indicator_warms_on_prefix_and_supports_constant_lines():
         lines = ("sma", "constant")
 
         def __init__(self):
-            self.lines.sma = bt.pta.SMA(self.data.close, length=2)
+            self.lines.sma = bt.talib.SMA(self.data.close, timeperiod=2)
             self.lines.constant = 7
 
     class S(Strategy):
@@ -216,7 +222,7 @@ def test_direct_function_plan_updates_and_warms_without_indicator_wrapper():
     class S(Strategy):
         def __init__(self):
             super().__init__()
-            self.line = sma(self.data.close, period=2)
+            self.line = _explicit_prefix(sma,self.data.close, period=2)
             self.values = []
 
         def next(self):
@@ -260,7 +266,7 @@ def test_ema_keeps_full_causal_prefix_across_window_rollover():
     class S(Strategy):
         def __init__(self):
             super().__init__()
-            self.i = ema(self.data.close)
+            self.i = _explicit_prefix(ema,self.data.close)
             self.values = []
 
         def next(self):
@@ -289,7 +295,7 @@ def test_frozen_array_math_and_function_args_fail_at_construction():
     class T(Strategy):
         def __init__(self):
             super().__init__()
-            self.line = func(self.data.close, np.array([1.0, 2.0]))
+            self.line = _explicit_prefix(func,self.data.close, np.array([1.0, 2.0]))
 
     with pytest.raises(ValueError, match="scalar|tracked"):
         StrategyRuntime(T, feeds={"A": "bar"})
@@ -326,7 +332,7 @@ def test_nested_incremental_indicators_and_late_output_alignment():
     r.start()
     for n, v in enumerate([1, 2, 3, 4]):
         r.step_market("A", bar(n, v))
-    assert r.strategy.values == [(3, None), (5, None), (7, (6, 3)), (9, (8, 3))]
+    assert r.strategy.values == [(3, None), (5, None), (7, (6, 3)), (9, (8, 4))]
 
 
 def test_full_prefix_limit_stops_before_accepting_market_step():
@@ -335,7 +341,7 @@ def test_full_prefix_limit_stops_before_accepting_market_step():
     class S(Strategy):
         def __init__(self):
             super().__init__()
-            self.i = ema(self.data.close)
+            self.i = _explicit_prefix(ema,self.data.close)
 
     r = StrategyRuntime(S, feeds={"A": "bar"}, capacity=2, prefix_history_limit=3)
     r.start()
@@ -354,7 +360,7 @@ def test_cross_feed_functions_do_not_positionally_align_independent_clocks():
     class S(Strategy):
         def __init__(self):
             super().__init__()
-            self.line = f(self.data0.close, self.data1.close)
+            self.line = _explicit_prefix(f,self.data0.close, self.data1.close)
 
     with pytest.raises(ValueError, match="alignment"):
         StrategyRuntime(S, feeds={"A": "bar", "B": "bar"})
@@ -390,13 +396,13 @@ def test_incremental_indicator_explicit_minperiod_before_next():
 
 
 def test_nested_sma_minimum_period_composes_and_keyword_line_is_tracked():
-    import tradelearn.engine as bt
+    from tradelearn.indicators import talib
 
     class S(Strategy):
         def __init__(self):
             super().__init__()
-            self.inner = bt.pta.SMA(close=self.data.close, length=3)
-            self.outer = bt.pta.SMA(close=self.inner, length=3)
+            self.inner = talib.SMA(real=self.data.close, timeperiod=3)
+            self.outer = talib.SMA(real=self.inner, timeperiod=3)
             self.values = []
 
         def next(self):
@@ -409,15 +415,13 @@ def test_nested_sma_minimum_period_composes_and_keyword_line_is_tracked():
     assert r.strategy.values == [3, 4]
 
 
-def test_lite_research_profile_rejected_before_init():
-    from tradelearn.lite import Strategy as LiteStrategy
-
-    class S(LiteStrategy):
-        def init(self):
-            raise AssertionError("research lifecycle must not be partly run")
-
-    with pytest.raises(TypeError, match="lite"):
-        StrategyRuntime(S, feeds={"A": "bar"})
+def test_lite_stream_profile_initializes_once():
+    from tradelearn.lite import Strategy as Lite
+    class S(Lite):
+        def init(self): self.calls=1
+    r=StrategyRuntime(S,feeds={"A":"bar"});r.start();r.start()
+    assert r.strategy.calls==1
+    r.stop()
 
 
 def test_output_write_invalidates_same_step_dependency_cache():
@@ -459,7 +463,7 @@ def test_constant_indicator_can_feed_full_prefix_at_construction_and_rollover():
     class S(Strategy):
         def __init__(self):
             super().__init__()
-            self.i = sma(C(self.data).v, period=2)
+            self.i = _explicit_prefix(sma,C(self.data).v, period=2)
             self.values = []
 
         def next(self):

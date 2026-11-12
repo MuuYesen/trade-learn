@@ -2,6 +2,12 @@
 
 当前源码版本为 **0.2.9**。TradeLearn 使用 Python 表达策略与研究流程，使用 Rust 支撑原生回测内核，并通过公开 `engine.StrategyRuntime` 协调默认研究、事件回放和外部驱动的 paper/live 生命周期。
 
+## 当前实现与后续目标
+
+本页表格与图描述当前混合实现，不代表完整Rust运行时。Python用户API与底层实现语言分开：保持Python策略，底层数据/调度/指标状态逐项原生化仍是待评估/待实现目标；实盘执行继续由官方Nautilus及适配器承担，不新建TL实盘网关或第二事件循环。唯一目标与验收见[框架规范](../../../../../docs/系统规范/交易/TradeLearn框架规范.md#python-native-runtime-20261111)，源码映射见[修订后的原生运行时路线](rust-live-runtime-roadmap.md)。
+
+> **流式优先目标／待实现（2026-11-11）**：公开指标以持续流式能力为基础；回测继续事件驱动，支持流式推进与经逐前缀一致性验收的历史批量加速，Engine/Lite共用计算生命周期。当前源码仍保留批量profile与Python调度，不据此认定已完成迁移。职责与验收唯一见[事件回测双执行规划](../../../../../docs/系统规范/交易/TradeLearn框架规范.md#stream-first-event-backtest-20261111)。
+
 ## 全景架构图
 
 ```mermaid

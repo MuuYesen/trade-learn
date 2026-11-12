@@ -42,7 +42,7 @@ def _observer_step(runtime: Any, observer_nexts: tuple[Any, ...]) -> None:
 
 def _current_bar(data: Any) -> BarSnapshot:
     idx = max(0, int(getattr(data, "_cursor", 0)))
-    timestamp = data.datetime[0] if hasattr(data, "datetime") else idx
+    timestamp = pd.to_datetime(data._datetime[idx], unit="s", utc=True) if hasattr(data, "_datetime") else idx
     return BarSnapshot(
         datetime=timestamp,
         open=float(data.open[0]),
@@ -93,7 +93,7 @@ def _orders_frame(broker: Any) -> pd.DataFrame:
                 "size": order.size,
                 "executed_size": order.executed.size,
                 "executed_price": order.executed.price,
-                "executed_dt": order.executed.dt,
+                "executed_dt": getattr(order, "_executed_dt_raw", order.executed.dt),
                 "tag": order.info.get("tag"),
                 "info": dict(order.info),
             }
@@ -502,7 +502,7 @@ def _trade_summary(broker: Any, trades: pd.DataFrame | None = None) -> tuple[flo
 
 
 def _win_rate_pct(total_trades: float, wins: float) -> float:
-    return wins / total_trades * 100.0 if total_trades else 0.0
+    return wins / total_trades * 100.0 if total_trades else float("nan")
 
 
 def _summary_pnl(positions: pd.DataFrame) -> tuple[float, float, float]:
@@ -529,141 +529,71 @@ def _summary_pnl(positions: pd.DataFrame) -> tuple[float, float, float]:
     )
 
 
-def _summary_max_drawdown(equity: pd.Series) -> float:
-    if equity is None or equity.empty:
-        return 0.0
-    cummax = equity.cummax().replace(0, np.nan)
-    dd = (cummax - equity) / cummax
-    return float(dd.fillna(0.0).max())
+def _canonical_drawdown(returns: pd.Series) -> float:
+    from tradelearn.metrics.risk import max_drawdown
+
+    return float(max_drawdown(returns))
 
 
 def _summary_sharpe(returns: pd.Series, periods: int = 252) -> float:
-    """Annualized Sharpe using the metrics module; return 0.0 on degenerate input."""
-    if returns is None or returns.empty:
-        return 0.0
-    if returns[returns != 0.0].shape[0] < 2:
-        return 0.0
-    try:
-        from tradelearn.metrics.risk import sharpe as _sharpe
+    """Canonical shared metric, preserving missing values and validation errors."""
+    from tradelearn.metrics.risk import sharpe
 
-        value = _sharpe(returns, periods=periods)
-    except Exception:
-        return 0.0
-    if value is None:
-        return 0.0
-    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
-        return 0.0
-    return float(value)
-
-
-def _safe_float(value: Any) -> float:
-    try:
-        x = float(value)
-        return x if math.isfinite(x) else 0.0
-    except (TypeError, ValueError):
-        return 0.0
+    values = pd.Series(dtype=float) if returns is None else returns
+    return float(sharpe(values, periods=periods))
 
 
 def _summary_annual_return(returns: pd.Series, periods: int = 252) -> float:
-    if returns is None or returns.empty or returns[returns != 0.0].shape[0] < 2:
-        return 0.0
-    try:
-        from tradelearn.metrics.returns import annual_return as _ar
-        return _safe_float(_ar(returns, periods=periods)) * 100.0
-    except Exception:
-        return 0.0
+    """Canonical shared metric, preserving missing values and validation errors."""
+    from tradelearn.metrics.returns import annual_return
+
+    values = pd.Series(dtype=float) if returns is None else returns
+    return float(annual_return(values, periods=periods))
 
 
 def _summary_volatility(returns: pd.Series, periods: int = 252) -> float:
-    if returns is None or returns.empty or returns[returns != 0.0].shape[0] < 2:
-        return 0.0
-    try:
-        from tradelearn.metrics.risk import volatility as _vol
-        return _safe_float(_vol(returns, periods=periods)) * 100.0
-    except Exception:
-        return 0.0
+    """Canonical shared metric, preserving missing values and validation errors."""
+    from tradelearn.metrics.risk import volatility
+
+    values = pd.Series(dtype=float) if returns is None else returns
+    return float(volatility(values, periods=periods))
 
 
 def _summary_sortino(returns: pd.Series, periods: int = 252) -> float:
-    if returns is None or returns.empty or returns[returns != 0.0].shape[0] < 2:
-        return 0.0
-    try:
-        from tradelearn.metrics.risk import sortino as _sortino
-        return _safe_float(_sortino(returns, periods=periods))
-    except Exception:
-        return 0.0
+    """Canonical shared metric, preserving missing values and validation errors."""
+    from tradelearn.metrics.risk import sortino
+
+    values = pd.Series(dtype=float) if returns is None else returns
+    return float(sortino(values, periods=periods))
 
 
 def _summary_calmar(returns: pd.Series, periods: int = 252) -> float:
-    if returns is None or returns.empty or returns[returns != 0.0].shape[0] < 2:
-        return 0.0
-    try:
-        from tradelearn.metrics.risk import calmar as _calmar
-        return _safe_float(_calmar(returns, periods=periods))
-    except Exception:
-        return 0.0
+    """Canonical shared metric, preserving missing values and validation errors."""
+    from tradelearn.metrics.risk import calmar
+
+    values = pd.Series(dtype=float) if returns is None else returns
+    return float(calmar(values, periods=periods))
 
 
 def _summary_trade_metrics(trades: pd.DataFrame) -> dict[str, float]:
-    empty = {
-        "profit_factor": 0.0,
-        "expectancy": 0.0,
-        "avg_win": 0.0,
-        "avg_loss": 0.0,
-        "best_trade": 0.0,
-        "worst_trade": 0.0,
-        "max_consec_wins": 0,
-        "max_consec_losses": 0,
-        "total_commission": 0.0,
-    }
-    if trades is None or trades.empty:
-        return empty
-    closed = (
-        trades[trades.get("isclosed", pd.Series(dtype=bool)).astype(bool)]
-        if "isclosed" in trades.columns
-        else trades
-    )
-    if closed.empty:
-        return empty
-    pnl = (
-        closed["pnlcomm"]
-        if "pnlcomm" in closed.columns
-        else closed.get("pnl", pd.Series(dtype=float))
-    )
-    wins = pnl[pnl > 0]
-    losses = pnl[pnl < 0]
-    gross_profit = float(wins.sum()) if not wins.empty else 0.0
-    gross_loss = float(losses.sum()) if not losses.empty else 0.0
-    profit_factor = (gross_profit / abs(gross_loss) if abs(gross_loss) > 1e-9
-                     else math.inf if gross_profit > 0 else 0.0)
-    expectancy = float(pnl.mean()) if not pnl.empty else 0.0
-    avg_win = float(wins.mean()) if not wins.empty else 0.0
-    avg_loss = float(losses.mean()) if not losses.empty else 0.0
-    best = float(pnl.max()) if not pnl.empty else 0.0
-    worst = float(pnl.min()) if not pnl.empty else 0.0
-    # consecutive streaks
-    signs = (pnl > 0).astype(int)
-    max_w = max_l = cur_w = cur_l = 0
-    for s in signs:
-        if s:
-            cur_w += 1
-            cur_l = 0
-        else:
-            cur_l += 1
-            cur_w = 0
-        max_w = max(max_w, cur_w)
-        max_l = max(max_l, cur_l)
-    commission = float(closed["commission"].sum()) if "commission" in closed.columns else 0.0
+    """Compute closed-cycle metrics on net PnL through the common formulas."""
+    from tradelearn.metrics import trade
+
+    closed = pd.DataFrame() if trades is None else trades
+    if "isclosed" in closed:
+        closed = closed[closed.isclosed.astype(bool)]
+    pnl = closed.get("pnlcomm", closed.get("pnl", pd.Series(dtype=float)))
+    pnl = pd.Series(pnl, dtype=float).dropna()
     return {
-        "profit_factor": profit_factor,
-        "expectancy": expectancy,
-        "avg_win": avg_win,
-        "avg_loss": avg_loss,
-        "best_trade": best,
-        "worst_trade": worst,
-        "max_consec_wins": max_w,
-        "max_consec_losses": max_l,
-        "total_commission": commission,
+        "profit_factor": trade.profit_factor(pnl),
+        "expectancy": trade.expectancy(pnl),
+        "avg_win": trade.avg_win(pnl),
+        "avg_loss": trade.avg_loss(pnl),
+        "best_trade": float(pnl.max()),
+        "worst_trade": float(pnl.min()),
+        "max_consec_wins": trade.max_consecutive_wins(pnl),
+        "max_consec_losses": trade.max_consecutive_losses(pnl),
+        "total_commission": float(closed.commission.sum()) if "commission" in closed else 0.0,
     }
 
 
@@ -802,6 +732,10 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
         primary = cerebro.datas[0] if getattr(cerebro, "datas", None) else None
         frame = getattr(primary, "_frame", pd.DataFrame())
     index = frame.index
+    runtime = getattr(strategy, "_runtime", None)
+    if runtime is not None and runtime._clock.requires_union:
+        index = pd.to_datetime(runtime._clock.timestamps, unit="s", utc=True)
+        index = index.tz_convert(frame.index.tz) if frame.index.tz is not None else index.tz_localize(None)
 
     if lazy_artifacts:
         final_cash = float(strategy.broker.getcash())
@@ -851,7 +785,7 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
             "sharpe": _summary_sharpe(eager_returns),
             "sortino": _summary_sortino(eager_returns),
             "calmar": _summary_calmar(eager_returns),
-            "max_drawdown": dd_stats["max_drawdown"],
+            "max_drawdown": _canonical_drawdown(eager_returns),
             "avg_drawdown": dd_stats["avg_drawdown"],
             "max_dd_duration": dd_stats["max_dd_duration"],
             "avg_dd_duration": dd_stats["avg_dd_duration"],
@@ -910,7 +844,7 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
         "sharpe": _summary_sharpe(returns),
         "sortino": _summary_sortino(returns),
         "calmar": _summary_calmar(returns),
-        "max_drawdown": dd_stats["max_drawdown"],
+        "max_drawdown": _canonical_drawdown(returns),
         "avg_drawdown": dd_stats["avg_drawdown"],
         "max_dd_duration": dd_stats["max_dd_duration"],
         "avg_dd_duration": dd_stats["avg_dd_duration"],
@@ -972,7 +906,7 @@ def _build_bar_advancers(
     for attr, val in strategy.__dict__.items():
         if attr.startswith("_"):
             continue
-        if id(val) in seen_advancer_ids:
+        if id(getattr(val, "_feed", val)) in seen_advancer_ids:
             continue
         advance = getattr(val, "_advance", None)
         if callable(advance):
@@ -1176,17 +1110,19 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
     has_analyzer_bar_callbacks = bool(analyzer_bar_callbacks)
     has_observer_nexts = bool(observer_nexts)
 
-    limit = cerebro.datas[0].buflen()
+    limit = len(runtime._clock)
     broker = cerebro.broker
     use_clocked_multi_data_runner = (
         isinstance(broker, RustBroker)
         and getattr(broker, "_engine", None) is not None
         and len(cerebro.datas) > 1
+        and not runtime._clock.requires_union
     )
     clocked_multi_data_runner = (
         _build_clocked_multi_data_runner(cerebro.datas) if use_clocked_multi_data_runner else None
     )
     data_advance_plan = (
+        runtime._clock if runtime._clock.requires_union else
         None if clocked_multi_data_runner is not None else _build_data_advance_plan(cerebro.datas)
     )
     data_advance_methods = tuple(data._advance for data in cerebro.datas)
@@ -1204,15 +1140,13 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
     else:
 
         def advance_datas(i: int) -> None:
-            for advance_data, cursor in zip(
-                data_advance_methods,
-                data_advance_plan.cursors_at(i),
-                strict=False,
-            ):
+            cursors = data_advance_plan.cursors_at(i)
+            for advance_data, cursor in zip(data_advance_methods, cursors, strict=False):
                 if cursor >= 0:
                     advance_data(cursor)
                 else:
                     advance_data(-1)
+            return cursors
 
     runtime.configure_bound(bar_advancers, advance_datas if data_advance_plan is not None else None)
     strategy_pre_next = runtime.advance_bound
@@ -1479,16 +1413,18 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
         on_end = getattr(ana, "on_end", None)
         if callable(on_end):
             runtime.invoke_component(on_end, stats)
+    for ana in strategy.analyzers.values():
+        if hasattr(ana,"stop"):
+            runtime.invoke_component(ana.stop)
     analyzer_results = {name: ana.get_analysis() for name, ana in strategy.analyzers.items()}
     stats.analyzers = analyzer_results
     strategy.stats = stats
     strategy.analyzer_results = analyzer_results
     cerebro.stats = stats
     cerebro.analyzer_results = analyzer_results
-    for ana in strategy.analyzers.values():
-        if hasattr(ana, "stop"):
-            runtime.invoke_component(ana.stop)
     for observer in getattr(strategy, "observers", {}).values():
-        runtime.invoke_component(observer.stop)
+        callback = getattr(observer,"stop",getattr(observer,"_stop",None))
+        if callable(callback):
+            runtime.invoke_component(callback)
 
     return [strategy]

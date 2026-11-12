@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime
-from html import escape
+import math
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pandas as pd
 
 from tradelearn.metrics import factor as factor_metrics
-from tradelearn.utils.console import smart_tqdm as tqdm
 
 
 @dataclass(frozen=True)
@@ -25,6 +23,7 @@ class FactorAnalyzer:
     periods: int = 252
     return_period: int = 1
     quantiles: int = 5
+    _analysis_cache: dict = field(default_factory=dict, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Promote single-index data to MultiIndex to support single-asset analysis."""
@@ -482,41 +481,81 @@ class FactorAnalyzer:
             items.append(charts.factor_turnover(turnover_series, ac))
         return bk_column(*items, sizing_mode="stretch_width") if items else None
 
-    def html(self, path: str) -> Path:
-        """Write a standalone Alphalens-style factor report and return the output path."""
-        from bokeh.embed import components
-        from bokeh.resources import INLINE
+    def to_analysis(self, *, include_figures: bool = False) -> dict:
+        """Compute existing diagnostics for the common report renderer."""
+        from tradelearn.research._analysis_snapshot import analysis_key, copy_analysis
 
-        grid = self.plot()
-        if grid is None:
-            raise ValueError("FactorAnalyzer has no data to plot")
-        script, chart = components(grid)
-        html_content = _render_factor_html(
-            title="TradeLearn Factor Analysis",
-            summary=self.summary(),
-            quantile_stats=self.quantile_stats(),
-            quantile_counts=self.quantile_counts(),
-            script=script,
-            chart=chart,
-            bokeh_resources=INLINE.render(),
+        key = analysis_key(
+            [self.factor, self.forward_returns, self.prices, self.groups, self.factor_quantiles],
+            (self.periods, self.return_period, self.quantiles),
         )
-        output = Path(path)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(html_content, encoding="utf-8")
-        return output
+        if self._analysis_cache.get("key") != key:
+            self._analysis_cache.clear()
+            self._analysis_cache["key"] = key
+        if "result" not in self._analysis_cache:
+            self._analysis_cache["result"] = self._compute_analysis()
+        result = copy_analysis(self._analysis_cache["result"])
+        if include_figures:
+            if "figures" not in self._analysis_cache:
+                self._analysis_cache["figures"] = {
+                    "IC Histogram and factor diagnostics": self.plot()
+                }
+            result["figures"] = dict(self._analysis_cache["figures"])
+        return result
+
+    def _compute_analysis(self) -> dict:
+        summary = self.summary()
+        tables = {
+            "Factor Summary": pd.DataFrame([summary]),
+            "Information Coefficient": self.ic(),
+            "rank_ic": self.factor_information_coefficient(),
+            "Quantile Statistics": self.quantile_stats(),
+            "Quantile Counts": self.quantile_counts(),
+            "Mean Return by Quantile": self.mean_return_by_quantile(),
+            "quantile_error": self.mean_return_by_quantile_std_error(),
+            "quantile_cumulative": self.quantile_cumulative_returns(),
+            "long_short": self.long_short_returns(),
+            "rank_autocorrelation": self.factor_rank_autocorrelation(),
+        }
+        return {
+            "title": "TradeLearn Factor Analysis",
+            "tables": {name: _identity_table(table) for name, table in tables.items()},
+            "metrics": {
+                name: {
+                    "value": value if math.isfinite(value) else None,
+                    "unit": _factor_metric_unit(name),
+                    "reason": "" if math.isfinite(value) else "not_computable_for_sample",
+                }
+                for name, value in summary.items()
+            },
+            "metadata": {
+                "factor_name": str(self.factor.name),
+                "source": dict(self.factor.attrs),
+                "evaluation": "cross_sectional",
+                "periods": self.periods,
+                "quantiles": self.quantiles,
+                "return_period": self.return_period,
+                "sample_coverage": {
+                    "factor_rows": len(self.factor),
+                    "paired_observations": summary["observations"],
+                    "ic_dates": summary["ic_dates"],
+                },
+            },
+            "figures": {},
+        }
+
+    def html(self, path: str) -> Path:
+        """Compatibility entry routed to the common renderer."""
+        return self.report(path, format="html")
 
     def report(self, path: str, format: str | None = None) -> Path:
-        """Write a factor report using the user-facing report() entrypoint."""
-        output = Path(path)
-        chosen = (format or output.suffix.lstrip(".") or "html").lower()
-        if chosen in {"htm", "html"}:
-            if not output.suffix:
-                output = output.with_suffix(".html")
-            with tqdm(total=1, desc="FactorAnalyzer.report", leave=True) as pbar:
-                result = self.html(str(output))
-                pbar.update(1)
-            return result
-        raise ValueError(f"Unsupported factor report format: {chosen}")
+        """Render completed diagnostics through the shared Reporter."""
+        from tradelearn.report import Reporter
+        from tradelearn.research._analysis_snapshot import wants_figures
+
+        return Reporter.from_analysis(
+            self.to_analysis(include_figures=wants_figures(path, format))
+        ).report(path, format=format)
 
     def _forward_returns(self) -> pd.Series:
         """Return configured or price-derived forward returns."""
@@ -626,24 +665,31 @@ class MultiPeriodFactorAnalyzer:
         """Return factor diagnostic charts for a selected prediction horizon."""
         return self._selected(period).plot()
 
+    def to_analysis(self, *, include_figures: bool = False) -> dict:
+        return _combined_analysis(
+            "Tradelearn Multi-Period Factor Analysis",
+            {
+                f"{period}-bar Forward Return": analyzer.to_analysis(
+                    include_figures=include_figures
+                )
+                for period, analyzer in self.analyzers.items()
+            },
+        )
+
     def html(self, path: str, period: int | None = None) -> Path:
-        """Write a standalone factor report for a selected prediction horizon."""
-        if period is None and len(self.analyzers) > 1:
-            return self._multi_period_html(path)
-        return self._selected(period).html(path)
+        return self.report(path, format="html", period=period)
 
     def report(self, path: str, format: str | None = None, period: int | None = None) -> Path:
-        """Write a factor report for a selected prediction horizon."""
-        output = Path(path)
-        chosen = (format or output.suffix.lstrip(".") or "html").lower()
-        if chosen in {"htm", "html"}:
-            if not output.suffix:
-                output = output.with_suffix(".html")
-            with tqdm(total=1, desc="MultiPeriodFactorAnalyzer.report", leave=True) as pbar:
-                result = self.html(str(output), period=period)
-                pbar.update(1)
-            return result
-        raise ValueError(f"Unsupported factor report format: {chosen}")
+        from tradelearn.report import Reporter
+        from tradelearn.research._analysis_snapshot import wants_figures
+
+        include_figures = wants_figures(path, format)
+        analysis = (
+            self._selected(period).to_analysis(include_figures=include_figures)
+            if period is not None
+            else self.to_analysis(include_figures=include_figures)
+        )
+        return Reporter.from_analysis(analysis).report(path, format=format)
 
     def _selected(self, period: int | None) -> FactorAnalyzer:
         """Return an analyzer by period, defaulting only when the choice is unambiguous."""
@@ -652,46 +698,6 @@ class MultiPeriodFactorAnalyzer:
         if len(self.analyzers) == 1:
             return next(iter(self.analyzers.values()))
         raise ValueError("period must be provided when multiple factor horizons are available")
-
-    def _multi_period_html(self, path: str) -> Path:
-        """Write one HTML report containing all configured factor horizons."""
-        from bokeh.embed import components
-        from bokeh.layouts import column as bk_column
-        from bokeh.models import Div
-        from bokeh.resources import INLINE
-
-        sections = []
-        for period, analyzer in self.analyzers.items():
-            grid = analyzer.plot()
-            if grid is not None:
-                sections.append(
-                    bk_column(
-                        Div(
-                            text=f"<h2>{period}-bar Forward Return</h2>",
-                            sizing_mode="stretch_width",
-                        ),
-                        grid,
-                        sizing_mode="stretch_width",
-                    )
-                )
-        chart = bk_column(*sections, sizing_mode="stretch_width") if sections else None
-        if chart is None:
-            raise ValueError("FactorAnalyzer has no data to plot")
-        script, rendered_chart = components(chart)
-        html_content = _render_factor_html(
-            title="Tradelearn Multi-Period Factor Analysis",
-            summary={},
-            summary_frame=self.summary(),
-            quantile_stats=pd.DataFrame(),
-            quantile_counts=pd.DataFrame(),
-            script=script,
-            chart=rendered_chart,
-            bokeh_resources=INLINE.render(),
-        )
-        output = Path(path)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(html_content, encoding="utf-8")
-        return output
 
 
 @dataclass(frozen=True)
@@ -750,267 +756,77 @@ class MultiFactorAnalyzer:
         result.columns.names = ["factor", "period"]
         return result
 
+    def to_analysis(self, *, include_figures: bool = False) -> dict:
+        return _combined_analysis(
+            "Tradelearn Multi-Factor Analysis",
+            {
+                factor: analyzer.to_analysis(include_figures=include_figures)
+                for factor, analyzer in self.analyzers.items()
+            },
+        )
+
     def report(self, path: str, format: str | None = None) -> Path:
-        """Write a multi-factor report using the user-facing report() entrypoint."""
-        output = Path(path)
-        chosen = (format or output.suffix.lstrip(".") or "html").lower()
-        if chosen in {"htm", "html"}:
-            if not output.suffix:
-                output = output.with_suffix(".html")
-            with tqdm(total=1, desc="MultiFactorAnalyzer.report", leave=True) as pbar:
-                result = self.html(str(output))
-                pbar.update(1)
-            return result
-        raise ValueError(f"Unsupported factor report format: {chosen}")
+        from tradelearn.report import Reporter
+        from tradelearn.research._analysis_snapshot import wants_figures
+
+        return Reporter.from_analysis(
+            self.to_analysis(include_figures=wants_figures(path, format))
+        ).report(path, format=format)
 
     def html(self, path: str) -> Path:
-        """Write one HTML report containing every factor and prediction horizon."""
-        from bokeh.embed import components
-        from bokeh.layouts import column as bk_column
-        from bokeh.models import Div
-        from bokeh.resources import INLINE
-
-        sections = []
-        for factor, analyzer in self.analyzers.items():
-            for period, period_analyzer in analyzer.items():
-                grid = period_analyzer.plot()
-                if grid is not None:
-                    sections.append(
-                        bk_column(
-                            Div(
-                                text=f"<h2>{escape(factor)} · {period}-bar Forward Return</h2>",
-                                sizing_mode="stretch_width",
-                            ),
-                            grid,
-                            sizing_mode="stretch_width",
-                        )
-                    )
-        chart = bk_column(*sections, sizing_mode="stretch_width") if sections else None
-        if chart is None:
-            raise ValueError("FactorAnalyzer has no data to plot")
-        script, rendered_chart = components(chart)
-        html_content = _render_factor_html(
-            title="Tradelearn Multi-Factor Analysis",
-            summary={},
-            summary_frame=self.summary(),
-            quantile_stats=pd.DataFrame(),
-            quantile_counts=pd.DataFrame(),
-            script=script,
-            chart=rendered_chart,
-            bokeh_resources=INLINE.render(),
-        )
-        output = Path(path)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(html_content, encoding="utf-8")
-        return output
+        return self.report(path, format="html")
 
 
-def _render_factor_html(
-    *,
-    title: str,
-    summary: dict[str, float],
-    summary_frame: pd.DataFrame | None = None,
-    quantile_stats: pd.DataFrame,
-    quantile_counts: pd.DataFrame,
-    script: str,
-    chart: str,
-    bokeh_resources: str,
-) -> str:
-    """Return a premium Alphalens-style factor report HTML page."""
-    summary_title = "Period Summary" if summary_frame is not None else "Factor Summary"
-    summary_table = (
-        _frame_table(summary_frame)
-        if summary_frame is not None
-        else _dict_table(summary, class_name="summary-table")
-    )
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{escape(title)}</title>
-  {bokeh_resources}
-  <style>
-    :root {{
-      --bg: #f8fafc;
-      --card: #ffffff;
-      --ink: #0f172a;
-      --muted: #64748b;
-      --line: #e2e8f0;
-      --accent: #334155;
-      --row-hover: #f1f5f9;
-      --brand: #4f46e5;
-    }}
-    * {{ box-sizing: border-box; }}
-    body {{
-      margin: 0;
-      background: var(--bg);
-      color: var(--ink);
-      font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      -webkit-font-smoothing: antialiased;
-    }}
-    .shell {{ max-width: 1400px; margin: 40px auto; padding: 0 32px; }}
-    header {{
-      margin: 0 0 32px;
-      padding: 32px 40px;
-      background: var(--card);
-      border-radius: 12px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-      border-top: 6px solid var(--brand);
-      background: linear-gradient(to bottom right, #ffffff, #fcfdff);
-    }}
-    .report-header {{
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      gap: 32px;
-    }}
-    .eyebrow {{
-      color: var(--brand);
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: .15em;
-      margin: 0 0 8px;
-      text-transform: uppercase;
-    }}
-    .meta-grid {{
-      display: grid;
-      grid-template-columns: repeat(2, minmax(140px, auto));
-      gap: 8px 40px;
-      padding-bottom: 4px;
-    }}
-    .meta-label {{ color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }}
-    .meta-value {{ color: var(--accent); font-size: 13px; font-weight: 600; white-space: nowrap; }}
-    section {{
-      margin: 0 0 32px;
-      padding: 32px;
-      background: var(--card);
-      border-radius: 12px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }}
-    h1 {{ margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -0.025em; color: var(--ink); }}
-    h2 {{ margin: 0 0 20px; font-size: 18px; font-weight: 700; color: var(--accent); border-bottom: 2px solid var(--row-hover); padding-bottom: 12px; }}
-    p {{ margin: 0; color: var(--muted); font-size: 15px; }}
-    .grid {{
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 380px;
-      gap: 32px;
-      align-items: start;
-    }}
-    aside {{ position: sticky; top: 32px; }}
-    table {{ border-collapse: collapse; width: 100%; margin: 8px 0; min-width: 600px; }}
-    th, td {{ padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--line); }}
-    th {{ background: var(--bg); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }}
-    tr:hover {{ background: var(--row-hover); }}
-    td {{ font-variant-numeric: tabular-nums; }}
-    td:last-child, th:last-child {{ text-align: right; }}
-    .summary-table {{ min-width: 0; }}
-    .summary-table th {{ width: 55%; color: var(--accent); background: none; text-transform: none; font-size: 14px; letter-spacing: normal; padding-left: 0; }}
-    .chart {{ overflow: hidden; }}
-    .chart > div, .chart .bk-root, .chart .bk-root > div {{
-      width: 100% !important;
-      max-width: 100% !important;
-    }}
-    .full-width-tables {{ margin-top: 32px; }}
-    .scroll-container {{ overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; border: 1px solid var(--line); }}
-    @media (max-width: 1100px) {{
-      .grid {{ grid-template-columns: 1fr; }}
-      aside {{ position: static; }}
-      .report-header {{ flex-direction: column; align-items: flex-start; gap: 16px; }}
-      .meta-grid {{ grid-template-columns: 1fr; }}
-    }}
-  </style>
-</head>
-<body>
-  <main class="shell">
-    <header>
-      <div class="report-header">
-        <div>
-          <p class="eyebrow">TradeLearn Report</p>
-          <h1>{escape(title)}</h1>
-        </div>
-        <div class="meta-grid">
-          <div class="meta-item">
-            <div class="meta-label">Generated</div>
-            <div class="meta-value">{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
-          </div>
-          <div class="meta-item">
-            <div class="meta-label">Factor Type</div>
-            <div class="meta-value">Alphalens-style</div>
-          </div>
-        </div>
-      </div>
-    </header>
-    
-    <div class="grid">
-      <div class="main-content">
-        <section class="chart">
-          <h2>Information Coefficient and Quantile Charts</h2>
-          {chart}
-        </section>
-      </div>
-      <aside>
-        <section>
-          <h2>{summary_title}</h2>
-          {summary_table}
-        </section>
-      </aside>
-    </div>
-
-    <div class="full-width-tables">
-      <section>
-        <h2>Quantile Statistics</h2>
-        <p style="margin-bottom: 16px; font-size: 13px;">Statistical summary of forward returns for each factor quantile. This table shows the performance distribution and risk metrics across groups.</p>
-        <div class="scroll-container">
-          {_frame_table(quantile_stats)}
-        </div>
-      </section>
-      <section>
-        <h2>Quantile Counts</h2>
-        <p style="margin-bottom: 16px; font-size: 13px;">The number of assets assigned to each quantile at each point in time. This helps verify data density and ensure balanced quantile allocation across the sample period.</p>
-        <div class="scroll-container">
-          {_frame_table(quantile_counts.tail(10))}
-        </div>
-      </section>
-    </div>
-    
-    {script}
-  </main>
-</body>
-</html>"""  # noqa: E501 - preserve the HTML/CSS template verbatim
+def _factor_metric_unit(name):
+    if name in {"observations", "ic_dates"}:
+        return "count"
+    if "spread" in name or "turnover" in name:
+        return "ratio"
+    if name.endswith("_ir"):
+        return "annualized_ratio"
+    return "correlation"
 
 
-def _dict_table(values: dict[str, float], *, class_name: str = "") -> str:
-    rows = "".join(
-        f"<tr><th>{escape(str(key))}</th><td>{escape(_format_html_value(value))}</td></tr>"
-        for key, value in values.items()
-    )
-    class_attr = f' class="{class_name}"' if class_name else ""
-    return f"<table{class_attr}><tbody>{rows}</tbody></table>"
+def _identity_table(values) -> pd.DataFrame:
+    table = pd.DataFrame(values)
+    if not isinstance(table.index, pd.RangeIndex) or table.index.name is not None:
+        return table.reset_index()
+    return table.copy()
 
 
-def _frame_table(frame: pd.DataFrame) -> str:
-    if frame.empty:
-        return "<table><tbody></tbody></table>"
-    display = frame.reset_index()
-    headers = "".join(f"<th>{escape(str(column))}</th>" for column in display.columns)
-    rows = "".join(
-        "<tr>" + "".join(f"<td>{escape(_format_html_value(value))}</td>" for value in row) + "</tr>"
-        for row in display.itertuples(index=False, name=None)
-    )
-    return f"<table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>"
-
-
-def _format_html_value(value: object) -> str:
-    import numpy as np
-
-    if pd.isna(value):
-        return "—"
-    if isinstance(value, (float, np.floating)):
-        if np.isnan(value) or np.isinf(value):
-            return "—"
-        return f"{value:.4f}"
-    return str(value)
+def _combined_analysis(title: str, analyses: dict) -> dict:
+    # Stack each diagnostic by domain identity, retaining all horizons/factors
+    # without truncating Excel sheet names into collisions.
+    table_names = {name for analysis in analyses.values() for name in analysis["tables"]}
+    tables = {
+        name: pd.concat(
+            {
+                key: pd.DataFrame(value["tables"][name])
+                for key, value in analyses.items()
+                if name in value["tables"]
+            },
+            names=["factor" if "Multi-Factor" in title else "period"],
+        ).reset_index(level=0)
+        for name in sorted(table_names)
+    }
+    if "Factor Summary" in tables:
+        tables["Period Summary"] = tables.pop("Factor Summary")
+    figures = {
+        f"{key} · {name}": figure
+        for key, value in analyses.items()
+        for name, figure in value["figures"].items()
+    }
+    return {
+        "title": title,
+        "tables": tables,
+        "figures": figures,
+        "metrics": {
+            f"{key}.{name}": fact
+            for key, value in analyses.items()
+            for name, fact in value.get("metrics", {}).items()
+        },
+        "metadata": {key: value["metadata"] for key, value in analyses.items()},
+    }
 
 
 def _clean_periods(clean: pd.DataFrame, periods: tuple[int, ...] | None) -> tuple[int, ...]:

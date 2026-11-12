@@ -74,6 +74,10 @@ class LiteStats(Mapping[str, Any]):
         return self.stats.orders
 
     @property
+    def metric_metadata(self) -> dict[str, Any]:
+        return self.stats.metric_metadata
+
+    @property
     def config(self) -> dict[str, Any]:
         return self.stats.config
 
@@ -99,6 +103,18 @@ class Backtest:
         storage: dict | None = None,
         match_mode: str = 'exact' # Default to exact for alignment
     ):
+        unsupported = {
+            "margin": margin != 1.,
+            "hedging": hedging,
+            "exclusive_orders": exclusive_orders,
+            "holding": bool(holding),
+            "trade_start_date": trade_start_date is not None,
+            "lot_size": lot_size != 1,
+            "fail_fast": not fail_fast,
+        }
+        for name, requested in unsupported.items():
+            if requested:
+                raise NotImplementedError(f"Lite Backtest does not implement non-default {name}")
         self._data = data
         self._strategy_cls = strategy
         self._cash = cash
@@ -186,22 +202,21 @@ class Backtest:
         return result
 
     def optimize(self, **kwargs) -> LiteStats:
-        """Simple grid search optimization."""
-        from concurrent.futures import ProcessPoolExecutor
-        from itertools import repeat
-
+        """Run a finite grid sequentially with isolated, identically configured runs."""
+        if self._storage:
+            raise NotImplementedError("Lite optimize requires empty storage for isolated trials")
         grid = expand_grid(kwargs)
-
-        with ProcessPoolExecutor() as executor:
-            results = list(tqdm(executor.map(_optimize_worker,
-                                        repeat(self._data),
-                                        repeat(self._strategy_cls),
-                                        repeat(self._cash),
-                                        repeat(self._commission),
-                                        repeat(self.match_mode),
-                                        grid), total=len(grid), desc="Backtest.optimize"))
-
-        best_res, best_params = max(results, key=lambda x: x[0]["return_pct"])
+        if not grid:
+            raise ValueError("Lite optimize requires a nonempty parameter grid")
+        best_res, best_params = None, None
+        for params in tqdm(grid, desc="Backtest.optimize"):
+            trial = Backtest(
+                self._data, self._strategy_cls, cash=self._cash,
+                commission=self._commission, match_mode=self.match_mode,
+                trade_on_close=self.trade_on_close, stats_mode=self.stats_mode,
+            ).run(**params)
+            if best_res is None or trial["return_pct"] > best_res["return_pct"]:
+                best_res, best_params = trial, params
         smart_print(f"Best Params: {best_params}")
         return best_res
 
@@ -220,40 +235,21 @@ class Backtest:
 
     def log_mlflow(
         self,
-        experiment_name: str = "tradelearn-lite",
+        experiment_name: str | None = None,
         run_name: str | None = None,
         *,
+        research_result: Any = None,
         uri: str | None = None,
-        params: dict[str, Any] | None = None,
-        tags: dict[str, Any] | None = None,
-        nested: bool = False,
-        log_mlflow: bool = True,
-        upload_artifacts: bool = True,
-        log_artifacts: bool | None = None,
-        artifact_path: str | None = None,
-        log_report: bool = True,
-        log_plot: bool = False,
-        mlflow_module: Any | None = None,
-    ) -> str:
-        """Log the most recent Lite run to MLflow."""
-        if not log_mlflow:
-            return "skipped"
+        log_report: bool = False,
+        attachments: tuple[str, ...] = (),
+    ) -> Any:
+        """Record the last result using the independent post-run integration."""
         from .mlflow import log_lite_run
 
         return log_lite_run(
-            self,
-            experiment_name=experiment_name,
-            run_name=run_name,
-            uri=uri,
-            params=params,
-            tags=tags,
-            nested=nested,
-            upload_artifacts=upload_artifacts,
-            log_artifacts=log_artifacts,
-            artifact_path=artifact_path,
-            log_report=log_report,
-            log_plot=log_plot,
-            mlflow_module=mlflow_module,
+            self, experiment_name=experiment_name, run_name=run_name,
+            research_result=research_result, uri=uri,
+            log_report=log_report, attachments=attachments,
         )
 
     def _last_reporter(self):
@@ -261,11 +257,6 @@ class Backtest:
         if stats is None:
             raise RuntimeError("run() must be called before plot() or report()")
         return reporter_from_stats(stats, getattr(self, "datas", None))
-
-def _optimize_worker(data, strategy_cls, cash, commission, match_mode, params):
-    bt = Backtest(data, strategy_cls, cash=cash, commission=commission, match_mode=match_mode)
-    return bt.run(**params), params
-
 
 def _can_skip_normalize_data(data: pd.DataFrame | dict[str, pd.DataFrame]) -> bool:
     if isinstance(data, dict):

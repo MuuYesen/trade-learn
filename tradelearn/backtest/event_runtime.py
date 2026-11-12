@@ -57,7 +57,11 @@ def _safe_cleanup_diagnostic(primary_error, cleanup_error):
 def _function_minimum(function, args, kwargs):
     """Shared inferred lookback for vector compilation and prefix plans."""
     bound = inspect.signature(function._func).bind_partial(*args, **kwargs)
+    supplied = set(bound.arguments)
     bound.apply_defaults()
+    for key,value in getattr(function,"params",{}).items():
+        if key not in supplied:
+            bound.arguments[key] = value
     lookback = max([1] + [int(bound.arguments[k])
         for k in ("period", "length", "window", "timeperiod")
         if isinstance(bound.arguments.get(k), int)])
@@ -69,6 +73,11 @@ def _function_minimum(function, args, kwargs):
         lookback = max(fast, slow) + signal - 1
     elif name in {"talib.RSI", "talib.ATR"}:
         lookback = int(bound.arguments["timeperiod"]) + 1
+    factory = getattr(function,"_stream_factory",None)
+    if factory is not None:
+        params = {**function.params, **{k:bound.arguments[k] for k in function.params if k in bound.arguments}}
+        backend = factory(params)
+        lookback = int(getattr(backend,"minimum",getattr(backend,"warmup",lookback)))
     dependency = max([0] + [int(getattr(value, "min_period", 0))
                            for value in (*args, *kwargs.values())])
     return max(1, dependency) + lookback - 1
@@ -80,6 +89,8 @@ class RuntimeContext:
     event: object
     ts_event_ns: int
     sequence: int
+    market_entry_clock: tuple[int, int] | None = None
+    market_callback: str | None = None
 
 
 class RuntimeLine(LineSeries):
@@ -104,7 +115,7 @@ class RuntimeLine(LineSeries):
         self._version_state = None
         self._version_id = 0
         self._full_ready = False
-        count = len(feed) - (
+        count = feed.retained - (
             1 if self._runtime._stepping and feed._name in self._runtime._active_market_symbols else 0
         )
         self._output = [np.nan] * max(0, count)
@@ -118,7 +129,7 @@ class RuntimeLine(LineSeries):
 
     @property
     def _cursor(self):
-        return len(self.feed) - 1
+        return self.feed._cursor
 
     @property
     def _values(self):
@@ -166,7 +177,7 @@ class RuntimeLine(LineSeries):
         if key != self._cache_key:
             from tradelearn.core.strategy_events import assert_observer_allows_mutation
             assert_observer_allows_mutation()
-            count = self.feed.received if self.history == "full" else len(self.feed)
+            count = self.feed.received if self.history == "full" else self.feed.retained
             result = (
                 self.compute()
                 if count >= self.min_period
@@ -202,13 +213,13 @@ class RuntimeLine(LineSeries):
     def to_series(self):
         if self.field is not None:
             return pd.Series(
-                self.feed._buffer.arrays[self.field][: len(self.feed)].copy(), dtype=float
+                self.feed._buffer.arrays[self.field][: self.feed.retained].copy(), dtype=float
             )
         if self.compute is None:
             return pd.Series(self._output, dtype=float)
         return (
-            self._evaluate().iloc[-len(self.feed) :].reset_index(drop=True).copy()
-            if len(self.feed)
+            self._evaluate().iloc[-self.feed.retained :].reset_index(drop=True).copy()
+            if self.feed.retained
             else pd.Series(dtype=float)
         )
 
@@ -223,11 +234,11 @@ class RuntimeLine(LineSeries):
         if ago > 0:
             raise ValueError("runtime lines cannot address future observations")
         if self.field is not None:
-            values = self.feed._buffer.arrays[self.field][:len(self.feed)]
+            values = self.feed._buffer.arrays[self.field][:self.feed.retained]
         elif self.compute is None:
             values = self._output
         else:
-            values = self._evaluate().to_numpy()[-len(self.feed):] if len(self.feed) else ()
+            values = self._evaluate().to_numpy()[-self.feed.retained:] if self.feed.retained else ()
         i = len(values) - 1 + int(ago)
         value = np.nan if i < 0 else values[i]
         return self._format_value(value) if self._is_datetime else value
@@ -269,7 +280,7 @@ class RuntimeLine(LineSeries):
                 self.full_series() if result.history == "full" else self.to_series()
             ).shift(-ago),
             dependencies=(self,),
-            min_period=self.min_period + abs(ago),
+            min_period=max(1, self.min_period) + abs(ago),
         )
         return result
 
@@ -300,6 +311,10 @@ class RuntimeLine(LineSeries):
         return result
 
     def _runtime_function(self, function, args, kwargs, *, history="full"):
+        if hasattr(function, "bind_stream"):
+            if function.supports_streaming:
+                return _PersistentIndicatorPlan(self._runtime, self.feed, function, args, kwargs).result
+            raise NotImplementedError(f"{function.name} has no qualified persistent implementation")
         if history not in ("full", "window"):
             raise ValueError("history must be full or window")
 
@@ -356,6 +371,54 @@ class RuntimeLine(LineSeries):
         )
 
 
+class _PersistentIndicatorPlan:
+    """One state transition per accepted feed event, shared by all output lines."""
+    def __init__(self, runtime, feed, function, args, kwargs):
+        from tradelearn.backtest.indicator_cache import IndicatorBundle
+        if feed.received:
+            raise ValueError("persistent indicators must be defined before delivery; reset/replay required")
+        self.data = feed
+        self.binding = function.bind_stream(args, kwargs)
+        self.binding.inputs = tuple(value.lines[0] if hasattr(value,"lines") else value
+                                    for value in self.binding.inputs)
+        self.runtime = runtime
+        for value in self.binding.inputs:
+            if not isinstance(value, LineSeries) and not np.isscalar(value):
+                raise ValueError("persistent inputs require tracked lines or scalar constants")
+            if isinstance(value, LineSeries) and runtime._feed_for(value) is not feed:
+                raise ValueError("cross-feed indicator inputs require explicit timestamp alignment")
+        configured = self.binding.indicator
+        self._lines_def = tuple(getattr(configured, "output_names", ("value",)))
+        dependency = max([1] + [int(getattr(value,"min_period",0)) for value in self.binding.inputs])
+        self._minperiod = dependency + configured.minimum_period - 1
+        self._closed = False
+        self.lines = SimpleNamespace()
+        for name in self._lines_def:
+            setattr(self.lines, name, RuntimeLine(feed, min_period=self._minperiod))
+        self.result = (getattr(self.lines, self._lines_def[0]) if len(self._lines_def)==1 else
+                       IndicatorBundle({name:getattr(self.lines,name) for name in self._lines_def}))
+        runtime._register_indicator(self)
+
+    def next(self):
+        values = [value[0] if isinstance(value, LineSeries) else value
+                  for value in self.binding.inputs]
+        value = self.binding.update(*values)
+        outputs = value if isinstance(value, tuple) else (value,)
+        if len(outputs) != len(self._lines_def):
+            raise ValueError("persistent indicator output arity changed")
+        for name, value in zip(self._lines_def, outputs):
+            getattr(self.lines, name)[0] = value
+
+    def stop(self):
+        """Release only backend ownership; retain the copied output histories."""
+        if not self._closed:
+            self._closed = True
+            self.binding.reset()
+
+    # Native states must consume their seed bars during warmup as well.
+    prenext = next
+
+
 class RuntimeFeed:
     def __init__(self, runtime, symbol, capacity, buffer=None):
         self.runtime = runtime
@@ -378,16 +441,23 @@ class RuntimeFeed:
 
     def retain_full(self):
         if self._history is None:
-            if self.received > len(self):
+            if self.received > self.retained:
                 raise ValueError(
                     "full-prefix indicator cannot start after required history was discarded"
                 )
             self._history = {
-                n: self._buffer.arrays[n][: len(self)].tolist() for n in self._buffer.arrays
+                n: self._buffer.arrays[n][: self.retained].tolist() for n in self._buffer.arrays
             }
 
     def __len__(self):
+        return self.received
+
+    @property
+    def retained(self):
         return self._buffer.cursor + 1
+
+    def buflen(self):
+        return self.retained
 
     @property
     def _cursor(self):
@@ -396,7 +466,7 @@ class RuntimeFeed:
     @property
     def _frame(self):
         self._history_materializations += 1
-        n = len(self)
+        n = self.retained
         return pd.DataFrame(
             {
                 name: self._buffer.arrays[name][:n]
@@ -491,13 +561,6 @@ class StrategyRuntime:
         profile = strategy_cls if strategy_cls is not None else type(strategy)
         if not issubclass(profile, Strategy):
             raise TypeError("runtime requires TradeLearn Strategy")
-        if any(
-            base.__module__ == "tradelearn.lite.strategy" and base.__name__ == "Strategy"
-            for base in profile.__mro__
-        ):
-            raise TypeError(
-                "lite uses its batch research lifecycle; runtime supports engine/core strategies"
-            )
         if not feeds or any(v not in ("bar", "tick") for v in feeds.values()):
             raise ValueError("explicit symbol -> bar/tick feeds required")
         if type(capacity) is not int or capacity < 2:
@@ -548,11 +611,11 @@ class StrategyRuntime:
 
     def add_observer(self, observer, **kwargs):
         self._owner()
-        return self.strategy.add_observer(observer, **kwargs)
+        return self.strategy._add_observer(observer, **kwargs)
 
     def remove_observer(self, observer):
         self._owner()
-        return self.strategy.remove_observer(observer)
+        return self.strategy._remove_observer(observer)
 
     def invoke_component(self, callback, *args, **kwargs):
         """Coordinate legacy analyzer/value-sampling component callbacks."""
@@ -608,6 +671,9 @@ class StrategyRuntime:
                 if line is not None:
                     line._runtime, line._bound_feed, line._runtime_field = self, feed, name
         self.modes = MappingProxyType({symbol: "bar" for symbol in self.feeds})
+        from .clock import BatchClock
+        self._clock = BatchClock(datas)
+        self._cursor = -1
         self.strategy = self._construct_strategy(strategy_cls, datas, broker, args, parameters)
         self.strategy._runtime = self
         self.strategy.datas, self.strategy.data = datas, datas[0]
@@ -629,7 +695,8 @@ class StrategyRuntime:
         self._initialized = True
         if callable(getattr(self.strategy, "_setup", None)):
             self._invoke("_setup")
-        self._invoke("init")
+        if callable(getattr(self.strategy, "init", None)):
+            self._invoke("init")
 
     def configure_bound(self, advancers, advance_datas=None):
         self._owner()
@@ -645,7 +712,10 @@ class StrategyRuntime:
             for data, position in zip(self.strategy.datas, data_cursors):
                 data._advance(max(-1, position))
         elif self._bound_data_advance is not None:
-            self._bound_data_advance(cursor)
+            data_cursors = self._bound_data_advance(cursor)
+        self._cursor = cursor
+        if getattr(self.broker, "_supports_event_clock", False):
+            self.broker._event_clock_timestamp = int(self._clock.timestamps[cursor])
         if callable(getattr(self.strategy, "_pre_next", None)):
             self._invoke("_pre_next", cursor)
         else:
@@ -656,8 +726,7 @@ class StrategyRuntime:
         self._sequence += 1
         self._mutation_epoch += 1
         primary = next(iter(self.feeds.values()))
-        clock_ts = primary.datetime[0]
-        timestamp = int(clock_ts.value) if clock_ts is not None else 0
+        timestamp = int(self._clock.timestamps[cursor]) * 1_000_000_000
         active = []
         for symbol, feed in self.feeds.items():
             if feed.received <= self._bound_seen[symbol]:
@@ -692,26 +761,66 @@ class StrategyRuntime:
     def _warming_up(self):
         """One eligibility rule for every storage/clock profile."""
         minimum = int(getattr(self.strategy, "_manual_min_period", 0))
-        if any(len(feed) < minimum for symbol, feed in self.feeds.items()
+        if self.profile == "batch" and getattr(self.strategy, "_bt_minperiods", False):
+            minimum = max(1, minimum)
+        if any(feed.received < minimum for symbol, feed in self.feeds.items()
                if self.modes[symbol] == "bar"):
             return True
         explicit = getattr(type(self.strategy), "min_period", 0)
         explicit = explicit(self.strategy) if callable(explicit) else explicit
         primary = next(iter(self.feeds.values()))
-        if int(explicit or 0) > 0 and len(primary) <= int(explicit):
+        if int(explicit or 0) > 0 and primary.received <= int(explicit):
             return True
         for indicator in self._indicators:
             feed = self._feed_for(indicator.data)
-            if feed is not None and len(feed) < indicator.min_period:
+            if feed is not None and feed.received < indicator._minperiod:
                 return True
         for line in tuple(self._plans.values()):
-            if len(line.feed) < line.min_period:
+            if line.feed.received < line.min_period:
                 return True
         for line in getattr(self, "_compiled_lines", {}).values():
             feed = self._feed_for(line)
-            if feed is not None and len(feed) < line.min_period:
+            if feed is not None and feed.received < line.min_period:
                 return True
         return False
+
+    def _bt_next_callback(self):
+        minima = {id(feed): max(1, int(getattr(self.strategy, "_manual_min_period", 0)))
+                  for feed in self.feeds.values()}
+        for indicator in self._indicators:
+            feed = self._feed_for(indicator.data)
+            if feed is not None:
+                minima[id(feed)] = max(minima[id(feed)], indicator._minperiod)
+        for line in (*tuple(self._plans.values()), *tuple(getattr(self,"_compiled_lines",{}).values())):
+            feed = self._feed_for(line)
+            if feed is not None:
+                minima[id(feed)] = max(minima[id(feed)], line.min_period)
+        return "nextstart" if any(feed.received == minima[id(feed)] for feed in self.feeds.values()) else "next"
+
+    def _next_callback(self, ready):
+        if not ready:
+            return "prenext"
+        if self.profile == "batch" and getattr(self.strategy, "_bt_minperiods", False):
+            return self._bt_next_callback()
+        if not getattr(self, "_next_started", False):
+            self._next_started = True
+            return "nextstart"
+        return "next"
+
+    def _advance_analyzers(self, ready):
+        for analyzer in getattr(self.strategy,"analyzers",{}).values():
+            if not ready:
+                name = "prenext"
+            elif self.profile == "batch" and getattr(self.strategy, "_bt_minperiods", False):
+                name = self._bt_next_callback()
+            elif not getattr(analyzer,"_next_started",False):
+                analyzer._next_started = True
+                name = "nextstart"
+            else:
+                name = "next"
+            callback = getattr(analyzer,name,None)
+            if callable(callback):
+                self.invoke_component(callback)
 
     def bound_ready(self, cursor):
         self._running()
@@ -726,7 +835,9 @@ class StrategyRuntime:
         self._running()
         ready = self.bound_ready(cursor)
         try:
-            return ready, dispatch(cursor, "next" if ready else "prenext")
+            result = dispatch(cursor, self._next_callback(ready))
+            self._advance_analyzers(ready)
+            return ready, result
         finally:
             self._stepping = False
 
@@ -794,12 +905,27 @@ class StrategyRuntime:
         if (self._started or getattr(self, "_start_attempted", False)) and not self._stopped:
             self._stopped = True
             self._stopping = True
+            primary = None
             try:
                 self._invoke("stop")
+            except BaseException as error:
+                primary = error
             finally:
+                for plan in reversed(tuple(self._indicators)):
+                    if isinstance(plan, _PersistentIndicatorPlan):
+                        try:
+                            plan.stop()
+                        except BaseException as error:
+                            self._failed = True
+                            if primary is None:
+                                primary = error
+                            else:
+                                _safe_cleanup_diagnostic(primary,error)
                 self._stopping = False
                 from tradelearn.core.strategy_events import emit_domain
                 emit_domain(self.strategy, "lifecycle.closed", "after", {"failed": self._failed})
+            if primary is not None:
+                raise primary
 
     def prefix(self, function, *inputs, history="full", **kwargs):
         """Causal window-recomputed Series function; not a constant-time promise."""
@@ -841,6 +967,7 @@ class StrategyRuntime:
         return RuntimeLine(feed if feed is not None else next(iter(self.feeds.values())))
 
     def _feed_for(self, value):
+        value = getattr(value, "_feed", value)
         if self.profile == "batch":
             bound = getattr(self, "_bound_feeds", {}).get(id(value))
             if bound is not None:
@@ -865,7 +992,7 @@ class StrategyRuntime:
 
     def normalize_indicator(self, indicator):
         self._owner()
-        for name in indicator.lines_def:
+        for name in indicator._lines_def:
             value = getattr(indicator.lines, name)
             if hasattr(value, "lines"):
                 value = value.lines[0]
@@ -876,7 +1003,7 @@ class StrategyRuntime:
                     feed = next(iter(self.feeds.values()))
                 line = RuntimeLine(feed)
                 line.compute = lambda v=float(value), f=feed, line=line: pd.Series(
-                    v, index=range(f.received if line.history == "full" else len(f))
+                    v, index=range(f.received if line.history == "full" else f.retained)
                 )
                 if len(self._plans) >= self.max_plans:
                     raise RuntimeError("runtime graph plan limit reached")
@@ -889,14 +1016,14 @@ class StrategyRuntime:
 
     def _register_indicator(self, indicator):
         self._owner()
-        if not hasattr(indicator, "lines_def"):
+        if not hasattr(indicator, "_lines_def"):
             return  # Legacy LineRoot analyzers are components, not indicator graphs.
         if any(x is indicator for x in self._indicators):
             return
         if len(self._indicators) >= self.max_indicators:
             raise RuntimeError("runtime indicator limit reached")
         self.normalize_indicator(indicator)
-        lines = [getattr(indicator.lines, n) for n in indicator.lines_def]
+        lines = [getattr(indicator.lines, n) for n in indicator._lines_def]
         if any(not isinstance(line, RuntimeLine) and not (
                 self.profile == "batch" and isinstance(line, LineSeries)) for line in lines):
             raise ValueError("indicator must expose runtime lines or a prefix function plan")
@@ -918,23 +1045,23 @@ class StrategyRuntime:
         indicator._runtime_sequence = self._sequence
         callback = getattr(indicator, "next", None)
         if callable(callback):
-            for name in indicator.lines_def:
+            for name in indicator._lines_def:
                 line = getattr(indicator.lines, name)
                 if (isinstance(line, RuntimeLine) and line.compute is None and line.field is None
                         and getattr(line, "_append_sequence", None) != self._sequence):
                     line._append_sequence = self._sequence
                     line._append_output()
-            callback = (
-                callback
-                if len(feed) >= indicator.min_period
-                else getattr(indicator, "prenext", lambda: None)
-            )
+            if feed.received < indicator._minperiod:
+                callback = getattr(indicator, "prenext", lambda: None)
+            elif not getattr(indicator, "_next_started", False):
+                indicator._next_started = True
+                callback = getattr(indicator, "nextstart", callback)
             with engine_context(
                 data=self.strategy.data, datas=self.strategy.datas, strategy=self.strategy
             ):
                 callback()
         else:
-            for name in indicator.lines_def:
+            for name in indicator._lines_def:
                 line = getattr(indicator.lines, name)
                 if isinstance(line, RuntimeLine):
                     line.to_series()
@@ -987,40 +1114,48 @@ class StrategyRuntime:
             feed.quote = event
         self._last_ts[symbol] = max(timestamp, self._last_ts.get(symbol, -1))
 
-    def _market_context(self, active, clock_symbol, timestamp):
+    def _market_context(self, active, clock_symbol, timestamp, entry_clock=None, market_callback=None):
         event = active[0][1] if len(active) == 1 else MappingProxyType(dict(
             clock_symbol=clock_symbol, ts=pd.Timestamp(timestamp, unit="ns", tz="UTC"),
             active_symbols=tuple(symbol for symbol, _ in active), bars=tuple(active),
         ))
-        return RuntimeContext(clock_symbol, event, timestamp, self._sequence)
+        return RuntimeContext(clock_symbol, event, timestamp, self._sequence, entry_clock, market_callback)
 
-    def _dispatch_market(self, prepared):
+    def _dispatch_market(self, prepared, entry_clock=None, market_callback=None):
         # Every explicitly grouped window is visible before any indicator runs.
         self._sequence += 1
         active = [(item[0], item[5]) for item in prepared]
-        context = self._market_context(active, prepared[0][0], prepared[0][3])
+        context = self._market_context(active, prepared[0][0], prepared[0][3], entry_clock, market_callback)
         self._active_market_symbols = frozenset(symbol for symbol, _ in active)
         self._stepping = True
         try:
             for symbol, _, _, timestamp, _, event in prepared:
-                self.context = RuntimeContext(symbol, event, timestamp, self._sequence)
+                self.context = RuntimeContext(symbol, event, timestamp, self._sequence, entry_clock, market_callback)
                 self.strategy.runtime_context = self.context
                 for indicator in tuple(self._indicators):
                     self._update_indicator(indicator, symbol)
             self.context = context
             self.strategy.runtime_context = context
-            self._invoke("prenext" if self._warming_up() else "next")
+            ready = not self._warming_up()
+            self._invoke(self._next_callback(ready))
+            self._advance_analyzers(ready)
         finally:
             self._stepping = False
         return context
 
+    def _market_observation_clock(self):
+        from tradelearn.core.strategy_events import capture_observation_clock
+        return (capture_observation_clock(self.strategy, 'business.next') or
+                capture_observation_clock(self.strategy, 'business.prenext'))
+
     def step_market(self, symbol, event, kind="bar"):
         """Accept one arrival and dispatch once; never waits for other symbols."""
         self._running()
+        entry_clock = self._market_observation_clock()
         try:
             prepared = self._prepare_market(symbol, event, kind)
             self._advance_market(prepared)
-            return self._dispatch_market((prepared,))
+            return self._dispatch_market((prepared,), entry_clock, 'runtime.step_market')
         except BaseException as error:
             self._failed = True
             self.cleanup(error)
@@ -1035,6 +1170,7 @@ class StrategyRuntime:
         before changing a feed. Input order supplies the explicit clock symbol.
         """
         self._running()
+        entry_clock = self._market_observation_clock()
         prepared, symbols = [], set()
         for item in events:
             if isinstance(item, tuple) and len(item) == 2:
@@ -1059,7 +1195,7 @@ class StrategyRuntime:
         try:
             for value in prepared:
                 self._advance_market(value)
-            return self._dispatch_market(prepared)
+            return self._dispatch_market(prepared, entry_clock, 'runtime.step_market_batch')
         except BaseException as error:
             self._failed = True
             self.cleanup(error)

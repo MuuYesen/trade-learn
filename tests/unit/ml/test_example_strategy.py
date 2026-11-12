@@ -85,8 +85,16 @@ def test_missing_features_skip_signals_without_dropping_market_bars() -> None:
     training = pd.DataFrame(
         {"feature": [float("nan"), 0.0, 1.0, 2.0], "target": [0.1, 0.1, 0.1, 0.1]}
     )
-    cerebro = Cerebro(trade_on_close=True)
-    cerebro.adddata(bars)
+    from tradelearn.engine.feeds import PandasData
+
+    cerebro = Cerebro()
+    cerebro.broker.set_coc(True)
+
+    class FeatureFeed(PandasData):
+        lines = ("feature",)
+        params = (("feature", "feature"),)
+
+    cerebro.adddata(FeatureFeed(dataname=bars))
     cerebro.addstrategy(
         Alpha101GBMStrategy,
         features=("feature",),

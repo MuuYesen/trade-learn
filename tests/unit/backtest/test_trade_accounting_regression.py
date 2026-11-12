@@ -1,3 +1,5 @@
+from tests.unit.backtest._engine_config import feed as _as_feed
+from tests.unit.backtest._engine_config import configured_engine
 """Closed trades must account for the complete position lifecycle."""
 import math
 import pandas as pd
@@ -31,9 +33,9 @@ def test_partial_exit_is_not_a_completed_trade():
     assert closed([('A',10,100,1),('A',-5,110,1)]).empty
 
 
-def test_all_winners_have_infinite_profit_factor():
+def test_all_winners_have_missing_profit_factor_without_loss_denominator():
     trades = closed([('A',10,100,1),('A',-10,110,1)])
-    assert math.isinf(_summary_trade_metrics(trades)['profit_factor'])
+    assert math.isnan(_summary_trade_metrics(trades)['profit_factor'])
 
 
 def test_mixed_profit_factor_uses_net_cycle_pnl():
@@ -56,10 +58,10 @@ def test_real_engine_returns_complete_net_profit_in_both_stats_modes(mode):
     bars = pd.DataFrame({key: prices for key in ['open','high','low','close']},
                         index=pd.date_range('2026-01-01', periods=5, tz='UTC'))
     bars['volume'] = 1000.0
-    engine = Cerebro(stats_mode=mode)
-    engine.setcash(10000)
+    engine = configured_engine(stats_mode=mode)
+    engine.broker.setcash(10000)
     engine.broker.setcommission(commission=0.01)
-    engine.adddata(bars)
+    engine.adddata(_as_feed(bars))
     engine.addstrategy(PartialExit)
     [strategy] = engine.run()
     stats = strategy.stats
@@ -71,4 +73,4 @@ def test_real_engine_returns_complete_net_profit_in_both_stats_modes(mode):
     assert stats.summary['win_rate_pct'] == 100
     assert stats.summary['expectancy'] == pytest.approx(128.5)
     assert stats.summary['final_value'] == pytest.approx(10128.5)
-    assert math.isinf(stats.summary['profit_factor'])
+    assert math.isnan(stats.summary['profit_factor'])

@@ -21,6 +21,7 @@ REPORT_SHEETS = [
     "positions",
     "orders",
     "config",
+    "metric_facts",
 ]
 
 
@@ -65,6 +66,22 @@ def write_excel_report(
         sections,
         build_context(reporter, benchmark=benchmark_returns),
     )
+
+    reserved = set(REPORT_SHEETS) | {
+        "benchmark_returns",
+        "rolling_beta",
+        "active_returns",
+        "active_weights",
+        "performance_attr",
+        "factor_ic",
+        "factor_rank_ic",
+        "factor_turnover",
+        "factor_autocorr",
+        "factor_long_short",
+        "factor_quantiles",
+    }
+    if any(name.casefold() in reserved for name in custom_sheets):
+        raise ValueError("custom sheet conflicts with a reserved report sheet")
 
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         _summary_frame(reporter.summary(benchmark=benchmark_returns)).to_excel(
@@ -139,6 +156,9 @@ def write_excel_report(
         for sheet_name, frame in custom_sheets.items():
             _excel_safe_frame(frame).to_excel(writer, sheet_name=sheet_name, index=False)
         _config_frame(config).to_excel(writer, sheet_name="config", index=False)
+        _excel_safe_frame(reporter.metric_facts(benchmark_returns)).to_excel(
+            writer, sheet_name="metric_facts", index=False
+        )
         _format_numeric_sheets(writer)
         _format_monthly_heatmap(writer)
     return output

@@ -1,37 +1,31 @@
 # Restoring the frozen test oracle
 
-The frozen 1.x sources are present under `reference/tradelearn_1x/` in the
-public repository. `tests/golden/fixture_checksums.json` and
-`scripts/oracle_manifest.json` identify their expected SHA-256 content. The
-reference is test-only and excluded from the distributed package; it is not
-regenerated from the current implementation. If a checkout is missing the files,
-restore them with `python scripts/restore_oracle.py` from the verified historical
-Git blobs; the restore refuses to overwrite modified files. A shallow checkout
-without those blobs must first fetch the required history.
+The frozen 1.x sources were retained by commit
+`e28ae1556d637975b95f1cd4952e9e090af8a461` and removed from Git tracking by
+`3ac1c4f67162211552353bbb16abe54e2e4b7b9c` ("keep local only"). A fresh checkout
+therefore needs an explicit restore before running oracle comparisons:
 
-CI keeps a shallow checkout and fetches the exact historical commit declared in
-`scripts/oracle_manifest.json` before tests that exercise restoration from Git.
-It does not fetch unrelated repository history or replace the frozen files.
+```sh
+python scripts/restore_oracle.py
+python scripts/check_oracle.py
+python -m pytest tests/consistency/test_metrics.py tests/unit/factor/test_alpha101.py tests/unit/factor/test_alpha191.py tests/golden
+```
 
-CI installs the dedicated `ci` and `oracle` dependency groups plus the documented
-indicator, factor, Parquet, report, ML, DuckDB and research extras before running
-`python scripts/check_oracle.py`, the consistency suite and the full tests. Tests
-that reference LeafQuant-private research/article files report a skip when those
-files are absent from a standalone public checkout; they remain runnable against
-their actual sources. The existing oracle and coverage gates remain in force.
+`scripts/oracle_manifest.json` records the source commit, Git blob IDs, and SHA-256
+checksums for the 13 required Query, Alpha101/191, Empyrical, and Alphalens files.
+The restore uses local Git history, verifies all bytes before writing, and refuses
+to overwrite a modified oracle. Re-running it is read-only when all files exist.
+The restored `reference/` stays ignored and excluded from package discovery.
+For a shallow clone missing the source commit, first fetch repository history
+from the configured origin (`git fetch --unshallow origin`). No current production
+calculation is used to generate these reference sources.
 
 The tests use deterministic small inputs to compare algorithms. This does not
 restore historical market parquet files or the 100 real Golden outputs.
 `python scripts/check_golden_readiness.py --json` reports those separately;
 passing the Golden test suite does not imply those real-data artifacts exist.
 
-MCP tests require the optional lab dependency declared in `pyproject.toml`.
-The minimum-supported SDK can be checked explicitly in the project environment:
-
-```sh
-uv pip install --python .venv/bin/python 'mcp==1.8.0'
-PYTHONPATH=. .venv/bin/python -m pytest tests/unit/test_mcp.py
-```
+The TL-owned MCP implementation and its tests were retired by the final CLI decision on 2026-11-12. AI Lite uses its upstream tools and version-matched Skills; do not reinstall the old MCP test dependency.
 
 ## Real-data release gates and test discovery
 

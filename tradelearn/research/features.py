@@ -52,7 +52,24 @@ class _PanelView:
     """Internal wide-table view over MultiIndex(timestamp, symbol) bars."""
 
     def __init__(self, bars: Any) -> None:
-        self.bars = validate_bars(pd.DataFrame(bars).copy())
+        frame = pd.DataFrame(bars).copy()
+        if isinstance(frame.index, pd.DatetimeIndex):
+            symbol = getattr(bars, "attrs", {}).get("symbol")
+            if not symbol:
+                raise ValueError("single-symbol features require explicit attrs['symbol']")
+            frame.index.name = "timestamp"
+            frame["symbol"] = str(symbol)
+            frame = frame.set_index("symbol", append=True)
+        if isinstance(frame.index, pd.MultiIndex):
+            if frame.index.nlevels != 2:
+                raise ContractError("Bars index must have two levels: timestamp and symbol")
+            timestamps = pd.DatetimeIndex(frame.index.get_level_values(0))
+            if timestamps.tz is not None:
+                frame.index = pd.MultiIndex.from_arrays(
+                    [timestamps.tz_convert("UTC"), frame.index.get_level_values(1)],
+                    names=["timestamp", "symbol"],
+                )
+        self.bars = validate_bars(frame)
 
     def __getattr__(self, name: str) -> pd.DataFrame:
         if name in self.bars.columns:

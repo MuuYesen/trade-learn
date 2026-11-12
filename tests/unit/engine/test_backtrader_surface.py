@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import feed as _as_feed
+
 import pandas as pd
+import pytest
 
 import tradelearn as tl
 import tradelearn.engine as bt
@@ -24,13 +27,9 @@ def test_backtrader_facade_exports_common_surface() -> None:
     for name in [
         "Cerebro",
         "OptReturn",
-        "DataFeed",
         "Strategy",
         "Order",
         "TimeFrame",
-        "FixedSize",
-        "PercentSizer",
-        "AllInSizer",
         "CommInfoBase",
         "observers",
         "sizers",
@@ -49,7 +48,7 @@ def test_cerebro_exposes_runtime_compat_methods() -> None:
     cerebro = bt.Cerebro()
     for name in [
         "addsizer",
-        "setsizer",
+        "_setsizer",
         "resampledata",
         "replaydata",
         "addobserver",
@@ -58,21 +57,18 @@ def test_cerebro_exposes_runtime_compat_methods() -> None:
         "optcallback",
         "runstop",
         "plot",
-        "set_coc",
-        "addtimer",
+        "_set_coc",
+        "add_timer",
         "addcalendar",
     ]:
         assert callable(getattr(cerebro, name))
 
 
-def test_set_coc_keeps_cheat_on_close_out_of_generic_kwargs() -> None:
-    cerebro = bt.Cerebro()
-
-    cerebro.set_coc(True)
-
-    assert cerebro.trade_on_close is True
-    assert cerebro.broker._trade_on_close is True
-    assert "cheat_on_close" not in cerebro.kwargs
+def test_set_coc_is_a_broker_configuration():
+    from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
+    c=bt.Cerebro();c.broker.set_coc(True)
+    assert BacktestRuntimeConfig.from_owner(c).trade_on_close
+    assert not hasattr(c,'set_coc')
 
 
 def test_broker_exposes_backtrader_cash_value_aliases() -> None:
@@ -88,14 +84,14 @@ def test_broker_exposes_backtrader_cash_value_aliases() -> None:
 
 def test_cerebro_getbroker_and_broker_addcommissioninfo() -> None:
     cerebro = bt.Cerebro()
-    comminfo = bt.CommInfoBase(commission=0.002, mult=5.0)
+    comminfo = bt.CommInfoBase(commission=0.002, percabs=True)
 
     assert cerebro.getbroker() is cerebro.broker
     cerebro.broker.addcommissioninfo(comminfo)
 
     assert cerebro.broker.getcommissioninfo(None) is comminfo
     assert cerebro.broker.commission_ratio == 0.002
-    assert cerebro.broker.get_mult() == 5.0
+    assert cerebro.broker.get_mult() == 1.0
 
 
 def test_cerebro_setbroker_replaces_broker_object() -> None:
@@ -117,59 +113,17 @@ def test_cerebro_addstore_keeps_store_reference() -> None:
     assert cerebro.stores == [store]
 
 
-def test_cerebro_writer_query_surface_aggregates_registered_writers() -> None:
-    class Writer:
-        def __init__(self, prefix: str) -> None:
-            self.prefix = prefix
-
-        def getheaders(self) -> list[str]:
-            return [f"{self.prefix}-header"]
-
-        def getinfo(self) -> dict[str, str]:
-            return {"writer": self.prefix}
-
-        def getvalues(self) -> list[str]:
-            return [f"{self.prefix}-value"]
-
-    cerebro = bt.Cerebro()
-    assert cerebro.getwriterheaders() == []
-    assert cerebro.getwriterinfo() == []
-    assert cerebro.getwritervalues() == []
-
-    cerebro.addwriter(Writer, "run")
-
-    assert cerebro.getwriterheaders() == ["run-header"]
-    assert cerebro.getwriterinfo() == [{"writer": "run"}]
-    assert cerebro.getwritervalues() == ["run-value"]
+def test_non_bt_writer_query_helpers_are_private():
+    c=bt.Cerebro()
+    assert not hasattr(c,'getwriterheaders')
+    assert not hasattr(c,'getwriterinfo')
+    assert not hasattr(c,'getwritervalues')
 
 
-def test_cerebro_run_accepts_backtrader_runtime_kwargs() -> None:
-    class CountBars(bt.Strategy):
-        def __init__(self) -> None:
-            self.calls = 0
-
-        def next(self) -> None:
-            self.calls += 1
-
-    cerebro = bt.Cerebro()
-    cerebro.adddata(_ohlcv(4))
-    cerebro.addstrategy(CountBars)
-
-    [strategy] = cerebro.run(
-        runonce=False,
-        preload=False,
-        maxcpus=1,
-        optreturn=False,
-        exactbars=True,
-        stdstats=False,
-        cheat_on_close=True,
-    )
-
-    assert strategy.calls == 4
-    assert cerebro.exactbars is True
-    assert cerebro.stdstats is False
-    assert cerebro.trade_on_close is True
-    assert cerebro.broker._trade_on_close is True
+def test_cerebro_rejects_unimplemented_runtime_options():
+    c=bt.Cerebro()
+    with pytest.raises(NotImplementedError):c.run(exactbars=True)
+    with pytest.raises(TypeError):c.run(cheat_on_close=True)
 
 
 def test_engine_adddata_normalizes_extra_columns_to_lowercase() -> None:
@@ -181,7 +135,7 @@ def test_engine_adddata_normalizes_extra_columns_to_lowercase() -> None:
                 seen["factor"] = self.data.get_array("factor")[self.data._cursor]
 
     cerebro = bt.Cerebro()
-    cerebro.adddata(_ohlcv(5).assign(FACTOR=[1.0, 2.0, 3.0, 4.0, 5.0]))
+    cerebro.adddata(_as_feed(_ohlcv(5).assign(FACTOR=[1.0, 2.0, 3.0, 4.0, 5.0])))
     cerebro.addstrategy(FactorStrategy)
 
     cerebro.run()
@@ -199,7 +153,7 @@ def test_addanalyzer_preserves_positional_arguments() -> None:
             return {"name": f"{self.prefix}{self.suffix}"}
 
     cerebro = bt.Cerebro()
-    cerebro.adddata(_ohlcv(3))
+    cerebro.adddata(_as_feed(_ohlcv(3)))
     cerebro.addstrategy(bt.Strategy)
     cerebro.addanalyzer(NamedAnalyzer, "run", suffix="-ok", _name="named")
 
@@ -216,7 +170,7 @@ def test_broker_order_history_and_open_orders_surface() -> None:
                 self.order = self.buy(size=1)
 
     cerebro = bt.Cerebro()
-    cerebro.adddata(_ohlcv(4))
+    cerebro.adddata(_as_feed(_ohlcv(4)))
     cerebro.addstrategy(SubmitOnce)
     strategy = cerebro.run()[0]
 
@@ -227,23 +181,16 @@ def test_broker_order_history_and_open_orders_surface() -> None:
 
 def test_cerebro_tracks_datas_by_name() -> None:
     cerebro = bt.Cerebro()
-    data = cerebro.adddata(_ohlcv(), name="asset0")
+    data = cerebro.adddata(_as_feed(_ohlcv()), name="asset0")
 
     assert cerebro.datasbyname["asset0"] is data
 
 
-def test_cerebro_chaindata_and_rolloverdata_register_feeds() -> None:
-    cerebro = bt.Cerebro()
-    first = bt.DataFeed(_ohlcv(4), name="first")
-    second = bt.DataFeed(_ohlcv(5), name="second")
-
-    assert cerebro.chaindata(first, second) is first
-    rolled = cerebro.rolloverdata(_ohlcv(6), name="rolled")
-
-    assert cerebro.datas == [first, second, rolled]
-    assert cerebro.datasbyname["first"] is first
-    assert cerebro.datasbyname["second"] is second
-    assert cerebro.datasbyname["rolled"] is rolled
+def test_cerebro_does_not_fake_chain_or_rollover_with_multiple_feeds():
+    c=bt.Cerebro()
+    with pytest.raises(NotImplementedError):c.chaindata(_ohlcv(4),_ohlcv(5))
+    with pytest.raises(NotImplementedError):c.rolloverdata(_ohlcv(4))
+    assert c.datas==[]
 
 
 def test_strategy_getpositionbyname_resolves_named_data() -> None:
@@ -254,23 +201,20 @@ def test_strategy_getpositionbyname_resolves_named_data() -> None:
             self.named_position = self.getpositionbyname("asset0")
 
     cerebro = bt.Cerebro()
-    cerebro.adddata(_ohlcv(4), name="asset0")
+    cerebro.adddata(_as_feed(_ohlcv(4)), name="asset0")
     cerebro.addstrategy(BuyNamed)
     strategy = cerebro.run()[0]
 
     assert strategy.named_position.size == 1
 
 
-def test_resampledata_adds_higher_timeframe_feed() -> None:
+def test_resampledata_rejects_without_mutating_feed_registration() -> None:
     cerebro = bt.Cerebro()
-    data0 = bt.DataFeed(_ohlcv(15), name="1m")
+    data0 = bt.feeds.PandasData(dataname=_ohlcv(15), name="1m")
     cerebro.adddata(data0)
-
-    data1 = cerebro.resampledata(data0, timeframe=bt.TimeFrame.Minutes, compression=5)
-
-    assert data1._name == "1m_5Minutes"
-    assert len(cerebro.datas) == 2
-    assert data1.buflen() < data0.buflen()
+    with pytest.raises(NotImplementedError,match="incremental"):
+        cerebro.resampledata(data0,timeframe=bt.TimeFrame.Minutes,compression=5)
+    assert cerebro.datas == [data0]
 
 
 def test_optstrategy_runs_parameter_grid() -> None:
@@ -281,10 +225,10 @@ def test_optstrategy_runs_parameter_grid() -> None:
             pass
 
     cerebro = bt.Cerebro()
-    cerebro.adddata(_ohlcv())
+    cerebro.adddata(_as_feed(_ohlcv()))
     cerebro.optstrategy(ParamStrategy, fast=[1, 2], slow=[3, 4])
 
-    results = cerebro.run()
+    results = [row[0] for row in cerebro.run(optreturn=False)]
 
     assert [(strategy.p.fast, strategy.p.slow) for strategy in results] == [
         (1, 3),
@@ -302,10 +246,10 @@ def test_optstrategy_can_return_backtrader_style_optreturn() -> None:
             pass
 
     cerebro = bt.Cerebro()
-    cerebro.adddata(_ohlcv())
+    cerebro.adddata(_as_feed(_ohlcv()))
     cerebro.optstrategy(ParamStrategy, fast=[1, 2])
 
-    results = cerebro.run(optreturn=True)
+    results = [row[0] for row in cerebro.run(optreturn=True)]
 
     assert [result.p.fast for result in results] == [1, 2]
     assert [result.params.fast for result in results] == [1, 2]
@@ -322,11 +266,11 @@ def test_optcallback_receives_full_strategy_instances() -> None:
 
     seen: list[int] = []
     cerebro = bt.Cerebro()
-    cerebro.adddata(_ohlcv())
+    cerebro.adddata(_as_feed(_ohlcv()))
     cerebro.optstrategy(ParamStrategy, fast=[3, 5])
-    cerebro.optcallback(lambda strategy: seen.append(strategy.p.fast))
+    cerebro.optcallback(lambda combination: seen.append(combination[0].p.fast))
 
-    results = cerebro.run()
+    results = [row[0] for row in cerebro.run(optreturn=False)]
 
     assert [strategy.p.fast for strategy in results] == [3, 5]
     assert seen == [3, 5]
@@ -343,7 +287,7 @@ def test_runstop_stops_later_strategy_callbacks() -> None:
                 self.cerebro.runstop()
 
     cerebro = bt.Cerebro()
-    cerebro.adddata(_ohlcv(10))
+    cerebro.adddata(_as_feed(_ohlcv(10)))
     cerebro.addstrategy(StopAfterTwo)
 
     [strategy] = cerebro.run()
@@ -364,12 +308,12 @@ def test_runstop_state_is_reset_between_runs() -> None:
             self.calls += 1
 
     first = bt.Cerebro()
-    first.adddata(_ohlcv(5))
+    first.adddata(_as_feed(_ohlcv(5)))
     first.addstrategy(StopImmediately)
     first.run()
 
     second = bt.Cerebro()
-    second.adddata(_ohlcv(5))
+    second.adddata(_as_feed(_ohlcv(5)))
     second.addstrategy(CountAll)
 
     [strategy] = second.run()
@@ -387,7 +331,7 @@ def test_addminperiod_extends_warmup_without_backtest_public_api() -> None:
             self.calls.append(len(self))
 
     cerebro = bt.Cerebro()
-    cerebro.adddata(_ohlcv(6))
+    cerebro.adddata(_as_feed(_ohlcv(6)))
     cerebro.addstrategy(WarmupStrategy)
 
     [strategy] = cerebro.run()
@@ -403,18 +347,18 @@ def test_sizer_observer_and_analyzer_attribute_access() -> None:
                 self.buy()
 
     cerebro = bt.Cerebro()
-    cerebro.adddata(_ohlcv())
+    cerebro.adddata(_as_feed(_ohlcv()))
     cerebro.addstrategy(BuyOnce)
-    cerebro.addsizer(bt.FixedSize, stake=7)
+    cerebro.addsizer(bt.sizers.FixedSize, stake=7)
     cerebro.addobserver(bt.observers.Value)
     cerebro.addanalyzer(bt.analyzers.Returns)
 
     strategy = cerebro.run()[0]
 
     assert abs(strategy.broker.fills_frame().iloc[0]["size"]) == 7
-    assert isinstance(strategy.bound_sizer, bt.FixedSize)
+    assert isinstance(strategy.bound_sizer, bt.sizers.FixedSize)
     assert "value" in strategy.observers
-    assert strategy.observers.value.get_analysis()["value"]
+    assert strategy.observers.value._get_analysis()["value"]
     assert strategy.analyzers.returns.get_analysis()
 
 
@@ -430,7 +374,7 @@ def test_bracket_order_helpers_preserve_parent_and_oco_metadata() -> None:
                 )
 
     cerebro = bt.Cerebro()
-    cerebro.adddata(_ohlcv())
+    cerebro.adddata(_as_feed(_ohlcv()))
     cerebro.addstrategy(BracketStrategy)
     strategy = cerebro.run()[0]
 
@@ -444,8 +388,8 @@ def test_bracket_order_helpers_preserve_parent_and_oco_metadata() -> None:
 
 
 def test_commission_scheme_methods_and_datetime_helpers() -> None:
-    comminfo = bt.CommInfoBase(commission=0.001, mult=10.0)
-    assert comminfo.getcommission(size=2, price=100) == 2.0
+    comminfo = bt.CommInfoBase(commission=0.001, mult=10.0, percabs=True)
+    assert comminfo.getcommission(size=2, price=100) == 0.2
     assert comminfo.profitandloss(size=2, price=100, newprice=105) == 100.0
 
     dt = pd.Timestamp("2024-01-01 09:30")

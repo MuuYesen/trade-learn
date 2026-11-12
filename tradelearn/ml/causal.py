@@ -56,6 +56,37 @@ class CausalSelector:
 
         return self
 
+    def get_params(self) -> dict[str, Any]:
+        """Expose definition metadata without fitting or graph discovery."""
+        return {
+            "type": type(self).__name__,
+            "target": self.target,
+            "features": None if self.features is None else list(self.features),
+            "max_features": self.max_features,
+            "min_score": self.min_score,
+            "method": self.method,
+            "alpha": self.alpha,
+            "indep_test": self.indep_test,
+            "backend": None
+            if self.backend is None
+            else getattr(self.backend, "__qualname__", type(self.backend).__name__),
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return completed selection evidence, retaining graph uncertainty."""
+        if not hasattr(self, "selected_features_"):
+            raise ValueError("CausalSelector must be fitted before to_dict().")
+        return {
+            **self.get_params(),
+            "input_columns": list(self.feature_names_),
+            "selected_features": list(self.selected_features_),
+            "scores": dict(self.scores_),
+            "graph": self.to_mermaid(),
+            "interpretation": "association"
+            if self.method == "correlation"
+            else "target adjacency, not causal effect",
+        }
+
     def plot(self, filename: str | None = None) -> str:
         """Render the fitted causal graph as a PNG image.
 

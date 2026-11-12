@@ -15,6 +15,7 @@ def test_derive_exports_only_stateful_feature_generators() -> None:
 
 def test_symbolic_feature_generator_requires_gplearn_when_missing(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "gplearn", None)
+    monkeypatch.delitem(sys.modules, "gplearn.genetic", raising=False)
 
     with pytest.raises(ImportError, match="gplearn"):
         dv.SymbolicFeatureGenerator(n_features=2).fit(

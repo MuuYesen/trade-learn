@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import feed as _as_feed
+
+from tests.unit.backtest._engine_config import configured_engine
+
 import datetime as dt
 
 import pandas as pd
@@ -23,13 +27,13 @@ class Recorder(Strategy):
         self.act()
 
     def notify_order(self, order):
-        self.events.append((order, order.status, self.bar, order.data.datetime[0]))
+        self.events.append((order, order.status, self.bar, order.data.datetime.datetime(0, tz=pd.Timestamp("2026-01-01", tz="UTC").tz, naive=False)))
 
     def terminal_events(self, order):
         return [
             status
             for candidate, status, _, _ in self.events
-            if candidate is order and status in (Order.Completed, Order.Canceled, Order.Expired)
+            if candidate.ref == order.ref and status in (Order.Completed, Order.Canceled, Order.Expired)
         ]
 
 
@@ -53,15 +57,15 @@ def _frame(prices, *, asynchronous=False, highs=None, lows=None):
 
 
 def _run(monkeypatch, strategy, runner, on_close, mode, target_frame):
-    cerebro = Cerebro(match_mode=mode, trade_on_close=on_close)
+    cerebro = configured_engine(match_mode=mode, trade_on_close=on_close)
     cerebro.broker.setcash(10_000)
     if runner != "single":
         # The target feed has gaps; repeated primary ticks must neither replay
         # its previous bar nor seed its orders using the primary asset's price.
-        cerebro.adddata(_frame([1000.0] * 8), name="clock")
+        cerebro.adddata(_as_feed(_frame([1000.0] * 8)), name="clock")
     if runner == "python-multi":
         monkeypatch.setattr(engine_module, "_build_clocked_multi_data_runner", lambda datas: None)
-    cerebro.adddata(target_frame, name="target")
+    cerebro.adddata(_as_feed(target_frame), name="target")
     cerebro.addstrategy(strategy)
     [s] = cerebro.run()
     if runner != "single":
@@ -112,7 +116,7 @@ def test_trailing_percent_without_price_uses_visible_target_close(
     fill_timestamp = next(
         timestamp
         for order, status, _, timestamp in s.events
-        if order is s.exit_order and status == Order.Completed
+        if order.ref == s.exit_order.ref and status == Order.Completed
     )
     assert pd.Timestamp(fill_timestamp) == expected_date
     assert s.exit_order.executed.price == pytest.approx(expected_price)

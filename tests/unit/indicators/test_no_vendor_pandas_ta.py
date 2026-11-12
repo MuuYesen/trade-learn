@@ -1,39 +1,32 @@
-"""Tests ensuring pandas-ta vendor code is removed."""
+"""PTA retirement must not leave hidden transitive runtime imports."""
 
+import importlib
 from pathlib import Path
 
-import pandas as pd
-import pandas_ta_classic as pta
+import pytest
 
 
-def test_legacy_pandas_ta_vendor_tree_is_removed() -> None:
-    """The vendored pandas_ta tree should not ship in runtime packages."""
-    repo_root = Path(__file__).resolve().parents[3]
+def test_legacy_vendor_tree_is_absent():
+    import tradelearn
 
-    assert not (repo_root / "tradelearn" / "query" / "tec" / "pandas_ta").exists()
-
-
-def test_lite_no_longer_exports_legacy_ta_util() -> None:
-    """Lite no longer exposes the chain-style indicator helper."""
-    import tradelearn.lite as lite
-
-    assert not hasattr(lite, "_TA")
+    root = Path(tradelearn.__file__).resolve().parent.parent
+    assert not (root / "tradelearn/query/tec/pandas_ta").exists()
 
 
-def test_pta_namespace_delegates_to_pandas_ta_classic() -> None:
-    """PTA namespace should use pandas-ta-classic after vendor removal."""
-    import tradelearn as tl
+def test_direct_retired_backend_import_explains_migration():
+    with pytest.raises(ImportError, match="PTA was retired"):
+        importlib.import_module("tradelearn.indicators.pta")
 
-    data = pd.DataFrame(
-        {
-            "open": [1.0, 2.0, 3.0, 4.0],
-            "high": [2.0, 3.0, 4.0, 5.0],
-            "low": [0.5, 1.0, 2.0, 3.0],
-            "close": [1.0, 2.0, 4.0, 8.0],
-            "volume": [10.0, 11.0, 12.0, 13.0],
-        }
-    )
 
-    result = tl.pta.SMA(data["close"], length=2)
+def test_runtime_source_contains_no_pandas_ta_imports():
+    import ast
 
-    pd.testing.assert_series_equal(result, pta.sma(data["close"], length=2))
+    import tradelearn
+
+    root = Path(tradelearn.__file__).resolve().parent.parent / "tradelearn/indicators"
+    for path in root.rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.Import):
+                assert all(not x.name.startswith("pandas_ta") for x in node.names), path
+            if isinstance(node, ast.ImportFrom):
+                assert not (node.module or "").startswith("pandas_ta"), path

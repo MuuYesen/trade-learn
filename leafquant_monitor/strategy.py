@@ -6,6 +6,7 @@ adapter owns no subscriptions and makes no account or position calculations.
 from __future__ import annotations
 
 from contextvars import ContextVar
+import asyncio
 from datetime import timedelta
 import logging
 import os
@@ -28,8 +29,11 @@ _RESERVED = _CALLBACKS | {'on_order_cancelled', 'on_quote_tick', 'on_order_book_
                           'submit_order', 'submit_order_list'}
 
 
+from tradelearn.core.observation_clock import CLOCK_DOMAIN, monotonic_ns
+
+
 class TradeLogStrategy(Strategy):
-    monitor_clock_domain = 'PYTHON_MONOTONIC'
+    monitor_clock_domain = CLOCK_DOMAIN
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -61,6 +65,12 @@ class TradeLogStrategy(Strategy):
         self._monitor_timer = 'leafquant-monitor-' + self.logger.run_id
         self._monitor_running = False
         self._monitor_last_account_ns = None
+        self._monitor_last_account_snapshot_ns = None
+        self._monitor_account_query_pending = False
+        self._monitor_account_query_handle = None
+        self._monitor_account_scan_task = None
+        self._monitor_account_scan = None
+        self._monitor_account_snapshot_requested = False
         self._monitor_market = {}
         self._monitor_expected_market = {}
         self._monitor_bar_sources = {}
@@ -132,6 +142,7 @@ class TradeLogStrategy(Strategy):
             self._observe(self.prepare_monitor)
         self._monitor_running = True
         self._monitor_last_account_ns = None
+        self._monitor_last_account_snapshot_ns = None
         self._observe(self._set_monitor_timer)
         self._monitor_tick(None)
 
@@ -143,8 +154,102 @@ class TradeLogStrategy(Strategy):
         self._monitor_clock.set_timer(self._monitor_timer,
             timedelta(seconds=self.logger.settings.heartbeat_seconds), callback=self._monitor_tick)
 
+    def _request_monitor_account(self):
+        # Logging owns this configured observation request, never user strategy glue.
+        # Defer the public dispatch until the native callback's Strategy borrow ends.
+        if self._monitor_account_query_pending:
+            return False
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Synchronous/backtest environments keep their existing cache observations.
+            return False
+        self._monitor_account_query_pending = True
+        self._monitor_account_query_handle = loop.call_soon(self._run_monitor_account_query)
+        return True
+
+    def _run_monitor_account_query(self):
+        self._monitor_account_query_pending = False
+        self._monitor_account_query_handle = None
+        if not self._monitor_running or self.logger.settings.account_source == 'external':
+            return
+        try:
+            from nautilus_trader.model import AccountId
+            settings = self.logger.settings
+            self.query_account(AccountId(settings.framework_account_id or settings.account_id))
+        except Exception as exc:
+            self._observation_error(exc)
+
+    def _queue_monitor_account_scan(self, snapshot_due):
+        self._monitor_account_snapshot_requested |= snapshot_due
+        if self._monitor_account_scan_task is not None:return
+        try:loop=asyncio.get_running_loop()
+        except RuntimeError:
+            # Synchronous engines/backtests have no live async dispatch to starve.
+            observed=self._wall_ns()
+            changed=self.logger._sample_account_events(self._monitor_cache,observed)
+            if changed or self._monitor_account_snapshot_requested:
+                self.logger._record_account_snapshot(self._monitor_cache,observed_ts_ns=observed)
+                self._monitor_last_account_snapshot_ns=observed
+            self._monitor_account_snapshot_requested=False
+            return
+        self._monitor_account_scan_task=loop.create_task(self._run_monitor_account_scan())
+
+    async def _run_monitor_account_scan(self):
+        scan=None
+        try:
+            # Capture the view on its framework thread at the actual scan start.
+            scan=self.logger._begin_account_event_scan(self._monitor_cache,self._wall_ns())
+            self._monitor_account_scan=scan
+            while not scan.done:
+                deadline=time.monotonic_ns()+2_000_000
+                for _ in range(16):
+                    if not scan.step():break
+                    if time.monotonic_ns()>=deadline:break
+                if not scan.done:await asyncio.sleep(0)
+            if self._monitor_running and (scan.result or self._monitor_account_snapshot_requested):
+                # A snapshot reads the current cache, so it gets its own fresh clock.
+                observed=self._wall_ns()
+                self.logger._record_account_snapshot(self._monitor_cache,observed_ts_ns=observed)
+                self._monitor_last_account_snapshot_ns=observed
+            self._monitor_account_snapshot_requested=False
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self._observation_error(exc)
+        finally:
+            if scan is not None:self.logger._release_account_event_scan(scan)
+            if self._monitor_account_scan is scan:self._monitor_account_scan=None
+            if self._monitor_account_scan_task is asyncio.current_task():
+                self._monitor_account_scan_task=None
+
+    def _finish_monitor_account_scan(self):
+        task=self._monitor_account_scan_task
+        scan=self._monitor_account_scan
+        self._monitor_account_scan_task=None;self._monitor_account_scan=None
+        if task is not None:task.cancel()
+        try:
+            if scan is not None:
+                changed=scan.finish()
+                self.logger._release_account_event_scan(scan)
+            elif task is not None:
+                # The queued task may not have started; fulfill its fact capture.
+                changed=self.logger._sample_account_events(self._monitor_cache,self._wall_ns())
+            else:return
+            if changed or self._monitor_account_snapshot_requested:
+                observed=self._wall_ns()
+                self.logger._record_account_snapshot(self._monitor_cache,observed_ts_ns=observed)
+                self._monitor_last_account_snapshot_ns=observed
+        except Exception as exc:self._observation_error(exc)
+        finally:self._monitor_account_snapshot_requested=False
+
     def _stop_monitor(self):
         self._monitor_running = False
+        self._finish_monitor_account_scan()
+        if self._monitor_account_query_handle is not None:
+            self._monitor_account_query_handle.cancel()
+            self._monitor_account_query_handle = None
+        self._monitor_account_query_pending = False
         try:
             if self._monitor_clock is not None and self._monitor_timer in self._monitor_clock.timer_names():
                 self._monitor_clock.cancel_timer(self._monitor_timer)
@@ -193,12 +298,14 @@ class TradeLogStrategy(Strategy):
             try:
                 if self._monitor_cache is None:
                     raise RuntimeError('framework cache not bound; call prepare_monitor after registration')
-                if (self._monitor_last_account_ns is None or observed - self._monitor_last_account_ns
-                        >= self.logger.settings.account_seconds * 1_000_000_000):
-                    self.logger.sample_account(self._monitor_cache, observed_ts_ns=observed)
+                period = self.logger.settings.account_seconds * 1_000_000_000
+                dispatched = False
+                if (self._monitor_last_account_ns is None or observed - self._monitor_last_account_ns >= period):
+                    dispatched = self._request_monitor_account()
                     self._monitor_last_account_ns = observed
-                else:
-                    self.logger._sample_account_events(self._monitor_cache, observed)
+                last = self._monitor_last_account_snapshot_ns
+                due = last is None or observed - last >= period
+                self._queue_monitor_account_scan(due and (last is None or not dispatched))
             except Exception as exc:
                 self._observation_error(exc)
         self._observe(self._market_summary, observed)
@@ -215,7 +322,7 @@ class TradeLogStrategy(Strategy):
         key = str(item.instrument_id)
         if key not in self._monitor_market and len(self._monitor_market) >= self.logger.settings.capacity:
             raise ValueError('market observation capacity exhausted')
-        observed, monotonic = self._wall_ns(), time.monotonic_ns()
+        observed, monotonic = self._wall_ns(), self._event_monotonic_ns()
         prices = {}
         if kind == 'quote':
             prices = dict(bid_price=str(item.bid_price), ask_price=str(item.ask_price))
@@ -349,17 +456,27 @@ class TradeLogStrategy(Strategy):
     def _before_native_submission(self,order,position_id=None,client_id=None,params=None):
         """Executor preflight; exceptions block dispatch and are never observer-isolated."""
 
+    def _record_submit_dispatch(self, cid, public_anchor):
+        fields = {'client_order_id': cid, 'phase': 'local_dispatch'}
+        if public_anchor is not None:
+            mono, wall = public_anchor
+            fields.update(nautilus_api_entry_mono_ns=mono, nautilus_api_entry_utc_ns=wall,
+                          nautilus_api_clock_domain=self.monitor_clock_domain,
+                          nautilus_api_origin='NAUTILUS_PUBLIC_SUBMIT_V1')
+        self.logger.record('submit_dispatch', fields)
+
     def submit_order(self, order, position_id=None, client_id=None, params=None):
         self._before_native_submission(order,position_id,client_id,params)
         anchor = self._observe(lambda: (self._event_monotonic_ns(), self._wall_ns()))
         cid = self._observe(self._request, order, anchor if anchor is not None else False)
+        public_anchor = self._observe(lambda: (self._event_monotonic_ns(), self._wall_ns()))
         try:
             result = super().submit_order(order, position_id=position_id, client_id=client_id, params=params)
         except Exception as exc:
             self._observe(self.logger.record, 'exception', {'operation': 'submit_order', 'exception_type': type(exc).__name__,
                                                           'client_order_id': cid})
             raise
-        self._observe(self.logger.record, 'submit_dispatch', {'client_order_id': cid, 'phase': 'local_dispatch'})
+        self._observe(self._record_submit_dispatch, cid, public_anchor)
         return result
 
     def _request_list(self, order_list, anchor=None):
@@ -372,6 +489,7 @@ class TradeLogStrategy(Strategy):
         for order in order_list:self._before_native_submission(order,position_id,client_id,params)
         anchor = self._observe(lambda: (self._event_monotonic_ns(), self._wall_ns()))
         cids = self._observe(self._request_list, order_list, anchor if anchor is not None else False) or []
+        public_anchor = self._observe(lambda: (self._event_monotonic_ns(), self._wall_ns()))
         try:
             result = super().submit_order_list(order_list, position_id=position_id, client_id=client_id, params=params)
         except Exception as exc:
@@ -379,7 +497,7 @@ class TradeLogStrategy(Strategy):
                                                           'client_order_ids': cids})
             raise
         for cid in cids:
-            self._observe(self.logger.record, 'submit_dispatch', {'client_order_id': cid, 'phase': 'local_dispatch'})
+            self._observe(self._record_submit_dispatch, cid, public_anchor)
         return result
 
     def _instrument_metadata(self, event):
@@ -397,7 +515,7 @@ class TradeLogStrategy(Strategy):
             public_type=type(instrument).__name__)
 
     def _event_monotonic_ns(self):
-        return time.monotonic_ns()
+        return monotonic_ns()
 
     def _capture_event(self, callback, event):
         # Capture the first public callback boundary before metadata/log work.

@@ -5,7 +5,7 @@ import pandas as pd
 import tradelearn.engine as bt
 
 
-def test_backtrader_position_object_is_callable_extension() -> None:
+def test_backtrader_position_object_uses_native_property() -> None:
     data = pd.DataFrame(
         {
             "open": [10.0, 11.0, 12.0],
@@ -20,13 +20,14 @@ def test_backtrader_position_object_is_callable_extension() -> None:
 
     class PositionCallStrategy(bt.Strategy):
         def next(self) -> None:
-            pos = self.position()
+            pos = self.position
+            assert not callable(pos)
             seen["same_size"] = pos.size == self.position.size
             if not pos:
                 self.buy(size=1)
 
     cerebro = bt.Cerebro()
-    cerebro.adddata(bt.DataFeed(data))
+    cerebro.adddata(bt.feeds.PandasData(dataname=data))
     cerebro.addstrategy(PositionCallStrategy)
     cerebro.run()
 

@@ -81,8 +81,7 @@ class OptunaBacktestSearch:
 
     def _objective(self, trial: Any) -> float:
         params = {
-            name: _suggest_param(trial, name, spec)
-            for name, spec in self.param_space.items()
+            name: _suggest_param(trial, name, spec) for name, spec in self.param_space.items()
         }
         backtest = self.backtest_factory(params)
         result = backtest.run() if hasattr(backtest, "run") else backtest(params)
@@ -95,12 +94,12 @@ def _import_optuna():
     except ImportError as exc:
         raise ImportError(
             "Optuna is required for this feature. Install with "
-            "`pip install trade-learn[research,lab]` or `pip install optuna`."
+            "`pip install trade-learn[research]` or `pip install optuna`."
         ) from exc
     if optuna is None:
         raise ImportError(
             "Optuna is required for this feature. Install with "
-            "`pip install trade-learn[research,lab]` or `pip install optuna`."
+            "`pip install trade-learn[research]` or `pip install optuna`."
         )
     return optuna
 

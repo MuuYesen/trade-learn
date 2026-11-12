@@ -7,7 +7,7 @@ trade-learn 的扩展原则是：**用户层写策略语法，research 层写投
 | 扩展目标 | 推荐方式 | 入口 |
 |---|---|---|
 | Engine 专业策略组件 | `bt.Indicator` / `bt.Analyzer` / `bt.Sizer` / `bt.CommInfoBase` | `tradelearn.engine` |
-| Lite 快速策略组件 | 普通函数 + `self.I(...)`，或 `target_weights()` 所需的权重 Series | `tradelearn.lite` |
+| Lite 快速策略组件 | 共享`Indicator`、显式持久来源，或`target_weights()`所需权重Series | `tradelearn.lite` |
 | Research 预处理 / 特征 / 选股 / 权重 | sklearn-like 类：`fit()` / `transform()` / `fit_transform()` / `build()` | `tradelearn.research` |
 | 数据源 | 返回标准 OHLCV DataFrame 或 `MultiIndex(timestamp, symbol)` panel | `tradelearn.data` |
 | 报告 | 从 `Stats` 或 `Reporter` 读取结果生成 HTML / CSV / XLSX | `tradelearn.report` |
@@ -42,7 +42,8 @@ class AboveMid(bt.Strategy):
 内置 vendor 指标仍然走统一命名空间：
 
 ```python
-self.ma20 = bt.tdx.MA(self.data.close, N=20)
+from tradelearn.indicators import tdx
+self.ma20 = tdx.MA(self.data.close, N=20)
 self.rsi14 = bt.talib.RSI(self.data.close, timeperiod=14)
 ```
 
@@ -88,28 +89,23 @@ class FixedPlusPercent(bt.CommInfoBase):
         return abs(size) * price * self.p.commission + self.p.fixed
 
 
-cerebro.setcommission(comminfo=FixedPlusPercent())
+fee = FixedPlusPercent(percabs=True).getcommission(100, 10.0)
+# 只演示公式。当前native回测不能执行任意Python佣金override，接入会明确拒绝。
 ```
 
 ## Lite 轻量拓展
 
-Lite 的定位是快速表达策略。自定义指标优先写成普通函数，然后通过 `self.I(...)` 注册。
+Lite与Engine使用同一个Indicator、Lines和持久后端协议。组合已合格的来源指标与实时Line表达式；任意Pandas函数不会自动变成流式程序。
 
 ```python
-import pandas as pd
 import tradelearn.lite as tl
-
-
-def zscore(close: pd.Series, window: int = 20) -> pd.Series:
-    mean = close.rolling(window).mean()
-    std = close.rolling(window).std()
-    return (close - mean) / std
-
+from tradelearn.indicators import talib
 
 class MeanReversion(tl.Strategy):
     def init(self):
-        self.z = self.I(zscore, self.data.close, window=20)
-        self.start_on_bar(20)
+        mean = talib.SMA(self.data.close, timeperiod=20)
+        std = talib.STDDEV(self.data.close, timeperiod=20)
+        self.z = (self.data.close - mean) / std
 
     def next(self):
         if self.z[0] < -2:
@@ -118,13 +114,7 @@ class MeanReversion(tl.Strategy):
             self.position().close()
 ```
 
-内置指标与 Engine 一样使用 vendor 命名空间：
-
-```python
-self.ma20 = tl.tdx.MA(self.data.close, N=20)
-self.rsi14 = tl.talib.RSI(self.data.close, timeperiod=14)
-self.tv_rsi = tl.tv.RSI(self.data.close, length=14)
-```
+新后端须显式提供逐事件状态、配置隔离、暖机和输出元数据，以及reset/close；应验证流式与同输入批量一致、重复读取不推进和有界buffer。停止时Runtime释放各binding，保留输出历史。资格与来源见[指标指南](indicators.md)，共享生命周期见[策略指南](strategy.md)。
 
 ## Research 通用组件拓展
 

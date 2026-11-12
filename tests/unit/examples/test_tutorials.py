@@ -22,15 +22,6 @@ def test_tutorial_smoke_covers_stage9_topics() -> None:
     assert result["portfolio"]["position_rows"] >= 1
     assert result["ml_strategy"]["selected_features"]
     assert math.isfinite(result["ml_strategy"]["final_value"])
-    assert result["mlflow"]["status"] == "logged"
-    assert result["jupyterlab"]["mcp_command"] == [
-        "tradelearn",
-        "mcp",
-        "--transport",
-        "streamable-http",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        "8765",
-    ]
+    assert result["mlflow"]["status"] == "FINISHED"
+    assert result["jupyterlab"]["services"] == ["jupyterlab"]
     assert result["backtrader_migration"]["fills"] >= 1

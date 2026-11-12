@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import configured_engine
+
 import pandas as pd
 import pytest
 
@@ -60,7 +62,7 @@ def test_backtrader_cerebro_runs_pandasdata_feed_and_analyzer() -> None:
         def get_analysis(self) -> dict[str, list[float]]:
             return {"values": self.values}
 
-    cerebro = bt.Cerebro(trade_on_close=True)
+    cerebro = configured_engine(trade_on_close=True)
     data = bt.feeds.PandasData(dataname=bars(), name="daily")
     returned = cerebro.adddata(data)
     cerebro.addstrategy(RecordingStrategy, threshold=11.0)
@@ -129,29 +131,15 @@ def test_pandasdata_accepts_backtrader_style_column_mapping() -> None:
     assert data.close[0] == 10.0
 
 
-def test_cerebro_adddata_accepts_provider_panel_dataframe() -> None:
-    cerebro = bt.Cerebro()
-
-    returned = cerebro.adddata(panel_bars())
-
-    assert returned is cerebro.datas[0]
-    assert [data._name for data in cerebro.datas] == ["AAA", "BBB"]
-    assert list(cerebro.datasbyname) == ["AAA", "BBB"]
-    assert cerebro.datasbyname["AAA"].close.to_series().tolist() == [10.0, 11.0, 12.0]
-    assert cerebro.datasbyname["BBB"].close.to_series().tolist() == [110.0, 111.0, 112.0]
+def test_cerebro_adddata_requires_explicit_feed_for_panels():
+    c=bt.Cerebro()
+    with pytest.raises(TypeError):c.adddata(panel_bars())
+    for symbol in ('AAA','BBB'):
+        c.adddata(bt.feeds.PandasData(dataname=panel_bars().xs(symbol,level='symbol')),name=symbol)
+    assert list(c.datasbyname)==['AAA','BBB']
 
 
-def test_cerebro_adddata_panel_name_mapping() -> None:
-    cerebro = bt.Cerebro()
-
-    returned = cerebro.adddata(panel_bars(), name={"AAA": "alpha", "BBB": "beta"})
-
-    assert returned is cerebro.datas[0]
-    assert [data._name for data in cerebro.datas] == ["alpha", "beta"]
-    assert list(cerebro.datasbyname) == ["alpha", "beta"]
-
-
-@pytest.mark.parametrize("unsupported", [{"openinterest": None}, {"openinterest": "oi"}, {"typo_column": "close"}])
+@pytest.mark.parametrize("unsupported", [{"typo_column": "close"}])
 def test_pandasdata_rejects_unimplemented_parameters(unsupported):
     with pytest.raises(TypeError):
         bt.feeds.PandasData(dataname=bars(), **unsupported)

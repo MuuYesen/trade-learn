@@ -13,7 +13,7 @@ import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor
 
 from examples.engine import Alpha101GBMStrategy
-from tradelearn.engine import Cerebro
+from tradelearn.engine import Cerebro, feeds
 from tradelearn.factor.alpha import alpha101
 from tradelearn.ml import CausalSelector
 
@@ -97,7 +97,12 @@ def run_example(
     if not features:
         raise ValueError("no complete training rows for selected features")
     cerebro = Cerebro()
-    cerebro.adddata(data.iloc[split:], name="DEMO")
+
+    class FeatureFeed(feeds.PandasData):
+        lines = tuple(features)
+        params = tuple((name, name) for name in features)
+
+    cerebro.adddata(FeatureFeed(dataname=data.iloc[split:]), name="DEMO")
     cerebro.addstrategy(
         Alpha101GBMStrategy,
         model=GradientBoostingRegressor(random_state=7, n_estimators=50, max_depth=3),

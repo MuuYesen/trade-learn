@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.unit.backtest._engine_config import configured_engine
+
 import pandas as pd
 
 import tradelearn.backtest as backtest
@@ -65,9 +67,9 @@ def test_backtest_namespace_exposes_event_runner_drivers() -> None:
 
 
 def test_cerebro_accepts_backtest_paper_live_modes() -> None:
-    assert Cerebro(mode="backtest").mode == "backtest"
-    assert Cerebro(mode="paper").mode == "paper"
-    assert Cerebro(mode="live").mode == "live"
+    assert configured_engine(mode="backtest").mode == "backtest"
+    assert configured_engine(mode="paper").mode == "paper"
+    assert configured_engine(mode="live").mode == "live"
 
 
 def test_historical_driver_replays_bars_through_event_runner() -> None:
@@ -149,11 +151,11 @@ def test_cerebro_paper_and_live_modes_run_through_event_runner() -> None:
         )
     ]
 
-    paper = Cerebro(mode="paper", event_bars=bars)
+    paper = configured_engine(mode="paper", event_bars=bars)
     paper.addstrategy(CountingStrategy)
     [paper_strategy] = paper.run()
 
-    live = Cerebro(mode="live", live_poller=lambda: bars)
+    live = configured_engine(mode="live", live_poller=lambda: bars)
     live.addstrategy(CountingStrategy)
     [live_strategy] = live.run()
 

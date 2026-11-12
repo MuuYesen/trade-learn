@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import numbers
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -18,24 +19,33 @@ class Position:
     realized_pnl: float = 0.0
 
     def __bool__(self) -> bool:
-        return abs(self.size) > 1e-9
+        return bool(self.size)
 
-    def __call__(self, *args: Any, **kwargs: Any) -> Position:
-        """Return self so facade position objects can be used as ``position()``."""
-        return self
+    def __len__(self):
+        return abs(int(self.size))
 
-    def update(self, size_delta: float, price: float) -> None:
-        new_size = self.size + size_delta
-        if abs(new_size) < 1e-9:
-            self.size = 0.0
+    def update(self, size, price, dt=None):
+        old = self.size
+        self.datetime = dt
+        new = old + size
+        opened = closed = 0
+        if new == 0:
+            closed = size
             self.price = 0.0
-            return
-        if self.size == 0.0 or self.size * size_delta > 0:
-            total_abs = abs(self.size) + abs(size_delta)
-            self.price = (abs(self.size) * self.price + abs(size_delta) * price) / total_abs
-        elif self.size * new_size < 0:
+        elif old == 0:
+            opened = size
             self.price = price
-        self.size = new_size
+        elif old * size > 0:
+            opened = size
+            self.price = (old*self.price + size*price)/new
+        elif old * new > 0:
+            closed = size
+        else:
+            opened, closed = new, -old
+            self.price = price
+        self.size = new
+        self.upopened, self.upclosed = opened, closed
+        return self.size, self.price, opened, closed
 
 
 _SUMMARY_FIELDS: tuple[tuple[str | None, str, str], ...] = (
@@ -47,8 +57,8 @@ _SUMMARY_FIELDS: tuple[tuple[str | None, str, str], ...] = (
     ("peak_value", "Equity Peak [$]", "money"),
     ("return_pct", "Return [%]", "pct_plain"),
     ("buy_hold_return_pct", "Buy & Hold Return [%]", "pct_plain"),
-    ("annual_return", "Return (Ann.) [%]", "pct_plain"),
-    ("volatility", "Volatility (Ann.) [%]", "pct_plain"),
+    ("annual_return", "Return (Ann.) [%]", "frac"),
+    ("volatility", "Volatility (Ann.) [%]", "frac"),
     ("cagr_pct", "CAGR [%]", "pct_plain"),
     ("sharpe", "Sharpe Ratio", "ratio"),
     ("sortino", "Sortino Ratio", "ratio"),
@@ -185,6 +195,24 @@ class Stats:
         self.analyzers = analyzers
         self.config = config
         self._fills = fills
+        # Summary retains legacy key spellings, with canonical numeric units.
+        # 252 is the existing per-bar summary profile, not inferred calendar proof.
+        units = {"annual_return": "ratio", "volatility": "ratio",
+                 "sharpe": "dimensionless", "sortino": "dimensionless",
+                 "calmar": "dimensionless", "max_drawdown": "ratio",
+                 "profit_factor": "dimensionless", "expectancy": "pnl_currency",
+                 "win_rate_pct": "percent"}
+        self.metric_metadata = {
+            key: {"unit": unit,
+                  "reason": "not_calculable" if value is None or not math.isfinite(float(value)) else "",
+                  "periods": 252,
+                  "period_source": "default_per_bar_profile"}
+            for key, unit in units.items() if key in summary
+            for value in (summary[key],)
+        }
+        for key in ("profit_factor", "expectancy", "win_rate_pct"):
+            if key in self.metric_metadata:
+                self.metric_metadata[key]["pnl_basis"] = "pnlcomm"
 
     @staticmethod
     def _materialize(value: Any) -> Any:
@@ -260,14 +288,15 @@ class ExecutedInfo:
     slippage: float = 0.0
     pnl: float = 0.0
     dt: Any = None
+    remsize: float = 0.0
 
 
 @dataclass
 class Order:
     Created, Submitted, Accepted, Partial, Completed, Canceled, Expired, Margin, Rejected = range(9)
     Cancelled = Canceled
-    Buy, Sell = 1, 2
-    Market, Limit, Stop, StopLimit, Close, StopTrail, StopTrailLimit = range(1, 8)
+    Buy, Sell = range(2)
+    Market, Close, Limit, Stop, StopLimit, StopTrail, StopTrailLimit, Historical = range(8)
     DAY, GTC, IOC = "day", "gtc", "ioc"
     ref: int
     data: Any
@@ -289,18 +318,50 @@ class Order:
     info: dict[str, Any] = field(default_factory=dict)
     created_ts: Any = None
 
-    def getstatusname(self) -> str:
-        return [
-            "Created",
-            "Submitted",
-            "Accepted",
-            "Partial",
-            "Completed",
-            "Canceled",
-            "Expired",
-            "Margin",
-            "Rejected",
-        ][self.status]
+    def __post_init__(self):
+        quantity = abs(float(self.size))
+        self.size = quantity if self.ordtype == self.Buy else -quantity
+
+    Status = ("Created", "Submitted", "Accepted", "Partial", "Completed",
+              "Canceled", "Expired", "Margin", "Rejected")
+    ExecTypes = ("Market", "Close", "Limit", "Stop", "StopLimit",
+                 "StopTrail", "StopTrailLimit", "Historical")
+
+    def _initialize_clock(self, owner, submitted_at=None):
+        from types import SimpleNamespace
+        self.created_ts = submitted_at
+        self._bt_dates = bool(getattr(owner, "_bt_minperiods", False))
+        clock = getattr(self.data, "datetime", None)
+        date = clock.datetime() if clock is not None else None
+        if self._bt_dates and date is not None:
+            from tradelearn.backtest.clock import date2num
+            date = date2num(date)
+        close_line = getattr(self.data, "close", None)
+        close = float(close_line[0]) if close_line is not None else float("nan")
+        price = close if not self.price and not self.pricelimit else self.price
+        self.created = SimpleNamespace(dt=date, size=self.size, price=price,
+            pricelimit=self.pricelimit or price, pclose=close,
+            trailamount=self.trailamount, trailpercent=self.trailpercent)
+        self.executed.remsize = self.size
+
+    def _set_execution_clock(self, timestamp, *, unit="s"):
+        self._executed_dt_raw = pd.Timestamp(timestamp, unit=unit, tz="UTC") if isinstance(timestamp, numbers.Real) else pd.Timestamp(timestamp)
+        self.executed.dt = self._executed_dt_raw
+        if getattr(self, "_bt_dates", False):
+            from tradelearn.backtest.clock import date2num
+            self.executed.dt = date2num(self._executed_dt_raw)
+
+    def getstatusname(self, status=None) -> str:
+        return self.Status[self.status if status is None else status]
+
+    def getordername(self, exectype=None) -> str:
+        return self.ExecTypes[self.exectype if exectype is None else exectype]
+
+    def clone(self):
+        from copy import copy
+        result = copy(self)
+        result.executed = copy(self.executed)
+        return result
 
     def isbuy(self) -> bool:
         return self.ordtype == Order.Buy
@@ -312,7 +373,7 @@ class Order:
         return self.status in (Order.Created, Order.Submitted, Order.Accepted, Order.Partial)
 
     @classmethod
-    def from_request(cls, ref: int, request: OrderRequest, *, data: Any = None) -> Order:
+    def _from_request(cls, ref: int, request: OrderRequest, *, data: Any = None) -> Order:
         """Create a backtest runtime order from a broker-neutral request."""
         side = cls.Buy if request.side == "buy" else cls.Sell
         exectype = {
@@ -338,10 +399,14 @@ class Order:
             pricelimit=request.limit_price if request.order_type == "stop_limit" else None,
             exectype=exectype,
             time_in_force=request.tif,
+            valid=(pd.Timestamp(request.expire_time_ns-1_000_000_000,unit='ns',tz='UTC')
+                   if getattr(request,'expire_time_ns',None) is not None else None),
+            trailamount=getattr(request, 'trail_amount', None),
+            trailpercent=getattr(request, 'trail_percent', None),
             info={"client_oid": request.client_oid, "symbol": request.symbol},
         )
 
-    def to_fill(
+    def _to_fill(
         self,
         *,
         qty: float,

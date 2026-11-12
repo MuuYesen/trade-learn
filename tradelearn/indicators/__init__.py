@@ -1,8 +1,7 @@
-"""Generic technical indicator namespace.
+"""Persistent indicator sources.
 
-The default ``ta.*`` functions are thin wrappers over pandas-ta-classic.
-Same-name indicators may differ from future ``ta.tdx`` and ``ta.tv`` namespaces.
-Choose the namespace for the market convention you need.
+Choose talib (default source), tv or tdx explicitly. Retired PTA and duplicate
+shortcut formulas are not imported, including through dynamic discovery.
 """
 
 from __future__ import annotations
@@ -10,35 +9,15 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from tradelearn.indicators.base import FunctionIndicator, Indicator
-from tradelearn.indicators.core.momentum import rsi
-from tradelearn.indicators.core.overlap import bbands, ema, sma
-from tradelearn.indicators.core.trend import adx, macd
-from tradelearn.indicators.core.volatility import atr
-from tradelearn.indicators.core.volume import vwap
+from tradelearn.indicators.base import FunctionIndicator, Indicator, IndicatorState
 
-__all__ = [
-    "FunctionIndicator",
-    "Indicator",
-    "adx",
-    "atr",
-    "bbands",
-    "ema",
-    "macd",
-    "rsi",
-    "sma",
-    "vwap",
-]
+DEFAULT_SOURCE = "talib"
+__all__ = ["DEFAULT_SOURCE", "FunctionIndicator", "Indicator", "IndicatorState"]
 
 
 def __getattr__(name: str) -> Any:
-    """Lazily expose market-specific indicator namespaces."""
-    if name == "pta":
-        return importlib.import_module("tradelearn.indicators.pta")
-    if name == "talib":
-        return importlib.import_module("tradelearn.indicators.talib")
-    if name == "tdx":
-        return importlib.import_module("tradelearn.indicators.tdx")
-    if name == "tv":
-        return importlib.import_module("tradelearn.indicators.tv")
-    raise AttributeError(f"module 'tradelearn.indicators' has no attribute {name!r}")
+    if name in {"talib", "tdx", "tv"}:
+        return importlib.import_module(f"tradelearn.indicators.{name}")
+    raise AttributeError(
+        f"tradelearn.indicators has no {name!r}; use a qualified talib/tv/tdx source"
+    )

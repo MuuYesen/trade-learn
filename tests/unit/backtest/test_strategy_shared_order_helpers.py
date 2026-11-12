@@ -37,6 +37,10 @@ class DummyBroker:
             return 0.0
         return 1_000.0
 
+    def getcommissioninfo(self, data=None):
+        from tradelearn.engine import CommInfoBase
+        return CommInfoBase()
+
     def getposition(self, data=None):
         return Position(size=0.0, price=0.0)
 

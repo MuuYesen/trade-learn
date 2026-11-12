@@ -19,13 +19,14 @@ pip install ".[research]"  # 当前源码根目录；需要Rust/maturin，PyPI 0
 ```bash
 uv pip install trade-learn
 # 或者克隆源码开发模式
-uv sync
+uv pip install ".[research]"
 ```
+
+当前通用 `uv.lock` 因尚未公开的 tl-store 0.2.1a2 无法更新；选定 research 组安装与完整全组锁定是不同验收，本轮不将旧锁文件视为新 profile 的冻结结果。
 
 如果需要开发 Rust 扩展：
 
 ```bash
-cd backtest-rs
 maturin develop --release
 ```
 
@@ -43,7 +44,7 @@ class LiteSmaCross(tl.Strategy):
     def init(self):
         self.fast_ma = tl.tdx.MA(self.data.close, N=self.fast)
         self.slow_ma = tl.tdx.MA(self.data.close, N=self.slow)
-        self.start_on_bar(self.slow + 1)
+        self.addminperiod(self.slow + 2)
 
     def next(self):
         if self.fast_ma[0] > self.slow_ma[0] and not self.position():
@@ -80,14 +81,15 @@ stats.config
 ```python
 import tradelearn.engine as bt
 from tradelearn.data import TradingViewProvider
+from tradelearn.indicators import tdx
 
 
 class SmaCross(bt.Strategy):
     params = (("fast", 10), ("slow", 20))
 
     def __init__(self):
-        self.fast = bt.tdx.MA(self.data.close, N=self.p.fast)
-        self.slow = bt.tdx.MA(self.data.close, N=self.p.slow)
+        self.fast = tdx.MA(self.data.close, N=self.p.fast)
+        self.slow = tdx.MA(self.data.close, N=self.p.slow)
 
     def next(self):
         if self.fast[0] != self.fast[0] or self.slow[0] != self.slow[0]:
@@ -101,17 +103,19 @@ class SmaCross(bt.Strategy):
 provider = TradingViewProvider(n_bars=5000)
 bars = provider.history_ohlc("NASDAQ:AAPL", start="2023-01-01", end="2024-01-01")
 
-cerebro = bt.Cerebro(trade_on_close=True)
-cerebro.setcash(100_000)
-cerebro.setcommission(0.0003)
-cerebro.adddata(bars, name="AAPL")
+cerebro = bt.Cerebro()
+cerebro.broker.setcash(100_000)
+cerebro.broker.setcommission(commission=0.0003)
+cerebro.broker.set_coc(True)
+cerebro.adddata(bt.feeds.PandasData(dataname=bars), name="AAPL")
 cerebro.addstrategy(SmaCross)
 
 [strategy] = cerebro.run()
 
 print(strategy.stats.summary)
 cerebro.plot()
-cerebro.report("report.html")
+from tradelearn.report import Reporter
+Reporter(strategy.stats).report("report.html")
 ```
 
 Engine 侧结果挂在策略实例上：
@@ -151,14 +155,14 @@ stats = bt.run()
 
 ```python
 tl.tdx.MA(self.data.close, N=20)       # Lite
-bt.tdx.MA(self.data.close, N=20)       # Engine
+tdx.MA(self.data.close, N=20)       # Engine
 ```
 
 用户自定义指标按入口分层：
 
 | 场景 | 推荐写法 |
 |---|---|
-| Lite 自定义向量函数 | `self.I(func, self.data.close, ...)` |
+| Lite 自定义指标 | 共同`Indicator`状态推进，批量/流式资格一致 |
 | Engine 自定义复杂指标 | `class MyIndicator(bt.Indicator)` |
 
 ## 下一步

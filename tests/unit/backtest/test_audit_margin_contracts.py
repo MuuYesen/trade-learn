@@ -1,3 +1,5 @@
+from tests.unit.backtest._engine_config import feed as _as_feed
+from tests.unit.backtest._engine_config import configured_engine
 """Available funds exclude short-sale proceeds and 1:1 entry-cost collateral."""
 import pandas as pd
 import pytest
@@ -79,15 +81,15 @@ def test_margin_available_funds(monkeypatch, runner, mode, on_close, case):
             if order.status in (Order.Completed, Order.Margin):
                 self.terminal.append((order, order.status))
 
-    c = Cerebro(match_mode=mode, trade_on_close=on_close)
+    c = configured_engine(match_mode=mode, trade_on_close=on_close)
     if on_close:
         prices = prices[1:] + prices[-1:]
     c.broker.setcash(100)
-    c.broker.setcommission(commission=commission, mult=mult)
+    c.broker._configure_commission(commission=commission, mult=mult)
     dates = pd.date_range("2026-01-01", periods=len(prices), tz="UTC")
     for i in range(1 if runner == "single" else 2):
         p = prices if i == 0 else [10] * len(prices)
-        c.adddata(pd.DataFrame(dict(open=p, high=p, low=p, close=p, volume=100), index=dates), name=str(i))
+        c.adddata(_as_feed(pd.DataFrame(dict(open=p, high=p, low=p, close=p, volume=100), index=dates)), name=str(i))
     if runner == "python-multi":
         monkeypatch.setattr(engine_module, "_build_clocked_multi_data_runner", lambda datas: None)
     c.addstrategy(Orders)

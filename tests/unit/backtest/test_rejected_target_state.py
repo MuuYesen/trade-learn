@@ -1,3 +1,5 @@
+from tests.unit.backtest._engine_config import feed as _as_feed
+from tests.unit.backtest._engine_config import configured_engine
 import pandas as pd
 import pytest
 from tradelearn.engine import Cerebro, Strategy
@@ -20,10 +22,10 @@ def test_rejected_buy_clears_pending_before_next_target(symbol_count, cash_notif
     frame = pd.DataFrame({k: prices for k in ['open', 'high', 'low', 'close']},
                          index=pd.date_range('2024-01-01', periods=4))
     frame['volume'] = 1000.
-    engine = Cerebro(match_mode='exact', trade_on_close=False, stdstats=False)
+    engine = configured_engine(match_mode='exact', trade_on_close=False, stdstats=False)
     engine.broker.setcash(10000)
     for i in range(symbol_count):
-        engine.adddata(frame.copy(), name=str(i))
+        engine.adddata(_as_feed(frame.copy()), name=str(i))
     engine.addstrategy(Target)
     strategy = engine.run()[0]
     assert observed == [0]

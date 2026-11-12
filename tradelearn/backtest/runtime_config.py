@@ -41,7 +41,7 @@ class BacktestRuntimeConfig:
             ),
             commission_model=getattr(broker, "_commission_model", None),
             match_mode=str(getattr(owner, "match_mode", "exact")),
-            trade_on_close=bool(getattr(owner, "trade_on_close", False)),
+            trade_on_close=bool(getattr(broker, "_trade_on_close", getattr(owner, "trade_on_close", False))),
             exactbars=bool(getattr(owner, "exactbars", False)),
             stdstats=bool(getattr(owner, "stdstats", True)),
             stats_mode=str(getattr(owner, "stats_mode", "full")),

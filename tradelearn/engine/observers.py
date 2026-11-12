@@ -34,13 +34,13 @@ class Observer:
     def next(self) -> None:
         self.values.append(self._observe())
 
-    def stop(self) -> None:
+    def _stop(self) -> None:
         pass
 
     def _observe(self) -> Any:
         return None
 
-    def get_analysis(self) -> dict[str, Any]:
+    def _get_analysis(self) -> dict[str, Any]:
         return {self.__class__.__name__.lower(): self.values}
 
 
@@ -48,7 +48,7 @@ class Value(Observer):
     def _observe(self) -> float:
         return float(self.strategy.broker.getvalue())
 
-    def get_analysis(self) -> dict[str, list[float]]:
+    def _get_analysis(self) -> dict[str, list[float]]:
         return {"value": self.values}
 
 
@@ -62,7 +62,7 @@ class BuySell(Observer):
         fills = getattr(broker, "_fills", ())
         return len(fills)
 
-    def get_analysis(self) -> dict[str, list[int]]:
+    def _get_analysis(self) -> dict[str, list[int]]:
         return {"fills": self.values}
 
 
@@ -71,7 +71,7 @@ class Trades(Observer):
         trades = getattr(self.strategy, "_trades", ())
         return len(trades)
 
-    def get_analysis(self) -> dict[str, list[int]]:
+    def _get_analysis(self) -> dict[str, list[int]]:
         return {"trades": self.values}
 
 
@@ -87,7 +87,7 @@ class DrawDown(Observer):
             return 0.0
         return (self._peak - value) / self._peak
 
-    def get_analysis(self) -> dict[str, list[float]]:
+    def _get_analysis(self) -> dict[str, list[float]]:
         return {"drawdown": self.values}
 
 
@@ -104,7 +104,7 @@ class TimeReturn(Observer):
             return 0.0
         return (value / previous_value) - 1.0
 
-    def get_analysis(self) -> dict[str, list[float]]:
+    def _get_analysis(self) -> dict[str, list[float]]:
         return {"timereturn": self.values}
 
 

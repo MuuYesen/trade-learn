@@ -77,12 +77,12 @@ def test_render_engine_api_guide_includes_code_signatures_and_parameter_tables()
 
     assert "Generated from `tradelearn.engine` code signatures" in rendered
     assert "## `Cerebro.__init__`" in rendered
-    assert "| `match_mode` | `str` | `'exact'` |" in rendered
+    assert "Cerebro.run" in rendered
     assert "## `Strategy.buy_bracket`" in rendered
     assert "| `stopprice` |" in rendered
     assert "## Engine 完整接口" in rendered
     assert "| `Cerebro.addobserver` | method |" in rendered
-    assert "| `Cerebro.getwriterinfo` | method |" in rendered
+    assert "Cerebro.getwriterinfo" not in rendered
     assert "| `Strategy.close` | method |" in rendered
     assert "| `Strategy.getpositionbyname` | method |" in rendered
 
@@ -100,7 +100,7 @@ def test_render_lite_api_guide_includes_code_signatures_and_parameter_tables() -
     assert "| `Strategy.target_weights` | method |" in rendered
     assert "| `Strategy.close_all` | method |" in rendered
     assert "| `Strategy.orders` | property |" in rendered
-    assert "| `LiteDataProxy.df` | property |" in rendered
+    assert "Strategy.I" not in rendered
     assert "| `PositionProxy.pl_pct` | property |" in rendered
 
 
@@ -113,3 +113,14 @@ def test_render_strategy_writing_guide_explains_strategy_workflow() -> None:
     assert "class SmaCross(tl.Strategy)" in rendered
     assert "`line[0]` 是当前 bar" in rendered
     assert "uv run python benchmarks/runners/benchmark_bt.py" in rendered
+
+
+def test_generated_guides_use_current_strict_facades_and_independent_integrations():
+    engine = render_engine_api_guide()
+    lite = render_lite_api_guide()
+    strategy = render_strategy_writing_guide()
+    assert "Cerebro.report" not in engine
+    assert "Strategy.I" not in lite
+    assert "pandas-ta-classic" not in engine + lite + strategy
+    assert "tradelearn.integrations.mlflow" in strategy
+    assert "tradelearn_runtime" in strategy

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 import pandas as pd
@@ -12,14 +13,15 @@ from examples.engine import QuickstartSmaCross
 from scripts.examples.ml_strategy import build_alpha101_features
 from scripts.examples.ml_strategy import run_example as run_ml_example
 from tradelearn.core.config import TradelearnConfig
-from tradelearn.engine.analyzers import MLflowAnalyzer
+from tradelearn.integrations.mlflow import log
 from tradelearn.lab import build_lab_plan
 
 
 def run_quickstart() -> dict[str, Any]:
     """Run the quickstart strategy and return a compact result summary."""
     bars = _sample_bars()
-    cerebro = bt.Cerebro(trade_on_close=True)
+    cerebro = bt.Cerebro()
+    cerebro.broker.set_coc(True)
     cerebro.adddata(bt.feeds.PandasData(dataname=bars, name="demo"))
     cerebro.addstrategy(QuickstartSmaCross)
 
@@ -112,7 +114,8 @@ def run_strategy_backtest_tutorial() -> dict[str, Any]:
 
 def run_portfolio_tutorial() -> dict[str, Any]:
     """Run a two-data buy-and-hold example to exercise portfolio artifacts."""
-    cerebro = bt.Cerebro(trade_on_close=True)
+    cerebro = bt.Cerebro()
+    cerebro.broker.set_coc(True)
     cerebro.adddata(bt.feeds.PandasData(dataname=_sample_bars(), name="asset_a"))
     cerebro.adddata(bt.feeds.PandasData(dataname=_sample_bars() * 1.03, name="asset_b"))
     cerebro.addstrategy(_TwoAssetBuyAndHold)
@@ -138,26 +141,28 @@ def run_ml_strategy_tutorial() -> dict[str, Any]:
 
 
 def run_mlflow_tutorial() -> dict[str, Any]:
-    """Run a local MLflowAnalyzer smoke without contacting a remote server."""
-    fake_mlflow = _FakeMLflow()
-    cerebro = bt.Cerebro(trade_on_close=True)
+    """Record a completed run using an actual local SQLite MLflow store."""
+    import mlflow
+    from mlflow import MlflowClient
+
+    cerebro = bt.Cerebro()
+    cerebro.broker.set_coc(True)
     cerebro.adddata(bt.feeds.PandasData(dataname=_sample_bars(), name="demo"))
     cerebro.addstrategy(QuickstartSmaCross)
-    cerebro.addanalyzer(
-        MLflowAnalyzer,
-        name="mlflow",
-        experiment="tutorial",
-        run_name="quickstart",
-        uri="file:///tmp/tradelearn-mlflow-tutorial",
-        mlflow_module=fake_mlflow,
-    )
-
-    [strategy] = cerebro.run()
-    return {
-        "status": strategy.analyzer_results["mlflow"]["status"],
-        "metric_count": len(fake_mlflow.metrics),
-        "artifact_count": len(fake_mlflow.artifacts),
-    }
+    strategies = cerebro.run()
+    previous_uri = mlflow.get_tracking_uri()
+    try:
+        with TemporaryDirectory(prefix="tl-tutorial-") as folder:
+            uri = "sqlite:///" + str(Path(folder) / "tracking.db")
+            result = log(strategies, experiment_name="tutorial", run_name="quickstart", uri=uri)
+            if result.status != "FINISHED":
+                raise RuntimeError(result.error)
+            client = MlflowClient(tracking_uri=uri)
+            run = client.get_run(result.run_id)
+            return {"status": result.status, "metric_count": len(run.data.metrics),
+                    "artifact_count": len(client.list_artifacts(result.run_id))}
+    finally:
+        mlflow.set_tracking_uri(previous_uri)
 
 
 def run_jupyterlab_tutorial() -> dict[str, Any]:
@@ -165,18 +170,19 @@ def run_jupyterlab_tutorial() -> dict[str, Any]:
     plan = build_lab_plan(
         TradelearnConfig(mlflow_tracking_uri="file:///tmp/tradelearn-mlflow"),
         no_browser=True,
-        missing_packages=("jupyter-ai",),
+        missing_packages=("jupyter-ai-lite",),
     )
     return {
         "jupyter_command": list(plan.jupyter.args),
-        "mcp_command": list(plan.mcp.args),
+        "services": ["jupyterlab"],
         "missing_packages": list(plan.missing_packages),
     }
 
 
 def run_backtrader_migration_tutorial() -> dict[str, Any]:
     """Run a migrated backtrader-style strategy through the compat facade."""
-    cerebro = bt.Cerebro(trade_on_close=True)
+    cerebro = bt.Cerebro()
+    cerebro.broker.set_coc(True)
     cerebro.adddata(bt.feeds.PandasData(dataname=_sample_bars(), name="demo"))
     cerebro.addstrategy(QuickstartSmaCross)
 
@@ -200,29 +206,3 @@ class _TwoAssetBuyAndHold(bt.Strategy):
         self.buy(data=self.datas[0], size=1)
         self.buy(data=self.datas[1], size=1)
         self._entered = True
-
-
-class _FakeMLflow:
-    def __init__(self) -> None:
-        self.metrics: dict[str, float] = {}
-        self.artifacts: dict[str, Any] = {}
-
-    def set_tracking_uri(self, uri: str) -> None:
-        self.tracking_uri = uri
-
-    def set_experiment(self, experiment: str) -> None:
-        self.experiment = experiment
-
-    @contextmanager
-    def start_run(self, **kwargs: Any):
-        self.run_kwargs = kwargs
-        yield self
-
-    def log_params(self, params: dict[str, Any]) -> None:
-        self.params = dict(params)
-
-    def log_metrics(self, metrics: dict[str, float]) -> None:
-        self.metrics.update(metrics)
-
-    def log_dict(self, payload: dict[str, Any], artifact_file: str) -> None:
-        self.artifacts[artifact_file] = payload

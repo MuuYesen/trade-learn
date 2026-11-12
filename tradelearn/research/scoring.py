@@ -23,6 +23,8 @@ class ModelScorer:
     def predict(self, data: pd.DataFrame) -> pd.Series:
         """Predict scores from a feature frame."""
         frame = pd.DataFrame(data)
+        if frame.empty:
+            return pd.Series(dtype="float64", name="score")
         if self.current and isinstance(frame.index, pd.MultiIndex):
             time_level = frame.index.names[0] if frame.index.names[0] is not None else 0
             latest = frame.index.get_level_values(time_level).max()
