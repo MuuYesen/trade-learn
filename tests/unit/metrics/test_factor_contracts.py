@@ -168,10 +168,15 @@ def test_clean_factors_aligns_external_groups_and_drops_unidentifiable_tied_bins
 
 def test_clean_factors_does_not_suppress_invalid_quantile_errors():
     factors, prices = _inputs()
-    with pytest.raises(ValueError, match="percentiles"):
+    # Pandas 2.x and 3.x use different wording for invalid q. Require the
+    # exact installed upstream error to propagate, rather than matching prose.
+    with pytest.raises(ValueError) as upstream:
+        pd.qcut(factors["value"], q=float("nan"))
+    with pytest.raises(ValueError) as actual:
         clean_factor_and_forward_returns(
             factors,
             factor="value",
             prices=prices,
             quantiles=float("nan"),
         )
+    assert str(actual.value) == str(upstream.value)
