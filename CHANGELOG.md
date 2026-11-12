@@ -5,9 +5,9 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
-## [0.3.0] - Unreleased
+## [0.3.0] - 2026-11-12
 
-本节是当前源码候选迁移记录，尚未发布PyPI或部署；已发布0.2.9保留原字节。
+本节记录0.3.0的实现与兼容边界。正式发行与平台资格以版本产物和发行收据为准；已发布0.2.9保留原字节，部署另行验收。
 
 - Engine与Lite共用事件/时钟、持久Indicator、订单和账户事实。Engine保持已核Backtrader外观；明确拒绝未实现参数，不承诺完整BT移植。Lite退出向量化I/未来初始化，七个示例采用有界状态，保原EMA初值与简单TR口径。
 - 指标公开来源收敛到固定资格集合TA-Lib/TV/TDX；PTA与重复ta入口退出。KunQuant提供82个Alpha101和158特征的显式TS/STREAM产物；编译、数值、恢复与平台资格分别记录，不用图生成代替数值合格。
