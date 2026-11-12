@@ -265,6 +265,9 @@ class Cerebro:
 
     def runstop(self) -> None:
         self._runstop = True
+        driver = getattr(self, '_active_store_driver', None)
+        if driver is not None:
+            driver.stop()
 
     def plot(self, *args: Any, **kwargs: Any) -> list[Any]:
         """Return market replay charts for the most recent run."""
@@ -282,6 +285,12 @@ class Cerebro:
         return self._last_reporter().report(path, benchmark=benchmark, sections=sections)
 
     def run(self, **kwargs: Any) -> list[Strategy]:
+        from tradelearn.engine.stores import select_driver
+        driver = select_driver(self)
+        if kwargs.get('monitor') is not None and driver is None:
+            raise ValueError('remote monitor requires a Store-owned native driver')
+        if driver is not None:
+            return driver._run_cerebro(self, kwargs)
         self._apply_run_kwargs(kwargs)
         has_live_data = any(bool(getattr(data, "is_live", False)) for data in self.datas)
         if self.mode == "backtest" and has_live_data:

@@ -46,6 +46,7 @@
 *   **[API 边界](concepts/api-boundary.md)**：公开 facade 与内部实现层的划分。
 *   **[Lite 入门](guides/lite.md)**：最简单的策略书写方式。
 *   **[Engine 指南](guides/engine.md)**：Backtrader 风格的高级策略控制。
+*   **[执行接入与 Store](guides/live.md)**：DefaultStore 扩展、官方 NA 配置、Cerebro 组装、生命周期及本地新增未发布边界。
 *   **[指标生态](guides/indicators.md)**：支持 TDX、TradingView、TA-Lib 等口径。
 
 ### 2. 量化投研 (Research & ML)
