@@ -40,7 +40,8 @@ def test_base_ci_keeps_selected_profiles_and_mandatory_lock_gate():
     assert 'uv pip install -e . --group dev --group ci --group oracle' in workflow
     assert 'run: uv lock --check' in workflow
     assert 'official-na-boundary:' in workflow
-    assert "uv pip install -e '.[nautilus,tl-store]' --group dev --group ci --group oracle" in workflow
+    assert ("uv pip install -e '.[nautilus,tl-store]' "
+            "--group dev --group ci --group oracle") in workflow
 
 
 def test_symbolic_versions_match_the_real_python_boundary():
