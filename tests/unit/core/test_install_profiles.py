@@ -21,11 +21,14 @@ def test_three_public_profiles_and_explicit_development_groups():
     assert {'boto3==1.41.2','botocore==1.41.6'} <= set(extras['nautilus'])
 
 
-def test_ci_does_not_install_nautilus_or_new_research_optimizers():
+def test_base_ci_keeps_selected_profiles_and_mandatory_lock_gate():
     data=tomllib.loads((ROOT/'pyproject.toml').read_text())
     ci=data['dependency-groups']['ci']
     assert {'boto3==1.41.2','botocore==1.41.6','numba>=0.65.1'} <= set(ci)
     assert not any(name.startswith(('nautilus','Riskfolio','optuna')) for name in ci)
     workflow=(ROOT/'.github/workflows/ci.yml').read_text()
     assert '--extra' not in workflow
-    assert 'uv sync --frozen --group dev --group ci --group oracle' in workflow
+    assert 'uv pip install -e . --group dev --group ci --group oracle' in workflow
+    assert 'run: uv lock --check' in workflow
+    assert 'official-na-boundary:' in workflow
+    assert "uv pip install -e '.[nautilus]'" in workflow

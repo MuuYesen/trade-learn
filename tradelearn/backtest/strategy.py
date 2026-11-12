@@ -230,6 +230,12 @@ class Strategy:
         """Submit a shared event-driven order through the bound broker."""
         assert_observer_allows_mutation()
         entry_clock = capture_observation_clock(self, "intent.submit_order")
+        return self._submit_order_observed(entry_clock, side, data, size, price, exectype, **kwargs)
+
+    def _submit_order_observed(self, entry_clock, side, data=None, size=None,
+                               price=None, exectype=None, **kwargs):
+        """Continue one submission with its facade's original observation clock."""
+        assert_observer_allows_mutation()
         runtime = getattr(self, "_runtime", None)
         if runtime is not None:
             runtime.assert_can_submit()

@@ -102,7 +102,8 @@ def run_engine(data: pd.DataFrame, *, trade_on_close: bool = False) -> tuple[flo
             elif self.position and self.data.close[0] < self.sma[0]:
                 self.close()
 
-    cerebro = bt.Cerebro(trade_on_close=trade_on_close)
+    cerebro = bt.Cerebro()
+    cerebro.broker.set_coc(trade_on_close)
     cerebro.adddata(bt.feeds.PandasData(dataname=data, name="throughput"))
     cerebro.addstrategy(EngineSmaCross)
     cerebro.broker.setcash(100_000.0)

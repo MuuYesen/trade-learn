@@ -213,7 +213,8 @@ def _run_engine(
     total_bars = min(len(frame) for frame in panel.values())
     strategy_cls = _engine_strategy_cls(bt, rebalance_every, holdings, total_bars)
     for run_idx in range(warmup + repeats):
-        cerebro = bt.Cerebro(match_mode=match_mode, trade_on_close=trade_on_close)
+        cerebro = bt.Cerebro()
+        cerebro._initialize(match_mode=match_mode, trade_on_close=trade_on_close)
         cerebro.broker.setcash(cash)
         cerebro.broker.setcommission(commission=0.0)
         for name, frame in panel.items():

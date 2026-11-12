@@ -78,3 +78,5 @@ run/environment/业务身份由外部显式context绑定；缺失保持缺失，
 实际distribution为 `trade-learn`、import为 `tradelearn`。0.2.9的 `OBSERVER_API_VERSION == 1`；Python包、native版本、目标ABI与平台必须一致，文件摘要取实际发行来源，不按同名版本猜测。旧候选与日期化安装证据保留在[发布记录](../reviews/2026-11-03-runtime-release.md)。
 
 Engine批量订单通知按下一Broker周期交付快照，订单ref公开稳定，内部native ID单独映射；观察器不改写该实际顺序。多Feed批量时钟为真实时间并集，各指标只随所属Feed的新Bar推进；nextstart边界以固定BT逐Feed最小周期实测为准，不外推为全局恰一次。自定义nextstart现归入business.next；默认nextstart直接委托next，避免双层dispatch。默认/自定义回调及共同观察回归已验证不双计。
+
+提交计时沿共同单调域，在实际提交外观入口、数据解析及sizing之前捕获；Engine与基础路径保留同一原始点到CID组装及观察事件，观察日志不新增订单事实。测试spy必须使用`tradelearn.core.observation_clock.monotonic_ns`，不能将不同平台的`time.monotonic_ns`数值混作同域。源码修复不代表现役通知已迁移或生产延迟已重测。

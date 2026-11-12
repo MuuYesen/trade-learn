@@ -11,6 +11,7 @@ import pandas as pd
 
 # Setup paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 DATA_PATH = PROJECT_ROOT / "tests" / "data" / "AAPL.parquet"
 
 TARGET_STRATEGIES = [
@@ -149,7 +150,7 @@ def run_strategy_in_process(
 
         dataframe = load_benchmark_data()
         if engine_type == "Tradelearn":
-            from tradelearn.engine import DataFeed
+            from tradelearn.engine.feeds import PandasData
         else:
 
             class PandasData(bt.feeds.PandasData):
@@ -171,13 +172,14 @@ def run_strategy_in_process(
         trades = None
         for run_idx in range(warmup + repeats):
             if engine_type == "Tradelearn":
-                cerebro = bt.Cerebro(match_mode=match_mode)
+                cerebro = bt.Cerebro()
+                cerebro._initialize(match_mode=match_mode)
             else:
                 cerebro = bt.Cerebro()
             cerebro.broker.setcash(100000.0)
             cerebro.broker.setcommission(commission=0.0)
             if engine_type == "Tradelearn":
-                data = DataFeed(dataframe)
+                data = PandasData(dataname=dataframe)
             else:
                 data = PandasData(dataname=dataframe)
             cerebro.adddata(data)
@@ -262,7 +264,8 @@ def run_portfolio_strategy_in_process(
         target_count = None
         for run_idx in range(warmup + repeats):
             if engine_type == "Tradelearn":
-                cerebro = bt.Cerebro(match_mode=match_mode, trade_on_close=True)
+                cerebro = bt.Cerebro()
+                cerebro._initialize(match_mode=match_mode, trade_on_close=True)
             else:
                 cerebro = bt.Cerebro()
                 cerebro.broker.set_coc(True)

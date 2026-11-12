@@ -8,6 +8,10 @@ module exposes that implementation under ``tradelearn.engine``.
 from tradelearn.backtest.history import build_history_panel
 from tradelearn.backtest.models import ExecutedInfo, Order, Position, Trade
 from tradelearn.backtest.strategy import Strategy as _BaseStrategy
+from tradelearn.core.strategy_events import (
+    assert_observer_allows_mutation,
+    capture_observation_clock,
+)
 from tradelearn.engine.base import _G, LineRoot, LineSeries, Params, MetaParams, collect_param_defaults, set_current_data
 from tradelearn.engine.datafeed import DataFeed
 from tradelearn.engine.sizers import Sizer
@@ -136,6 +140,8 @@ class Strategy(_BaseStrategy, LineRoot):
 
     def _submit_bt(self, side, data, size, price, plimit, exectype, valid, tradeid,
                    oco, trailamount, trailpercent, parent, transmit, controls):
+        assert_observer_allows_mutation()
+        entry_clock = capture_observation_clock(self, "intent.submit_order")
         data = self._resolve_data(data)
         size = self.getsizing(data, isbuy=side == Order.Buy) if size is None else abs(size)
         if not size:
@@ -164,7 +170,7 @@ class Strategy(_BaseStrategy, LineRoot):
                 controls[name] = value
         if not transmit:
             controls["transmit"] = transmit
-        return super()._submit_order(side, self._resolve_data(data), size, price, exectype, **controls)
+        return super()._submit_order_observed(entry_clock, side, self._resolve_data(data), size, price, exectype, **controls)
 
     def _resolve_data(self, data=None):
         if isinstance(data, str):

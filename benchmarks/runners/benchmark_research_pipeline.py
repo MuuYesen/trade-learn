@@ -44,16 +44,20 @@ class ResearchPipelineBenchmarkResult:
 class ResearchTargetWeightStrategy(tl.Strategy):
     """Execute precomputed research weights through Lite target_weights()."""
 
+    result = None
     lookback = 20
     rebalance_every = 20
 
     def init(self) -> None:
+        from tradelearn.research.run import bind_research_result
+        self.bound = bind_research_result(self.result, self)
+        self._record_research_result(self.bound)
         self.start_on_bar(self.lookback + 1)
 
     def next(self) -> None:
         if len(self.data) % self.rebalance_every != 0:
             return
-        self.target_weights(self.research_result.weights[0], close_missing=True)
+        self.target_weights(self.bound.weights[0], close_missing=True)
 
 
 def make_panel(*, symbols: int, bars: int, seed: int) -> pd.DataFrame:
@@ -169,7 +173,7 @@ def run_benchmark(
         trade_on_close=True,
     )
     stats = backtest.run(
-        research_result=research_result,
+        result=research_result,
         lookback=lookback,
         rebalance_every=rebalance_every,
     )

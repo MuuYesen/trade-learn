@@ -9,6 +9,7 @@ from unittest.mock import patch
 from tradelearn.engine import Strategy
 from tradelearn.backtest.event_runtime import StrategyRuntime
 from tradelearn.core import strategy_events as events
+from tradelearn.core.observation_clock import monotonic_ns
 from leafquant_monitor.tradelearn import TradeLogStrategy, TradeLogConfig
 from leafquant_monitor.logger import TradeLogger, MonitorSettings
 from tradelearn_runtime.broker import NautilusBroker
@@ -26,9 +27,9 @@ class ClockTests(unittest.TestCase):
         times={}
         class Item:
             def __strategy_snapshot__(self):
-                times['snapshot']=time.monotonic_ns();return {'status':2}
+                times['snapshot']=monotonic_ns();return {'status':2}
         class S(Strategy):
-            def notify_order(self, order): times['callback']=time.monotonic_ns()
+            def notify_order(self, order): times['callback']=monotonic_ns()
         s=S();seen=[];events.add_observer(s,seen.append,events={'business.notify_order'},phases=('before',))
         events.invoke_callback(s,'notify_order',Item());e=seen[0]
         self.assertIsInstance(getattr(e,'observed_mono_ns',None),int)
@@ -36,7 +37,7 @@ class ClockTests(unittest.TestCase):
         self.assertIsInstance(e.observed_ts_ns,int)
     def test_no_observers_do_not_read_observation_clocks(self):
         s=Strategy()
-        with patch('time.monotonic_ns',side_effect=AssertionError('unexpected clock')),patch('time.time_ns',side_effect=AssertionError('unexpected clock')):
+        with patch('tradelearn.core.strategy_events.monotonic_ns',side_effect=AssertionError('unexpected clock')),patch('time.time_ns',side_effect=AssertionError('unexpected clock')):
             events.invoke_callback(s,'notify_order',None)
 
 class TimingTests(unittest.TestCase):
@@ -75,7 +76,7 @@ class TimingTests(unittest.TestCase):
         self.assertFalse(any(x['kind'] in ('order_accepted','order_filled') for x in self.rec.rows));r.stop()
     def test_market_origin_precedes_feed_and_indicator_preparation(self):
         r,b=self.runtime();seen=[];advance=r._advance_market
-        def observed(*args):seen.append(time.monotonic_ns());return advance(*args)
+        def observed(*args):seen.append(monotonic_ns());return advance(*args)
         r._advance_market=observed;r.step_market('BTC',NS(ts_event=100),kind='tick')
         market=self.timing('tl_submit_entry')[0]['fields']['market_callback_entry']
         self.assertLessEqual(market['observed_mono_ns'],seen[0]);r.stop()
@@ -86,7 +87,7 @@ class TimingTests(unittest.TestCase):
 
     def test_submit_clock_is_before_data_resolution(self):
         r,b=self.runtime();s=r.strategy;times=[];resolve=s._resolve_data
-        def slow(*args,**kwargs):times.append(time.monotonic_ns());time.sleep(.002);return resolve(*args,**kwargs)
+        def slow(*args,**kwargs):times.append(monotonic_ns());time.sleep(.002);return resolve(*args,**kwargs)
         s._resolve_data=slow;r.step_market('BTC',NS(ts_event=100),kind='tick')
         self.assertEqual(len(self.timing('tl_submit_entry')),1)
         self.assertLessEqual(self.timing('tl_submit_entry')[0]['observed_mono_ns'],times[0]);r.stop()
