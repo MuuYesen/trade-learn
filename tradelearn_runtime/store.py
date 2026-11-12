@@ -155,6 +155,7 @@ class NautilusStore:
         self._used = False
         self._handle = self._host = self._engine = None
         self._remote_monitor = None
+        self._local_monitor = False
 
     @staticmethod
     def _validate_factory_types(data_factories, exec_factories):
@@ -206,6 +207,7 @@ class NautilusStore:
         self._used = False
         self._handle = self._host = self._engine = None
         self._remote_monitor = self._monitor_binding = None
+        self._local_monitor = False
 
     @property
     def strategy_spec(self):
@@ -339,11 +341,9 @@ class NautilusStore:
         monitor = None
         sender_factory = None
         from tradelearn.strategy_logging.tradelearn import TradeLogStrategy
-        if self._remote_monitor is not None and not issubclass(strategy_cls, TradeLogStrategy):
-            raise ValueError('remote monitor requires TradeLogStrategy')
-        if issubclass(strategy_cls, TradeLogStrategy):
+        if self._local_monitor or self._remote_monitor is not None or issubclass(strategy_cls, TradeLogStrategy):
             if 'monitor_config' in parameters or getattr(strategy_cls, 'monitor_config', None) is not None:
-                raise ValueError('Store owns TradeLogStrategy context; custom monitor_config is unsupported')
+                raise ValueError('Store owns monitoring context; custom monitor_config is unsupported')
             from leafquant_monitor import MonitorSettings
             from leafquant_monitor.tradelearn import TradeLogConfig
             monitor = MonitorSettings(
@@ -362,7 +362,9 @@ class NautilusStore:
             # Bind a per-run class attribute, not a synthetic user __init__ kwarg.
             # This keeps no-super callbacks and the existing TL params mechanism.
             strategy_cls = type(strategy_cls.__name__, (strategy_cls,),
-                                {'monitor_config': log_config, '__module__': strategy_cls.__module__})
+                                {'monitor_config': log_config,
+                                 'strategy_observer_factories': TradeLogStrategy.strategy_observer_factories,
+                                 '__module__': strategy_cls.__module__})
         host = create_execution_host(
             self.strategy_config, business_cls=strategy_cls, strategy_args=args,
             parameters=parameters, feeds={data._name: 'bar' for data in engine.datas},
@@ -399,7 +401,11 @@ class NautilusStore:
             pass
         else:
             raise RuntimeError('Cerebro.run requires a thread without a running event loop')
-        if remote is not None:
+        if remote is True:
+            if self._driver is not None:
+                raise ValueError('local monitoring requires native host assembly')
+            self._local_monitor = True
+        elif remote is not None:
             from leafquant_monitor.bootstrap import MonitorConnection
             self._remote_monitor = MonitorConnection.from_options(remote)
         self._used = True

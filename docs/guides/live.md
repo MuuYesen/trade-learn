@@ -1,4 +1,4 @@
-> 正式公共发行组合：TL 0.3.0 / TL-Store 0.2.1a3 / 官方NA 2.0.0rc7；实际实现与native统一为`tl_store.ctrader` / `tl_store.ctrader._native`。TL标签v0.3.0源af47b786与Store私有源8364acf的实际OIDC上传均成功。最终公网安装与逐wheel SHA以TL整合IC-FORMAL-RELEASE-CONTRACT.json为准，部署/venue自然运行独立验收；下方日期化旧候选仅证明各自历史。
+> 当前正式组合为TL0.3.2/Store0.2.1a4/官方NA2.0.0rc7。独立只读Collector接口另由已发行Store0.2.1a5提供，不改变TL0.3.2 extra的a4锁；精确平台、SHA和真实验收见TL整合正式回执。下文日期化旧候选仅证明其历史，0.3.2之后源码不冒充已发行行为。
 
 # 实盘协议
 
@@ -177,6 +177,8 @@ TL-Store `tl_store/ctrader/execution.py` 的实际提交/拒绝分支。
 
 ### 可选 SQS 监控
 
+**0.3.2之后源码**：通用原生宿主允许普通`bt.Strategy`沿下方`monitor`配置透明接入日志，无需SDK基类或私有构造参数；`store.run(engine, monitor=True)`只开本地日志，不启动Sender。普通策略默认日志关闭，旧SDK基类默认本地日志仍兼容。私有driver的本地True开关尚未实现；其原远程绑定路径不变。普通策略本地开关已用固定官方NA真实离线Bar回放验证，远程链使用合成Sender验证；尚未进入正式wheel或真实AWS/券商验收。
+
 本地源码已支持 `store.run(engine, monitor=...)` 直接使用受限 SQS 发送配置。`endpoint` 是完整队列 URL；`credentials` 是该队列的 AWS 发送凭据，字段沿现有发送器使用 `access_key_id`、`secret_access_key`、可选 `session_token`。区域从队列 URL 读取，不使用默认 AWS 身份链，不访问 Sentinel 领取配置，也不要求平台 token。
 
 ```python
@@ -189,7 +191,7 @@ store.run(engine, monitor={
 })
 ```
 
-`receipt_origin`、`archive_binding_id` 沿既有归档证明协议提供，不是交易账户参数，不能猜测或省略后放松原件清理条件。使用 `TradeLogStrategy` 时，Store 自动生成运行 ID、环境和策略/账户上下文，原生宿主与 TL observer 共用一个日志器；后台 Sender 复用原有文件 outbox、源段格式、重试和回执校验。仅 SQS ACK 不允许删除原件，缺归档证明保留本地日志。用户不用手工创建 Runtime、Node、Sender。
+`receipt_origin`、`archive_binding_id` 沿既有归档证明协议提供，不是交易账户参数，不能猜测或省略后放松原件清理条件。正式0.3.2中使用 `TradeLogStrategy` 时，Store 自动生成运行 ID、环境和策略/账户上下文，原生宿主与 TL observer 共用一个日志器；后台 Sender 复用原有文件 outbox、源段格式、重试和回执校验。仅 SQS ACK 不允许删除原件，缺归档证明保留本地日志。用户不用手工创建 Runtime、Node、Sender。
 
 连接规格的构造只做语法校验；启用时先检查 SDK 依赖，再创建本地记录和后台发送。凭据仅保留在内存，停止时先关闭记录器、等待发送线程退出，再释放发送客户端；日志不包含发送凭据。IAM 资格只能由实际 AWS 请求确认，本轮以合成凭据/队列客户端验证本地链路，没有调用真实 AWS 或修改 IAM。发送失败保留重试状态和日志，不控制策略交易逻辑。
 

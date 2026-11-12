@@ -47,13 +47,23 @@ class Strategy(_BaseStrategy, LineRoot):
         return runtime if runtime is not None and runtime.profile == "batch" else None
 
     def __len__(self):
-        runtime = self._batch_runtime()
-        return runtime._cursor + 1 if runtime is not None else super().__len__()
+        runtime = getattr(self, "_runtime", None)
+        if runtime is None:
+            runtime = getattr(getattr(self, "data", None), "runtime", None)
+        if runtime is None:
+            return super().__len__()
+        return runtime._cursor + 1 if runtime.profile == "batch" else runtime._sequence
 
     @property
     def datetime(self):
         runtime = self._batch_runtime()
         if runtime is None:
+            owner = getattr(self, "_runtime", None)
+            if owner is None:
+                owner = getattr(getattr(self, "data", None), "runtime", None)
+            clock = getattr(owner, "_strategy_datetime_line", None)
+            if clock is not None:
+                return clock
             return self.data.datetime
         line = getattr(self, "_clock_datetime_line", None)
         if line is None:

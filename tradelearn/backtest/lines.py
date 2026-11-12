@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from array import array
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
+
+def _window_result(line, values):
+    """Adapt the public result only; shared buffers keep their native arrays."""
+    runtime = getattr(line, "_runtime", None)
+    owner = runtime if runtime is not None else getattr(line, "_cursor_source", None)
+    return array("d", values) if getattr(owner, "_bt_line_views", False) else values
 
 
 def line_names(cls):
@@ -99,7 +107,7 @@ class LineSeries:
             self._series_cache = cached
         return cached
 
-    def get(self, ago: int = 0, size: int = 1) -> np.ndarray:
+    def get(self, ago: int = 0, size: int = 1) -> np.ndarray | array:
         """Return a Backtrader-style trailing window ending at ``ago``.
 
         ``line.get(size=n)`` follows Backtrader's strategy helper semantics and
@@ -114,8 +122,8 @@ class LineSeries:
         end = cursor + int(ago) + 1
         start = max(0, end - int(size))
         if end <= 0:
-            return np.asarray([], dtype=np.float64)
-        return self._values[start:end].copy()
+            return _window_result(self, np.asarray([], dtype=np.float64))
+        return _window_result(self, self._values[start:end].copy())
 
     def _runtime_function(self, function, args, kwargs, *, history="full"):
         runtime = getattr(self, "_runtime", None)

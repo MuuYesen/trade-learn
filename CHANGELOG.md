@@ -5,6 +5,13 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
+## [0.3.3] - 2026-11-13
+
+- Candidate: ordinary BT Strategy logging uses Store-owned observer assembly; local-only logging is `store.run(engine, monitor=True)`, remote uses the existing SQS mapping. No SDK superclass or private strategy constructor arguments are required on the common native host. Private application driver migration remains separate.
+- Match fixed BT Engine `Line.get()` array return, multi-data warmup/strategy count, bounded strategy datetime reads, and data datetime lag/arithmetic in ordinal-day units; source/event clocks stay unchanged.
+- Returns/Sharpe calendar sampling follows Strategy datetime, including late secondary sources, without changing the observed-value compatibility profile or public cashflow metrics.
+- Pin standalone Store0.2.1a5 and qualify the SDK finite version/API1 boundary. Existing032/a4 and standalone Storea5 artifacts remain immutable. GTD pinned-NA defects, complete BT Line/Observer/fund semantics and venue limits remain explicit incomplete capabilities.
+
 ## [0.3.2] - 2026-11-13
 
 本节记录本版实现与兼容边界；正式发行及平台安装资格以对应版本产物和收据为准。0.3.1与Store0.2.1a4既有正式字节及旧SDK冻结保持。

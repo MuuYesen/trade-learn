@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import math
 
-import pandas as pd
-
 from ..analyzer import Analyzer
 from ..base import TimeFrame
 from .returns import _YEAR_PERIODS, _period_key, _validate_period
@@ -68,9 +66,9 @@ class SharpeRatio(Analyzer):
         self._sampled_value = self._value()
 
     def _before_next(self, phase):
-        context = getattr(getattr(self.strategy, "_runtime", None), "context", None)
-        timestamp = (pd.Timestamp(context.ts_event_ns, unit="ns", tz="UTC") if context is not None
-                     else self.strategy.datetime.datetime())
+        # BT TimeFrameAnalyzerBase buckets on Strategy.datetime. A secondary
+        # source can arrive behind that clock; its raw event time must stay raw.
+        timestamp = self.strategy.datetime.datetime()
         key = _period_key(timestamp, self.timeframe, self.compression)
         if self._last_period is not None and key > self._last_period:
             self._commit_period()

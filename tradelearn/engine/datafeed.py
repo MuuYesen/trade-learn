@@ -14,6 +14,7 @@ class _DateLine(BTDateLine, LineSeries):
 class DataFeed(RuntimeDataFeed, LineRoot):
     """Backtrader-style DataFeed with LineSeries magic."""
     _reset_line_aliases = True
+    _bt_line_views = True
     lines = ("close", "low", "high", "open", "volume", "openinterest", "datetime")
 
     @property

@@ -33,7 +33,7 @@ TL额外能力从独立模块接入：
 | 组合权重意图 | `tradelearn.backtest.targets.target_weights(strategy, weights)`；或原生`order_target_percent` |
 | Runtime/Context | 内部`tradelearn.backtest.event_runtime`；用户无需另启循环 |
 | 实时Store | `tradelearn_runtime.NautilusStore`，见[实时指南](live.md) |
-| 日志策略 | `tradelearn.strategy_logging.tradelearn.TradeLogStrategy` |
+| 日志 | Store集成配置，见[实时指南](live.md#可选-sqs-监控)；普通`bt.Strategy`透明装配为0.3.2之后源码，旧SDK基类仍保留兼容 |
 | 评价/报告 | 普通Analyzer继续；独立Reporter消费已计算结果 |
 | MLflow | `tradelearn.integrations.mlflow.log(strategies, research_result=...)`，运行后显式记录 |
 | 简单网格 | `tradelearn.integrations.search.grid_search`，不属于BT facade |
@@ -70,3 +70,11 @@ broker.setcommission使用BT完整参数入口并规范化percabs；实际原生
 Position空仓price按BT归零；`len(Position)`保固定BT的整数尺寸约束，浮点尺寸调用len会按BT抛TypeError，持仓存在性使用`bool(position)`，数量读取`.size`，不截断小数数量。
 
 后续0.3.2候选同时对齐Analyzer/Observer的构造参数和组件start先于业务start。Observer集合名称使用BT的`obsname`，普通`name`保留给用户参数；Analyzer名称使用`_name`，传入Data作构造参数不替换所属Strategy的数据上下文。增量Engine的datetime/date/time采用与预载相同的BT读视图；`on_bar`快照使用所选Data的真实源时间，缺源时间不拿cursor冒充。源码/产物/平台资格分列，当前正式0.3.1不自动获得这些改动。
+
+`v0.3.2`标签之后的本地后续修复另核默认`Line.get()`返回：Engine预载/增量的数据、日期与指标窗口对照固定BT返回`array.array("d")`，Lite仍返回NumPy窗口；只转换返回值，缓冲区和原始时钟不变。该修复尚未进入0.3.2或任何后续正式产物；qbuffer/exactbars、窗口不足和完整Line代数资格不能据此外推。
+
+同属标签之后本地修复的增量暖机，复用共同BT逐Data门槛：未齐数据先`prenext`，门槛处按固定BT触发`nextstart`；`len(strategy)`读取现有Runtime市场步计数，而非主Data长度。调用者明确的同时间原子组已与固定BT对照；普通逐个到达仍保既有输入顺序，不伪称自动排序回放。全局`strategy.datetime`、完整时钟Line与恢复仍未闭合，这些后续源码也不包含在0.3.2正式标签中。
+
+随后本地主时钟读接口修复将增量`strategy.datetime`接到共同Runtime的有界日期视图，不再借用Data0最后一根时间。该视图只有日期，不注册为行情Data、不补OHLC；每个源事件的原始ns和执行采样边界不变。显式完整历史请求仍受prefix预算限制，超限在接收下一根行情前失败。固定BT的当前日期/lag/get已对照；完整日期Line代数、多数据迟到情况下Analyzer分桶与完整恢复仍需继续。这也是0.3.2标签之后的未发行源码。
+
+`v0.3.2`之后的本地Store修复允许普通`bt.Strategy`通过`store.run(engine, monitor=...)`启用远程日志，通过`monitor=True`只启用同一原生宿主的本地日志。策略仍只写`params/self.p`及标准回调，不接收monitor_config、宿主或SDK基类。Store按运行生成内部observer class属性，原用户类不变；继承的旧SDK factories按身份去重，不启动第二Sender。普通策略默认不记录；旧`TradeLogStrategy`默认本地记录保留兼容。`monitor=True`当前限通用原生宿主，私有driver尚未接通此本地开关；拒绝不计完成。该修复仅源码/离线验证，未包含在0.3.2发行，完整保护接回与IC迁移仍独立验收。

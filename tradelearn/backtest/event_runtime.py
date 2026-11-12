@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from tradelearn.backtest.data import RollingBarBuffer
-from tradelearn.backtest.lines import Lines, LineSeries
+from tradelearn.backtest.lines import Lines, LineSeries, _window_result
 from tradelearn.backtest._bt_datetime import BTDateLine
 from tradelearn.backtest.strategy import Strategy
 from tradelearn.core.strategy_context import engine_context
@@ -278,7 +278,7 @@ class RuntimeLine(LineSeries):
             raise ValueError("runtime lines cannot address future observations")
         values = self.to_series().to_numpy()
         end = max(0, len(values) + int(ago))
-        return values[max(0, end - int(size)) : end]
+        return _window_result(self, values[max(0, end - int(size)) : end])
 
     def __call__(self, ago=0):
         if ago > 0:
@@ -489,6 +489,28 @@ class RuntimeFeed:
         )
 
 
+class _RuntimeClockFeed(RuntimeFeed):
+    """One bounded view of the existing market dispatch clock, never a subscription."""
+
+    def __init__(self, runtime, capacity):
+        self.runtime = runtime
+        self._name = object()
+        self._buffer = RollingBarBuffer(capacity, fields=("datetime",))
+        self.received = self.revision = 0
+        self._history = None
+        self.last_ns = None
+
+    def append(self, timestamp):
+        timestamp = timestamp if self.last_ns is None else max(timestamp, self.last_ns)
+        self.last_ns = timestamp
+        value = timestamp / 1_000_000_000
+        self._buffer.append({"datetime": value})
+        self.received += 1
+        self.revision += 1
+        if self._history is not None:
+            self._history["datetime"].append(value)
+
+
 class _EngineRuntimeFeed(RuntimeFeed):
     """Existing Engine line order, with unavailable native openinterest left missing."""
     lines = ("close", "low", "high", "open", "volume", "openinterest", "datetime")
@@ -618,7 +640,13 @@ class StrategyRuntime:
         self._plans = WeakValueDictionary()
         self._stepping = False
         self.modes = MappingProxyType(dict(feeds))
-        feed_type = _EngineRuntimeFeed if getattr(profile, "_bt_minperiods", False) else RuntimeFeed
+        self._bt_line_views = bool(getattr(profile, "_bt_minperiods", False))
+        self._clock_feed = _RuntimeClockFeed(self, capacity) if self._bt_line_views else None
+        self._strategy_datetime_line = (
+            _EngineRuntimeDateLine(self._clock_feed, field="datetime")
+            if self._clock_feed is not None else None
+        )
+        feed_type = _EngineRuntimeFeed if self._bt_line_views else RuntimeFeed
         self.feeds = {s: feed_type(self, s, capacity, (buffers or {}).get(s)) for s in feeds}
         metadata = {} if feed_metadata is None else feed_metadata
         if not isinstance(metadata, dict) or set(metadata) - set(self.feeds):
@@ -696,6 +724,7 @@ class StrategyRuntime:
     def _init_bound(self, strategy_cls, args, parameters, datas, broker,
                     prefix_limit, max_indicators, max_plans):
         """Preloaded storage backend for the shared incremental indicator graph."""
+        self._bt_line_views = bool(getattr(strategy_cls, "_bt_minperiods", False))
         self._thread = get_ident()
         self._started = self._stopped = self._failed = False
         self._initialized = self._stepping = False
@@ -809,7 +838,7 @@ class StrategyRuntime:
     def _warming_up(self):
         """One eligibility rule for every storage/clock profile."""
         minimum = int(getattr(self.strategy, "_manual_min_period", 0))
-        if self.profile == "batch" and getattr(self.strategy, "_bt_minperiods", False):
+        if getattr(self.strategy, "_bt_minperiods", False):
             minimum = max(1, minimum)
         if any(feed.received < minimum for symbol, feed in self.feeds.items()
                if self.modes[symbol] == "bar"):
@@ -833,22 +862,25 @@ class StrategyRuntime:
         return False
 
     def _bt_next_callback(self):
+        clock_feeds = {id(feed): feed for feed in self.feeds.values()}
         minima = {id(feed): max(1, int(getattr(self.strategy, "_manual_min_period", 0)))
                   for feed in self.feeds.values()}
         for indicator in self._indicators:
             feed = self._feed_for(indicator.data)
             if feed is not None:
-                minima[id(feed)] = max(minima[id(feed)], indicator._minperiod)
+                clock_feeds[id(feed)] = feed
+                minima[id(feed)] = max(minima.get(id(feed), 1), indicator._minperiod)
         for line in (*tuple(self._plans.values()), *tuple(getattr(self,"_compiled_lines",{}).values())):
             feed = self._feed_for(line)
             if feed is not None:
-                minima[id(feed)] = max(minima[id(feed)], line.min_period)
-        return "nextstart" if any(feed.received == minima[id(feed)] for feed in self.feeds.values()) else "next"
+                clock_feeds[id(feed)] = feed
+                minima[id(feed)] = max(minima.get(id(feed), 1), line.min_period)
+        return "nextstart" if any(feed.received == minima[key] for key, feed in clock_feeds.items()) else "next"
 
     def _next_callback(self, ready):
         if not ready:
             return "prenext"
-        if self.profile == "batch" and getattr(self.strategy, "_bt_minperiods", False):
+        if getattr(self.strategy, "_bt_minperiods", False):
             return self._bt_next_callback()
         if not getattr(self, "_next_started", False):
             self._next_started = True
@@ -866,7 +898,7 @@ class StrategyRuntime:
         for analyzer in getattr(self.strategy,"analyzers",{}).values():
             if not ready:
                 name = "prenext"
-            elif self.profile == "batch" and getattr(self.strategy, "_bt_minperiods", False):
+            elif getattr(self.strategy, "_bt_minperiods", False):
                 name = self._bt_next_callback()
             elif not getattr(analyzer,"_next_started",False):
                 analyzer._next_started = True
@@ -1100,7 +1132,10 @@ class StrategyRuntime:
         feed = self._feed_for(getattr(indicator, "data", None))
         if feed is None:
             feed = self.strategy.data
-        if feed is not self.feeds[symbol] or self.modes[symbol] != "bar":
+        clock = getattr(self, "_clock_feed", None)
+        selected = clock if clock is not None and symbol is clock._name else self.feeds[symbol]
+        mode = "bar" if selected is clock else self.modes[symbol]
+        if feed is not selected or mode != "bar":
             return
         if getattr(indicator, "_runtime_sequence", None) == self._sequence:
             return
@@ -1131,6 +1166,10 @@ class StrategyRuntime:
     def _prepare_market(self, symbol, event, kind):
         if self.profile != "stream":
             raise ValueError("market ingestion requires the stream profile")
+        clock = getattr(self, "_clock_feed", None)
+        if clock is not None and clock._history is not None and clock.received >= self.prefix_history_limit:
+            self._failed = True
+            raise RuntimeError("full-prefix clock history limit reached before accepting event")
         if self.modes.get(symbol) != kind:
             raise ValueError("event does not match configured feed mode")
         feed = self.feeds[symbol]
@@ -1189,6 +1228,11 @@ class StrategyRuntime:
         active = [(item[0], item[5]) for item in prepared]
         context = self._market_context(active, prepared[0][0], prepared[0][3], entry_clock, market_callback)
         self._active_market_symbols = frozenset(symbol for symbol, _ in active)
+        clock = getattr(self, "_clock_feed", None)
+        if clock is not None:
+            clock.append(max(item[3] for item in prepared))
+            self._mutation_epoch += 1
+            self._active_market_symbols |= {clock._name}
         self._stepping = True
         try:
             for symbol, _, _, timestamp, _, event in prepared:
@@ -1196,6 +1240,9 @@ class StrategyRuntime:
                 self.strategy.runtime_context = self.context
                 for indicator in tuple(self._indicators):
                     self._update_indicator(indicator, symbol)
+            if clock is not None:
+                for indicator in tuple(self._indicators):
+                    self._update_indicator(indicator, clock._name)
             self.context = context
             self.strategy.runtime_context = context
             ready = not self._warming_up()

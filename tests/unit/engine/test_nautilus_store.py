@@ -152,7 +152,7 @@ def test_sync_run_rejects_existing_event_loop_without_side_effects(tmp_path):
     assert not list(tmp_path.iterdir())
 
 
-@pytest.mark.parametrize('logged', [False, True])
+@pytest.mark.parametrize('logged', [False, True, 'plain'])
 def test_official_bar_replay_uses_one_runtime_and_existing_params(tmp_path, monkeypatch, logged):
     if logged:
         pytest.importorskip('tradelearn._rust')
@@ -173,7 +173,7 @@ def test_official_bar_replay_uses_one_runtime_and_existing_params(tmp_path, monk
                          i * 60_000_000_000, i * 60_000_000_000) for i in range(1, 4)])
     calls = []
     stopped = []
-    class Business(TradeLogStrategy if logged else bt.Strategy):
+    class Business(TradeLogStrategy if logged is True else bt.Strategy):
         params = (('period', 2),)
         def __init__(self, label):
             calls.append(('init', label, self.p.period, self.data._name))
@@ -201,7 +201,7 @@ def test_official_bar_replay_uses_one_runtime_and_existing_params(tmp_path, monk
         def dispose(self):
             native.dispose()
     monkeypatch.setattr(a, '_build_node', ReplayNode)
-    [business] = engine.run()
+    [business] = a.run(engine, monitor=True) if logged == 'plain' else engine.run()
     assert business.broker is a.getbroker()
     assert isinstance(business.broker, NautilusBroker)
     assert business._runtime is a._host.frontend
@@ -209,6 +209,13 @@ def test_official_bar_replay_uses_one_runtime_and_existing_params(tmp_path, monk
                      ('next', 10.0), ('next', 10.0), ('next', 10.0), ('stop',)]
     assert stopped == [True]
     assert [item[0] for item in a.get_notifications()] == ['STARTING', 'RUNNING', 'STOPPED']
+
+    if logged:
+        assert business.monitor_logger is a._host.logger
+        assert business.monitor_config.context['run_id'] == a._host.logger.run_id
+    else:
+        assert not hasattr(business, 'monitor_logger')
+        assert not hasattr(a._host, 'logger') or a._host.logger is None
 
 
 def test_tradelog_strategy_no_super_has_generated_local_context(tmp_path, monkeypatch):
@@ -340,7 +347,8 @@ def test_documented_official_adapter_configuration_constructs_offline(tmp_path, 
     assert not (tmp_path / '.tradelearn').exists()
 
 
-def test_engine_monitor_assembles_one_logger_and_joins_sender(tmp_path, monkeypatch):
+@pytest.mark.parametrize("strategy_base", [bt.Strategy, TradeLogStrategy])
+def test_engine_monitor_assembles_one_logger_and_joins_sender(tmp_path, monkeypatch, strategy_base):
     pytest.importorskip('tradelearn._rust')
     from dataclasses import replace
     from threading import Event
@@ -360,22 +368,45 @@ def test_engine_monitor_assembles_one_logger_and_joins_sender(tmp_path, monkeypa
         return settings, lambda current, flush: Sender()
     monkeypatch.setattr(MonitorConnection, 'bind', bind)
     a = store(tmp_path)
-    engine = engine_for(a, TradeLogStrategy)
-    monkeypatch.setattr(a, '_build_node', lambda: FakeNode([]))
-    a.run(engine, monitor=dict(endpoint='https://sqs.ap-southeast-1.amazonaws.com/123456789012/test.fifo',
+    class Business(strategy_base):
+        params = (("period", 2),)
+        def __init__(self):
+            # Ordinary BT parameters, no private constructor/SDK objects or super.
+            self.observed_period = self.p.period
+        def start(self):
+            self.started = True
+    engine = engine_for(a, Business, period=3)
+    node = FakeNode([])
+    async def run():
+        node.actor.frontend = StrategyRuntime(
+            node.actor._business_cls, feeds={'BTCUSDT.BINANCE': 'bar'},
+            broker=a.getbroker(), parameters=node.actor._parameters)
+        node.actor.frontend.start()
+    node.run_async = run
+    monkeypatch.setattr(a, '_build_node', lambda: node)
+    [business] = a.run(engine, monitor=dict(endpoint='https://sqs.ap-southeast-1.amazonaws.com/123456789012/test.fifo',
         credentials=dict(access_key_id='synthetic',secret_access_key='synthetic'),
         receipt_origin='https://receipt.invalid',archive_binding_id='test'))
     assert calls == ['bootstrap', 'sender-start', 'sender-close']
     assert a._remote_monitor._closed and a._remote_monitor._credentials == {}
 
+    assert isinstance(business, Business)
+    assert business.observed_period == 3 and business.started
+    assert business.monitor_logger is a._host.logger
+    assert business.monitor_config.context['run_id'] == a._host.logger.run_id
+    assert 'monitor_config' not in vars(Business)
+    from tradelearn.core.strategy_events import observation_failures
+    assert observation_failures(business).total == 0
 
-def test_monitor_denial_prevents_native_node_and_local_state(tmp_path, monkeypatch):
+
+@pytest.mark.parametrize("strategy_base", [bt.Strategy, TradeLogStrategy])
+def test_monitor_denial_prevents_native_node_and_local_state(tmp_path, monkeypatch, strategy_base):
     from leafquant_monitor.bootstrap import MonitorConnection
     def denied(self, settings):
         raise RuntimeError('denied')
     monkeypatch.setattr(MonitorConnection, 'bind', denied)
     a = store(tmp_path)
-    engine = engine_for(a, TradeLogStrategy)
+    engine = engine_for(a, strategy_base)
     monkeypatch.setattr(a, '_build_node', lambda: pytest.fail('denied monitor reached Node'))
     with pytest.raises(RuntimeError, match='denied'):
         a.run(engine, monitor=dict(endpoint='https://sqs.ap-southeast-1.amazonaws.com/123456789012/test.fifo',

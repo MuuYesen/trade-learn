@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import math
 
-import pandas as pd
-
 from ..analyzer import Analyzer
 from ..base import TimeFrame
 
@@ -76,10 +74,9 @@ class Returns(Analyzer):
         return broker.fundvalue if self._fundmode else broker.getvalue()
 
     def _before_next(self, phase):
-        runtime = getattr(self.strategy, "_runtime", None)
-        context = getattr(runtime, "context", None)
-        timestamp = (pd.Timestamp(context.ts_event_ns, unit="ns", tz="UTC") if context is not None
-                     else self.strategy.datetime.datetime())
+        # BT TimeFrameAnalyzerBase buckets on Strategy.datetime. A secondary
+        # source can arrive behind that clock; its raw event time must stay raw.
+        timestamp = self.strategy.datetime.datetime()
         key = _period_key(timestamp, self.timeframe, self.compression)
         if self._last_period is None or key > self._last_period:
             self._period_count += 1
