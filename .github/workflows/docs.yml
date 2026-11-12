@@ -29,13 +29,17 @@ jobs:
         run: uv sync --frozen --group docs
 
       - name: Build site
-        run: uv run mkdocs build --strict
+        run: |
+          uv run --no-sync python .github/actions/prepare-public-docs.py --root "$GITHUB_WORKSPACE" --destination "$RUNNER_TEMP/trade-learn-public-docs"
+          DOCS_INTERPRETER="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
+          cd "$RUNNER_TEMP/trade-learn-public-docs"
+          "$DOCS_INTERPRETER" -m mkdocs build --strict
 
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: ${{ runner.temp }}/trade-learn-public-docs/site
 
   deploy:
     name: Deploy GitHub Pages
