@@ -26,5 +26,12 @@ def test_docs_workflow_deploys_mkdocs_site_with_github_pages_actions() -> None:
     assert "actions/configure-pages@v5" in step_uses
     assert "actions/upload-pages-artifact@v3" in step_uses
     assert "uv sync --frozen --group docs" in step_runs
-    assert "uv run mkdocs build --strict" in step_runs
+    build = next(step for step in build_steps if step.get("name") == "Build site")
+    assert "prepare-public-docs.py" in build["run"]
+    assert 'cd "$RUNNER_TEMP/trade-learn-public-docs"' in build["run"]
+    assert '"$DOCS_INTERPRETER" -m mkdocs build --strict' in build["run"]
+    upload = next(
+        step for step in build_steps if step.get("uses") == "actions/upload-pages-artifact@v3"
+    )
+    assert upload["with"]["path"] == "${{ runner.temp }}/trade-learn-public-docs/site"
     assert workflow["jobs"]["deploy"]["steps"][0]["uses"] == "actions/deploy-pages@v4"
