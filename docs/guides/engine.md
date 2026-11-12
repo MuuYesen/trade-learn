@@ -68,3 +68,5 @@ broker.setcommission使用BT完整参数入口并规范化percabs；实际原生
 `bt.analyzers.DrawDown(fund=None)`的value模式采用有界增量观测；`get_analysis()`为支持属性访问的字典，含`len/drawdown/moneydown/max.len/max.drawdown/max.moneydown`，drawdown为BT正百分比，moneydown保账户货币单位。它与Observer复用公共观测回撤计算，公共Stats/Reporter的有符号比例单位不变。NA路径必须显式权威account_provider，缺值/布尔值/非法初始峰值不补零；该结果是未调整资金流的观测回撤，不证明TWR绩效。fund=True还需要真实fundvalue；后端未提供的fund事实不由TL另造账本。后续源码的Returns已补观测权益对数收益、真实日/周/月/年/分钟桶及常量状态计数，并通过固定BT和实时Runtime定向对照；它在stop定稿，尚未包含在0.3.1。0.3.2后续源码还补原生时间BarType周期元数据、Sharpe固定BT的默认周期/无风险换算/方差/年化选项及用户next前账户采样，采用当前桶和常量矩状态。legacyannual、完整fund/时区/会话等仍未闭合；不以明确拒绝计实现。这些尚未包含在公共0.3.1。
 
 Position空仓price按BT归零；`len(Position)`保固定BT的整数尺寸约束，浮点尺寸调用len会按BT抛TypeError，持仓存在性使用`bool(position)`，数量读取`.size`，不截断小数数量。
+
+后续0.3.2候选同时对齐Analyzer/Observer的构造参数和组件start先于业务start。Observer集合名称使用BT的`obsname`，普通`name`保留给用户参数；Analyzer名称使用`_name`，传入Data作构造参数不替换所属Strategy的数据上下文。增量Engine的datetime/date/time采用与预载相同的BT读视图；`on_bar`快照使用所选Data的真实源时间，缺源时间不拿cursor冒充。源码/产物/平台资格分列，当前正式0.3.1不自动获得这些改动。

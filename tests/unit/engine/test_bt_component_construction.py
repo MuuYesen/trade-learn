@@ -228,3 +228,51 @@ def test_components_start_before_business_start_like_real_bt():
         return result
 
     assert calls(tl) == calls(official)
+
+
+def test_observer_positional_args_name_param_and_obsname_match_bt():
+    def calls(api):
+        values = []
+        class Observation(api.Observer):
+            lines = ('observed',)
+            params = (('name', 'default'),)
+            def __init__(self, label):
+                values.append((label, self.p.name, self.data is self.data0))
+        e = engine(api)
+        e.addobserver(Observation, 'label-value', name='user-name', obsname='named')
+        strategy = e.run()[0]
+        return values, strategy.observers.named.p.name
+    assert calls(tl) == calls(official)
+
+
+def test_analyzer_data_argument_does_not_replace_the_owner_data_context():
+    def calls(api):
+        values = []
+        class Analysis(api.Analyzer):
+            def __init__(self, argument):
+                values.append((argument is self.strategy.datas[1],
+                               self.data is self.strategy.data0,
+                               self.data1 is self.strategy.datas[1]))
+        e = engine(api)
+        frame = pd.DataFrame({key:[20.,21.] for key in ('open','high','low','close','volume')},
+                             index=pd.date_range('2026-01-01', periods=2))
+        secondary = e.adddata(api.feeds.PandasData(dataname=frame))
+        e.addanalyzer(Analysis, secondary)
+        e.run()
+        return values
+    assert calls(tl) == calls(official)
+
+
+def test_observer_underscore_name_is_a_user_param_not_a_collection_selector():
+    def values(api):
+        calls = []
+        class Observation(api.Observer):
+            lines = ('observed',)
+            params = (('_name', 'default'),)
+            def start(self):
+                calls.append(self.p._name)
+        e = engine(api)
+        e.addobserver(Observation, _name='user-value')
+        e.run()
+        return calls
+    assert values(tl) == values(official)

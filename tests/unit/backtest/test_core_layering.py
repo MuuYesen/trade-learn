@@ -153,6 +153,8 @@ def test_backtest_runtime_modules_are_flattened() -> None:
         "__init__.py",
         "broker.py",
         "clock.py",
+        "components.py",
+        "_bt_datetime.py",
         "data.py",
         "engine.py",
         "event_runner.py",

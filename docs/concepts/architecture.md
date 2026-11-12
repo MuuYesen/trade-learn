@@ -1,6 +1,8 @@
 # 架构与边界
 
-当前正式发行分支版本为 **0.3.0**；正式发布与安装状态按精确产物收据核验。TradeLearn 使用 Python 表达策略与研究流程，使用 Rust 支撑原生回测内核，并通过内部 `tradelearn.backtest.event_runtime.StrategyRuntime` 协调默认研究、事件回放和外部驱动的 paper/live 生命周期。
+当前已正式发行版本为 **0.3.1**，后续 **0.3.2** 为独立候选；正式发布与安装状态按精确产物收据核验。TradeLearn 使用 Python 表达策略与研究流程，使用 Rust 支撑原生回测内核，并通过内部 `tradelearn.backtest.event_runtime.StrategyRuntime` 协调默认研究、事件回放和外部驱动的 paper/live 生命周期。
+
+Analyzer集合由共同运行层的`tradelearn.backtest.components`维护，Engine与回测都复用，核心不反向导入Engine/Lite。`tradelearn.backtest._bt_datetime`只转换Engine的公开日期读视图：预载与增量路径共用BT日期数与date/time/datetime参数，内部Unix秒/ns与Lite便利外观保持。NA Bar缺openinterest时显示NaN，不补零；自定义预载Line和OI列同样受已交付prefix约束。以上后续候选仍须新版本构建/安装资格，不外推为完整BT、子秒回测或全部原生化。
 
 ## 当前实现与后续目标
 

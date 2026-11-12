@@ -119,8 +119,8 @@ def test_native_store_components_and_signal_strategy_replay_use_one_runtime(tmp_
         def __init__(self):super().__init__();self.kinds=[]
         def on_broker_event(self,event):self.kinds.append(event.kind)
         def get_analysis(self):return {'kinds':self.kinds}
-    engine.addanalyzer(Stream,_name='stream');engine.addobserver(bt.observers.BuySell,_name='fills')
-    engine.addobserver(bt.observers.Trades,_name='trades')
+    engine.addanalyzer(Stream,_name='stream');engine.addobserver(bt.observers.BuySell,obsname='fills')
+    engine.addobserver(bt.observers.Trades,obsname='trades')
     store._validate(engine,{});store._engine=engine
     cls,args,parameters=store.strategy_spec
     bridge=create_execution_host(StrategyConfig(strategy_id=StrategyId('TL-001')),
@@ -160,7 +160,7 @@ def test_live_default_observer_history_uses_existing_runtime_capacity():
     from tradelearn_runtime.components import LiveComponents
     class Window(bt.Observer):
         def _observe(self):return float(self.strategy.data.close[0])
-    engine=bt.Cerebro(stdstats=False);engine.addobserver(Window,_name='window')
+    engine=bt.Cerebro(stdstats=False);engine.addobserver(Window,obsname='window')
     runtime=StrategyRuntime(bt.Strategy,feeds={'A':'bar'},capacity=2)
     components=LiveComponents(engine,runtime)
     runtime.start();components.start()

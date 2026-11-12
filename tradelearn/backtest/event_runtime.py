@@ -20,6 +20,7 @@ import pandas as pd
 
 from tradelearn.backtest.data import RollingBarBuffer
 from tradelearn.backtest.lines import Lines, LineSeries
+from tradelearn.backtest._bt_datetime import BTDateLine
 from tradelearn.backtest.strategy import Strategy
 from tradelearn.core.strategy_context import engine_context
 
@@ -160,7 +161,7 @@ class RuntimeLine(LineSeries):
     def full_series(self):
         self.require_full()
         if self.field is not None:
-            return pd.Series(self.feed._history[self.field][: self.feed.received], dtype=float)
+            return pd.Series(self._field_values(full=True), dtype=float)
         if self.compute is None:
             return pd.Series(self._all_output, dtype=float)
         return self._evaluate().copy()
@@ -210,10 +211,18 @@ class RuntimeLine(LineSeries):
             self._version_epoch = epoch
         return self._version_id
 
+    def _field_values(self, full=False):
+        if self.field == "openinterest" and self.field not in self.feed._buffer.arrays:
+            # Native OHLCV bars carry no OI fact. Match BT's missing field, never zero.
+            return np.full(self.feed.received if full else self.feed.retained, np.nan)
+        if full:
+            return self.feed._history[self.field][:self.feed.received]
+        return self.feed._buffer.arrays[self.field][:self.feed.retained]
+
     def to_series(self):
         if self.field is not None:
             return pd.Series(
-                self.feed._buffer.arrays[self.field][: self.feed.retained].copy(), dtype=float
+                self._field_values().copy(), dtype=float
             )
         if self.compute is None:
             return pd.Series(self._output, dtype=float)
@@ -234,7 +243,7 @@ class RuntimeLine(LineSeries):
         if ago > 0:
             raise ValueError("runtime lines cannot address future observations")
         if self.field is not None:
-            values = self.feed._buffer.arrays[self.field][:self.feed.retained]
+            values = self._field_values()
         elif self.compute is None:
             values = self._output
         else:
@@ -419,6 +428,10 @@ class _PersistentIndicatorPlan:
     prenext = next
 
 
+class _EngineRuntimeDateLine(BTDateLine, RuntimeLine):
+    """The Engine face shares the same BT conversion as preloaded feeds."""
+
+
 class RuntimeFeed:
     def __init__(self, runtime, symbol, capacity, buffer=None):
         self.runtime = runtime
@@ -476,6 +489,22 @@ class RuntimeFeed:
         )
 
 
+class _EngineRuntimeFeed(RuntimeFeed):
+    """Existing Engine line order, with unavailable native openinterest left missing."""
+    lines = ("close", "low", "high", "open", "volume", "openinterest", "datetime")
+
+    @property
+    def _indicator_line(self):
+        return self.close
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.datetime = _EngineRuntimeDateLine(self, field="datetime")
+        self.openinterest = RuntimeLine(self, field="openinterest")
+        self.lines.datetime = self.datetime
+        self.lines.openinterest = self.openinterest
+
+
 class _BoundBuffer:
     """Cursor view of a backend's preloaded storage; owns no second window."""
     def __init__(self, data):
@@ -485,6 +514,11 @@ class _BoundBuffer:
         for name in ("datetime", "open", "high", "low", "close", "volume"):
             line = getattr(data, name, None)
             self.arrays[name] = line._values if line is not None else getattr(data, "_" + name)
+        aliases = getattr(getattr(data, "lines", None), "getlinealiases", None)
+        for name in aliases() if callable(aliases) else ():
+            line = getattr(data, name, None)
+            if name not in self.arrays and hasattr(line, "_values"):
+                self.arrays[name] = line._values
         self.capacity = max(2, len(self.arrays["close"]))
 
     @property
@@ -584,7 +618,8 @@ class StrategyRuntime:
         self._plans = WeakValueDictionary()
         self._stepping = False
         self.modes = MappingProxyType(dict(feeds))
-        self.feeds = {s: RuntimeFeed(self, s, capacity, (buffers or {}).get(s)) for s in feeds}
+        feed_type = _EngineRuntimeFeed if getattr(profile, "_bt_minperiods", False) else RuntimeFeed
+        self.feeds = {s: feed_type(self, s, capacity, (buffers or {}).get(s)) for s in feeds}
         metadata = {} if feed_metadata is None else feed_metadata
         if not isinstance(metadata, dict) or set(metadata) - set(self.feeds):
             raise ValueError("feed period metadata must match declared runtime symbols")

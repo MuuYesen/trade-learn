@@ -12,7 +12,7 @@
 - Analyzer/Observer继承参数与构造前owner/data绑定；Analyzer的name参数保留给用户，集合名称使用_name，重复实例加序号，集合索引/迭代走共同实现。
 - Returns按真实日历时间桶常量计数，输出BT观测权益对数收益字段；Sharpe按当前桶和在线矩状态处理固定BT的周期/无风险利率/样本方差选项，不借Stats历史重算，不改变公共TWR金融口径。legacyannual、完整fund/时区/会话等仍未全部支持。
 - 共同Runtime在用户next前采样观察账户值，对齐DrawDown/Sharpe原始BT通知阶段；未新增运行循环。
-- 固定NA的BarType周期声明传到惰性订阅及Runtime feed，不猜采样频率；非时间Bar保未知。
+- 固定NA的BarType周期声明传到惰性订阅及Runtime feed，不猜采样频率；非时间Bar保未知。Engine日期读视图在预载/增量路径共用，内部Unix/ns不变，缺OI保NaN；预载可选Line受prefix限制。
 - 既有broker kwargs新增严格布尔post_only，对NA限价族映射，恢复保存和核对不可变标志；固定NA模拟器正反例通过，OHLCV后端不模拟该venue准入策略。cTrader支持范围不外推。
 - SDK有限白名单增加0.3.2/API1，其余17文件不变，未知版本/API继续拒绝。完整BT/NA行为、GTD与其他已列缺口仍继续，不以这版候选称整轮完成。
 

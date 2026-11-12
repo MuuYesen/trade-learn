@@ -148,7 +148,8 @@ class MetaParams(type):
             instance._base_init(**p_kwargs)
 
         # 4. Data Assignment
-        datas = [arg for arg in args if hasattr(arg, 'lines') or hasattr(arg, '_values')]
+        datas = ([] if isinstance(instance, BaseAnalyzer) else
+                 [arg for arg in args if hasattr(arg, 'lines') or hasattr(arg, '_values')])
         if not datas and _G.current_datas:
             datas = list(_G.current_datas)
         elif not datas and _G.current_data is not None:

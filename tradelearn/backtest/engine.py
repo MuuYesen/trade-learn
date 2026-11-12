@@ -31,7 +31,18 @@ def _observer_step(runtime: Any, observer_nexts: tuple[Any, ...]) -> None:
 
 def _current_bar(data: Any) -> BarSnapshot:
     idx = max(0, int(getattr(data, "_cursor", 0)))
-    timestamp = pd.to_datetime(data._datetime[idx], unit="s", utc=True) if hasattr(data, "_datetime") else idx
+    runtime = getattr(data, "runtime", None)
+    source_ns = getattr(runtime, "_last_ts", {}).get(getattr(data, "_name", None))
+    if source_ns is not None:
+        timestamp = pd.Timestamp(source_ns, unit="ns", tz="UTC")
+    elif hasattr(data, "_datetime"):
+        timestamp = pd.to_datetime(data._datetime[idx], unit="s", utc=True)
+    elif getattr(data, "_buffer", None) is not None:
+        raw_timestamp = data._buffer.value("datetime", ago=0)
+        timestamp = (pd.to_datetime(raw_timestamp, unit="s", utc=True)
+                     if pd.notna(raw_timestamp) else None)
+    else:
+        timestamp = None
     return BarSnapshot(
         datetime=timestamp,
         open=float(data.open[0]),
@@ -1069,7 +1080,7 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
     indicators = getattr(strategy, "_indicators", [])
     indicators_bt = getattr(strategy, "_indicators_bt", [])
 
-    from tradelearn.engine.analyzer import AnalyzerCollection
+    from tradelearn.backtest.components import AnalyzerCollection
     strategy.analyzers = AnalyzerCollection()
     for name, ana_spec in cerebro.analyzers.items():
         if len(ana_spec) == 3:

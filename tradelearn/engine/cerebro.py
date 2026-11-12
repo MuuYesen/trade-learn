@@ -106,7 +106,7 @@ class Cerebro:
         self._sizer_spec = (FixedSize, {})
         self.analyzers: dict[str, tuple[type[Analyzer], tuple[Any, ...], dict[str, Any]]] = {}
         self._analyzer_name_counts: dict[str, int] = {}
-        self.observers: dict[str, tuple[type[Any], dict]] = {}
+        self.observers: dict[str, tuple[type[Any], tuple[Any, ...], dict]] = {}
         self.writers: list[tuple[type[Any], tuple, dict]] = []
         self.stores: list[Any] = []
         self.timers: list[tuple[tuple, dict]] = []
@@ -199,16 +199,17 @@ class Cerebro:
     def optcallback(self, cb: Any) -> None:
         self.optcbs.append(cb)
 
-    def addanalyzer(self, analyzer: type[Analyzer], *args: Any, _name=None, **kwargs: Any) -> None:
-        base_name = _name or analyzer.__name__.lower()
+    def addanalyzer(self, ancls: type[Analyzer], *args: Any, **kwargs: Any) -> None:
+        base_name = kwargs.pop("_name", None) or ancls.__name__.lower()
         suffix = self._analyzer_name_counts.get(base_name, 0)
         self._analyzer_name_counts[base_name] = suffix + 1
         name = base_name + (str(suffix) if suffix else "")
-        self.analyzers[name] = (analyzer, args, kwargs)
+        self.analyzers[name] = (ancls, args, kwargs)
 
-    def addobserver(self, observer: type[Any], *args: Any, _name=None, **kwargs: Any) -> None:
-        name = _name or kwargs.pop("name", None) or observer.__name__.lower()
-        self.observers[name] = (observer, kwargs)
+    def addobserver(self, obscls: type[Any], *args: Any, **kwargs: Any) -> None:
+        # Only obsname selects the BT collection; other keywords belong to the observer.
+        name = kwargs.pop("obsname", None) or obscls.__name__.lower()
+        self.observers[name] = (obscls, args, kwargs)
 
     def addwriter(self, writer: type[Any], *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("writer lifecycle is not implemented; use an independent Reporter")
@@ -404,9 +405,14 @@ class Cerebro:
         observer_specs = dict(self.observers)
         if self.stdstats:
             observer_specs.setdefault("value", (Value, {}))
-        for name, (observer_cls, observer_kwargs) in observer_specs.items():
+        for name, spec in observer_specs.items():
+            if len(spec) == 3:
+                observer_cls, observer_args, observer_kwargs = spec
+            else:
+                observer_cls, observer_kwargs = spec
+                observer_args = ()
             with engine_context(strategy=strategy, data=strategy.data, datas=strategy.datas):
-                observer = observer_cls(**observer_kwargs)
+                observer = observer_cls(*observer_args, **observer_kwargs)
             observer._set(strategy)
             strategy.observers[name] = observer
 
