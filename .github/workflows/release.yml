@@ -10,8 +10,7 @@ on:
         type: boolean
   push:
     branches:
-      - "publish/preview-runtime-20261103"
-      - "release/0.3.0-integration-20261112"
+      - "dev"
     tags:
       - "v*"
     # CI/oracle preparation alone does not change wheel inputs. Keep the

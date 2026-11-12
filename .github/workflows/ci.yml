@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: ["master", "publish/**", "release/**"]
+    branches: ["master", "dev", "publish/**", "release/**"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -32,8 +32,8 @@ jobs:
       - uses: ./.github/actions/prepare-oracle
       - name: Diagnose default environment and create explicit selected interpreter
         run: python .github/actions/prepare-ci-environment.py --python 3.12 --probe-default
-      - run: uv pip install . --group dev --group ci --group oracle
-      - run: uv pip check
+      - run: uv pip install -e . --group dev --group ci --group oracle
+      - run: python scripts/check_ci_dependencies.py
       - run: uv run --no-sync python scripts/check_oracle.py
       - uses: actions/upload-artifact@v4
         if: always()
@@ -61,8 +61,8 @@ jobs:
       # Qualify the actual selected metadata while the separately mandatory
       # universal lock check exposes unpublished optional distributions.
       - run: python .github/actions/prepare-ci-environment.py --python "${{ matrix.python-version }}"
-      - run: uv pip install . --group dev --group ci --group oracle
-      - run: uv pip check
+      - run: uv pip install -e . --group dev --group ci --group oracle
+      - run: python scripts/check_ci_dependencies.py
       - run: uv run --no-sync ruff check tradelearn/core tradelearn/data tradelearn/factor tradelearn/indicators tradelearn/metrics tradelearn/report tradelearn/integrations tests/unit/core tests/unit/data tests/unit/factor tests/unit/indicators tests/unit/metrics tests/unit/report tests/unit/integrations tests/golden tests/consistency scripts
       - run: uv run --no-sync pytest --junitxml=pytest-results.xml
       - name: Expose test failures in public annotations
@@ -85,9 +85,12 @@ jobs:
           python-version: "3.12"
       - uses: ./.github/actions/prepare-oracle
       - run: python .github/actions/prepare-ci-environment.py --python 3.12
-      - run: uv pip install . --group dev --group ci --group oracle
-      - run: uv pip check
-      - run: uv run --no-sync pytest tests/consistency/ -v --tb=short
+      - run: uv pip install -e . --group dev --group ci --group oracle
+      - run: python scripts/check_ci_dependencies.py
+      - run: uv run --no-sync pytest tests/consistency/ -v --tb=short --junitxml=consistency-results.xml
+      - name: Expose consistency failures
+        if: failure()
+        run: python scripts/report_test_failures.py consistency-results.xml
       - run: uv run --no-sync pytest tests/golden/ -v
 
   oracle:
@@ -101,6 +104,6 @@ jobs:
           python-version: "3.12"
       - uses: ./.github/actions/prepare-oracle
       - run: python .github/actions/prepare-ci-environment.py --python 3.12
-      - run: uv pip install . --group dev --group ci --group oracle
-      - run: uv pip check
+      - run: uv pip install -e . --group dev --group ci --group oracle
+      - run: python scripts/check_ci_dependencies.py
       - run: uv run --no-sync python scripts/check_oracle.py

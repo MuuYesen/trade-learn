@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import patch
-from tradelearn.engine import Strategy, StrategyRuntime
+from tradelearn.engine import Strategy
+from tradelearn.backtest.event_runtime import StrategyRuntime
 from tradelearn.core import strategy_events as events
 from leafquant_monitor.tradelearn import TradeLogStrategy, TradeLogConfig
 from leafquant_monitor.logger import TradeLogger, MonitorSettings

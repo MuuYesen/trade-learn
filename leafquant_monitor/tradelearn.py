@@ -1,4 +1,4 @@
-"""Optional TradeLearn 0.2.9 observation seam; no execution authority or loop."""
+"""Optional TradeLearn 0.2.9/0.3.0 observation seam; no execution authority or loop."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -161,8 +161,8 @@ class _Monitor:
 
 
 def _assemble(strategy):
-    if tradelearn.__version__ != '0.2.9' or OBSERVER_API_VERSION != 1:
-        raise RuntimeError('TradeLearn 0.2.9 with observer API v1 required')
+    if tradelearn.__version__ not in {'0.2.9', '0.3.0'} or OBSERVER_API_VERSION != 1:
+        raise RuntimeError('TradeLearn 0.2.9 or 0.3.0 with observer API v1 required')
     config = getattr(strategy, 'monitor_config', None)
     if not isinstance(config, TradeLogConfig):
         raise ValueError('explicit TradeLogConfig required before Runtime assembly')
