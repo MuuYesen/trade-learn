@@ -20,8 +20,30 @@ jobs:
           python-version: "3.13"
       - run: uv lock --check
 
+  bootstrap:
+    name: oracle and selected-profile bootstrap
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - uses: ./.github/actions/prepare-oracle
+      - name: Diagnose default environment and create explicit selected interpreter
+        run: python .github/actions/prepare-ci-environment.py --python 3.12 --probe-default
+      - run: uv pip install . --group dev --group ci --group oracle
+      - run: uv pip check
+      - run: uv run --no-sync python scripts/check_oracle.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bootstrap-diagnostic
+          path: ${{ runner.temp }}/ci-environment-diagnostic.json
+
   test:
     name: ${{ matrix.os }} py${{ matrix.python-version }}
+    needs: bootstrap
     runs-on: ${{ matrix.os }}
     env:
       PYTHONUTF8: "1"
@@ -38,7 +60,7 @@ jobs:
       - uses: ./.github/actions/prepare-oracle
       # Qualify the actual selected metadata while the separately mandatory
       # universal lock check exposes unpublished optional distributions.
-      - run: uv venv
+      - run: python .github/actions/prepare-ci-environment.py --python "${{ matrix.python-version }}"
       - run: uv pip install . --group dev --group ci --group oracle
       - run: uv pip check
       - run: uv run --no-sync ruff check tradelearn/core tradelearn/data tradelearn/factor tradelearn/indicators tradelearn/metrics tradelearn/report tradelearn/integrations tests/unit/core tests/unit/data tests/unit/factor tests/unit/indicators tests/unit/metrics tests/unit/report tests/unit/integrations tests/golden tests/consistency scripts
@@ -54,6 +76,7 @@ jobs:
 
   consistency:
     name: consistency
+    needs: bootstrap
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -61,7 +84,7 @@ jobs:
         with:
           python-version: "3.12"
       - uses: ./.github/actions/prepare-oracle
-      - run: uv venv
+      - run: python .github/actions/prepare-ci-environment.py --python 3.12
       - run: uv pip install . --group dev --group ci --group oracle
       - run: uv pip check
       - run: uv run --no-sync pytest tests/consistency/ -v --tb=short
@@ -69,6 +92,7 @@ jobs:
 
   oracle:
     name: oracle-readiness
+    needs: bootstrap
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,7 +100,7 @@ jobs:
         with:
           python-version: "3.12"
       - uses: ./.github/actions/prepare-oracle
-      - run: uv venv
+      - run: python .github/actions/prepare-ci-environment.py --python 3.12
       - run: uv pip install . --group dev --group ci --group oracle
       - run: uv pip check
       - run: uv run --no-sync python scripts/check_oracle.py
