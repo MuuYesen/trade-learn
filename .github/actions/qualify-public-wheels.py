@@ -1,4 +1,4 @@
-"""Qualify already-published immutable wheels, never build or publish a package."""
+"""Qualify immutable public or explicitly selected CI wheels; never build or publish."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import urllib.request
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
@@ -29,7 +30,25 @@ TESTS = [
     "tests/unit/backtest/test_trailing_matching.py",
     "tests/unit/backtest/test_bt_trail_projection.py",
 ]
+TESTS_032 = [
+    "tests/unit/engine/test_bt_analyzer_param_inheritance.py",
+    "tests/unit/engine/test_bt_component_construction.py",
+    "tests/unit/engine/test_bt_returns_actual.py",
+    "tests/unit/engine/test_bt_sharpe_actual.py",
+    "tests/unit/engine/test_bt_stream_datetime.py",
+    "tests/unit/engine/test_native_only_broker_controls.py",
+    "tests/test_live_components.py",
+    "tests/test_live_feed_metadata.py",
+    "tests/test_live_returns_analyzer.py",
+    "tests/test_live_post_only.py",
+]
 PACKAGES = {"tradelearn", "tradelearn_runtime", "leafquant_monitor"}
+
+
+def selected_tests(version):
+    """Keep historical 031 evidence stable; require new tests on new releases."""
+    release = tuple(map(int, re.match(r"(\d+)\.(\d+)\.(\d+)", version).groups()))
+    return TESTS + (TESTS_032 if release >= (0, 3, 2) else [])
 
 
 def digest(path):
@@ -118,9 +137,22 @@ def installed(args):
     import pytest
 
     code = pytest.main(
-        ["-c", str(work / "pytest.ini"), "-v", "--junitxml=" + str(work / "tests.xml")]
-        + [str(work / name) for name in TESTS]
+        [
+            "-c",
+            str(work / "pytest.ini"),
+            "-v",
+            "-W",
+            "error::pytest.PytestUnraisableExceptionWarning",
+            "--junitxml=" + str(work / "tests.xml"),
+        ]
+        + [str(work / name) for name in selected_tests(args.tl)]
     )
+    suites = ET.parse(work / "tests.xml").getroot().iter("testsuite")
+    counts = {key: 0 for key in ("tests", "failures", "errors", "skipped")}
+    for suite in suites:
+        for key in counts:
+            counts[key] += int(suite.get(key, "0"))
+    assert counts["tests"] > 0 and counts["skipped"] == 0, counts
     assert not attempts
     for name, module in list(sys.modules.items()):
         if name.split(".")[0] in PACKAGES | {"tl_store"} and getattr(module, "__file__", None):
@@ -136,7 +168,10 @@ def installed(args):
         "recipient_source": source_receipt,
         "network_attempts": attempts,
         "pytest_exit": code,
-        "own_packages_are_public_final_wheels": True,
+        "test_counts": counts,
+        "test_paths": selected_tests(args.tl),
+        "own_packages_are_public_final_wheels": not bool(args.candidate_wheel),
+        "candidate_wheel": args.candidate_wheel,
     }
     (work / "installed-receipt.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result), flush=True)
@@ -157,6 +192,10 @@ def prepare(args):
     work.mkdir(parents=True, exist_ok=False)
     wheels = work / "wheels"
     wheels.mkdir()
+    candidate = Path(args.candidate_wheel).resolve() if args.candidate_wheel else None
+    if candidate:
+        assert candidate.is_file() and candidate.name.startswith("trade_learn-" + args.tl + "-")
+        shutil.copyfile(candidate, wheels / candidate.name)
     subprocess.run(
         [
             sys.executable,
@@ -170,7 +209,7 @@ def prepare(args):
             "--no-deps",
             "--dest",
             str(wheels),
-            "trade-learn==" + args.tl,
+            *([] if candidate else ["trade-learn==" + args.tl]),
             "tl-store==" + args.store,
             "nautilus-trader==2.0.0rc7",
         ],
@@ -184,6 +223,15 @@ def prepare(args):
         ("nautilus-trader", "2.0.0rc7", "nautilus_trader-"),
     ]:
         wheel = next(wheels.glob(prefix + "*.whl"))
+        if project == "trade-learn" and candidate:
+            expected[project] = {
+                "version": version,
+                "filename": wheel.name,
+                "sha256": digest(wheel),
+                "url": None,
+                "candidate_not_public": True,
+            }
+            continue
         with urllib.request.urlopen(
             "https://pypi.org/pypi/" + project + "/" + version + "/json", timeout=45
         ) as response:
@@ -200,11 +248,18 @@ def prepare(args):
     inventory = {}
     for package in PACKAGES:
         for path in (args.source / package).rglob("*"):
-            if path.is_file() and path.suffix in {".py", ".json", ".html", ".hpp", ".jinja2"}:
+            if path.is_file() and path.suffix in {
+                ".py",
+                ".json",
+                ".html",
+                ".hpp",
+                ".jinja2",
+                ".md",
+            }:
                 inventory[path.relative_to(args.source).as_posix()] = digest(path)
     assert inventory
     (work / "source-inventory.json").write_text(json.dumps(inventory, indent=2) + "\n")
-    paths = [name for name in TESTS if name != "test_store.py"] + [
+    paths = [name for name in selected_tests(args.tl) if name != "test_store.py"] + [
         "tests/test_live_order_mapping.py",
         "tests/windows_private_directory.py",
     ]
@@ -222,7 +277,6 @@ def prepare(args):
     shutil.copyfile(
         Path(__file__).with_name("public_store_binding_test.py"), work / "test_store.py"
     )
-    TESTS[0] = "test_store.py"
     (work / "pytest.ini").write_text("[pytest]\naddopts = -ra\n")
     subprocess.run([sys.executable, "-m", "venv", str(work / "venv")], check=True)
     python = work / "venv/bin/python"
@@ -265,6 +319,7 @@ def prepare(args):
             args.store,
             "--sha",
             args.sha,
+            *(["--candidate-wheel", str(candidate)] if candidate else []),
         ],
         cwd=work,
         env=env,
@@ -281,6 +336,9 @@ def main():
     parser.add_argument("--tl", required=True)
     parser.add_argument("--store", required=True)
     parser.add_argument("--sha", required=True)
+    parser.add_argument(
+        "--candidate-wheel", help="Exact CI wheel path, never labelled public final"
+    )
     parser.add_argument("--installed", action="store_true")
     args = parser.parse_args()
     return installed(args) if args.installed else prepare(args)

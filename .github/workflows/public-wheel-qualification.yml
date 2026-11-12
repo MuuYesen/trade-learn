@@ -19,8 +19,13 @@ on:
       source_sha:
         type: string
         required: true
+      candidate_run:
+        description: "Optional successful Release build-only run; never labels a candidate public"
+        type: string
+        required: false
 permissions:
   contents: read
+  actions: read
 jobs:
   linux-public:
     runs-on: ubuntu-22.04
@@ -31,18 +36,46 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: v${{ inputs.tl_version || '0.3.1' }}
+          ref: ${{ inputs.candidate_run && inputs.source_sha || format('v{0}', inputs.tl_version || '0.3.1') }}
           path: qualification-source
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Actual public wheels; no build, no publish, no broker connection
+      - name: Verify exact candidate run and download existing Linux wheels
+        if: inputs.candidate_run
         env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          python - <<'PYCODE'
+          import json, os, subprocess
+          run = os.environ['CANDIDATE_RUN']
+          assert run.isdecimal()
+          data = json.loads(subprocess.check_output(['gh', 'api', 'repos/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + run]))
+          assert data['head_sha'] == os.environ['SOURCE_SHA']
+          assert data['path'] == '.github/workflows/release.yml'
+          assert data['conclusion'] == 'success'
+          assert data['event'] == 'push' and data['head_branch'] == 'dev'
+          subprocess.run(['gh', 'run', 'download', run, '--repo', os.environ['GITHUB_REPOSITORY'], '--name', 'wheels-ubuntu-latest-auto64', '--dir', os.environ['RUNNER_TEMP'] + '/candidate-wheels'], check=True)
+          PYCODE
+      - name: Actual installed wheels; no build, no publish, no broker connection
+        env:
+          CANDIDATE_RUN: ${{ inputs.candidate_run }}
           TL_VERSION: ${{ inputs.tl_version || '0.3.1' }}
           STORE_VERSION: ${{ inputs.store_version || '0.2.1a4' }}
           SOURCE_SHA: ${{ inputs.source_sha || '0f08eaba7215ea3b45b4b11649cdcd758b59b19b' }}
-        run: python .github/actions/qualify-public-wheels.py --source "$GITHUB_WORKSPACE/qualification-source" --work "$RUNNER_TEMP/public-wheel-qualification" --tl "$TL_VERSION" --store "$STORE_VERSION" --sha "$SOURCE_SHA"
+        run: |
+          python - <<'PYCODE'
+          import os, pathlib, subprocess, sys
+          command = [sys.executable, '.github/actions/qualify-public-wheels.py', '--source', os.environ['GITHUB_WORKSPACE'] + '/qualification-source', '--work', os.environ['RUNNER_TEMP'] + '/public-wheel-qualification', '--tl', os.environ['TL_VERSION'], '--store', os.environ['STORE_VERSION'], '--sha', os.environ['SOURCE_SHA']]
+          if os.environ.get('CANDIDATE_RUN'):
+              wheels = list(pathlib.Path(os.environ['RUNNER_TEMP'], 'candidate-wheels').glob('*cp313-cp313*.whl'))
+              assert len(wheels) == 1
+              command += ['--candidate-wheel', str(wheels[0])]
+          subprocess.run(command, check=True)
+          PYCODE
       - uses: actions/upload-artifact@v4
         if: always()
         with:

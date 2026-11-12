@@ -50,7 +50,10 @@ def test_event_runner_drives_single_live_bar_and_broker_events() -> None:
     assert [event.kind for event in snapshot.events] == ["fill"]
     assert snapshot.bar.symbol == "AAPL"
     assert fills == [{"price": 10.5}]
-    assert strategy.rows == [(pd.Timestamp("2026-01-01", tz="UTC"), 10.5)]
+    # Engine exposes BT Gregorian date numbers; Lite keeps Timestamp convenience.
+    import backtrader as official
+
+    assert strategy.rows == [(official.date2num(pd.Timestamp("2026-01-01", tz="UTC")), 10.5)]
 
 
 def test_backtest_namespace_exposes_event_runner_drivers() -> None:
