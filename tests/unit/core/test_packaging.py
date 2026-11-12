@@ -116,7 +116,7 @@ def test_release_workflow_builds_cross_platform_artifacts_and_publishes_with_oid
     assert "tags:" in workflow
     assert "v*" in workflow
     assert "ubuntu-latest" in workflow
-    assert "macos-14" in workflow
+    assert "macos-15" in workflow
     assert "cibw-archs: arm64" in workflow
     assert "windows-latest" in workflow
     assert "CIBW_ARCHS: ${{ matrix.cibw-archs }}" in workflow

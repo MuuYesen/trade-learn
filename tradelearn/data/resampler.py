@@ -79,7 +79,7 @@ def _try_rust_resample_frame(
         )
     except (ImportError, AttributeError):
         return None
-    index = pd.to_datetime(labels, unit="s", utc=True)
+    index = pd.to_datetime(labels, unit="s", utc=True).as_unit("ns")
     if tz != "UTC":
         index = index.tz_convert(tz)
     result = pd.DataFrame(

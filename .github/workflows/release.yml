@@ -177,7 +177,17 @@ jobs:
         run: |
           cd "$RUNNER_TEMP"
           python -c 'import pathlib,tradelearn; assert not pathlib.Path(tradelearn.__file__).is_relative_to(pathlib.Path(__import__("os").environ["GITHUB_WORKSPACE"]))'
-          python "$GITHUB_WORKSPACE/tests/unit/indicators/kunquant_fixture.py" "$RUNNER_TEMP/native-fixture" --github-actions
+          python - <<'PY'
+          import os,pathlib,subprocess,sys
+          command=[sys.executable,os.environ['GITHUB_WORKSPACE']+'/tests/unit/indicators/kunquant_fixture.py',os.environ['RUNNER_TEMP']+'/native-fixture','--github-actions']
+          result=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+          pathlib.Path('native-build.log').write_text(result.stdout)
+          print(result.stdout)
+          if result.returncode:
+              message=result.stdout[:8000]+'\n...\n'+result.stdout[-12000:]
+              print('::error::'+message.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
+          sys.exit(result.returncode)
+          PY
       - name: Real installed native numeric and lifecycle qualification; zero skips
         shell: bash
         env:
@@ -198,6 +208,7 @@ jobs:
           name: native-qualification-${{ matrix.os }}
           path: |
             ${{ runner.temp }}/native-fixture
+            ${{ runner.temp }}/native-build.log
             ${{ runner.temp }}/native-results.xml
 
   publish:

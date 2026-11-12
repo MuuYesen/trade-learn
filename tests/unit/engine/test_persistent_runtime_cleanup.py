@@ -11,7 +11,7 @@ def bar(i):
 
 
 @pytest.mark.parametrize('failure',['none','business','stop','both'])
-def test_owned_bindings_reset_once_after_normal_or_exceptional_stop(monkeypatch,failure):
+def test_owned_bindings_reset_once_after_normal_or_exceptional_stop(monkeypatch,failure,recwarn):
     resets=[];closed=[]
     original=StreamBinding.reset
     def reset(binding):resets.append(id(binding));return original(binding)
@@ -32,7 +32,11 @@ def test_owned_bindings_reset_once_after_normal_or_exceptional_stop(monkeypatch,
     if failure in ('business','both'):
         with pytest.raises(LookupError) as caught:runtime.step_market('A',bar(0))
         assert caught.value is primary
-        if failure=='both':assert any('stop' in note for note in primary.__notes__)
+        if failure=='both':
+            if callable(getattr(primary,'add_note',None)):
+                assert any('stop' in note for note in primary.__notes__)
+            else:
+                assert any('stop' in str(w.message) for w in recwarn)
     else:
         runtime.step_market('A',bar(0))
         if failure=='stop':
@@ -61,3 +65,13 @@ def test_all_bindings_release_even_when_one_close_fails():
     runtime.stop()
     assert sorted(closed)==['failing','normal']
     assert runtime.strategy.a[0]==runtime.strategy.b[0]==1
+
+
+def test_python310_cleanup_warning_fallback_preserves_primary(recwarn):
+    from tradelearn.backtest.event_runtime import _safe_cleanup_diagnostic
+    class LegacyError(LookupError):
+        add_note = None
+    primary = LegacyError("business")
+    _safe_cleanup_diagnostic(primary, RuntimeError("stop"))
+    assert str(primary) == "business"
+    assert any("stop" in str(w.message) for w in recwarn)

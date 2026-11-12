@@ -33,10 +33,7 @@ def repo(tmp_path, version="0.2.9", native="0.2.9"):
 
 
 def test_build_only_branch_cannot_accidentally_publish():
-    assert (
-        guard.check("refs/heads/publish/preview-runtime-20261103", "push", False)["publish"]
-        == "false"
-    )
+    assert guard.check("refs/heads/dev", "push", False)["publish"] == "false"
     with pytest.raises(ValueError, match="exact version tag"):
         guard.check("refs/heads/master", "workflow_dispatch", True)
 
@@ -50,8 +47,9 @@ def test_wrong_tag_and_native_version_are_rejected(tmp_path):
 
 def test_release_requires_exact_commit_ci_and_allows_internal_core_version():
     seen = []
+    version, prerelease = guard.release_version()
     result = guard.check(
-        "refs/tags/v0.2.9",
+        "refs/tags/v" + version,
         "push",
         False,
         repository="owner/repo",
@@ -59,7 +57,7 @@ def test_release_requires_exact_commit_ci_and_allows_internal_core_version():
         ci_check=lambda repository, sha, token: seen.append((repository, sha)),
     )
     assert seen == [("owner/repo", "reviewed")]
-    assert result == {"version": "0.2.9", "prerelease": "false", "publish": "true"}
+    assert result == {"version": version, "prerelease": str(prerelease).lower(), "publish": "true"}
 
 
 def test_rc_release_sets_prerelease_and_checks_normalized_native_version(tmp_path):

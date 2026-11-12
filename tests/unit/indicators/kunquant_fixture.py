@@ -13,7 +13,7 @@ from KunQuant.Op import Builder, Input, Output, Rank
 from KunQuant.ops import WindowedAvg, WindowedCorrelation
 from KunQuant.Stage import Function
 
-from tradelearn.indicators._kunquant_compile import compile_modules
+from tradelearn.indicators._kunquant_compile import compile_modules, compiler_config
 from tradelearn.indicators._kunquant_graph import ALPHA101_NAMES, build_alpha101, build_alpha158
 
 
@@ -94,7 +94,13 @@ def build(output, *, github_actions=False):
         isa=tuple(name for name, enabled in __cpu_features__.items() if enabled),
         metadata=metadata,
         expressions=expressions,
-        compiler=subprocess.check_output(["clang++", "--version"], text=True).splitlines()[0],
+        compiler=subprocess.check_output(
+            [compiler_config().compiler, "--version"], text=True
+        ).splitlines()[0],
+        compiler_executable=compiler_config().compiler,
+        max_child_rss_unit="bytes" if platform.system() == "Darwin" else "KiB",
+        max_child_rss_bytes=resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+        * (1 if platform.system() == "Darwin" else 1024),
         modules=[item[0] for item in modules],
         blocking_len=width,
         dtype="float64",

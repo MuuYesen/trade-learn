@@ -8,7 +8,7 @@ from tradelearn.data.resampler import _DAYS, _MINUTES, resample_frame
 
 
 def _minute_bars() -> pd.DataFrame:
-    index = pd.date_range("2026-01-01 09:30", periods=7, freq="1min", tz="UTC")
+    index = pd.date_range("2026-01-01 09:30", periods=7, freq="1min", tz="UTC").as_unit("ns")
     return pd.DataFrame(
         {
             "open": [10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0],

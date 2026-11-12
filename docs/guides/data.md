@@ -166,3 +166,5 @@ class MyProvider:
 
 
 DataExplorer 的报告表格快照按数据/索引/列类型/来源属性与内部计算版本自动失效；修改返回表不会污染缓存，重复 HTML/Excel 不重做统计。Tushare 默认 HTTP 客户端仅在显式请求时导入 requests；数据 facade 和自定义 transport 不因此要求 requests。缺依赖给出 research 安装提示，凭据及自定义 transport 错误继续脱敏。
+
+固定宽度Rust重采样从真实秒标签重建索引时显式使用纳秒dtype，避免Pandas 2/3默认表示差异；输入s/ms/us/ns按声明单位转换，真实标签和时区不变，不因此声称原数据有纳秒测量精度。
