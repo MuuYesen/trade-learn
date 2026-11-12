@@ -1,10 +1,10 @@
-> 当前源码组合：TL 0.3.0 / TL-Store 0.2.1a3，实际实现与 native 统一为 `tl_store.ctrader` / `tl_store.ctrader._native`。本机 Mac 干净安装及离线组合通过；Linux 新 wheel 和公网安装未合格。下文带版本/日期的旧候选仅为各自历史证据。
+> 正式公共发行组合：TL 0.3.0 / TL-Store 0.2.1a3 / 官方NA 2.0.0rc7；实际实现与native统一为`tl_store.ctrader` / `tl_store.ctrader._native`。TL标签v0.3.0源af47b786与Store私有源8364acf的实际OIDC上传均成功。最终公网安装与逐wheel SHA以TL整合IC-FORMAL-RELEASE-CONTRACT.json为准，部署/venue自然运行独立验收；下方日期化旧候选仅证明各自历史。
 
 # 实盘协议
 
 > **待实现目标（2026-11-11）**：收敛共同策略/流水线与运行产物、历史资格/截面/调仓恢复、数量与在途订单处理；不新增执行引擎或自动扩展venue资格。当前唯一NautilusStore和真实SQS/IAM合同继续有效，讨论中的endpoint+token不是可用接口；本页候选/发行/真实验收状态分别保留。见[统一改造状态](../concepts/api-boundary.md#pending-unification-20261111)。
 
-本轮未发布源码通过内部 `tradelearn.backtest.event_runtime.StrategyRuntime` 协调默认研究、事件回放和外部驱动 paper/live 的策略生命周期；Engine根导出已退出。接入方负责事件调度、行情、权威订单/账户事实和执行保护；Runtime 不启动后台循环。完整调用与限制见 [Runtime](../concepts/runtime.md#正式增量策略runtime)。
+0.3.0通过内部 `tradelearn.backtest.event_runtime.StrategyRuntime` 协调默认研究、事件回放和外部驱动 paper/live 的策略生命周期；Engine根导出已退出。接入方负责事件调度、行情、权威订单/账户事实和执行保护；Runtime 不启动后台循环。完整调用与限制见 [Runtime](../concepts/runtime.md#正式增量策略runtime)。
 
 ## NautilusStore：唯一执行装配入口
 
@@ -120,9 +120,9 @@ adapter 必须核对接口能力。构造和 feed/broker 登记不启动 Node、
 或后台刷新。显式原生 `CTraderStoreConfig` 保留，与简洁字段互斥，二者进入同一工厂/
 会话/Runtime/Broker装配与退出链。`run` 对清理异常保留原主异常。
 
-TL extra 候选锁定 `tl-store==0.2.1a2`；准确目标命令仍为
-`pip install "trade-learn[nautilus,tl-store]"`。源码、发行候选安装及公网发布分别验收，
-此命令目前须使用匹配候选 wheelhouse，不能指向旧公开0.2.9宣称可用。
+0.3.0 extra锁定`tl-store==0.2.1a3`，正式命令为
+`pip install "trade-learn[nautilus,tl-store]==0.3.0"`，组合须用CPython3.13；
+a3已提供Mac arm64/Linux x86_64（glibc2.34+）真实wheel。新增平台及ABI仍独立实施；旧公开0.2.9不具备此入口。
 
 ### 实时功能映射现状（2026-11-10候选，尚未完成全量覆盖）
 
@@ -143,7 +143,7 @@ TL extra 候选锁定 `tl-store==0.2.1a2`；准确目标命令仍为
 | Stop(price) | OrderFactory.stop_market(trigger_price) | 已补stop_market及触发价恢复核验（本地候选），尚无venue交易验收 | adapter也有独立实现缺口，不等于OpenAPI不支持 |
 | StopLimit(price,pricelimit) | OrderFactory.stop_limit(trigger_price,price) | 已补stop_limit双价格及恢复核验（本地候选），尚无venue交易验收 | 同上，需扩协议/报告/撤改单闭包后验收 |
 | StopTrail(trailamount/trailpercent) | trailing_stop_market/trailing_offset_type | Mac本地安装候选已映射初始水位/绝对价差/BPS及原始准入恢复；不在TL另追价，Linux新组合待验 | adapter/产品资格待核；不得默认启用NA仿真 |
-| StopTrailLimit与限价偏移 | trailing_stop_limit/limit_offset | **模型表达不等价**：TL既有pricelimit固定，NA trailing_stop_limit会移动limit；已明确拒绝，不另造追价/子单状态机 | 不因有trailing类型就认定当前venue支持 |
+| StopTrailLimit与限价偏移 | trailing_stop_limit/limit_offset | **0.3.0桥未实现**。BT实际以原price/plimit差形成limitoffset，触发价和限价同步移动；先前称固定执行限价是错误描述。下一版已补绝对回撤/零差比例的真实NA工厂映射及共同核反例，但最终安装/原生更新事件资格尚未完成；非零固定差+比例回撤在固定NA共享offset单位下不等价，不自造追价循环 | 不因有trailing类型就认定当前venue支持 |
 | buy_bracket/sell_bracket、parent/transmit/oco | 一次NA关联OrderList，OTO与Bracket子单OUO；独立OCO为原生OCO | Mac本地安装候选缓存未transmit意图于既有Broker投影，完整组校验后一次原生提交；没有TL子单控制循环 | 固定NA模拟器整组拒绝/正常与部分成交回放已验；cTrader实际factory声明不支持组单，提交前拒绝。真实venue待验 |
 | cancel(order) | Strategy.cancel_order | 已映射，原生身份核验 | 现有native cancel接口；不得重发原提交 |
 | 修改订单 | NA modify_order | TL通用Broker协议声明modify，当前engine.NautilusBroker无公开实现 | 当前adapter也未实现修改；不捏造Strategy.modify API |

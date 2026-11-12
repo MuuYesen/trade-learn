@@ -341,7 +341,7 @@ def test_rust_broker_processes_rust_fills_with_batch_sync() -> None:
         (1, Order.Completed, 10.0),
         (2, Order.Completed, 11.0),
     ]
-    assert strategy.trades == [(1.0, 10.0, 0.0), (0.0, 11.0, 1.0)]
+    assert strategy.trades == [(1.0, 10.0, 0.0), (0.0, 10.0, 1.0)]
     assert broker._last_fill_idx == 2
 
 
@@ -386,7 +386,7 @@ def test_rust_broker_processes_compact_columnar_fill_batch() -> None:
         (1, Order.Completed, 10.0),
         (2, Order.Completed, 11.0),
     ]
-    assert strategy.trades == [(1.0, 10.0, 0.0), (0.0, 11.0, 1.0)]
+    assert strategy.trades == [(1.0, 10.0, 0.0), (0.0, 10.0, 1.0)]
     assert broker._last_fill_idx == 2
 
 

@@ -1,19 +1,19 @@
 # 架构与边界
 
-当前源码版本为 **0.2.9**。TradeLearn 使用 Python 表达策略与研究流程，使用 Rust 支撑原生回测内核，并通过公开 `engine.StrategyRuntime` 协调默认研究、事件回放和外部驱动的 paper/live 生命周期。
+当前正式发行分支版本为 **0.3.0**；正式发布与安装状态按精确产物收据核验。TradeLearn 使用 Python 表达策略与研究流程，使用 Rust 支撑原生回测内核，并通过内部 `tradelearn.backtest.event_runtime.StrategyRuntime` 协调默认研究、事件回放和外部驱动的 paper/live 生命周期。
 
 ## 当前实现与后续目标
 
 本页表格与图描述当前混合实现，不代表完整Rust运行时。Python用户API与底层实现语言分开：保持Python策略，底层数据/调度/指标状态逐项原生化仍是待评估/待实现目标；实盘执行继续由官方Nautilus及适配器承担，不新建TL实盘网关或第二事件循环。唯一目标与验收见[框架规范](../../../../../docs/系统规范/交易/TradeLearn框架规范.md#python-native-runtime-20261111)，源码映射见[修订后的原生运行时路线](rust-live-runtime-roadmap.md)。
 
-> **流式优先目标／待实现（2026-11-11）**：公开指标以持续流式能力为基础；回测继续事件驱动，支持流式推进与经逐前缀一致性验收的历史批量加速，Engine/Lite共用计算生命周期。当前源码仍保留批量profile与Python调度，不据此认定已完成迁移。职责与验收唯一见[事件回测双执行规划](../../../../../docs/系统规范/交易/TradeLearn框架规范.md#stream-first-event-backtest-20261111)。
+> **流式优先实际状态（2026-11-13）**：公共技术指标按来源资格导出，批量/逐前缀/有界恢复已有定向验收；Engine/Lite共用状态化Indicator与计算生命周期。Python数据推进/调度仍存在，尚未完成的原生化与更长时资源资格分别保留，不能称全部Rust。职责及验收唯一见[事件回测双执行规划](../../../../../docs/系统规范/交易/TradeLearn框架规范.md#stream-first-event-backtest-20261111)。
 
 ## 全景架构图
 
 ```mermaid
 flowchart TB
     engine[engine.Strategy / Cerebro]
-    lite[Lite 批量研究 API]
+    lite[Lite 便利外观]
     research[Data / Indicators / Factor / Research / ML]
     runtime[StrategyRuntime<br/>构造、生命周期、历史、指标、业务回调]
     backtest[回测编排 / 预载数组 / 批量预计算]
@@ -43,8 +43,8 @@ flowchart TB
 
 | 层 | 职责 | 边界 |
 |---|---|---|
-| Engine facade | Backtrader 风格的 Strategy、Cerebro、指标、Analyzer、Sizer 及 Runtime 入口 | 用户优先从 `tradelearn.engine` 导入 |
-| Lite facade | 轻量策略、目标权重和批量研究 | Lite.I 保留批量语义，增量 Runtime 不支持完整 Lite profile |
+| Engine facade | Backtrader 风格的 Strategy、Cerebro、指标、Analyzer、Sizer；内部Runtime不从根导出 | 用户优先从 `tradelearn.engine` 导入 |
+| Lite facade | 轻量策略、目标权重和批量研究 | 共享有状态Indicator/window与Runtime；NA实际策略准入及各参数资格单列 |
 | StrategyRuntime | 策略构造、参数绑定、生命周期、行情历史、暖机、指标推进和业务通知 | 同步执行，由调用方提供时钟、市场事件和 broker 事实 |
 | Python 回测编排 | 数据预载、批量指标预计算、runner 选择、结果收集 | 委托同一 Runtime 调用业务，不另建生命周期 |
 | Rust 回测内核 | 回测时钟推进、模拟撮合、订单与组合状态 | RustBroker 仅用于回测；不能当成实盘账户或真实成交 |
@@ -74,7 +74,7 @@ Python/Rust 扩展由 maturin/PyO3 构建，数组及绑定实现以源码为准
 
 Backtrader oracle、golden 和基准用于核验指定输入与已声明语义；通过某组样本不代表所有 API、所有策略或实盘成交都完全等价。历史性能数字以[基准说明](../benchmarks.md)的环境及输入为限。
 
-源码同步、构建 wheel、发布 PyPI、部署和券商验收是不同步骤。0.2.9 源码说明不表示这些步骤已完成。
+源码同步、构建 wheel、发布 PyPI、部署和券商验收是不同步骤。源码说明不表示这些步骤已完成；公共发行与现役切换分别验收。
 
 ## 相关阅读
 

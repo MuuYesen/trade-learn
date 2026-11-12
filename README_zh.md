@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/pypi/v/trade-learn?style=flat-square" alt="PyPI version">
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
   <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/source-0.2.9-blue?style=flat-square" alt="Source version">
+  <img src="https://img.shields.io/badge/source-0.3.1--candidate-blue?style=flat-square" alt="Source version">
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
@@ -33,10 +33,10 @@
 
 ## 实现路径
 
-**trade-learn** 拒绝功能的简单堆砌，而是通过独特的“双模双核”设计，在专业深度与研发效率之间构建了平衡。底层通过 **Engine** 深度对齐 Backtrader 语义以夯实逻辑正确性，上层则由 **Lite** 提供极简的 Pythonic 接口，确保了“快”与“准”的统一。
+**trade-learn** 拒绝功能的简单堆砌，而是通过Engine与Lite两种外观共用运行内核，在专业深度与研发效率之间构建了平衡。底层通过 **Engine** 深度对齐 Backtrader 语义以夯实逻辑正确性，上层则由 **Lite** 提供极简的 Pythonic 接口，确保了“快”与“准”的统一。
 
 您可以根据研发阶段，自由定义策略的深度：
-- **Engine 模式 (深度研发)**：深度对齐 Backtrader 语义，支持 Analyzer/Sizer/Signal 完整生态，适合逐项研究订单、指标与分析器行为的复杂回测策略。
+- **Engine 模式 (深度研发)**：深度对齐 Backtrader 语义，提供已核 Analyzer/Sizer/Signal 入口，剩余差异见API状态说明，适合逐项研究订单、指标与分析器行为的复杂回测策略。
 - **Lite 模式 (敏捷验证)**：沿袭 backtesting.py 的极简主义，支持模型权重直连，极其适合在因子挖掘阶段进行高频迭代与原型验证。
 
 在生态层面，**trade-learn** 提供完善的指标支持。框架兼容 TA-Lib、TDX、TradingView/PyneCore 等主流指标库，并支持灵活扩展自定义指标与数据源，满足不同研究场景的需求。

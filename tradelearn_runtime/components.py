@@ -2,6 +2,18 @@
 from types import SimpleNamespace
 
 
+class _ObservationWindow(list):
+    """Retain the existing list view while bounding framework sampling appends."""
+    def __init__(self, capacity, values):
+        self._capacity = capacity
+        super().__init__(values[-capacity:])
+
+    def append(self, value):
+        if len(self) >= self._capacity:
+            del self[:len(self) - self._capacity + 1]
+        super().append(value)
+
+
 def strategy_spec(engine):
     """Normalize existing SignalStrategy options without changing signal execution."""
     specs=list(engine.strats)
@@ -26,15 +38,18 @@ def strategy_spec(engine):
 
 
 def native_sizer(engine):
-    """Translate only fixed quantities; never invent native cash/fee inputs."""
-    from tradelearn.engine.sizers import FixedSize
-    from tradelearn.backtest.sizer import FixedSize as QuantitySizer
+    """Bind the existing BT Sizer, without replacing it with a quantity-only type."""
+    from tradelearn.engine.sizers import FixedSize, Sizer
 
     cls, options = engine._sizer_spec
-    if cls is not FixedSize:
-        raise NotImplementedError("native Store currently supports FixedSize only; cash/commission sizing inputs are not qualified")
+    if not isinstance(cls, type) or not issubclass(cls, Sizer):
+        raise TypeError('native Store requires a Backtrader-compatible TL Sizer')
     configured = cls(**options)
-    return QuantitySizer(stake=configured._getsizing(None, None, None, True))
+    if cls is FixedSize:
+        # FixedSize does not consume cash or a commission estimate. Keep its
+        # public type/params/setsizing, without requesting unknown account money.
+        configured.getsizing = lambda data, isbuy: configured._getsizing(None, None, data, isbuy)
+    return configured
 
 
 def validate_components(engine,*,account_provider):
@@ -44,6 +59,9 @@ def validate_components(engine,*,account_provider):
         cls=spec[0]
         if getattr(cls,'_metric_key','') and not getattr(cls,'_is_streaming',False):
             raise NotImplementedError('post analyzer requires backtest Stats; use a streaming analyzer for native runs')
+    if account_provider is None and any(getattr(spec[0], '_requires_account_value', False)
+                                       for spec in engine.analyzers.values()):
+        raise ValueError('value analyzer requires an authoritative account provider')
     if account_provider is None and any(issubclass(spec[0],(Value,DrawDown,TimeReturn))
                                        for spec in engine.observers.values()):
         raise ValueError('value observer requires an authoritative account provider')
@@ -61,8 +79,11 @@ class LiveComponents:
         view=SimpleNamespace(observers=engine.observers,
             stdstats=engine.stdstats and account_provider is not None)
         type(engine)._attach_observers(view,self.strategy)
+        capacity = max((feed._buffer.capacity for feed in runtime.feeds.values()), default=512)
         from tradelearn.engine.observers import BuySell,Trades
         for observer in self.strategy.observers.values():
+            if type(observer.values) is list:
+                observer.values = _ObservationWindow(capacity, observer.values)
             # Counts are projections of deduplicated native events in this run,
             # not fabricated _fills/_trades collections or another order ledger.
             if type(observer)._observe is BuySell._observe:

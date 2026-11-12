@@ -6384,14 +6384,20 @@ wheels = [
 
 [[package]]
 name = "tl-store"
-version = "0.2.1a3"
+version = "0.2.1a4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nautilus-trader", marker = "python_full_version == '3.13.*'" },
+    { name = "nautilus-trader", marker = "python_full_version >= '3.13'" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cc/90/e9705df1f23dc6392529a4477ca064ddc8018e2e6c48b9116345ed79194b/tl_store-0.2.1a3-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:8e703670e4520e13e51d143307b2a3b932bc295d17fc423d645ef12eac92d25a", size = 46540981 },
-    { url = "https://files.pythonhosted.org/packages/ee/83/2ea2532efbf5c3650b6d3368476543acd9e1e74fb02e93c6e970da692ee1/tl_store-0.2.1a3-cp313-cp313-manylinux_2_34_x86_64.whl", hash = "sha256:603f46bd9b01ddc41534855033ae8d4c0373f355a25dd7f000a09a32eae8a26e", size = 46878397 },
+    { url = "https://files.pythonhosted.org/packages/a5/85/8bb798c70aa16170e0952360f3b42d5f92ae3e4c3ea9b99f23f1cf938a6a/tl_store-0.2.1a4-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:4d7b9ea400b6cc0c04feb7371c885857ba62cf8b470baa73faaeccffaf96aa47", size = 46546644 },
+    { url = "https://files.pythonhosted.org/packages/3c/c6/735f8d7909d85029d2c08fa7c3dc687f0c95c8d9380b66e15f96dbcd7784/tl_store-0.2.1a4-cp313-cp313-manylinux_2_34_aarch64.whl", hash = "sha256:8b9310de4efd30e383a033cb61bd43c180468edaf57db144230632f80a7bebe9", size = 46899695 },
+    { url = "https://files.pythonhosted.org/packages/9d/eb/adde87c8a3333c4cdc3abf6a0b599e1a6c9986dec2e898814ef77094b769/tl_store-0.2.1a4-cp313-cp313-manylinux_2_34_x86_64.whl", hash = "sha256:b080b0536a8397eeaf14706281f3ee8bfb18cbca97d1b78a30b8b49a77efa997", size = 46891926 },
+    { url = "https://files.pythonhosted.org/packages/b9/ef/2b6631a70f5d26a5774cc856005f341e3fd750aab83c71e02b6e00d2b7bd/tl_store-0.2.1a4-cp313-cp313-win_amd64.whl", hash = "sha256:8c853e759d4fdb38f289cb67f6249fcecb93331a53e264d4793b8e227ba6b849", size = 46196527 },
+    { url = "https://files.pythonhosted.org/packages/36/3e/9f6580181b88e889eaf0e9971f048688c5ea366d1951a01de6abdaa7e88f/tl_store-0.2.1a4-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:f0984b4a8370086d3409e3a7930b481e8facfc810afb1ecf49eba5805ac6813e", size = 46548957 },
+    { url = "https://files.pythonhosted.org/packages/49/71/b7511203d147b45b0d9010ddb5c9c0bf8a28180e50e148a488694fd74830/tl_store-0.2.1a4-cp314-cp314-manylinux_2_34_aarch64.whl", hash = "sha256:69473c62dedc6cf2ee62fe09f851d808257b187f7943efcaa2808d30e27a9eb5", size = 46899500 },
+    { url = "https://files.pythonhosted.org/packages/d1/4b/fbd1f791aa2927818bc248935c15903ade79e2dc8c858a602af5e1d9b7e0/tl_store-0.2.1a4-cp314-cp314-manylinux_2_34_x86_64.whl", hash = "sha256:15faa38da518ffec566ef46b5602ee89148dbcd1aded873f1852ae0eca7aa875", size = 46895157 },
+    { url = "https://files.pythonhosted.org/packages/0b/90/013017b4da7d662189bd3468de4344cc55d7cf48103c0ce89d28c522b1a2/tl_store-0.2.1a4-cp314-cp314-win_amd64.whl", hash = "sha256:ba41a1b1d9d8e1d94bdafeca3b1ed42b3e2d7996883d4873b071261f4da0028a", size = 46504077 },
 ]
 
 [[package]]
@@ -6479,7 +6485,7 @@ wheels = [
 
 [[package]]
 name = "trade-learn"
-version = "0.3.0"
+version = "0.3.1"
 source = { editable = "." }
 dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -6528,7 +6534,7 @@ research = [
     { name = "xlsxwriter" },
 ]
 tl-store = [
-    { name = "tl-store", marker = "(python_full_version == '3.13.*' and platform_machine == 'arm64' and sys_platform == 'darwin') or (python_full_version == '3.13.*' and platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "tl-store", marker = "(python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'arm64' and sys_platform == 'darwin') or (python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'AMD64' and sys_platform == 'win32')" },
 ]
 
 [package.dev-dependencies]
@@ -6616,7 +6622,7 @@ requires-dist = [
     { name = "scikit-learn", marker = "extra == 'research'" },
     { name = "scipy", marker = "extra == 'research'" },
     { name = "ta-lib", specifier = "==0.8.3" },
-    { name = "tl-store", marker = "(python_full_version == '3.13.*' and platform_machine == 'arm64' and sys_platform == 'darwin' and extra == 'tl-store') or (python_full_version == '3.13.*' and platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'tl-store')", specifier = "==0.2.1a3" },
+    { name = "tl-store", marker = "(python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'arm64' and sys_platform == 'darwin' and extra == 'tl-store') or (python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'tl-store') or (python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'tl-store') or (python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'AMD64' and sys_platform == 'win32' and extra == 'tl-store')", specifier = "==0.2.1a4" },
     { name = "tqdm" },
     { name = "urllib3", marker = "extra == 'nautilus'", specifier = ">=2.8.0,<3" },
     { name = "urllib3", marker = "extra == 'research'", specifier = ">=2.8.0,<3" },
@@ -6670,7 +6676,7 @@ docs = [
 ]
 oracle = [
     { name = "backtesting", specifier = ">=0.6.5" },
-    { name = "backtrader" },
+    { name = "backtrader", specifier = "==1.9.78.123" },
     { name = "opentdx", marker = "python_full_version >= '3.12'" },
     { name = "pytz" },
 ]

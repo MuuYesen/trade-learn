@@ -55,6 +55,24 @@ def _trailing_parameters(request):
     return trigger, offset, kind
 
 
+def _trailing_limit_parameters(request):
+    """BT keeps price-plimit constant; NA offsets are measured from market basis."""
+    trigger, offset, kind = _trailing_parameters(request)
+    anchor = Decimal(str(request.stop_price))
+    original_limit = anchor if request.limit_price is None else Decimal(str(request.limit_price))
+    if not original_limit.is_finite() or original_limit <= 0:
+        raise ValueError('positive finite trailing execution limit required')
+    difference = anchor - original_limit
+    if request.trail_amount is None and difference:
+        # Fixed NA shares one offset unit for both prices. A percentage of a
+        # changing basis cannot represent BT's constant nonzero price delta.
+        raise NotImplementedError('native percent offsets cannot preserve a fixed nonzero BT limit difference')
+    limit = trigger - difference
+    direction = Decimal(1) if request.side == 'buy' else Decimal(-1)
+    limit_offset = offset + direction * (original_limit - anchor) if request.trail_amount is not None else offset
+    return trigger, limit, limit_offset, offset, kind
+
+
 def _require_qualified_expiry(request):
     if request.tif == 'gtd':
         raise NotImplementedError('native GTD expiry boundary is not qualified on pinned NA; explicit deadlines are not admitted')
@@ -382,6 +400,12 @@ class _RuntimeBridge:
         elif request.order_type=='stop_limit':
             native=self.order_factory.stop_limit(price=exact_price(request.limit_price),
                 trigger_price=exact_price(request.stop_price),**kwargs)
+        elif request.order_type=='stop_trail_limit':
+            trigger, limit, limit_offset, offset, offset_type = _trailing_limit_parameters(request)
+            native=self.order_factory.trailing_stop_limit(
+                price=exact_price(limit), limit_offset=limit_offset,
+                trigger_price=exact_price(trigger), trailing_offset=offset,
+                trailing_offset_type=offset_type, **kwargs)
         elif request.order_type=='stop_trail':
             trigger, offset, offset_type = _trailing_parameters(request)
             native=self.order_factory.trailing_stop_market(
@@ -591,7 +615,7 @@ class _RuntimeBridge:
             self._validate_group_recovery(group,native)
             # Only an intact native initialization proves a linked child's original size.
             admitted_quantity=native.init_event.quantity
-        types={'market':'MARKET','limit':'LIMIT','stop':'STOP_MARKET','stop_limit':'STOP_LIMIT','stop_trail':'TRAILING_STOP_MARKET'}
+        types={'market':'MARKET','limit':'LIMIT','stop':'STOP_MARKET','stop_limit':'STOP_LIMIT','stop_trail':'TRAILING_STOP_MARKET','stop_trail_limit':'TRAILING_STOP_LIMIT'}
         if request.order_type not in types:
             raise ValueError('unmapped durable order type requires reconciliation')
         expected_type=types[request.order_type]
@@ -605,12 +629,17 @@ class _RuntimeBridge:
             raise ValueError('native recovery limit price differs from request')
         if expected_type in ('STOP_MARKET','STOP_LIMIT') and Decimal(str(native.trigger_price))!=Decimal(str(request.stop_price)):
             raise ValueError('native recovery trigger price differs from request')
-        if expected_type == 'TRAILING_STOP_MARKET':
+        if expected_type in ('TRAILING_STOP_MARKET','TRAILING_STOP_LIMIT'):
             trigger, offset, offset_type = _trailing_parameters(request)
             initial = native.init_event
             if (native.trailing_offset != offset or native.trailing_offset_type != offset_type
                     or initial.trigger_price is None or Decimal(str(initial.trigger_price)) != trigger):
                 raise ValueError('native recovery trailing admission differs from request')
+            if expected_type == 'TRAILING_STOP_LIMIT':
+                _, limit, limit_offset, _, _ = _trailing_limit_parameters(request)
+                if (native.limit_offset != limit_offset or initial.price is None
+                        or Decimal(str(initial.price)) != limit):
+                    raise ValueError('native recovery trailing limit admission differs from request')
         expiry = getattr(request, 'expire_time_ns', None)
         if request.tif == 'gtd' and (expiry is None or native.expire_time_ns != expiry):
             raise ValueError('native recovery expiry differs from durable request')

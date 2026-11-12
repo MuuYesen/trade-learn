@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "trade-learn"
-version = "0.3.0"
+version = "0.3.1"
 description = "Python quantitative research framework for traditional and ML strategies."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -73,7 +73,7 @@ nautilus = [
 ]
 
 tl-store = [
-    "tl-store==0.2.1a3; python_version == '3.13' and ((sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and platform_machine == 'x86_64'))",
+    "tl-store==0.2.1a4; python_version >= '3.13' and python_version < '3.15' and ((sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'win32' and platform_machine == 'AMD64') or (sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')))",
 ]
 
 [dependency-groups]
@@ -122,7 +122,7 @@ ci = [
 oracle = [
     "pytz",
     "backtesting>=0.6.5",
-    "backtrader",
+    "backtrader==1.9.78.123",
     "opentdx; python_version >= '3.12'",
 ]
 

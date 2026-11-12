@@ -52,15 +52,12 @@ def test_invalid_deadlines_rejected_before_submission(valid):
             1,price=10,exectype=bt.Order.Limit,valid=valid)
 
 
-def test_market_gtd_and_fixed_limit_trailing_semantics_are_not_silently_reinterpreted():
+def test_market_gtd_is_not_silently_reinterpreted():
     broker=NautilusBroker(NS(lookup_order=lambda oid:None,submit=lambda *a,**k:pytest.fail('unsupported order sent')))
     broker.runtime=NS(step_broker=lambda *a,**k:None)
     owner=NS(data=NS(datetime=[1767225600.]))
     with pytest.raises(ValueError,match='Market.*GTD|GTD.*Market'):
         broker._submit(owner,NS(_name='EURUSD'),bt.Order.Buy,1,valid=timedelta(seconds=10))
-    with pytest.raises(NotImplementedError,match='fixed.*limit|固定'):
-        broker._submit(owner,NS(_name='EURUSD'),bt.Order.Sell,1,price=10,
-            exectype=bt.Order.StopTrailLimit,pricelimit=8,trailamount=1)
 
 
 def test_cash_notification_reads_one_authoritative_snapshot_through_existing_runtime():

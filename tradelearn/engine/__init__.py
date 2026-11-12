@@ -4,7 +4,7 @@ import importlib
 from typing import Any
 
 
-from tradelearn.engine import analyzers, feeds, observers, sizers, stores
+from tradelearn.engine import analyzers, feeds, indicators, observers, sizers, stores
 from tradelearn.engine.analyzer import Analyzer
 from tradelearn.engine.base import TimeFrame
 from tradelearn.engine.cerebro import Cerebro, OptReturn
@@ -43,6 +43,7 @@ from tradelearn.backtest.clock import date2num, num2date
 
 # Aliases for Backtrader compatibility
 obs = observers
+ind = indicators
 
 
 def __getattr__(name: str) -> Any:
@@ -64,6 +65,8 @@ __all__ = [
     "TimeFrame",
     "Analyzer",
     "feeds",
+    "indicators",
+    "ind",
     "analyzers",
     "observers",
     "sizers",

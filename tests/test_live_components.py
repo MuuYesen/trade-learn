@@ -150,5 +150,24 @@ def test_native_fixed_size_maps_quantity_without_requesting_fake_economics():
     engine.addsizer(bt.sizers.FixedSize,stake=11,tranches=3)
     assert native_sizer(engine).getsizing(None,True)==3
     engine.addsizer(bt.sizers.PercentSizer)
-    with pytest.raises(NotImplementedError,match='FixedSize only'):
-        validate_components(engine,account_provider=None)
+    validate_components(engine,account_provider=None)
+    assert isinstance(native_sizer(engine),bt.sizers.PercentSizer)
+
+
+def test_live_default_observer_history_uses_existing_runtime_capacity():
+    from tradelearn_runtime.components import LiveComponents
+    class Window(bt.Observer):
+        def _observe(self):return float(self.strategy.data.close[0])
+    engine=bt.Cerebro(stdstats=False);engine.addobserver(Window,_name='window')
+    runtime=StrategyRuntime(bt.Strategy,feeds={'A':'bar'},capacity=2)
+    components=LiveComponents(engine,runtime)
+    runtime.start();components.start()
+    for day in range(1,6):
+        runtime.step_market('A',dict(ts=f'2026-01-{day:02}T00:00:00Z',
+            open=day,high=day,low=day,close=day,volume=1))
+        components.after_market()
+    values=runtime.strategy.observers['window'].values
+    assert isinstance(values,list)
+    assert values==[4.,5.]
+    assert runtime.feeds['A'].retained==2
+    runtime.stop();components.finish()

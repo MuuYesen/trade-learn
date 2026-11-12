@@ -78,14 +78,12 @@ class Trades(Observer):
 class DrawDown(Observer):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self._peak = 0.0
+        self._peak = None
 
     def _observe(self) -> float:
-        value = float(self.strategy.broker.getvalue())
-        self._peak = max(self._peak, value)
-        if self._peak <= 0:
-            return 0.0
-        return (self._peak - value) / self._peak
+        from tradelearn.metrics.risk import _drawdown_observation
+        self._peak, ratio, _ = _drawdown_observation(self.strategy.broker.getvalue(), self._peak)
+        return -ratio
 
     def _get_analysis(self) -> dict[str, list[float]]:
         return {"drawdown": self.values}

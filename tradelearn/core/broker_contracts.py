@@ -14,7 +14,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 import pandas as pd
 
 OrderSide = Literal["buy", "sell"]
-OrderType = Literal["market", "limit", "stop", "stop_limit", "stop_trail"]
+OrderType = Literal["market", "limit", "stop", "stop_limit", "stop_trail", "stop_trail_limit"]
 TimeInForce = Literal["day", "gtc", "ioc", "fok", "gtd"]
 
 __all__ = [

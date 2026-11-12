@@ -408,14 +408,24 @@ pub(crate) fn advance_trailing_order(order: &mut OrderEvent, bar: &BarEvent) {
             return;
         }
     }
+    let previous_stop = trailing_stop_price(order);
     let previous = order.trail_watermark.or(order.stop_price);
     order.trail_watermark = Some(trailing_watermark(order.side, bar, previous));
+    if order.order_type == OrderType::StopTrailLimit {
+        if let (Some(limit), Some(before), Some(after)) =
+            (order.limit_price, previous_stop, trailing_stop_price(order))
+        {
+            // Initial trigger/limit were compiled together. Preserve their
+            // absolute difference even for a percentage trailing trigger.
+            order.limit_price = Some(limit + after - before);
+        }
+    }
 }
 
 pub(crate) fn trailing_watermark(side: OrderSide, bar: &BarEvent, prev: Option<f64>) -> f64 {
     match side {
-        OrderSide::Sell => prev.unwrap_or(bar.high).max(bar.high),
-        OrderSide::Buy => prev.unwrap_or(bar.low).min(bar.low),
+        OrderSide::Sell => prev.unwrap_or(bar.close).max(bar.close),
+        OrderSide::Buy => prev.unwrap_or(bar.close).min(bar.close),
     }
 }
 
@@ -489,4 +499,55 @@ pub(crate) fn is_exit_fill(old_size: f64, fill_size: f64) -> bool {
 
 pub(crate) fn is_exit_order_for_position(old_size: f64, order: &OrderEvent) -> bool {
     old_size.abs() > 1e-9 && old_size.signum() != signed_order_size(order).signum()
+}
+
+#[cfg(test)]
+mod bt_trailing_contracts {
+    use super::*;
+
+    #[test]
+    fn bt_trailing_limit_keeps_original_delta_and_uses_completed_close() {
+        for (side, initial_limit, close, want_trigger, want_limit) in [
+            (OrderSide::Sell, 97.0, 110.0, 109.0, 107.0),
+            (OrderSide::Buy, 103.0, 90.0, 91.0, 93.0),
+        ] {
+            let mut order = OrderEvent {
+                order_id: 1, symbol: "DATA".into(), side,
+                order_type: OrderType::StopTrailLimit, size: 1.0,
+                limit_price: Some(initial_limit), stop_price: Some(100.0),
+                created_ts: 0, trail_amount: Some(1.0), trail_percent: None,
+                trail_watermark: Some(100.0), trail_triggered: false,
+            };
+            // Extreme is deliberately different from close, without triggering
+            // the old stop. BT trails once from completed close, not high/low.
+            let bar = BarEvent {
+                ts: 1, symbol: "DATA".into(), open: 100.0,
+                high: if side == OrderSide::Sell { 120.0 } else { 100.5 },
+                low: if side == OrderSide::Buy { 80.0 } else { 99.5 },
+                close, volume: 10.0,
+            };
+            advance_trailing_order(&mut order, &bar);
+            assert_eq!(trailing_stop_price(&order), Some(want_trigger));
+            assert_eq!(order.limit_price, Some(want_limit));
+            order.trail_triggered = true;
+            advance_trailing_order(&mut order, &BarEvent { close: 200.0, ..bar });
+            assert_eq!(order.limit_price, Some(want_limit));
+        }
+    }
+
+    #[test]
+    fn bt_percent_trailing_limit_keeps_price_delta_not_percent_delta() {
+        let mut order = OrderEvent {
+            order_id: 1, symbol: "DATA".into(), side: OrderSide::Sell,
+            order_type: OrderType::StopTrailLimit, size: 1.0,
+            limit_price: Some(88.0), stop_price: Some(100.0),
+            created_ts: 0, trail_amount: None, trail_percent: Some(0.1),
+            trail_watermark: Some(100.0), trail_triggered: false,
+        };
+        let bar = BarEvent { ts: 1, symbol: "DATA".into(), open: 100.0,
+            high: 120.0, low: 99.0, close: 110.0, volume: 10.0 };
+        advance_trailing_order(&mut order, &bar);
+        assert!((trailing_stop_price(&order).unwrap() - 99.0).abs() < 1e-12);
+        assert!((order.limit_price.unwrap() - 97.0).abs() < 1e-12);
+    }
 }

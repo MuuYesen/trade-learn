@@ -54,6 +54,9 @@ class NautilusBroker:
         self._recovery_blocks = set()
         self._thread = get_ident()
         self.storage = None
+        from tradelearn.engine.comminfo import CommInfoBase
+        # BT sizing policy, not native execution fees or an account ledger.
+        self.comminfo = {None: CommInfoBase()}
 
     def bind_gateway(self, gateway):
         """Bind once on the native callback thread, before Runtime construction."""
@@ -120,14 +123,12 @@ class NautilusBroker:
         if grouped:
             self.gateway.validate_group([])  # reject known unsupported sources before staging
         exectype = Order.Market if exectype is None else exectype
-        if exectype == Order.StopTrailLimit:
-            raise NotImplementedError('TL fixed execution limit cannot be represented by NA moving-limit trailing_stop_limit; no implicit emulation')
-        if exectype not in (Order.Market, Order.Limit, Order.Stop, Order.StopLimit, Order.StopTrail):
+        if exectype not in (Order.Market, Order.Limit, Order.Stop, Order.StopLimit, Order.StopTrail, Order.StopTrailLimit):
             raise ValueError('unsupported live order type')
         if side not in (Order.Buy,Order.Sell) or not math.isfinite(float(size)) or float(size)<=0:
             raise ValueError('positive finite size and explicit side required')
         trail_amount, trail_percent = kwargs.pop('trailamount', None), kwargs.pop('trailpercent', None)
-        if exectype == Order.StopTrail:
+        if exectype in (Order.StopTrail, Order.StopTrailLimit):
             if trail_amount is None and trail_percent is None:
                 raise ValueError('trailing amount or percent required')
             for value in (trail_amount, trail_percent):
@@ -137,14 +138,16 @@ class NautilusBroker:
                 price = float(data.close[0])
         elif trail_amount is not None or trail_percent is not None:
             raise ValueError('trailing offsets require a trailing order')
-        if exectype in (Order.Limit, Order.Stop, Order.StopLimit, Order.StopTrail) and (price is None or not math.isfinite(float(price)) or float(price)<=0):
+        if exectype in (Order.Limit, Order.Stop, Order.StopLimit, Order.StopTrail, Order.StopTrailLimit) and (price is None or not math.isfinite(float(price)) or float(price)<=0):
             raise ValueError('positive finite limit/trigger price required')
         pricelimit = kwargs.pop('pricelimit', None)
-        if exectype == Order.StopLimit:
+        if exectype == Order.StopTrailLimit and pricelimit is None:
+            pricelimit = price
+        if exectype in (Order.StopLimit, Order.StopTrailLimit):
             if pricelimit is None or not math.isfinite(float(pricelimit)) or float(pricelimit) <= 0:
                 raise ValueError('positive finite stop-limit execution price required')
         elif pricelimit is not None:
-            raise ValueError('pricelimit requires StopLimit')
+            raise ValueError('pricelimit requires StopLimit or StopTrailLimit')
         if exectype == Order.Market and price is not None:
             raise ValueError('market order cannot contain a limit price')
         tif_value, valid_value = kwargs.pop('tif', None), kwargs.pop('valid', None)
@@ -164,9 +167,9 @@ class NautilusBroker:
         if oid in self._orders or self.gateway.lookup_order(oid) is not None:
             raise ValueError('client order ID reuse requires reconciliation, not resubmission')
         request = OrderRequest(data._name,'buy' if side==Order.Buy else 'sell',float(size),
-                               {Order.Market:'market',Order.Limit:'limit',Order.Stop:'stop',Order.StopLimit:'stop_limit',Order.StopTrail:'stop_trail'}[exectype],
-                               limit_price=pricelimit if exectype==Order.StopLimit else (price if exectype==Order.Limit else None),
-                               stop_price=price if exectype in (Order.Stop,Order.StopLimit,Order.StopTrail) else None,
+                               {Order.Market:'market',Order.Limit:'limit',Order.Stop:'stop',Order.StopLimit:'stop_limit',Order.StopTrail:'stop_trail',Order.StopTrailLimit:'stop_trail_limit'}[exectype],
+                               limit_price=pricelimit if exectype in (Order.StopLimit,Order.StopTrailLimit) else (price if exectype==Order.Limit else None),
+                               stop_price=price if exectype in (Order.Stop,Order.StopLimit,Order.StopTrail,Order.StopTrailLimit) else None,
                                tif=tif,client_oid=oid,
                                trail_amount=trail_amount,trail_percent=trail_percent,expire_time_ns=expire_time_ns)
         if callable(getattr(self.gateway,'validate',None)):
@@ -383,10 +386,29 @@ class NautilusBroker:
         self._check_thread()
         return self.gateway.position(data._name)
 
+    def getcommissioninfo(self, data):
+        """Return the BT sizing policy; fills retain their native reported fees."""
+        self._check_thread()
+        return self.comminfo.get(getattr(data, '_name', None), self.comminfo[None])
+
+    def addcommissioninfo(self, comminfo, name=None):
+        self._check_mutation()
+        self.comminfo[name] = comminfo
+
+    def setcommission(self, commission=0.0, margin=None, mult=1.0, commtype=None,
+                      percabs=True, stocklike=False, interest=0.0,
+                      interest_long=False, leverage=1.0, automargin=False, name=None):
+        """Configure the ordinary BT sizing estimate, never overwrite venue fees."""
+        from tradelearn.engine.comminfo import CommInfoBase
+        self.addcommissioninfo(CommInfoBase(commission=commission, margin=margin,
+            mult=mult, commtype=commtype, percabs=percabs, stocklike=stocklike,
+            interest=interest, interest_long=interest_long, leverage=leverage,
+            automargin=automargin), name)
+
     def _money(self, name):
         self._check_thread()
         value=self.gateway.account().get(name)
-        if value is None or not math.isfinite(float(value)):
+        if isinstance(value, bool) or value is None or not math.isfinite(float(value)):
             raise ValueError(f'account {name} unavailable')
         return float(value)
 

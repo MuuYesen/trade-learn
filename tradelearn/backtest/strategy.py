@@ -604,7 +604,7 @@ class Strategy:
             # Trade closed or flipped
             from tradelearn.backtest.models import Trade
 
-            trade = Trade(data=data, size=new_size, price=price, status=Trade.Closed)
+            trade = Trade(data=data, size=new_size, price=old_price, status=Trade.Closed)
             trade.pnl = (price - old_price) * old_size * getattr(self.broker, "_mult", 1.0)
             trade.pnlcomm = trade.pnl  # Simplified
             trade.isclosed = True

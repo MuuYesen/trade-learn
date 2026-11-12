@@ -59,3 +59,12 @@ Engine的order_target_size/value按BT已成交仓位与comminfo.getsize计算；
 当前批量Rust时间存储仅合格到整秒；500ms等subsecond输入会在截断前拒绝，避免把两事件合成同一秒。常量MicroSeconds/Ticks的名称对齐不代表这些回测时钟已实现；NA实时原生事件仍保纳秒上下文，资格另列。
 
 broker.setcommission使用BT完整参数入口并规范化percabs；实际原生回测目前合格的是默认股票百分比费用。固定/保证金/乘数/杠杆/利息/分标的费用与任意Python override在准入前明确拒绝，不能接受后忽略。CommInfoBase/CommissionInfo的独立公式仍保固定BT计算语义；内部旧Rust经济profile继续独立保留，不伪装成BT执行资格。
+
+
+## 后续BT兼容修复（尚未发布，不能外推0.3.0）
+
+已实现的后续源码按固定BT1.9.78.123实际调用核对：`bt.ind`与`bt.indicators`指向现有共同Indicator模块；自定义/Percent/AllIn Sizer沿Strategy/NABroker及显式估算comminfo绑定，估算费用不是券商真实手续费；StopTrailLimit保原price/plimit固定价差，Rust水位改按completed close。新wheel资格仍须单独完成。
+
+`bt.analyzers.DrawDown(fund=None)`的value模式采用有界增量观测；`get_analysis()`为支持属性访问的字典，含`len/drawdown/moneydown/max.len/max.drawdown/max.moneydown`，drawdown为BT正百分比，moneydown保账户货币单位。它与Observer复用公共观测回撤计算，公共Stats/Reporter的有符号比例单位不变。NA路径必须显式权威account_provider，缺值/布尔值/非法初始峰值不补零；该结果是未调整资金流的观测回撤，不证明TWR绩效。fund=True还需要真实fundvalue；后端未提供的fund事实不由TL另造账本。Returns/Sharpe目前仍为未完成的BT对齐及实时能力项，不以明确拒绝计实现。
+
+Position空仓price按BT归零；`len(Position)`保固定BT的整数尺寸约束，浮点尺寸调用len会按BT抛TypeError，持仓存在性使用`bool(position)`，数量读取`.size`，不截断小数数量。

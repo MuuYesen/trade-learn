@@ -13,16 +13,20 @@ from tradelearn.core.broker_contracts import Fill, OrderRequest
 
 @dataclass
 class Position:
-    size: float = 0.0
+    size: float = 0
     price: float = 0.0
     adjbase: float = 0.0
     realized_pnl: float = 0.0
+
+    def __post_init__(self):
+        if not self.size:
+            self.price = 0.0
 
     def __bool__(self) -> bool:
         return bool(self.size)
 
     def __len__(self):
-        return abs(int(self.size))
+        return abs(self.size)
 
     def update(self, size, price, dt=None):
         old = self.size
@@ -342,6 +346,11 @@ class Order:
         self.created = SimpleNamespace(dt=date, size=self.size, price=price,
             pricelimit=self.pricelimit or price, pclose=close,
             trailamount=self.trailamount, trailpercent=self.trailpercent)
+        if self.exectype in (self.StopTrail, self.StopTrailLimit):
+            self._limitoffset = self.created.price - self.created.pricelimit
+            reference = self.created.price
+            self.created.price = float('inf') if self.isbuy() else float('-inf')
+            self.trailadjust(reference)
         self.executed.remsize = self.size
 
     def _set_execution_clock(self, timestamp, *, unit="s"):
@@ -350,6 +359,16 @@ class Order:
         if getattr(self, "_bt_dates", False):
             from tradelearn.backtest.clock import date2num
             self.executed.dt = date2num(self._executed_dt_raw)
+
+    def trailadjust(self, price):
+        """Adjust the BT order projection; execution remains owned by its broker."""
+        distance = self.trailamount or (price * self.trailpercent if self.trailpercent else 0.0)
+        candidate = price + distance if self.isbuy() else price - distance
+        improves = candidate < self.created.price if self.isbuy() else candidate > self.created.price
+        if improves:
+            self.created.price = candidate
+            if self.exectype == self.StopTrailLimit:
+                self.created.pricelimit = candidate - self._limitoffset
 
     def getstatusname(self, status=None) -> str:
         return self.Status[self.status if status is None else status]
@@ -396,7 +415,7 @@ class Order:
             ordtype=side,
             size=float(request.qty),
             price=price,
-            pricelimit=request.limit_price if request.order_type == "stop_limit" else None,
+            pricelimit=request.limit_price if request.order_type in ("stop_limit", "stop_trail_limit") else None,
             exectype=exectype,
             time_in_force=request.tif,
             valid=(pd.Timestamp(request.expire_time_ns-1_000_000_000,unit='ns',tz='UTC')

@@ -816,7 +816,7 @@ class RustBroker:
             # 跟踪止损：初始止损价作为首帧水位基准；回撤量由 trail* 传入
             stop_price = price if price is not None else float(order.data.close[0])
             if order.exectype == Order.StopTrailLimit:
-                limit_price = order.pricelimit
+                limit_price = order.created.pricelimit
         return symbol, side_str, ot_str, actual_size, limit_price, stop_price
 
     def _trail_params(self, order: Order) -> tuple[float | None, float | None]:
@@ -1261,6 +1261,7 @@ class RustBroker:
 
             pos = self._positions.setdefault(data, Position(size=0.0, price=0.0))
             old_size = pos.size
+            old_price = pos.price
             pos.update(signed_size, price)
             if data is None:
                 self._pos = pos
@@ -1278,7 +1279,7 @@ class RustBroker:
                 trade.isopen = True
                 self._notify_trade_event(strategy, trade)
             elif wants_trade_event and trade_closed:
-                trade = Trade(data=data, size=new_size, price=price, status=Trade.Closed)
+                trade = Trade(data=data, size=new_size, price=old_price, status=Trade.Closed)
                 trade.pnl = pnl
                 trade.pnlcomm = pnl
                 trade.isclosed = True

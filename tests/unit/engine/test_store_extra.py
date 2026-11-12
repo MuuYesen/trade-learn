@@ -14,17 +14,23 @@ def extra_requirement():
     assert len(requirements) == 1  # Future adapters stay independently selectable.
     requirement = Requirement(requirements[0])
     assert requirement.name == 'tl-store'
-    assert str(requirement.specifier) == '==0.2.1a3'
+    assert str(requirement.specifier) == '==0.2.1a4'
     return requirement
 
 
 @pytest.mark.parametrize('python,system,machine,expected', [
     ('3.13', 'darwin', 'arm64', True),
     ('3.13', 'linux', 'x86_64', True),
-    ('3.14', 'darwin', 'arm64', False),
+    ('3.14', 'darwin', 'arm64', True),
+    ('3.14', 'linux', 'x86_64', True),
+    ('3.14', 'linux', 'aarch64', True),
+    ('3.14', 'win32', 'AMD64', True),
     ('3.12', 'linux', 'x86_64', False),
-    ('3.13', 'win32', 'AMD64', False),
-    ('3.13', 'linux', 'aarch64', False),
+    ('3.15', 'linux', 'x86_64', False),
+    ('3.13', 'darwin', 'x86_64', False),
+    ('3.13', 'win32', 'ARM64', False),
+    ('3.13', 'win32', 'AMD64', True),
+    ('3.13', 'linux', 'aarch64', True),
 ])
 def test_extra_only_selects_qualified_candidate(python, system, machine, expected):
     requirement = extra_requirement()

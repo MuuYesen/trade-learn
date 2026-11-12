@@ -100,15 +100,16 @@ def test_trailing_percent_without_price_uses_visible_target_close(
         expected_price = 80.0
         expected_date = frame.index[2]
     else:
-        # High=120 raises tomorrow's stop to 108, but low=100 must not
-        # retrospectively trigger it on the same bar. Next open=105 does.
+        # Frozen BT updates from completed close=115 to stop=103.5;
+        # high=120 is not a watermark. Next open=105 does not trigger;
+        # the subsequent low=100 crosses the stop at 103.5.
         frame = _frame(
             [100.0, 100.0, 115.0, 105.0, 105.0, 105.0],
             highs=[100.0, 100.0, 120.0, 110.0, 110.0, 110.0],
             lows=[100.0, 100.0, 100.0, 100.0, 100.0, 100.0],
             asynchronous=runner != "single",
         )
-        expected_price = 105.0
+        expected_price = 103.5
         expected_date = frame.index[3]
     s = _run(monkeypatch, Trailing, runner, on_close, mode, frame)
     assert s.terminal_events(s.entry) == [Order.Completed]

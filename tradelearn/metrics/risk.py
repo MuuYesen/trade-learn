@@ -158,12 +158,32 @@ def sortino(
     return float(adjusted.mean(skipna=False) / (downside / math.sqrt(periods)) * math.sqrt(periods))
 
 
+def _drawdown_from_peak(value, peak):
+    """Common signed ratio for scalar state and vector metrics."""
+    return value / peak - 1.0
+
+
+def _drawdown_observation(value, peak=None):
+    """Advance observed-value drawdown without retaining the equity history."""
+    if isinstance(value, (bool, np.bool_)) or value is None or not math.isfinite(float(value)):
+        raise ValueError("authoritative finite value required")
+    value = float(value)
+    if peak is None:
+        if value <= 0:
+            raise ValueError("positive initial observed value required")
+        peak = value
+    elif isinstance(peak, (bool, np.bool_)) or not math.isfinite(float(peak)) or peak <= 0:
+        raise ValueError("positive finite observed peak required")
+    peak = max(float(peak), value)
+    return peak, _drawdown_from_peak(value, peak), peak - value
+
+
 def drawdown_from_equity(equity: pd.Series, *, baseline: float | None = None) -> pd.Series:
     """Return negative drawdowns from an observed equity curve."""
     peak = equity.cummax(skipna=False)
     if baseline is not None:
         peak = peak.clip(lower=baseline)
-    return equity / peak - 1.0
+    return _drawdown_from_peak(equity, peak)
 
 
 def drawdown_series(

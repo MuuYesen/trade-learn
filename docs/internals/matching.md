@@ -42,7 +42,9 @@ smart 模式采用确定性路径：阳线 / 平线为 `open → low → high �
 
 `trailamount` 指定绝对回撤，`trailpercent` 指定比例回撤（例如 `0.05`）；同时指定时优先使用 `trailamount`。`price` 是初始参考水位，Python 门面省略时以当前 `close` 初始化。卖出水位只升不降，买入水位只降不升，初始参考价也参与比较。
 
-每根 bar 先按已保存水位撮合，未成交订单再用本 bar 极值推进下一根 bar 的水位，避免用当前 high 抬高水位后回看当前 low。无成交量的 bar 不推进水位。跟踪限价单一旦触发便冻结水位。
+正式0.3.0仍以本bar极值推进下一水位；该实现与BT按completed close更新有差异，不能称BT行为完全一致。下一版本源码已改为先按旧水位撮合、未触发订单再按本bar close单向推进，并通过共同Rust核两个定向反例；新wheel安装态尚待验收，不能据源码覆盖既有发行字节。无成交量bar不推进；跟踪限价单一旦触发便冻结水位。
+
+BT `StopTrailLimit`使用原始`price - pricelimit`作为固定价差，初始trailadjust及后续追踪都使执行限价等于新触发价减该差，不是恒定执行限价。下一版本源码已同步初始Order投影/原生载荷和共同Rust核价差移动；正式0.3.0仍有该差异。逐调用BT配对向量和源码级测试不替代新版本实际安装/回放资格。
 
 ## 订单生命周期
 
@@ -53,12 +55,12 @@ Created → Submitted → Accepted → Completed
                             ↘ Canceled / Expired / Margin / Rejected
 ```
 
-- `valid=None` 表示无截止时间；`date` / `datetime` 表示绝对截止时刻（日期按当天零点），`timedelta` / 数字秒数相对提交时的主时钟计算一次。
+- `valid=None` 表示无截止时间；`date` / `datetime` 表示绝对截止时刻（日期按当天零点），Engine timedelta按BT目标Feed当前日期换算，数字为BT日期序数（0为DAY）；内部/Lite相对秒按自身契约。
 - 无时区值按 UTC 解释，有时区值换算为 UTC。仅当当前时间严格晚于截止时刻才过期，截止时刻本身仍可成交。
 - single-data Rust runner、multi-data Rust runner 和 Python fallback 均在撮合前执行过期检查；过期订单不会先成交再被标记失效。
 - 显式 `oco=other_order` 在 exact 与 smart 模式都互斥；一笔成交即撤销仍存活的同组订单。smart 原有隐式保护性退出互斥规则为兼容性保留。
 - 手动撤单、OCO 撤单和过期均同步原生待撮合队列与 Python 状态；关联策略收到相应的终态通知。括号订单的子单在父单成交后激活，父单终止时撤销尚未激活的子单。
-- 原有 `Order` 数值常量保持兼容；`tag` 和 `info` 元数据可随订单 / 交易统计保留。
+- 未发布Engine候选的`Order`数值常量按固定BT 1.9.78.123对齐（Market=0、Close=1等），旧产物/历史记录不批量重写；`tag` 和 `info` 元数据可随订单 / 交易统计保留。
 
 ## 2.0 不支持 Partial Fill
 
@@ -124,3 +126,5 @@ trade-learn 撮合规则的设计目标：
 - [事件循环](event-loop.md)：撮合在每根 bar 中的位置
 - [Portfolio 模型](portfolio.md)：fill 进入 portfolio 后如何变成持仓与现金
 - [契约与边界](contracts.md)：Order / Fill / OrderStatus 的字段定义
+
+本轮Engine通知为下一Broker周期的独立快照，公开ref在Rust准入后保持不变，原生ID单独映射；get_orders_open(safe=True)复制执行信息。末根订单保Submitted历史，不因无后续Bar抹去意图。默认多Feed批量调度使用时间并集，各Feed仅按真实Bar更新，原生matcher不重复撮合同一symbol时间戳。官方NA实时过期边界未合格，GTD新准入明确拒绝，不用回测秒级规则冒充venue能力。

@@ -75,11 +75,11 @@ def test_limit_crossing_before_trigger_cannot_fill_trailing_limit(smart):
 
 
 @pytest.mark.parametrize("smart", [False, True])
-def test_current_bar_high_only_updates_trail_after_matching(smart):
+def test_completed_bar_close_updates_trail_after_matching(smart):
     engine = engine_for([(100, 120, 99, 115), (114, 115, 110, 111)], smart)
     engine.submit_order("sell", "stop_trail", 1.0, None, 100.0, 5.0)
     assert engine.step(0) == []
-    assert engine.step(1)[0][3] == 114.0
+    assert engine.step(1)[0][3] == 110.0
 
 
 @pytest.mark.parametrize("smart", [False, True])
@@ -100,15 +100,16 @@ def test_trailing_limit_fills_at_trigger_not_earlier_open(smart, side, bars, lim
 @pytest.mark.parametrize(
     "side,bars,expected",
     [
-        ("sell", [(100, 120, 99, 115), (110, 112, 107, 109)], 108.0),
-        ("buy", [(100, 101, 80, 85), (85, 89, 83, 87)], 88.0),
+        ("sell", [(100, 120, 99, 115), (110, 112, 107, 109), (104, 106, 100, 101)], 103.5),
+        ("buy", [(100, 101, 80, 85), (85, 89, 83, 87), (92, 95, 90, 94)], 93.5),
     ],
 )
-def test_percentage_trail_tracks_favorable_prior_bar(smart, side, bars, expected):
+def test_percentage_trail_tracks_favorable_completed_close(smart, side, bars, expected):
     engine = engine_for(bars, smart)
     engine.submit_order(side, "stop_trail", 1.0, None, 100.0, None, 0.1)
     assert engine.step(0) == []
-    assert engine.step(1)[0][3] == expected
+    assert engine.step(1) == []
+    assert engine.step(2)[0][3] == expected
 
 
 @pytest.mark.parametrize("smart", [False, True])
@@ -123,3 +124,18 @@ def test_gap_trigger_can_fill_limit_on_later_segment(smart, side, bars, limit, e
     engine = engine_for(bars, smart)
     engine.submit_order(side, "stop_trail_limit", 1.0, limit, 100.0, 5.0)
     assert engine.step(0)[0][3] == expected
+
+
+@pytest.mark.parametrize("smart", [False, True])
+@pytest.mark.parametrize("side,bars,initial_limit,expected", [
+    ("sell", [(100,111,99,110),(104,108,103,106)],97.,107.),
+    ("buy", [(100,101,89,90),(96,97,92,94)],103.,93.),
+])
+def test_trailing_limit_moves_execution_limit_with_original_bt_delta(
+        smart,side,bars,initial_limit,expected):
+    # Values independently observed with frozen BT1.9.78.123. The native
+    # boundary takes the already-adjusted initial limit from Order.created.
+    engine=engine_for(bars,smart)
+    engine.submit_order(side,"stop_trail_limit",1.,initial_limit,100.,5.)
+    assert engine.step(0)==[]
+    assert engine.step(1)[0][3]==expected

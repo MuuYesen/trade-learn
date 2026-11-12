@@ -5,6 +5,16 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
+## [0.3.1] - Unreleased
+
+本节仅为下一候选源码；正式0.3.0及其收据不改写，新字节须重新构建和安装态验收后发行。
+
+- Engine自定义/百分比Sizer绑定原Strategy和唯一NABroker；新增BT风格委托估算佣金策略，实际成交费用仍以NA事实为准。
+- StopTrailLimit保留BT初始price-plimit差值，触发价与限价同步移动；回测核在完成bar的close更新水位。NA桥接金额及零原始价差百分比形式；非零固定价差百分比仍受固定NA单一offset单位限制。
+- DrawDown Analyzer在线增量输出BT百分比/货币/嵌套max字段，公共Stats/Reporter金融口径不变；实时Observer采样历史按既有feed容量有界。
+- 平仓notify_trade.price保留开仓成本价，成交退出价仍由原订单/Fill事实提供；无新订单账本。
+- 补齐ind/indicators模块别名、Position空仓价格及直接len行为；完整BT接口对账仍在继续，Returns/Sharpe与GTD缺口不算已完成。
+
 ## [0.3.0] - 2026-11-12
 
 本节记录0.3.0的实现与兼容边界。正式发行与平台资格以版本产物和发行收据为准；已发布0.2.9保留原字节，部署另行验收。
