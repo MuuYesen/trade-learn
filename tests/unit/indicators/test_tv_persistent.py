@@ -1,8 +1,16 @@
 """PyneCore fixed-version state-vector adapter qualification."""
 
+import sys
+
 import numpy as np
 import pandas as pd
 import pytest
+
+if sys.version_info < (3, 11):
+    pytest.skip(
+        "Fixed PyneCore 6.13.3 requires Python 3.11+; TV is unsupported on 3.10",
+        allow_module_level=True,
+    )
 
 from tradelearn.indicators.tv.persistent import SPECS, make_indicator
 

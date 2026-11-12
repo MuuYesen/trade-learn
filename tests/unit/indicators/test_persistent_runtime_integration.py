@@ -7,7 +7,7 @@ import pytest
 import tradelearn.engine as bt
 import tradelearn.lite as lite
 from tradelearn.backtest.event_runtime import StrategyRuntime
-from tradelearn.indicators import talib, tdx, tv
+from tradelearn.indicators import talib
 
 
 def bars(n=100):
@@ -20,10 +20,17 @@ def bars(n=100):
 
 @pytest.mark.parametrize("base", [bt.Strategy, lite.Strategy])
 @pytest.mark.parametrize(
-    "indicator,options",
-    [(talib.EMA, {"timeperiod": 30}), (tv.ema, {"length": 8}), (tdx.EMA, {"N": 8})],
+    "source,name,options",
+    [("talib", "EMA", {"timeperiod": 30}), ("tv", "ema", {"length": 8}), ("tdx", "EMA", {"N": 8})],
 )
-def test_actual_shared_runtime_and_capacity(base, indicator, options):
+def test_actual_shared_runtime_and_capacity(base, source, name, options):
+    import importlib
+    import sys
+
+    if source == "tv" and sys.version_info < (3, 11):
+        pytest.skip("Fixed PyneCore requires Python 3.11+; no TV substitute")
+    indicator = getattr(importlib.import_module(f"tradelearn.indicators.{source}"), name)
+
     class S(base):
         def init(self):
             self.values = []

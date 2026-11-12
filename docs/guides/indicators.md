@@ -137,3 +137,5 @@ python -m pytest tests/unit/indicators -q
 2026-11-12 定向修正后的六个 TS/STREAM 原生库已编译，真实23项数值/常量/并列/恢复/身份/容量测试通过；收据见[原生运行记录](../../../../../docs/参考资料/paseo-session-records/20261112-two-goals/TL2/NATIVE-CAUSAL-V2-RECEIPT.json)。这覆盖本次固定 macOS arm64、float64、8个真实合成资产及所记录编译配置，不能外推其他平台或所有参数。旧 skip-list 长窗口位置差异及全局 no_skip_list 分位数编译失败保留为历史反例，不复用其旧二进制。
 
 最终整合、wheel安装和平台限制见[整合记录](../../../../../docs/参考资料/paseo-session-records/20261112-two-goals/TL-INTEGRATION/STATUS.json)；四个明确排除的 MyTT 函数、Linux/Windows原生图、所有参数组合、公开发布或生产自然数据仍未获资格。
+
+固定 PyneCore 6.13.3 要求 Python 3.11+；Python 3.10 的基础安装不提供 TV 指标，不能以 TA/TDX 或批量回退冒充。CI 在 3.10 显式列出不可用的 TV 案例，仍执行 TA/TDX 容量与基础核心；3.11+ 缺少已声明 PyneCore 则直接失败。此范围不等同所有 Python/平台已通过。

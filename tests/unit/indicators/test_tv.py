@@ -1,7 +1,16 @@
 """Real PyneCore 6.13.3 source formulas and public discovery."""
 
+import sys
+
 import numpy as np
 import pandas as pd
+import pytest
+
+if sys.version_info < (3, 11):
+    pytest.skip(
+        "Fixed PyneCore 6.13.3 requires Python 3.11+; TV is unsupported on 3.10",
+        allow_module_level=True,
+    )
 
 from tradelearn.indicators import tv
 from tradelearn.indicators.base import FunctionIndicator

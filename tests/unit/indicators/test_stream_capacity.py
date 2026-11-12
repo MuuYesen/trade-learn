@@ -81,13 +81,35 @@ def test_fifty_thousand_updates_have_stable_working_state(source, name):
 
 
 def all_public_indicators():
-    from tradelearn.indicators import talib, tdx, tv
+    import json
+    import sys
+    from pathlib import Path
 
-    return [
-        (source, name)
-        for source, module in [("talib", talib), ("tv", tv), ("tdx", tdx)]
-        for name in module.QUALIFIED
-    ]
+    from tradelearn.indicators import talib, tdx
+
+    rows = [("talib", name) for name in talib.QUALIFIED]
+    if sys.version_info < (3, 11):
+        # Keep each unavailable TV capability visible, while executing all
+        # supported TA/TDX capacity cases. Missing PyneCore on 3.11+ is an error.
+        manifest = Path(__file__).parents[3] / "tradelearn/indicators/capabilities.json"
+        capabilities = json.loads(manifest.read_text())["entries"]["tv"]
+        rows.extend(
+            pytest.param(
+                "tv",
+                name,
+                marks=pytest.mark.skip(
+                    reason="Fixed PyneCore requires Python 3.11+; TV unsupported on 3.10"
+                ),
+            )
+            for name, item in capabilities.items()
+            if item["public"]
+        )
+    else:
+        from tradelearn.indicators import tv
+
+        rows.extend(("tv", name) for name in tv.QUALIFIED)
+    rows.extend(("tdx", name) for name in tdx.QUALIFIED)
+    return rows
 
 
 @pytest.mark.parametrize("source,name", all_public_indicators())
