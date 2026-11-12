@@ -4,7 +4,8 @@ from typing import Any
 
 from tradelearn.backtest.models import Stats
 
-from .base import BaseAnalyzer, MetaParams, Params
+from .base import (BaseAnalyzer, MetaParams, Params, collect_param_defaults,
+                   _bind_component_data_aliases)
 
 
 class Analyzer(BaseAnalyzer, metaclass=MetaParams):
@@ -14,20 +15,21 @@ class Analyzer(BaseAnalyzer, metaclass=MetaParams):
     _is_streaming = False  # Set to True for real-time analyzers
 
     def _base_init(self, **kwargs: Any) -> None:
-        params = []
-        for base_cls in self.__class__.mro():
-            cls_params = getattr(base_cls, "params", ())
-            if isinstance(cls_params, dict):
-                params.extend(cls_params.items())
-            elif isinstance(cls_params, (list, tuple)):
-                params.extend(cls_params)
+        _names, params = collect_param_defaults(type(self))
         self.params = self.p = Params(params, **kwargs)
-        self.create_analysis()
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
         self._strategy = None
         self._instance_id = f"{self.__class__.__name__.lower()}_{id(self)}"
+
+    def _initialize_component_context(self, strategy):
+        self.strategy = strategy
+        _bind_component_data_aliases(self)
+        self.create_analysis()
+
+    def __init__(self) -> None:
+        pass
+
+    def __len__(self):
+        return len(self.strategy)
 
     @property
     def strategy(self) -> Any:
@@ -84,5 +86,21 @@ class AnalyzerCollection(dict):
         except KeyError as exc:
             raise AttributeError(name) from exc
 
+    def __getitem__(self, key):
+        if isinstance(key, (int, slice)):
+            return list(self.values())[key]
+        return super().__getitem__(key)
+
+    def __iter__(self):
+        return iter(self.values())
+
+    def getnames(self):
+        return list(self.keys())
+
+    def getitems(self):
+        return iter(self.items())
+
     def getbyname(self, name: str) -> Any:
+        # The BT collection reports a missing name as ValueError.
+        self.getnames().index(name)
         return self[name]

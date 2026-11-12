@@ -16,17 +16,6 @@ from tradelearn.utils.console import smart_tqdm as tqdm
 TRADE_STATISTICS_REVISION = "flat-to-flat-fees-v1"
 
 
-class _AttrDict(dict):
-    def __getattr__(self, name: str) -> Any:
-        try:
-            return self[name]
-        except KeyError as exc:
-            raise AttributeError(name) from exc
-
-    def getbyname(self, name: str) -> Any:
-        return self[name]
-
-
 def _build_observer_nexts(strategy: Any) -> tuple[Any, ...]:
     return tuple(
         observer.next
@@ -1080,7 +1069,8 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
     indicators = getattr(strategy, "_indicators", [])
     indicators_bt = getattr(strategy, "_indicators_bt", [])
 
-    strategy.analyzers = _AttrDict()
+    from tradelearn.engine.analyzer import AnalyzerCollection
+    strategy.analyzers = AnalyzerCollection()
     for name, ana_spec in cerebro.analyzers.items():
         if len(ana_spec) == 3:
             ana_cls, ana_args, ana_kwargs = ana_spec

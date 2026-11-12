@@ -543,6 +543,7 @@ class StrategyRuntime:
         parameters=None,
         capacity=4096,
         buffers=None,
+        feed_metadata=None,
         prefix_history_limit=100000,
         max_indicators=1024,
         max_plans=4096,
@@ -551,6 +552,8 @@ class StrategyRuntime:
         assert_observer_allows_mutation()
         self.profile = profile
         if profile == "batch":
+            if feed_metadata is not None:
+                raise ValueError("batch feed metadata is owned by the provided DataFeed")
             self._init_bound(strategy_cls, strategy_args, parameters, data_feeds, broker,
                              prefix_history_limit, max_indicators, max_plans)
             return
@@ -582,6 +585,16 @@ class StrategyRuntime:
         self._stepping = False
         self.modes = MappingProxyType(dict(feeds))
         self.feeds = {s: RuntimeFeed(self, s, capacity, (buffers or {}).get(s)) for s in feeds}
+        metadata = {} if feed_metadata is None else feed_metadata
+        if not isinstance(metadata, dict) or set(metadata) - set(self.feeds):
+            raise ValueError("feed period metadata must match declared runtime symbols")
+        from tradelearn.backtest.parameters import Params
+        for symbol, feed in self.feeds.items():
+            period = metadata.get(symbol, {})
+            if not isinstance(period, dict) or set(period) - {"timeframe", "compression"}:
+                raise ValueError("unknown feed period metadata")
+            feed.p = feed.params = Params({"timeframe": None, "compression": None}, **period)
+            feed._timeframe, feed._compression = feed.p.timeframe, feed.p.compression
         datas = list(self.feeds.values())
         self.broker = broker
         self.strategy = strategy if strategy is not None else self._construct_strategy(
@@ -807,6 +820,13 @@ class StrategyRuntime:
             return "nextstart"
         return "next"
 
+    def _sample_analyzers(self):
+        # Observe authoritative broker facts before user business code can mutate them.
+        for analyzer in getattr(self.strategy, "analyzers", {}).values():
+            sample = getattr(analyzer, "_before_business", None)
+            if callable(sample):
+                self.invoke_component(sample)
+
     def _advance_analyzers(self, ready):
         for analyzer in getattr(self.strategy,"analyzers",{}).values():
             if not ready:
@@ -818,6 +838,9 @@ class StrategyRuntime:
                 name = "nextstart"
             else:
                 name = "next"
+            before = getattr(analyzer, "_before_next", None)
+            if callable(before) and self.invoke_component(before, name) is False:
+                continue
             callback = getattr(analyzer,name,None)
             if callable(callback):
                 self.invoke_component(callback)
@@ -835,6 +858,7 @@ class StrategyRuntime:
         self._running()
         ready = self.bound_ready(cursor)
         try:
+            self._sample_analyzers()
             result = dispatch(cursor, self._next_callback(ready))
             self._advance_analyzers(ready)
             return ready, result
@@ -1137,6 +1161,7 @@ class StrategyRuntime:
             self.context = context
             self.strategy.runtime_context = context
             ready = not self._warming_up()
+            self._sample_analyzers()
             self._invoke(self._next_callback(ready))
             self._advance_analyzers(ready)
         finally:

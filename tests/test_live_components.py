@@ -38,7 +38,9 @@ def test_registered_streaming_analyzer_and_observer_use_existing_callbacks():
 
 def test_post_backtest_stats_analyzer_is_not_a_live_streaming_analyzer():
     from tradelearn_runtime.components import validate_components
-    engine=bt.Cerebro();engine.addanalyzer(bt.analyzers.SharpeRatio)
+    class PostStats(bt.Analyzer):
+        _metric_key = "sharpe"
+    engine=bt.Cerebro();engine.addanalyzer(PostStats)
     with pytest.raises(NotImplementedError,match='backtest Stats'):
         validate_components(engine,account_provider=None)
 

@@ -1,6 +1,6 @@
 # Strategy observers
 
-本页描述共同策略观察API。正式0.3.0保留已发布字节；下一0.3.1候选仍须独立发行和安装资格，不触发在线切换。（`OBSERVER_API_VERSION = 1`）。它是Python domain API，不是日志wire协议，不提供商业SDK、持久化、发送器或账户金融计算。发布与外部SDK联合验收是独立步骤。
+本页描述共同策略观察API。正式0.3.1已完成公共PyPI发行与Linux/Mac公网定向组合资格；0.3.0保留历史已发布字节，生产切换仍由消费者单独验收。（`OBSERVER_API_VERSION = 1`）。它是Python domain API，不是日志wire协议，不提供商业SDK、持久化、发送器或账户金融计算。发布与外部SDK联合验收是独立步骤。
 
 ## 唯一运行协调
 
@@ -75,7 +75,7 @@ run/environment/业务身份由外部显式context绑定；缺失保持缺失，
 
 ## 版本识别
 
-实际distribution为 `trade-learn`、import为 `tradelearn`。0.2.9/0.3.0及下一0.3.1候选的 `OBSERVER_API_VERSION == 1`；Python包、native版本、目标ABI与平台必须一致，文件摘要取实际发行来源，不按同名版本猜测。旧候选与日期化安装证据保留在[发布记录](../reviews/2026-11-03-runtime-release.md)。
+实际distribution为 `trade-learn`、import为 `tradelearn`。已发行0.2.9/0.3.0/0.3.1的 `OBSERVER_API_VERSION == 1`；Python包、native版本、目标ABI与平台必须一致，文件摘要取实际发行来源，不按同名版本猜测。旧候选与日期化安装证据保留在[发布记录](../reviews/2026-11-03-runtime-release.md)。
 
 Engine批量订单通知按下一Broker周期交付快照，订单ref公开稳定，内部native ID单独映射；观察器不改写该实际顺序。多Feed批量时钟为真实时间并集，各指标只随所属Feed的新Bar推进；nextstart边界以固定BT逐Feed最小周期实测为准，不外推为全局恰一次。自定义nextstart现归入business.next；默认nextstart直接委托next，避免双层dispatch。默认/自定义回调及共同观察回归已验证不双计。
 

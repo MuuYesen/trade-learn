@@ -279,3 +279,7 @@ trade-learn 不公开 `tradelearn.live` 包。具体券商适配器由独立扩�
 NA2.0.0rc7与现有TL-Store原生扩展、当前Python源码组合：93 passed / 6 skipped / 2 xfailed。缺少同Python3.13 TL Rust扩展的6项须由最终wheel安装复验；两项GTD边界仍未合格。此证据不等于新wheel或线上venue验收。
 
 默认及显式`bt.sizers.FixedSize`在原生装配时转换为共享固定数量计算，保stake/tranches，不读取或伪造cash/commission。当前原生Store对其他Sizer启动前明确拒绝；回测仍使用标准BT Sizer协议。需要资金的原生Sizer须先提供可核账户与费用输入后独立资格验收。
+
+### 后续源码的原生专属挂单控制（未发行）
+
+`buy/sell(..., post_only=True)` 沿已有 broker kwargs 接入，必须为布尔值，仅对带执行限价的 Limit/StopLimit/StopTrailLimit 生效。固定NA离线撮合与持久恢复证明已通过，尚未进入新wheel或公共版本；当前0.3.1不能据此使用。OHLCV回测不模拟venue的maker准入政策，显式True会拒绝，不忽略；cTrader当前能力边界及未知/断线恢复门保持。其他原生专属字段仍按已列缺口处理，不无条件透传。

@@ -20,6 +20,7 @@ from nautilus_trader.model import AccountId, ClientOrderId, PositionId, OrderSid
 from nautilus_trader.trading import Strategy as NautilusStrategy
 from tradelearn.backtest.models import Position, Trade
 from .broker import NautilusBroker
+from ._data_period import feed_period_metadata as _feed_period_metadata
 from tradelearn.engine import Strategy
 from tradelearn.backtest.event_runtime import StrategyRuntime
 
@@ -76,6 +77,13 @@ def _trailing_limit_parameters(request):
 def _require_qualified_expiry(request):
     if request.tif == 'gtd':
         raise NotImplementedError('native GTD expiry boundary is not qualified on pinned NA; explicit deadlines are not admitted')
+
+
+def _native_route_proof(native, controls):
+    """Persist immutable admission flags separately from native command routing."""
+    return dict(reduce_only=bool(native.is_reduce_only),
+                position_id=str(controls['position_id']) if controls.get('position_id') is not None else None,
+                post_only=bool(getattr(native, 'is_post_only', False)))
 
 
 class _RuntimeBridge:
@@ -280,7 +288,8 @@ class _RuntimeBridge:
         self.frontend=StrategyRuntime(self._business_cls,feeds=self._feeds,
                                    broker=self.frontend_broker,parameters=self._parameters,
                                    strategy_args=getattr(self,'_strategy_args',()),
-                                   capacity=getattr(self,'_buffer_capacity',512))
+                                   capacity=getattr(self,'_buffer_capacity',512),
+                                   feed_metadata=_feed_period_metadata(self._instrument_ids, self._subscriptions))
         from .observers import attach_runtime_observer
         attach_runtime_observer(self.frontend,getattr(self,'_runtime_observer_factory',None))
         for oid,(native,payload) in recovered.items():
@@ -364,8 +373,13 @@ class _RuntimeBridge:
 
     def _make_order(self,request,controls):
         self._assert_account_binding()
-        if set(controls)-{'reduce_only','position_id'}:
+        if set(controls)-{'reduce_only','position_id','post_only'}:
             raise ValueError('unsupported execution controls; configure verified Node venue routing')
+        post_only = controls.pop('post_only', False)
+        if type(post_only) is not bool:
+            raise TypeError('post_only must be boolean')
+        if post_only and request.order_type not in ('limit', 'stop_limit', 'stop_trail_limit'):
+            raise ValueError('post-only requires a limit execution order')
         position_id=controls.get('position_id')
         if position_id is not None:self._bound_position(position_id,self._instrument_ids[request.symbol])
         iid=self._instrument_ids[request.symbol]
@@ -379,6 +393,8 @@ class _RuntimeBridge:
         kwargs=dict(instrument_id=iid,order_side=OrderSide.BUY if request.side=='buy' else OrderSide.SELL,
                     quantity=quantity,time_in_force={'day':TimeInForce.DAY,'gtc':TimeInForce.GTC,'ioc':TimeInForce.IOC,'fok':TimeInForce.FOK,'gtd':TimeInForce.GTD}[request.tif],
                     client_order_id=ClientOrderId(request.client_oid),reduce_only=controls.pop('reduce_only',False))
+        if request.order_type in ('limit', 'stop_limit', 'stop_trail_limit'):
+            kwargs['post_only'] = post_only
         expiry = getattr(request, 'expire_time_ns', None)
         if request.tif == 'gtd':
             if request.order_type == 'market' or type(expiry) is not int or not 0 < expiry <= 2**64-1:
@@ -497,9 +513,7 @@ class _RuntimeBridge:
                         {'request':asdict(entry['request']),
                          'controls':{key:str(value) for key,value in entry['controls'].items()},
                          'group':group,
-                         'native_controls':dict(reduce_only=bool(order.is_reduce_only),
-                            position_id=str(entry['controls']['position_id'])
-                            if entry['controls'].get('position_id') is not None else None)})
+                         'native_controls':_native_route_proof(order, entry['controls'])})
             if self._stopping or self.frontend.failed:
                 for order in orders:self.frontend_broker._unresolved.add(str(order.client_order_id))
                 return
@@ -547,8 +561,7 @@ class _RuntimeBridge:
             async with self._io_lock:
                 await asyncio.to_thread(self.intent_journal.prepare,request.client_oid,
                                         {'request':asdict(request),'controls':{key:str(value) for key,value in controls.items()},
-                                         'native_controls':dict(reduce_only=bool(native.is_reduce_only),
-                                            position_id=str(controls['position_id']) if controls.get('position_id') is not None else None)})
+                                         'native_controls':_native_route_proof(native, controls)})
             if self._stopping or self.frontend.failed:
                 self._stopping=True
                 self.frontend_broker._unresolved.add(request.client_oid)
@@ -645,9 +658,14 @@ class _RuntimeBridge:
             raise ValueError('native recovery expiry differs from durable request')
         if native_controls is not None:
             if (not isinstance(native_controls,dict)
-                    or set(native_controls) != {'reduce_only','position_id'}
+                    or not {'reduce_only','position_id'}.issubset(native_controls)
+                    or set(native_controls) - {'reduce_only','position_id','post_only'}
                     or type(native_controls['reduce_only']) is not bool):
                 raise ValueError('invalid durable native route proof')
+            admitted_post_only = native_controls.get('post_only', False)
+            if (type(admitted_post_only) is not bool
+                    or admitted_post_only != getattr(native, 'is_post_only', False)):
+                raise ValueError('native recovery post-only flag differs from admitted route')
             if native_controls['reduce_only'] != native.is_reduce_only:
                 raise ValueError('native recovery reduce-only flag differs from admitted route')
             requested = native_controls['position_id']

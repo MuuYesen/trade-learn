@@ -10,7 +10,7 @@ from tradelearn.core.costs import FixedCommission, FixedSlippage
 from tradelearn.core.logging import get_logger
 from tradelearn.core.strategy_events import invoke_component
 from tradelearn.engine.analyzer import AnalyzerCollection
-from tradelearn.engine.base import TimeFrame, Params
+from tradelearn.engine.base import TimeFrame, Params, engine_context
 from tradelearn.engine.datafeed import DataFeed
 from tradelearn.engine.observers import ObserverCollection, Value
 from tradelearn.engine.sizers import FixedSize
@@ -105,6 +105,7 @@ class Cerebro:
         self.runtime_config = BacktestRuntimeConfig.from_owner(self)
         self._sizer_spec = (FixedSize, {})
         self.analyzers: dict[str, tuple[type[Analyzer], tuple[Any, ...], dict[str, Any]]] = {}
+        self._analyzer_name_counts: dict[str, int] = {}
         self.observers: dict[str, tuple[type[Any], dict]] = {}
         self.writers: list[tuple[type[Any], tuple, dict]] = []
         self.stores: list[Any] = []
@@ -199,7 +200,10 @@ class Cerebro:
         self.optcbs.append(cb)
 
     def addanalyzer(self, analyzer: type[Analyzer], *args: Any, _name=None, **kwargs: Any) -> None:
-        name = _name or kwargs.pop("name", None) or analyzer.__name__.lower()
+        base_name = _name or analyzer.__name__.lower()
+        suffix = self._analyzer_name_counts.get(base_name, 0)
+        self._analyzer_name_counts[base_name] = suffix + 1
+        name = base_name + (str(suffix) if suffix else "")
         self.analyzers[name] = (analyzer, args, kwargs)
 
     def addobserver(self, observer: type[Any], *args: Any, _name=None, **kwargs: Any) -> None:
@@ -401,7 +405,8 @@ class Cerebro:
         if self.stdstats:
             observer_specs.setdefault("value", (Value, {}))
         for name, (observer_cls, observer_kwargs) in observer_specs.items():
-            observer = observer_cls(**observer_kwargs)
+            with engine_context(strategy=strategy, data=strategy.data, datas=strategy.datas):
+                observer = observer_cls(**observer_kwargs)
             observer._set(strategy)
             strategy.observers[name] = observer
 
@@ -413,8 +418,10 @@ class Cerebro:
             else:
                 ana_cls, ana_kwargs = ana_spec
                 ana_args = ()
-            analyzer = ana_cls(*ana_args, **ana_kwargs)
-            analyzer.strategy = strategy
+            with engine_context(strategy=strategy, data=strategy.data, datas=strategy.datas):
+                analyzer = ana_cls(*ana_args, **ana_kwargs)
+            if getattr(analyzer, "strategy", None) is not strategy:
+                analyzer.strategy = strategy
             strategy.analyzers[name] = analyzer
 
     def _start_analyzers(self, strategy: Any) -> None:

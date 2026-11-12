@@ -106,7 +106,7 @@ class NautilusBroker:
         self._check_mutation()
         if self._unresolved or self._recovery_blocks:
             raise RuntimeError('unresolved submission blocks new orders until reconciliation')
-        unsupported = set(kwargs) - {'client_oid','tif','valid','reduce_only','position_id','pricelimit','trailamount','trailpercent','parent','oco','transmit','info'}
+        unsupported = set(kwargs) - {'client_oid','tif','valid','reduce_only','position_id','pricelimit','trailamount','trailpercent','parent','oco','transmit','info','post_only'}
         if unsupported:
             raise ValueError(f'unsupported live order controls: {sorted(unsupported)}')
         info = dict(kwargs.pop('info', {}))

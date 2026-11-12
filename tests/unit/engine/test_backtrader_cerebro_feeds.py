@@ -66,7 +66,7 @@ def test_backtrader_cerebro_runs_pandasdata_feed_and_analyzer() -> None:
     data = bt.feeds.PandasData(dataname=bars(), name="daily")
     returned = cerebro.adddata(data)
     cerebro.addstrategy(RecordingStrategy, threshold=11.0)
-    cerebro.addanalyzer(CloseAnalyzer, name="close")
+    cerebro.addanalyzer(CloseAnalyzer, _name="close")
 
     [strategy] = cerebro.run()
 
@@ -97,7 +97,7 @@ def test_non_streaming_analyzer_does_not_build_bar_snapshot(
     cerebro = bt.Cerebro()
     cerebro.adddata(bt.feeds.PandasData(dataname=bars(), name="daily"))
     cerebro.addstrategy(NoopStrategy)
-    cerebro.addanalyzer(SummaryAnalyzer, name="summary")
+    cerebro.addanalyzer(SummaryAnalyzer, _name="summary")
 
     [strategy] = cerebro.run()
 

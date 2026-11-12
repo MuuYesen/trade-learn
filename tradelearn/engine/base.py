@@ -114,6 +114,26 @@ class BaseAnalyzer:
 
 
 
+class BaseObserver:
+    """Marker for components whose owner is bound before user construction."""
+
+
+def _bind_component_data_aliases(component):
+    for index, data in enumerate(component.datas):
+        aliases = data.lines.getlinealiases()
+        if not aliases:
+            aliases = ("close", "low", "high", "open", "volume", "openinterest", "datetime")
+        for number, name in enumerate(aliases):
+            line = getattr(data.lines, name, None)
+            if line is None:
+                continue
+            setattr(component, f"data{index}_{name}", line)
+            setattr(component, f"data{index}_{number}", line)
+            if index == 0:
+                setattr(component, f"data_{name}", line)
+                setattr(component, f"data_{number}", line)
+
+
 class MetaParams(type):
     """Metaclass to handle Backtrader-style parameter stripping and lifecycle hooks."""
     def __call__(cls, *args, **kwargs):
@@ -147,13 +167,19 @@ class MetaParams(type):
         if runtime is not None and hasattr(runtime, "broker"):
             instance.broker = runtime.broker
 
+        component_context = (getattr(instance, '_initialize_component_context', None)
+                             if isinstance(instance, (BaseAnalyzer, BaseObserver)) else None)
+        if callable(component_context):
+            component_context(_G.current_strategy)
+
         # 5. Setup Hook (Data and aliasing)
         if not isinstance(instance, CoreStrategy) and hasattr(instance, '_setup'):
             instance._setup()
             
         # 5.5 Register Indicator to Strategy
         # 5.5 Register Indicator to Strategy
-        if _G.current_strategy is not None and not isinstance(instance, CoreStrategy):
+        if (_G.current_strategy is not None and not isinstance(instance, CoreStrategy)
+                and not callable(component_context)):
              if hasattr(_G.current_strategy, '_register_indicator'):
                  _G.current_strategy._register_indicator(instance)
 
@@ -181,7 +207,8 @@ class MetaParams(type):
                 ]
                 instance.__init__(*args[:len(pos_params)], **other_kwargs)
             
-        if prev_strat is not None and not isinstance(instance, prev_strat.__class__):
+        if (prev_strat is not None and not isinstance(instance, prev_strat.__class__)
+                and not callable(component_context)):
             if hasattr(instance, 'lines') and hasattr(prev_strat, '_register_indicator'):
                 prev_strat._register_indicator(instance)
 

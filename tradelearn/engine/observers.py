@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from tradelearn.engine.base import Params
+from tradelearn.engine.base import (BaseObserver, MetaParams, Params,
+                                    collect_param_defaults, _bind_component_data_aliases)
 
 
 class ObserverCollection(dict):
@@ -15,15 +16,25 @@ class ObserverCollection(dict):
             raise AttributeError(name) from exc
 
 
-class Observer:
+class Observer(BaseObserver, metaclass=MetaParams):
     """Minimal Backtrader observer base class."""
 
     params: tuple = ()
 
-    def __init__(self, **kwargs: Any) -> None:
-        self.params = self.p = Params(self.params, **kwargs)
+    def _base_init(self, **kwargs: Any) -> None:
+        self.params = self.p = Params(collect_param_defaults(type(self))[1], **kwargs)
         self.strategy = None
         self.values: list[Any] = []
+
+    def __init__(self) -> None:
+        pass
+
+    def _initialize_component_context(self, strategy: Any) -> None:
+        self._owner = self._clock = self.strategy = strategy
+        _bind_component_data_aliases(self)
+
+    def __len__(self) -> int:
+        return len(self.strategy)
 
     def _set(self, strategy: Any) -> None:
         self.strategy = strategy

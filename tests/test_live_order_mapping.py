@@ -248,3 +248,69 @@ def test_group_durable_admission_prepares_every_member_before_single_native_comm
             native=next(order for order in orders if str(order.client_order_id)==oid)
             ExecutionHost._validate_group_recovery(payload['group'],native)
     finally:reopened.close()
+
+
+@pytest.mark.parametrize('exectype,price,extra', [
+    (Order.Limit, 1.2, {}),
+    (Order.StopLimit, 1.2, {'pricelimit': 1.25}),
+    (Order.StopTrailLimit, 1.2, {'pricelimit': 1.25, 'trailamount': 0.1}),
+])
+def test_post_only_existing_broker_kwarg_reaches_real_native_limit_factory(exectype, price, extra):
+    host = native_host()
+    sent = []
+    requests = []
+    class Gateway:
+        def lookup_order(self, cid):return None
+        def validate(self, request, **controls):host._make_order(request, dict(controls))
+        def submit(self, request, **controls):
+            requests.append(request)
+            sent.append(host._make_order(request, dict(controls))[0])
+    broker = NautilusBroker(Gateway())
+    broker.runtime = NS(step_broker=lambda *a, **k:None)
+    broker._submit(NS(), NS(_name='EURUSD'), Order.Buy, 1., price=price,
+                   exectype=exectype, post_only=True, client_oid='POST-ONLY-1', **extra)
+    assert len(sent) == 1 and sent[0].is_post_only is True
+    proof = dict(reduce_only=False, position_id=None, post_only=True)
+    ExecutionHost.validate_recovery(host, requests[0], sent[0], native_controls=proof)
+    with pytest.raises(ValueError, match='post-only'):
+        ExecutionHost.validate_recovery(host, requests[0], sent[0],
+                                       native_controls={**proof, 'post_only':False})
+    with pytest.raises(ValueError, match='post-only'):
+        ExecutionHost.validate_recovery(host, requests[0], sent[0],
+                                       native_controls=dict(reduce_only=False, position_id=None))
+
+
+@pytest.mark.parametrize('exectype,post_only', [
+    (Order.Limit, 'true'), (Order.Limit, 1), (Order.Market, True), (Order.Stop, True),
+])
+def test_post_only_wrong_type_or_order_kind_never_submits(exectype, post_only):
+    host = native_host()
+    class Gateway:
+        def lookup_order(self, cid):return None
+        def validate(self, request, **controls):host._make_order(request, dict(controls))
+        def submit(self, *a, **k):pytest.fail('invalid post-only reached submit')
+    broker = NautilusBroker(Gateway())
+    broker.runtime = NS(step_broker=lambda *a, **k:pytest.fail('invalid request published'))
+    with pytest.raises((TypeError, ValueError), match='post_only|post-only'):
+        broker._submit(NS(), NS(_name='EURUSD'), Order.Buy, 1.,
+                       price=None if exectype == Order.Market else 1.2,
+                       exectype=exectype, post_only=post_only)
+
+
+def test_admitted_post_only_flag_survives_actual_intent_journal_json(tmp_path):
+    from tradelearn_runtime.execution import _native_route_proof
+    from tradelearn_runtime.intents import IntentJournal
+    from tradelearn.core.broker_contracts import OrderRequest
+    host = native_host()
+    request = OrderRequest('EURUSD', 'buy', 1., 'limit', limit_price=1.2, client_oid='POST-JOURNAL')
+    native, route = host._make_order(request, {'post_only':True})
+    assert route == {}
+    proof = _native_route_proof(native, route)
+    with_journal = IntentJournal(tmp_path / 'intent.sqlite', identity='offline-test')
+    try:
+        with_journal.prepare(request.client_oid, {'native_controls':proof})
+        restored = with_journal.unfinished()[request.client_oid]['native_controls']
+        assert restored['post_only'] is True
+        ExecutionHost.validate_recovery(host, request, native, native_controls=restored)
+    finally:
+        with_journal.close()

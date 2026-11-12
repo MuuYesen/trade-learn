@@ -837,6 +837,11 @@ class RustBroker:
         **kwargs,
     ) -> Order:
         """Core submission entry point called by Strategy.buy/sell."""
+        if 'post_only' in kwargs:
+            if type(kwargs['post_only']) is not bool:
+                raise TypeError('post_only must be boolean')
+            if kwargs['post_only']:
+                raise NotImplementedError('post-only venue policy is not simulated by the OHLCV backend')
         self._order_count += 1
         is_buy = side == Order.Buy
         actual_size = float(size if size is not None else 1.0)

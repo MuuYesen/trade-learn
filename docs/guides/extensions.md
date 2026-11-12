@@ -79,6 +79,10 @@ class TurnoverAnalyzer(bt.Analyzer):
 cerebro.addanalyzer(TurnoverAnalyzer, _name="turnover")
 ```
 
+`addanalyzer` 的集合名称使用 `_name`，`name` 留给自定义 Analyzer 的参数或构造函数。相同集合基名的重复实例按 Backtrader 顺序加 `1`、`2` 后缀。此注册修复和构造前 owner/data/params 绑定当前仅在后续源码中通过定向对照，尚未包含在公共 0.3.1；已发布版本不改字节。
+
+后续源码还将 Analyzer 的整数索引、迭代、`getnames/getitems/getbyname` 统一到共同集合，并在自定义 Observer 无 `super()` 构造前绑定 owner/data/params；完整 Observer lines 与最小周期行为仍待补齐。`Returns` 后续源码按真实时间桶增量计数，以 BT 的观测权益对数收益字段在 stop 定稿，不使用 Stats 历史重算；它不是现金流调整后的公共投资收益，后续源码又补原生时间BarType声明的周期，以及Sharpe的常量矩状态/周期/利率选项；完整fund/时区/会话与legacyannual仍未闭合。这些后续源码均不代表 0.3.1 已获得该能力。
+
 ### 自定义佣金
 
 ```python

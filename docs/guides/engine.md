@@ -63,8 +63,8 @@ broker.setcommission使用BT完整参数入口并规范化percabs；实际原生
 
 ## 后续BT兼容修复（尚未发布，不能外推0.3.0）
 
-已实现的后续源码按固定BT1.9.78.123实际调用核对：`bt.ind`与`bt.indicators`指向现有共同Indicator模块；自定义/Percent/AllIn Sizer沿Strategy/NABroker及显式估算comminfo绑定，估算费用不是券商真实手续费；StopTrailLimit保原price/plimit固定价差，Rust水位改按completed close。新wheel资格仍须单独完成。
+已实现的后续源码按固定BT1.9.78.123实际调用核对：`bt.ind`与`bt.indicators`指向现有共同Indicator模块；自定义/Percent/AllIn Sizer沿Strategy/NABroker及显式估算comminfo绑定，估算费用不是券商真实手续费；StopTrailLimit保原price/plimit固定价差，Rust水位改按completed close。这些能力已随正式0.3.1发布，并完成最终公网Linux/Mac定向组合资格；后续新增源码仍单独验收。
 
-`bt.analyzers.DrawDown(fund=None)`的value模式采用有界增量观测；`get_analysis()`为支持属性访问的字典，含`len/drawdown/moneydown/max.len/max.drawdown/max.moneydown`，drawdown为BT正百分比，moneydown保账户货币单位。它与Observer复用公共观测回撤计算，公共Stats/Reporter的有符号比例单位不变。NA路径必须显式权威account_provider，缺值/布尔值/非法初始峰值不补零；该结果是未调整资金流的观测回撤，不证明TWR绩效。fund=True还需要真实fundvalue；后端未提供的fund事实不由TL另造账本。Returns/Sharpe目前仍为未完成的BT对齐及实时能力项，不以明确拒绝计实现。
+`bt.analyzers.DrawDown(fund=None)`的value模式采用有界增量观测；`get_analysis()`为支持属性访问的字典，含`len/drawdown/moneydown/max.len/max.drawdown/max.moneydown`，drawdown为BT正百分比，moneydown保账户货币单位。它与Observer复用公共观测回撤计算，公共Stats/Reporter的有符号比例单位不变。NA路径必须显式权威account_provider，缺值/布尔值/非法初始峰值不补零；该结果是未调整资金流的观测回撤，不证明TWR绩效。fund=True还需要真实fundvalue；后端未提供的fund事实不由TL另造账本。后续源码的Returns已补观测权益对数收益、真实日/周/月/年/分钟桶及常量状态计数，并通过固定BT和实时Runtime定向对照；它在stop定稿，尚未包含在0.3.1。0.3.2后续源码还补原生时间BarType周期元数据、Sharpe固定BT的默认周期/无风险换算/方差/年化选项及用户next前账户采样，采用当前桶和常量矩状态。legacyannual、完整fund/时区/会话等仍未闭合；不以明确拒绝计实现。这些尚未包含在公共0.3.1。
 
 Position空仓price按BT归零；`len(Position)`保固定BT的整数尺寸约束，浮点尺寸调用len会按BT抛TypeError，持仓存在性使用`bool(position)`，数量读取`.size`，不截断小数数量。

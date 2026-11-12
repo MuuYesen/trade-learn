@@ -67,7 +67,7 @@ def test_close_control_proof_is_persisted_in_existing_intent_journal(tmp_path):
     try:
         asyncio.run(check())
         proof=journal.unfinished()['CLOSE-1']['native_controls']
-        assert proof=={'position_id':'P1','reduce_only':True} and len(calls)==1
+        assert proof=={'position_id':'P1','reduce_only':True,'post_only':False} and len(calls)==1
     finally:journal.close()
 
 

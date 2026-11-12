@@ -5,9 +5,20 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
-## [0.3.1] - Unreleased
+## [0.3.2] - 2026-11-13
 
-本节仅为下一候选源码；正式0.3.0及其收据不改写，新字节须重新构建和安装态验收后发行。
+本节记录本版实现与兼容边界；正式发行及平台安装资格以对应版本产物和收据为准。0.3.1与Store0.2.1a4既有正式字节及旧SDK冻结保持。
+
+- Analyzer/Observer继承参数与构造前owner/data绑定；Analyzer的name参数保留给用户，集合名称使用_name，重复实例加序号，集合索引/迭代走共同实现。
+- Returns按真实日历时间桶常量计数，输出BT观测权益对数收益字段；Sharpe按当前桶和在线矩状态处理固定BT的周期/无风险利率/样本方差选项，不借Stats历史重算，不改变公共TWR金融口径。legacyannual、完整fund/时区/会话等仍未全部支持。
+- 共同Runtime在用户next前采样观察账户值，对齐DrawDown/Sharpe原始BT通知阶段；未新增运行循环。
+- 固定NA的BarType周期声明传到惰性订阅及Runtime feed，不猜采样频率；非时间Bar保未知。
+- 既有broker kwargs新增严格布尔post_only，对NA限价族映射，恢复保存和核对不可变标志；固定NA模拟器正反例通过，OHLCV后端不模拟该venue准入策略。cTrader支持范围不外推。
+- SDK有限白名单增加0.3.2/API1，其余17文件不变，未知版本/API继续拒绝。完整BT/NA行为、GTD与其他已列缺口仍继续，不以这版候选称整轮完成。
+
+## [0.3.1] - 2026-11-13
+
+正式公共PyPI已发行；Linux/Mac最终公网定向组合及Mac/Linux KQ native23零skip通过，其他功能/平台仍按精确资格范围。
 
 - Engine自定义/百分比Sizer绑定原Strategy和唯一NABroker；新增BT风格委托估算佣金策略，实际成交费用仍以NA事实为准。
 - StopTrailLimit保留BT初始price-plimit差值，触发价与限价同步移动；回测核在完成bar的close更新水位。NA桥接金额及零原始价差百分比形式；非零固定价差百分比仍受固定NA单一offset单位限制。

@@ -53,7 +53,7 @@ def test_small_golden_smoke_covers_trades_pnl_and_equity_chain() -> None:
     cerebro.broker.setcash(100.0)
     cerebro.adddata(feeds.PandasData(dataname=synthetic_bars()), name="synthetic")
     cerebro.addstrategy(BuyThenClose)
-    cerebro.addanalyzer(SmokeAnalyzer, name="smoke")
+    cerebro.addanalyzer(SmokeAnalyzer, _name="smoke")
 
     [strategy] = cerebro.run()
     analysis = strategy.analyzers["smoke"].get_analysis()

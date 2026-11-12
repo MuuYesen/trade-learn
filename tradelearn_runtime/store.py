@@ -26,6 +26,14 @@ class _Subscription:
     _name: str
     is_live: bool = True
 
+    def __post_init__(self):
+        from tradelearn.backtest.parameters import Params
+        from ._data_period import bar_period
+        metadata = bar_period(self.bar_type)
+        self.p = self.params = Params(metadata)
+        self._timeframe = self.p.timeframe
+        self._compression = self.p.compression
+
 
 class NautilusStore:
     """One native Store for official factories and explicitly selected installed adapters.
