@@ -7,13 +7,13 @@ import pytest
 from tradelearn import engine as tl
 
 
-def engine(api):
+def engine(api, strategy=None):
     frame = pd.DataFrame(
         {k: [10.0, 11.0] for k in ["open", "high", "low", "close", "volume"]},
         index=pd.date_range("2026-01-01", periods=2),
     )
     e = api.Cerebro(stdstats=False)
-    e.addstrategy(api.Strategy)
+    e.addstrategy(strategy or api.Strategy)
     e.adddata(api.feeds.PandasData(dataname=frame))
     return e
 
@@ -201,3 +201,30 @@ def analyzer_collection_calls(api):
 
 def test_analyzer_collection_names_items_integer_index_and_iteration_match_bt():
     assert analyzer_collection_calls(tl) == analyzer_collection_calls(official)
+
+
+def test_components_start_before_business_start_like_real_bt():
+    def calls(api):
+        result = []
+
+        class Business(api.Strategy):
+            def start(self):
+                result.append("strategy")
+
+        class Analysis(api.Analyzer):
+            def start(self):
+                result.append("analyzer")
+
+        class Observation(api.Observer):
+            lines = ("observed",)
+
+            def start(self):
+                result.append("observer")
+
+        e = engine(api, Business)
+        e.addanalyzer(Analysis)
+        e.addobserver(Observation)
+        e.run()
+        return result
+
+    assert calls(tl) == calls(official)

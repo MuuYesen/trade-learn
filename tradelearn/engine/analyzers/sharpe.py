@@ -7,7 +7,7 @@ import pandas as pd
 
 from ..analyzer import Analyzer
 from ..base import TimeFrame
-from .returns import _YEAR_PERIODS, _period_key
+from .returns import _YEAR_PERIODS, _period_key, _validate_period
 
 
 class SharpeRatio(Analyzer):
@@ -21,12 +21,17 @@ class SharpeRatio(Analyzer):
     _is_streaming = True
     _requires_account_value = True
 
+    def create_analysis(self):
+        super().create_analysis()
+        self._observation_started = False
+
     def start(self):
         if self.p.legacyannual:
             raise NotImplementedError(
                 "legacyannual Sharpe historical observer profile is not implemented")
         self.timeframe = self.p.timeframe or self.data._timeframe
         self.compression = self.p.compression or self.data._compression
+        _validate_period(self.timeframe, self.compression)
         self._fundmode = (getattr(self.strategy.broker, "fundmode", False)
                           if self.p.fund is None else self.p.fund)
         if self._fundmode and not hasattr(self.strategy.broker, "fundvalue"):
@@ -43,6 +48,7 @@ class SharpeRatio(Analyzer):
         self._last_period = None
         self._count = 0
         self._mean = self._m2 = 0.0
+        self._observation_started = True
 
     def _value(self):
         broker = self.strategy.broker
@@ -74,6 +80,9 @@ class SharpeRatio(Analyzer):
         return True
 
     def stop(self):
+        if not self._observation_started:
+            return
+        self._observation_started = False
         if self._last_period is not None:
             self._commit_period()
         denominator = self._count - self.p.stddev_sample

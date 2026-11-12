@@ -922,6 +922,9 @@ class StrategyRuntime:
         if not self._started:
             self.initialize()
             self._started = True
+            component_start = self.__dict__.pop("_component_start_callback", None)
+            if callable(component_start):
+                self.invoke_component(component_start)
             self._invoke("start")
 
     def stop(self):

@@ -75,7 +75,7 @@ def run_dataset_smoke(dataset: dict[str, str], path: Path) -> dict[str, object]:
     cerebro.broker.setcash(100.0)
     cerebro.adddata(feeds.PandasData(dataname=frame), name=dataset["symbol"])
     cerebro.addstrategy(BuyThenClose)
-    cerebro.addanalyzer(SmokeAnalyzer, name="smoke")
+    cerebro.addanalyzer(SmokeAnalyzer, _name="smoke")
 
     [strategy] = cerebro.run()
     analysis = strategy.analyzers["smoke"].get_analysis()

@@ -72,3 +72,30 @@ def test_ambiguous_native_periods_remain_unknown_instead_of_last_writer_winning(
         for spec in ["1-SECOND", "1-MINUTE"]
     ]
     assert _feed_period_metadata({"A": InstrumentId.from_str("EURUSD.SIM")}, bars) == {}
+
+
+def test_unknown_returns_period_is_rejected_before_business_start():
+    from types import SimpleNamespace
+
+    from tradelearn.backtest.event_runtime import StrategyRuntime
+    from tradelearn_runtime.broker import NautilusBroker
+    from tradelearn_runtime.components import LiveComponents
+
+    calls = []
+
+    class Business(bt.Strategy):
+        def start(self):
+            calls.append("business-start")
+
+    def account():
+        return {"cash": 100.0, "equity": 100.0}
+    runtime = StrategyRuntime(
+        Business, feeds={"A": "bar"}, broker=NautilusBroker(SimpleNamespace(account=account))
+    )
+    engine = bt.Cerebro(stdstats=False)
+    engine.addanalyzer(bt.analyzers.Returns)
+    components = LiveComponents(engine, runtime, account_provider=account)
+    with pytest.raises(ValueError, match="declared.*timeframe"):
+        runtime.start()
+    assert calls == []
+    components.finish()

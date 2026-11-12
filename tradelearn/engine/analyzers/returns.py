@@ -33,6 +33,14 @@ def _period_key(timestamp, timeframe, compression):
     return timestamp.date().toordinal(), elapsed // (units[timeframe] * compression)
 
 
+def _validate_period(timeframe, compression):
+    if timeframe not in tuple(range(TimeFrame.MicroSeconds, TimeFrame.NoTimeFrame + 1)):
+        raise ValueError("a declared time-based analyzer timeframe is required")
+    if timeframe < TimeFrame.Days:
+        if compression is None or not math.isfinite(float(compression)) or compression <= 0:
+            raise ValueError("a positive declared subday compression is required")
+
+
 class Returns(Analyzer):
     """Constant-state BT Returns; result is finalized at stop, as in BT.
 
@@ -46,9 +54,14 @@ class Returns(Analyzer):
     _is_streaming = True
     _requires_account_value = True
 
+    def create_analysis(self):
+        super().create_analysis()
+        self._observation_started = False
+
     def start(self):
         self.timeframe = self.p.timeframe or self.data._timeframe
         self.compression = self.p.compression or self.data._compression
+        _validate_period(self.timeframe, self.compression)
         self._fundmode = (getattr(self.strategy.broker, "fundmode", False)
                           if self.p.fund is None else self.p.fund)
         if self._fundmode and not hasattr(self.strategy.broker, "fundvalue"):
@@ -56,6 +69,7 @@ class Returns(Analyzer):
         self._initial_value = self._value()
         self._period_count = 0
         self._last_period = None
+        self._observation_started = True
 
     def _value(self):
         broker = self.strategy.broker
@@ -73,6 +87,8 @@ class Returns(Analyzer):
         return phase != "prenext" or self.p._doprenext
 
     def stop(self):
+        if not self._observation_started:
+            return
         end = self._value()
         growth = end / self._initial_value if self._initial_value else -1.0
         total = math.log(growth) if growth >= 0 else float("-inf")

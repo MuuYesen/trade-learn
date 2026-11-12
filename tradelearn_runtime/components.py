@@ -74,6 +74,7 @@ class LiveComponents:
         self.bars=self.broker_events=self.fill_events=self.closed_trades=0
         self._finished=False
         self._started=[]
+        self._start_done=False
         engine._attach_analyzers(self.strategy)
         # Default backtest statistics require a real value source in live mode.
         view=SimpleNamespace(observers=engine.observers,
@@ -93,8 +94,11 @@ class LiveComponents:
         from tradelearn.backtest.engine import _build_analyzer_bar_callbacks,_build_observer_nexts
         self._bar_callbacks=_build_analyzer_bar_callbacks(self.strategy)
         self._observer_callbacks=_build_observer_nexts(self.strategy)
+        runtime._component_start_callback=self.start
 
     def start(self):
+        if self._start_done:return
+        self._start_done=True
         for analyzer in self.strategy.analyzers.values():
             self._started.append(analyzer)
             for name in ('on_start','start'):

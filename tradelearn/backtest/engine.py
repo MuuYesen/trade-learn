@@ -1085,16 +1085,18 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
     if callable(attach_observers):
         attach_observers(strategy)
 
-    # 3. Lifecycle Start
+    # 3. Component start is coordinated before the business start callback.
+    def start_components():
+        for ana in strategy.analyzers.values():
+            on_start = getattr(ana, "on_start", None)
+            if callable(on_start):
+                runtime.invoke_component(on_start)
+            if hasattr(ana, "start"):
+                runtime.invoke_component(ana.start)
+        for observer in getattr(strategy, "observers", {}).values():
+            runtime.invoke_component(observer.start)
+    runtime._component_start_callback = start_components
     runtime.start()
-    for ana in strategy.analyzers.values():
-        on_start = getattr(ana, "on_start", None)
-        if callable(on_start):
-            runtime.invoke_component(on_start)
-        if hasattr(ana, "start"):
-            runtime.invoke_component(ana.start)
-    for observer in getattr(strategy, "observers", {}).values():
-        runtime.invoke_component(observer.start)
     analyzer_bar_callbacks = _build_analyzer_bar_callbacks(strategy)
     observer_nexts = _build_observer_nexts(strategy)
     has_analyzer_bar_callbacks = bool(analyzer_bar_callbacks)
