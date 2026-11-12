@@ -77,6 +77,9 @@ def test_stream_lifecycle_length_counts_deliveries_while_history_is_bounded():
 
 @pytest.mark.parametrize('bands',[None,2.])
 def test_configured_vwap_output_arity_matches_native_batch(bands):
+    import sys
+    if sys.version_info < (3, 11):
+        pytest.skip("Fixed PyneCore requires Python 3.11+; no TV fallback")
     import numpy as np
     from tradelearn.indicators import tv
     frame=pd.DataFrame({k:[1.,3.,2.,4.,6.] for k in ['open','high','low','close','volume']},index=pd.date_range('2026-01-01',periods=5,tz='UTC'))

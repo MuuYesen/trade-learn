@@ -50,6 +50,9 @@ def owned_size(value, seen=None):
 def test_fifty_thousand_updates_have_stable_working_state(source, name):
     import importlib
 
+    if source == "tv" and sys.version_info < (3, 11):
+        pytest.skip("Fixed PyneCore requires Python 3.11+; TV unavailable")
+
     indicator = getattr(
         importlib.import_module(f"tradelearn.indicators.{source}"), name
     ).configured()
