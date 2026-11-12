@@ -12,15 +12,10 @@ class SMA(bt.Indicator):
     params = (("period", 30),)
 
     def __init__(self):
-        if hasattr(self.data, "to_series"):
-            values = self.data.to_series().rolling(self.p.period).mean()
-            self.lines.sma = self.data.wrap_indicator(values, name="sma")
-        else:
-            self.addminperiod(self.p.period)
+        self.addminperiod(self.p.period)
 
     def next(self):
-        if not hasattr(self.data, "to_series"):
-            self.lines.sma[0] = sum(self.data.get(size=self.p.period)) / self.p.period
+        self.lines.sma[0] = sum(self.data.get(size=self.p.period)) / self.p.period
 
 
 class MigratedSmaCross(bt.Strategy):

@@ -31,30 +31,19 @@ class RSI_SMA(bt.Indicator):
     params = (("period", 14), ("safediv", False))
 
     def __init__(self):
-        close = self.data.close if hasattr(self.data, "close") else self.data
-        if hasattr(close, "to_series"):
-            delta = close.to_series().diff()
-            gain = delta.clip(lower=0.0).rolling(self.p.period).mean()
-            loss = (-delta.clip(upper=0.0)).rolling(self.p.period).mean()
-            rsi = 100.0 - (100.0 / (1.0 + gain / loss.replace(0, np.nan)))
-            rsi.iloc[: self.p.period + 1] = np.nan
-            self.lines.rsi = close.wrap_indicator(rsi.fillna(100.0), name="rsi")
-            self.lines.rsi.min_period = self.p.period + 1
-        else:
-            self.addminperiod(self.p.period + 1)
+        self.addminperiod(self.p.period + 1)
 
     def next(self):
-        if not hasattr(self.data.close if hasattr(self.data, "close") else self.data, "to_series"):
-            close = self.data.close if hasattr(self.data, "close") else self.data
-            values = list(close.get(size=self.p.period + 1))
-            deltas = [values[i] - values[i - 1] for i in range(1, len(values))]
-            gains = [max(delta, 0.0) for delta in deltas]
-            losses = [max(-delta, 0.0) for delta in deltas]
-            avg_gain = sum(gains) / self.p.period
-            avg_loss = sum(losses) / self.p.period
-            self.lines.rsi[0] = (
-                100.0 if avg_loss == 0 else 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
-            )
+        close = self.data.close if hasattr(self.data, "close") else self.data
+        values = list(close.get(size=self.p.period + 1))
+        deltas = [values[i] - values[i - 1] for i in range(1, len(values))]
+        gains = [max(delta, 0.0) for delta in deltas]
+        losses = [max(-delta, 0.0) for delta in deltas]
+        avg_gain = sum(gains) / self.p.period
+        avg_loss = sum(losses) / self.p.period
+        self.lines.rsi[0] = (
+            100.0 if avg_loss == 0 else 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
+        )
 
 
 class ATR(bt.Indicator):
@@ -62,30 +51,16 @@ class ATR(bt.Indicator):
     params = (("period", 14),)
 
     def __init__(self):
-        if hasattr(self.data.close, "to_series"):
-            high = self.data.high.to_series()
-            low = self.data.low.to_series()
-            close = self.data.close.to_series()
-            tr = pd.concat(
-                [high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()],
-                axis=1,
-            ).max(axis=1)
-            tr.iloc[0] = np.nan
-            values = _wilder(tr, self.p.period)
-            self.lines.atr = self.data.close.wrap_indicator(values, name="atr")
-            self.lines.atr.min_period = self.p.period
-        else:
-            self.addminperiod(self.p.period + 1)
+        self.addminperiod(self.p.period + 1)
 
     def next(self):
-        if not hasattr(self.data.close, "to_series"):
-            ranges = []
-            for i in range(self.p.period):
-                high = self.data.high[-i]
-                low = self.data.low[-i]
-                prev_close = self.data.close[-i - 1]
-                ranges.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
-            self.lines.atr[0] = sum(ranges) / len(ranges)
+        ranges = []
+        for i in range(self.p.period):
+            high = self.data.high[-i]
+            low = self.data.low[-i]
+            prev_close = self.data.close[-i - 1]
+            ranges.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
+        self.lines.atr[0] = sum(ranges) / len(ranges)
 
 class FurCommInfo(bt.CommInfoBase):
     """定义期货的交易手续费和佣金"""

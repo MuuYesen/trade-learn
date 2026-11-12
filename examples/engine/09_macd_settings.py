@@ -17,7 +17,7 @@ class SMA(bt.Indicator):
 
     def __init__(self):
         line = self.data.close if hasattr(self.data, "close") else self.data
-        if hasattr(line, "to_series"):
+        if hasattr(line, "_runtime_function"):
             self.lines.sma = bt.talib.SMA(line, timeperiod=self.p.period)
         else:
             native = _bt_indicators().SMA(line, period=self.p.period)
@@ -29,7 +29,7 @@ class ATR(bt.Indicator):
     params = (("period", 14),)
 
     def __init__(self):
-        if hasattr(self.data.close, "to_series"):
+        if hasattr(self.data.close, "_runtime_function"):
             self.lines.atr = bt.talib.ATR(
                 self.data.high,
                 self.data.low,
@@ -47,7 +47,7 @@ class MACD(bt.Indicator):
 
     def __init__(self):
         line = self.data.close if hasattr(self.data, "close") else self.data
-        if hasattr(line, "to_series"):
+        if hasattr(line, "_runtime_function"):
             values = bt.talib.MACD(
                 line,
                 fastperiod=self.p.period_me1,
@@ -55,8 +55,8 @@ class MACD(bt.Indicator):
                 signalperiod=self.p.period_signal,
             )
             self.lines.macd = values.macd
-            self.lines.signal = values.signal
-            self.lines.histo = values.hist
+            self.lines.signal = values.macdsignal
+            self.lines.histo = values.macdhist
         else:
             native = _bt_indicators().MACD(
                 line,
@@ -73,19 +73,13 @@ class CrossOver(bt.Indicator):
     lines = ("crossover",)
 
     def __init__(self, *args):
-        d0, d1 = args if args else (self.data0, self.data1)
-        if hasattr(d0, "to_series"):
-            s0 = d0.to_series()
-            s1 = d1.to_series()
-            diff = s0 - s1
-            prev = diff.shift(1)
-            values = ((diff > 0) & (prev <= 0)).astype(float) - (
-                (diff < 0) & (prev >= 0)
-            ).astype(float)
-            self.lines.crossover = d0.wrap_indicator(values, name="crossover")
-        else:
-            native = _bt_indicators().CrossOver(d0, d1)
-            self.lines.crossover = native.lines[0]
+        self.data0, self.data1 = args if args else (self.data0, self.data1)
+        self.addminperiod(2)
+
+    def next(self):
+        up = self.data0[0] > self.data1[0] and self.data0[-1] <= self.data1[-1]
+        down = self.data0[0] < self.data1[0] and self.data0[-1] >= self.data1[-1]
+        self.lines.crossover[0] = 1.0 if up else -1.0 if down else 0.0
 
 
 class MacdTharp(bt.Strategy):

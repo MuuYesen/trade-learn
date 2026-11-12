@@ -2,9 +2,6 @@
 # Adapted from reference/backtesting-main/turtle_trading/main.py
 # Only imports are changed to prove compatibility.
 
-import numpy as np
-import pandas as pd
-
 import tradelearn.engine as bt
 
 
@@ -13,15 +10,10 @@ class Highest(bt.Indicator):
     params = (("period", 30),)
 
     def __init__(self):
-        if hasattr(self.data, "to_series"):
-            values = self.data.to_series().rolling(self.p.period).max()
-            self.lines.highest = self.data.wrap_indicator(values, name="highest")
-        else:
-            self.addminperiod(self.p.period)
+        self.addminperiod(self.p.period)
 
     def next(self):
-        if not hasattr(self.data, "to_series"):
-            self.lines.highest[0] = max(self.data.get(size=self.p.period))
+        self.lines.highest[0] = max(self.data.get(size=self.p.period))
 
 
 class Lowest(bt.Indicator):
@@ -29,15 +21,10 @@ class Lowest(bt.Indicator):
     params = (("period", 30),)
 
     def __init__(self):
-        if hasattr(self.data, "to_series"):
-            values = self.data.to_series().rolling(self.p.period).min()
-            self.lines.lowest = self.data.wrap_indicator(values, name="lowest")
-        else:
-            self.addminperiod(self.p.period)
+        self.addminperiod(self.p.period)
 
     def next(self):
-        if not hasattr(self.data, "to_series"):
-            self.lines.lowest[0] = min(self.data.get(size=self.p.period))
+        self.lines.lowest[0] = min(self.data.get(size=self.p.period))
 
 
 class CrossUp(bt.Indicator):
@@ -45,45 +32,25 @@ class CrossUp(bt.Indicator):
 
     def __init__(self, *args):
         d0, d1 = args if args else (self.data0, self.data1)
-        if hasattr(d0, "to_series"):
-            v0 = d0.to_series()
-            v1 = d1.to_series()
-            diff = v0 - v1
-            signs = np.sign(diff)
-            prev = pd.Series(np.where(signs == 0, np.nan, signs)).ffill().shift(1)
-            values = ((signs > 0) & (prev <= 0)).astype(float)
-            self.lines.crossover = d0.wrap_indicator(values, name="crossover")
-        else:
-            self.data0 = d0
-            self.data1 = d1
-            self.addminperiod(2)
+        self.data0 = d0
+        self.data1 = d1
+        self.addminperiod(2)
 
     def next(self):
-        if not hasattr(self.data0, "to_series"):
-            crossed = self.data0[0] > self.data1[0] and self.data0[-1] <= self.data1[-1]
-            self.lines.crossover[0] = float(crossed)
+        crossed = self.data0[0] > self.data1[0] and self.data0[-1] <= self.data1[-1]
+        self.lines.crossover[0] = float(crossed)
 
 
 class CrossDown(CrossUp):
     def __init__(self, *args):
         d0, d1 = args if args else (self.data0, self.data1)
-        if hasattr(d0, "to_series"):
-            v0 = d0.to_series()
-            v1 = d1.to_series()
-            diff = v0 - v1
-            signs = np.sign(diff)
-            prev = pd.Series(np.where(signs == 0, np.nan, signs)).ffill().shift(1)
-            values = ((signs < 0) & (prev >= 0)).astype(float)
-            self.lines.crossover = d0.wrap_indicator(values, name="crossover")
-        else:
-            self.data0 = d0
-            self.data1 = d1
-            self.addminperiod(2)
+        self.data0 = d0
+        self.data1 = d1
+        self.addminperiod(2)
 
     def next(self):
-        if not hasattr(self.data0, "to_series"):
-            crossed = self.data0[0] < self.data1[0] and self.data0[-1] >= self.data1[-1]
-            self.lines.crossover[0] = float(crossed)
+        crossed = self.data0[0] < self.data1[0] and self.data0[-1] >= self.data1[-1]
+        self.lines.crossover[0] = float(crossed)
 
 
 class ATR(bt.Indicator):
@@ -91,28 +58,16 @@ class ATR(bt.Indicator):
     params = (("period", 14),)
 
     def __init__(self):
-        if hasattr(self.data.close, "to_series"):
-            high = self.data.high.to_series()
-            low = self.data.low.to_series()
-            close = self.data.close.to_series()
-            tr = pd.concat(
-                [high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()],
-                axis=1,
-            ).max(axis=1)
-            values = tr.ewm(alpha=1 / self.p.period, adjust=False).mean()
-            self.lines.atr = self.data.close.wrap_indicator(values, name="atr")
-        else:
-            self.addminperiod(self.p.period + 1)
+        self.addminperiod(self.p.period + 1)
 
     def next(self):
-        if not hasattr(self.data.close, "to_series"):
-            ranges = []
-            for i in range(self.p.period):
-                high = self.data.high[-i]
-                low = self.data.low[-i]
-                prev_close = self.data.close[-i - 1]
-                ranges.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
-            self.lines.atr[0] = sum(ranges) / len(ranges)
+        ranges = []
+        for i in range(self.p.period):
+            high = self.data.high[-i]
+            low = self.data.low[-i]
+            prev_close = self.data.close[-i - 1]
+            ranges.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
+        self.lines.atr[0] = sum(ranges) / len(ranges)
 
 class DonchianChannels(bt.Indicator):
     '''
