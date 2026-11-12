@@ -14,6 +14,30 @@ on:
       - "release/0.3.0-integration-20261112"
     tags:
       - "v*"
+    # CI/oracle preparation alone does not change wheel inputs. Keep the
+    # existing in-flight platform build; tags/manual dispatch still rebuild.
+    paths:
+      - ".gitattributes"
+      - ".cargo/**"
+      - "Cargo*"
+      - "pyproject.toml"
+      - "rust/**"
+      - "tradelearn/**"
+      - "tradelearn_runtime/**"
+      - "leafquant_monitor/**"
+      - "THIRD_PARTY_LICENSES/**"
+      - "README*.md"
+      - "LICENSE"
+      - "NOTICE"
+      - "scripts/**"
+      - "examples/**"
+      - "docs/guides/**"
+      - "docs/api/**"
+      - "docs/quickstart.md"
+      - "docs/release/**"
+      - "tests/test_filesystem_identity.py"
+      - "tests/test_windows_delivery.py"
+      - "tests/unit/indicators/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

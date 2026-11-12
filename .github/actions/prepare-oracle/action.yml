@@ -1,0 +1,11 @@
+name: Prepare frozen oracle
+description: Fetch the pinned public revision and verify every restored source byte without project dependency resolution
+runs:
+  using: composite
+  steps:
+    - name: Fetch and restore exact frozen source
+      shell: bash
+      run: |
+        oracle_commit="$(python -c 'import json;print(json.load(open("scripts/oracle_manifest.json"))["commit"])')"
+        git fetch --no-tags --depth=1 origin "$oracle_commit"
+        python scripts/restore_oracle.py

@@ -10,6 +10,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  dependency-lock:
+    name: unified dependency lock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - run: uv lock --check
+
   test:
     name: ${{ matrix.os }} py${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
@@ -25,22 +35,22 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: uv sync --frozen --group dev --group ci --group oracle
-      - name: Fetch the frozen oracle revision
-        shell: bash
-        run: |
-          oracle_commit="$(uv run python -c 'import json;print(json.load(open("scripts/oracle_manifest.json"))["commit"])')"
-          git fetch --no-tags --depth=1 origin "$oracle_commit"
-      - run: uv run ruff check tradelearn/core tradelearn/data tradelearn/factor tradelearn/indicators tradelearn/metrics tradelearn/report tradelearn/integrations tests/unit/core tests/unit/data tests/unit/factor tests/unit/indicators tests/unit/metrics tests/unit/report tests/unit/integrations tests/golden tests/consistency scripts
-      - run: uv run pytest --junitxml=pytest-results.xml
+      - uses: ./.github/actions/prepare-oracle
+      # Qualify the actual selected metadata while the separately mandatory
+      # universal lock check exposes unpublished optional distributions.
+      - run: uv venv
+      - run: uv pip install . --group dev --group ci --group oracle
+      - run: uv pip check
+      - run: uv run --no-sync ruff check tradelearn/core tradelearn/data tradelearn/factor tradelearn/indicators tradelearn/metrics tradelearn/report tradelearn/integrations tests/unit/core tests/unit/data tests/unit/factor tests/unit/indicators tests/unit/metrics tests/unit/report tests/unit/integrations tests/golden tests/consistency scripts
+      - run: uv run --no-sync pytest --junitxml=pytest-results.xml
       - name: Expose test failures in public annotations
         if: failure()
         run: python scripts/report_test_failures.py pytest-results.xml
-      - run: uv run pytest tests/unit/metrics tests/consistency/test_metrics.py --cov=tradelearn.metrics --cov-report=term-missing --cov-fail-under=100
-      - run: uv run pytest tests/unit/core --doctest-modules tradelearn/core
-      - run: uv run pytest --doctest-modules tradelearn/data
-      - run: uv run pytest --doctest-modules tradelearn/metrics
-      - run: uv run interrogate tradelearn/core tradelearn/data tradelearn/factor tradelearn/indicators tradelearn/metrics tradelearn/report --fail-under 90
+      - run: uv run --no-sync pytest tests/unit/metrics tests/consistency/test_metrics.py --cov=tradelearn.metrics --cov-report=term-missing --cov-fail-under=100
+      - run: uv run --no-sync pytest tests/unit/core --doctest-modules tradelearn/core
+      - run: uv run --no-sync pytest --doctest-modules tradelearn/data
+      - run: uv run --no-sync pytest --doctest-modules tradelearn/metrics
+      - run: uv run --no-sync interrogate tradelearn/core tradelearn/data tradelearn/factor tradelearn/indicators tradelearn/metrics tradelearn/report --fail-under 90
 
   consistency:
     name: consistency
@@ -50,14 +60,12 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
-      - run: uv sync --frozen --group dev --group ci --group oracle
-      - name: Fetch the frozen oracle revision
-        shell: bash
-        run: |
-          oracle_commit="$(uv run python -c 'import json;print(json.load(open("scripts/oracle_manifest.json"))["commit"])')"
-          git fetch --no-tags --depth=1 origin "$oracle_commit"
-      - run: uv run pytest tests/consistency/ -v --tb=short
-      - run: uv run pytest tests/golden/ -v
+      - uses: ./.github/actions/prepare-oracle
+      - run: uv venv
+      - run: uv pip install . --group dev --group ci --group oracle
+      - run: uv pip check
+      - run: uv run --no-sync pytest tests/consistency/ -v --tb=short
+      - run: uv run --no-sync pytest tests/golden/ -v
 
   oracle:
     name: oracle-readiness
@@ -67,5 +75,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
-      - run: uv sync --frozen --group dev --group ci --group oracle
-      - run: uv run python scripts/check_oracle.py
+      - uses: ./.github/actions/prepare-oracle
+      - run: uv venv
+      - run: uv pip install . --group dev --group ci --group oracle
+      - run: uv pip check
+      - run: uv run --no-sync python scripts/check_oracle.py
