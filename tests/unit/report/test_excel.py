@@ -345,3 +345,19 @@ def test_reporter_excel_accepts_direct_mapping_section(tmp_path):
     )
     assert "causal_features" in _sheet_names(path)
     assert "alpha" in _shared_strings(path)
+
+
+def test_excel_mixed_metric_facts_normalize_aware_scalars_without_mutation(tmp_path):
+    from tradelearn.report.excel import _excel_safe_frame
+
+    timestamp = pd.Timestamp('2026-01-01 08:30', tz='Asia/Shanghai')
+    source = pd.DataFrame({'value': [timestamp, 1.25, 'UTC provenance']})
+    snapshot = source.copy(deep=True)
+    result = _excel_safe_frame(source)
+    assert result.loc[0, 'value'] == pd.Timestamp('2026-01-01 00:30')
+    assert result.loc[0, 'value'].tzinfo is None
+    assert result.loc[1:, 'value'].tolist() == [1.25, 'UTC provenance']
+    pd.testing.assert_frame_equal(source, snapshot)
+    path = tmp_path / 'mixed.xlsx'
+    result.to_excel(path, index=False)
+    assert path.exists()

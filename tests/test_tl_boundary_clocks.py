@@ -12,6 +12,7 @@ from tradelearn.core import strategy_events as events
 from tradelearn.core.observation_clock import monotonic_ns
 from leafquant_monitor.tradelearn import TradeLogStrategy, TradeLogConfig
 from leafquant_monitor.logger import TradeLogger, MonitorSettings
+from tests.windows_private_directory import make_private_test_directory
 from tradelearn_runtime.broker import NautilusBroker
 
 class Recorder:
@@ -43,6 +44,7 @@ class ClockTests(unittest.TestCase):
 class TimingTests(unittest.TestCase):
     def setUp(self):
         self.directory=tempfile.TemporaryDirectory();self.rec=Recorder()
+        make_private_test_directory(self.directory.name)
         self.logger=TradeLogger(MonitorSettings('BINANCE','tl-test','BINANCE-TEST',self.directory.name),recorder=self.rec)
         self.config=TradeLogConfig(context=dict(environment='paper',run_id='tl-context',source='BINANCE',strategy_id='tl-test',account_id='BINANCE-TEST',state_dir=self.directory.name),logger=self.logger)
     def tearDown(self): self.logger.close();self.directory.cleanup()

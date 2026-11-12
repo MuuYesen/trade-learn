@@ -43,7 +43,8 @@ def _run_strategy(strategy_name: str) -> tuple[float, object]:
         importlib.import_module("examples.engine"),
         strategy_name,
     )
-    cerebro = bt.Cerebro(trade_on_close=True)
+    cerebro = bt.Cerebro()
+    cerebro.broker.set_coc(True)
     for name, frame in _portfolio_data().items():
         cerebro.adddata(bt.feeds.PandasData(dataname=frame, name=name))
     cerebro.broker.setcash(100000.0)

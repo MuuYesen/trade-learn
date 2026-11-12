@@ -1,5 +1,6 @@
 """Tests for v2 Alpha191 factor entry points."""
 
+import ast
 import importlib
 import warnings
 from pathlib import Path
@@ -24,7 +25,28 @@ _legacy_spec = (
 )
 if _legacy_spec is not None and _legacy_spec.loader is not None:
     _legacy_module = importlib.util.module_from_spec(_legacy_spec)
-    _legacy_spec.loader.exec_module(_legacy_module)
+    # Keep the frozen oracle file and all formulas unchanged. Its numeric-frame
+    # `loc/iloc[...] = None` sentinel was accepted as NaN by pandas 2; pandas 3
+    # rejects it. Normalize only those assignment literals in the test loader.
+    # Arithmetic, windows, masks, input data and comparison tolerances are intact.
+    _legacy_tree = ast.parse(_LEGACY_ALPHA191_PATH.read_text())
+    _sentinel_assignments = 0
+    for _node in ast.walk(_legacy_tree):
+        if (
+            isinstance(_node, ast.Assign)
+            and isinstance(_node.value, ast.Constant)
+            and _node.value.value is None
+            and all(
+                isinstance(target, ast.Subscript)
+                and isinstance(target.value, ast.Attribute)
+                and target.value.attr in {"loc", "iloc"}
+                for target in _node.targets
+            )
+        ):
+            _node.value = ast.copy_location(ast.Constant(value=float("nan")), _node.value)
+            _sentinel_assignments += 1
+    assert _sentinel_assignments > 0
+    exec(compile(_legacy_tree, str(_LEGACY_ALPHA191_PATH), "exec"), _legacy_module.__dict__)
     LegacyAlphas191 = _legacy_module.Alphas191
 else:
     LegacyAlphas191 = None

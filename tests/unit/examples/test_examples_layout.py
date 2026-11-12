@@ -38,6 +38,7 @@ def test_examples_contains_only_strategy_files() -> None:
     """Keep only documented strategies, explicit aliases and shared research helpers."""
     helpers = {
         "research/_workflow.py",
+        "lite/_indicators.py",
         "research/components.py",
         "exploration/classifier_comparison.py",
     }

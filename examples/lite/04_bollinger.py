@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tradelearn.lite as tl
+from examples.lite._indicators import Rolling
 
 
 def crossover(series1, series2) -> bool:
@@ -15,15 +16,8 @@ class LiteBollBandCross(tl.Strategy):
     p = 2
 
     def init(self) -> None:
-        price = self.data.close.df
-        mid = price.rolling(self.n).mean()
-        std = price.rolling(self.n).std(ddof=0)
-        upper = mid + self.p * std
-        lower = mid - self.p * std
-
-        self.upper = self.I(upper, name="upper", overlay=True)
-        self.mid = self.I(mid, name="mid", overlay=True)
-        self.lower = self.I(lower, name="lower", overlay=True)
+        bands = Rolling(self.data.close, period=self.n, deviation=self.p)
+        self.upper, self.mid, self.lower = bands.upper, bands.mean, bands.lower
 
     def next(self) -> None:
         if len(self.upper) < 2:

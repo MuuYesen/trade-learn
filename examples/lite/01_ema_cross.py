@@ -13,6 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 import tradelearn.lite as tl
+from examples.lite._indicators import EMA
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "benchmarks" / "data" / "backtesting"
@@ -29,9 +30,8 @@ class EMA_Cross_Strategy(tl.Strategy):
     position_pct = 0.95  # 95% del equity
     
     def init(self):
-        close = self.data.close.df
-        self.ema9_ind = self.I(lambda: close.ewm(span=self.ema_fast, adjust=False).mean())
-        self.ema21_ind = self.I(lambda: close.ewm(span=self.ema_slow, adjust=False).mean())
+        self.ema9_ind = EMA(self.data.close, period=self.ema_fast)
+        self.ema21_ind = EMA(self.data.close, period=self.ema_slow)
         self.highest_since_entry = 0
         
     def next(self):
@@ -107,7 +107,7 @@ def run_backtest(symbol):
         EMA_Cross_Strategy,
         cash=initial_cash,
         commission=0.0008,  # 0.08% taker fee
-        exclusive_orders=True
+        exclusive_orders=False  # Positions and pending orders are explicit in Lite.
     )
     
     stats = bt.run()

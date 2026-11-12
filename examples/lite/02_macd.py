@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 import tradelearn.lite as tl
+from examples.lite._indicators import MACD, Rolling, TrueRange
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "benchmarks" / "data" / "backtesting"
@@ -39,30 +40,12 @@ class MACD_Volume_Strategy(tl.Strategy):
     volume_threshold = 1.2
     
     def init(self):
-        close = self.data.close.df
-        volume = self.data.volume.df
-        
-        # Calcular MACD
-        ema_fast = close.ewm(span=self.macd_fast, adjust=False).mean()
-        ema_slow = close.ewm(span=self.macd_slow, adjust=False).mean()
-        macd_line = ema_fast - ema_slow
-        macd_signal_line = macd_line.ewm(span=self.macd_signal_period, adjust=False).mean()
-        
-        self.macd_line_ind = self.I(lambda: macd_line)
-        self.macd_signal_ind = self.I(lambda: macd_signal_line)
-        
-        # Promedio de volumen
-        self.volume_sma = self.I(lambda: volume.rolling(window=20).mean())
-        
-        # ATR para stops
-        high = self.data.high.df
-        low = self.data.low.df
-        tr1 = high - low
-        tr2 = abs(high - close.shift())
-        tr3 = abs(low - close.shift())
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        self.atr = self.I(lambda: tr.rolling(window=self.atr_period).mean())
-        
+        macd = MACD(self.data.close, fast=self.macd_fast, slow=self.macd_slow,
+                    signal=self.macd_signal_period)
+        self.macd_line_ind, self.macd_signal_ind = macd.dif, macd.dea
+        self.volume_sma = Rolling(self.data.volume, period=20).mean
+        self.atr = Rolling(TrueRange(self.data), period=self.atr_period).mean
+
         self.entry_price = 0
         self.sl_price = 0
         self.tp_price = 0
@@ -150,7 +133,7 @@ def run_backtest(symbol):
         MACD_Volume_Strategy,
         cash=initial_cash,
         commission=0.0008,
-        exclusive_orders=True
+        exclusive_orders=False  # Pending orders remain explicit.
     )
     
     stats = bt.run()

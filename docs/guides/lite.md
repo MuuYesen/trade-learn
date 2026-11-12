@@ -33,3 +33,6 @@ result = tl.Backtest(bars, Cross, cash=100_000).run(period=20)
 `optimize(**parameter_grid)` 在本进程顺序执行有限网格，每个 trial 使用新 Backtest、同一执行配置和独立空 storage，按 `return_pct` 返回最佳 LiteStats；不序列化原生运行时，不启动进程池。非空 storage 与空网格明确拒绝。普通 `run()` 的显式 storage 用法保留。
 
 源码验收入口：`tests/unit/lite/test_engine_lite_replay.py`、`test_shared_runtime_contract.py`、`test_integration_backtest_contract.py`与`tests/test_lite_native_projection.py`。最后一项是投影fixture；官方NA真实离线回放另列，不把fixture当券商连接。
+
+
+`examples/lite`的七个策略已迁到共同逐Bar Indicator，未恢复`.df`/`I`全历史预计算。示例EMA保留原pandas `adjust=False`从首值递推的初值；MACD仍由该EMA构造，TR仍为简单滚动均值，不以TA-Lib同名默认口径替换。SMA/布林带采用有限窗口（标准差ddof=0）。网格策略等到prepare_days根实际到达后才冻结初始化区间；未来变动不影响已交付前缀。旧脚本不再传未实现的exclusive_orders=True；在途单需按Lite显式orders状态管理，不承诺自动撤单/互斥。

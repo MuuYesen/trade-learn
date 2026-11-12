@@ -153,7 +153,7 @@ def run_mlflow_tutorial() -> dict[str, Any]:
     previous_uri = mlflow.get_tracking_uri()
     try:
         with TemporaryDirectory(prefix="tl-tutorial-") as folder:
-            uri = "sqlite:///" + str(Path(folder) / "tracking.db")
+            uri = "sqlite:///" + (Path(folder) / "tracking.db").as_posix()
             result = log(strategies, experiment_name="tutorial", run_name="quickstart", uri=uri)
             if result.status != "FINISHED":
                 raise RuntimeError(result.error)

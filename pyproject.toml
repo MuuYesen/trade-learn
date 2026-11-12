@@ -88,6 +88,9 @@ docs = [
     "mkdocstrings-python",
 ]
 ci = [
+    "gplearn",
+    "optuna",
+    "Riskfolio-Lib",
     "build>=1.4.4; python_version < '3.11'",
     "certifi>=2026.10.19",
     "urllib3>=2.8.0,<3",
@@ -149,6 +152,7 @@ include = [
     { path = "examples/__init__.py", format = "sdist" },
     { path = "examples/research/*.py", format = "sdist" },
     { path = "examples/engine/*.py", format = "sdist" },
+    { path = "examples/lite/*.py", format = "sdist" },
     { path = "scripts/check_research_environment.py", format = "sdist" },
     { path = "scripts/check_kunquant_artifact.py", format = "sdist" },
     { path = "LICENSE", format = "sdist" },

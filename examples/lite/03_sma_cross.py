@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tradelearn.lite as tl
+from examples.lite._indicators import Rolling
 
 
 def crossover(series1, series2) -> bool:
@@ -14,9 +15,8 @@ class LiteSmaCross(tl.Strategy):
     slow = 20
 
     def init(self) -> None:
-        price = self.data.close.df
-        self.ma1 = self.I(lambda arr, n: arr.rolling(n).mean(), price, self.fast, overlay=True)
-        self.ma2 = self.I(lambda arr, n: arr.rolling(n).mean(), price, self.slow, overlay=True)
+        self.ma1 = Rolling(self.data.close, period=self.fast).mean
+        self.ma2 = Rolling(self.data.close, period=self.slow).mean
 
     def next(self) -> None:
         if len(self.ma1) < 2:

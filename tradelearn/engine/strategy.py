@@ -143,7 +143,7 @@ class Strategy(_BaseStrategy, LineRoot):
         assert_observer_allows_mutation()
         entry_clock = capture_observation_clock(self, "intent.submit_order")
         data = self._resolve_data(data)
-        size = self.getsizing(data, isbuy=side == Order.Buy) if size is None else abs(size)
+        size = abs(self.getsizing(data, isbuy=side == Order.Buy) if size is None else size)
         if not size:
             return None
         if valid is not None:

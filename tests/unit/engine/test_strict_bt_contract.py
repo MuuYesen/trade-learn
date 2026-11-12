@@ -346,3 +346,24 @@ def test_order_creation_and_execution_dates_follow_bt_without_changing_result_cl
     assert (o.created.size,o.created.price,o.created.pricelimit)==(-2,10.,10.)
     assert o.executed.dt==bt.date2num(frame.index[1]) and o.executed.remsize==0
     assert s.stats.orders.executed_dt.iloc[0]==pd.Timestamp('2026-01-02',tz='UTC')
+
+
+def test_sizer_signed_quantity_is_normalized_like_official_bt():
+    results = []
+    for api in (official, bt):
+        class SignedSizer(api.Sizer):
+            def _getsizing(self, comminfo, cash, data, isbuy):
+                return -2
+
+        class S(api.Strategy):
+            def next(self):
+                if len(self) == 1:
+                    self.submitted = self.buy()
+
+        c = api.Cerebro()
+        c.adddata(api.feeds.PandasData(dataname=bars()))
+        c.addsizer(SignedSizer)
+        c.addstrategy(S)
+        strategy = c.run()[0]
+        results.append((strategy.submitted.size, strategy.submitted.isbuy()))
+    assert results == [(2, True), (2, True)]

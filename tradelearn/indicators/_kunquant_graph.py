@@ -99,6 +99,25 @@ ALPHA101_NAMES = (
 )
 
 
+def _fixed_source_file(path, canonical_sha256, windows_sha256):
+    """Accept exactly the two verified official 0.1.12 source byte variants.
+
+    The Windows wheel uses CRLF. Its full raw SHA AND LF-normalized SHA must
+    match; other byte or formula edits remain rejected. Native Windows build
+    capability is independent of this source-identity check.
+    """
+    raw = Path(path).read_bytes()
+    actual = hashlib.sha256(raw).hexdigest()
+    if actual == canonical_sha256:
+        return actual
+    if (
+        actual == windows_sha256
+        and hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest() == canonical_sha256
+    ):
+        return actual
+    raise ValueError("KunQuant source differs from fixed qualification scope")
+
+
 def validate_names(names):
     names = tuple(names)
     if any(not isinstance(name, str) for name in names):
@@ -128,8 +147,11 @@ def build_alpha101(names):
     from KunQuant.Stage import Function
 
     source = Path(inspect.getfile(Alpha101))
-    if hashlib.sha256(source.read_bytes()).hexdigest() != SOURCE_SHA256:
-        raise ValueError("KunQuant Alpha101 source differs from the fixed qualification scope")
+    source_file_sha256 = _fixed_source_file(
+        source,
+        SOURCE_SHA256,
+        "6b974d42b4289ea6a8af8c7b26f752ee777a1caa697e190cd199fdda4537c5f3",
+    )
     builder = Builder()
     schema = ("open", "close", "high", "low", "volume", "amount")
     with builder:
@@ -149,6 +171,7 @@ def build_alpha101(names):
     )
     metadata = {
         **expression,
+        "source_file_sha256": source_file_sha256,
         "expression_sha256": hashlib.sha256(
             json.dumps(expression, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest(),
@@ -178,11 +201,11 @@ def build_alpha158(config=None):
     from KunQuant.predefined import Alpha158
     from KunQuant.Stage import Function
 
-    if (
-        hashlib.sha256(Path(inspect.getfile(Alpha158)).read_bytes()).hexdigest()
-        != ALPHA158_SOURCE_SHA256
-    ):
-        raise ValueError("KunQuant Alpha158 source differs from fixed qualification scope")
+    source_file_sha256 = _fixed_source_file(
+        Path(inspect.getfile(Alpha158)),
+        ALPHA158_SOURCE_SHA256,
+        "5afe30b56fbbe4fe5431a232153ed1c77dc25571b8786d4bae35be07a27a70b4",
+    )
     configuration = deepcopy(DEFAULT_ALPHA158_CONFIG if config is None else config)
     # Metadata must remain ordinary serializable source configuration.
     json.dumps(configuration, sort_keys=True)
@@ -233,6 +256,7 @@ def build_alpha158(config=None):
     )
     return function, {
         **expression,
+        "source_file_sha256": source_file_sha256,
         "expression_sha256": hashlib.sha256(
             json.dumps(expression, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest(),

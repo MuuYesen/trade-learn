@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 import tradelearn.lite as tl
+from examples.lite._indicators import Rolling, TrueRange
 
 
 class LiteAdvancedTurtle(tl.Strategy):
@@ -15,13 +16,11 @@ class LiteAdvancedTurtle(tl.Strategy):
     max_units = 4
 
     def init(self) -> None:
-        self.high_20 = self.I(self.data.high.df.rolling(self.entry_window).max())
-        self.low_20 = self.I(self.data.low.df.rolling(self.entry_window).min())
-        self.high_10 = self.I(self.data.high.df.rolling(self.exit_window).max())
-        self.low_10 = self.I(self.data.low.df.rolling(self.exit_window).min())
-        self.atr = self.I(
-            _atr(self.data.high.df, self.data.low.df, self.data.close.df, self.atr_window)
-        )
+        self.high_20 = Rolling(self.data.high, period=self.entry_window).highest
+        self.low_20 = Rolling(self.data.low, period=self.entry_window).lowest
+        self.high_10 = Rolling(self.data.high, period=self.exit_window).highest
+        self.low_10 = Rolling(self.data.low, period=self.exit_window).lowest
+        self.atr = Rolling(TrueRange(self.data), period=self.atr_window).mean
         self.units = 0
         self.last_price = 0.0
 
@@ -63,15 +62,3 @@ class LiteAdvancedTurtle(tl.Strategy):
                     self._execute_trade(False, close, atr, size_param)
             elif close < self.low_20[-1]:
                 self._execute_trade(False, close, atr, size_param)
-
-
-def _atr(high: pd.Series, low: pd.Series, close: pd.Series, n: int) -> pd.Series:
-    tr = pd.concat(
-        [
-            high - low,
-            (high - close.shift()).abs(),
-            (low - close.shift()).abs(),
-        ],
-        axis=1,
-    ).max(axis=1)
-    return tr.rolling(n).mean()

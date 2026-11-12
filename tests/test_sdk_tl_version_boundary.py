@@ -3,12 +3,14 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.windows_private_directory import make_private_test_directory
 from leafquant_monitor import MonitorSettings, TradeLogger
 from leafquant_monitor import tradelearn as sdk
 
 
 @pytest.mark.parametrize('version', ['0.2.9', '0.3.0'])
 def test_qualified_versions_assemble_real_local_logger(version, monkeypatch, tmp_path):
+    make_private_test_directory(tmp_path)
     monkeypatch.setattr(sdk.tradelearn, '__version__', version)
     monkeypatch.setattr(sdk, 'OBSERVER_API_VERSION', 1)
     settings = MonitorSettings('LOCAL', 'compat', 'fixture-account', str(tmp_path), account_source='external')

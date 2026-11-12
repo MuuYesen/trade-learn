@@ -92,6 +92,8 @@ def test_native_log_reaches_existing_source_wire_without_receipt_deletion(tmp_pa
     monkeypatch.setattr(ArchiveReceiptClient, 'fetch', lambda *args: None)
     remote = bootstrap.MonitorConnection.from_options(options())
     bound, factory = remote.bind(MonitorSettings('TEST', 'strategy', 'account', str(tmp_path/'logs')))
+    from tests.windows_private_directory import make_private_test_directory
+    make_private_test_directory(tmp_path)
     logger = TradeLogger(bound, sender_factory=factory)
     try:
         logger.sender.interval = 0.005

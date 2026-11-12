@@ -80,3 +80,6 @@ artifact; executable layering tests still enforce import/module boundaries.
 Neither kind of skip should be counted as a passing numerical check.
 
 2026-11-12：比较器统一使用TL比率口径。Backtrader Returns 的 `rnorm` 映射 `annual_return`，`rnorm100` 是百分数，不直接与比率比较；`return_pct` 则保持百分数。只修对照输出适配，不修改固定oracle源码、收益公式或比较容差。golden消费者使用显式PandasData和当前指标输出名。
+
+
+2026-11-12 Pandas 3测试兼容：Alpha191冻结原件仍按原SHA保存，不修改/删除公式。旧原件47处numeric `loc/iloc[...] = None`在Pandas 3拒绝；测试装载器只将这些赋值缺失标记转为NaN，其余AST不变。已在原Pandas2.3.3对184公式、240行/186列比较原装载与兼容装载：数值、缺失与顺序逐值完全一致（dtype沿原比较规则排除），随后Pandas3.1真实旧oracle对当前实现通过。详见整合ORACLE-ALPHA191-SENTINEL-COMPAT收据；不替换基准数据、公式、窗口或放宽数值容差。

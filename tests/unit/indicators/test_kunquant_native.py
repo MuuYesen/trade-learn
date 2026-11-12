@@ -474,6 +474,7 @@ def test_long_extremum_source_profile_avoids_invocation_local_skiplist():
     from tradelearn.indicators._kunquant_compile import prepare_causal_extrema
     from tradelearn.indicators._kunquant_graph import build_alpha158
 
+    width = 2 if __import__("platform").machine() in {"arm64", "aarch64"} else 4
     config = {"rolling": {"windows": [60], "include": ["IMAX", "IMIN", "IMXD"]}}
     for layout in ("TS", "STREAM"):
         function, metadata = build_alpha158(config)
@@ -483,7 +484,7 @@ def test_long_extremum_source_profile_avoids_invocation_local_skiplist():
                 function,
                 "extremum_profile",
                 dtype="double",
-                blocking_len=2,
+                blocking_len=width,
                 input_layout="TS",
                 output_layout=layout,
                 allow_unaligned=False,
@@ -491,8 +492,8 @@ def test_long_extremum_source_profile_avoids_invocation_local_skiplist():
             )
         )
         assert "SkipListArgMin" not in source
-        assert "ReduceArgMax<double, 2>" in source
-        assert "ReduceArgMin<double, 2>" in source
+        assert f"ReduceArgMax<double, {width}>" in source
+        assert f"ReduceArgMin<double, {width}>" in source
         assert set(metadata["outputs"]) == {"IMAX60", "IMIN60", "IMXD60"}
 
 
@@ -505,6 +506,7 @@ def test_full_source_lowering_retains_quantiles_and_removes_only_extremum_skipli
     from tradelearn.indicators._kunquant_compile import prepare_causal_extrema
     from tradelearn.indicators._kunquant_graph import ALPHA101_NAMES, build_alpha101, build_alpha158
 
+    width = 2 if __import__("platform").machine() in {"arm64", "aarch64"} else 4
     function, metadata = build_alpha101(ALPHA101_NAMES) if label == "alpha101" else build_alpha158()
     assert any(isinstance(op, (TsArgMax, TsArgMin)) for op in function.ops)
     prepare_causal_extrema(function)
@@ -514,7 +516,7 @@ def test_full_source_lowering_retains_quantiles_and_removes_only_extremum_skipli
             function,
             "full_profile",
             dtype="double",
-            blocking_len=2,
+            blocking_len=width,
             input_layout="TS",
             output_layout=layout,
             allow_unaligned=False,

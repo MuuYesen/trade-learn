@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import pandas as pd
-
 import tradelearn.lite as tl
+from examples.lite._indicators import MACD
 
 
 def crossover(series1, series2) -> bool:
@@ -14,24 +13,18 @@ def crossover(series1, series2) -> bool:
 class LiteMACDCross(tl.Strategy):
     title = "Long"
     s = 12
-    l = 26
+    l = 26  # noqa: E741 - retain the documented strategy parameter
     m = 9
 
     def init(self) -> None:
-        price = self.data.close.df
-        fast = price.ewm(span=self.s, adjust=False).mean()
-        slow = price.ewm(span=self.l, adjust=False).mean()
-        dif = fast - slow
-        dea = dif.ewm(span=self.m, adjust=False).mean()
-        macd = pd.DataFrame({"DIF": dif, "DEA": dea}, index=self.data.index)
-        self.macd = self.I(macd, name="macd", overlay=False)
+        self.macd = MACD(self.data.close, fast=self.s, slow=self.l, signal=self.m)
 
     def next(self) -> None:
         if len(self.macd) < 2:
             return
 
-        dif = self.macd[:, 0]
-        dea = self.macd[:, 1]
+        dif = self.macd.dif
+        dea = self.macd.dea
 
         if self.title == "Long":
             if crossover(dea, dif):

@@ -14,7 +14,7 @@ def extra_requirement():
     assert len(requirements) == 1  # Future adapters stay independently selectable.
     requirement = Requirement(requirements[0])
     assert requirement.name == 'tl-store'
-    assert str(requirement.specifier) == '==0.2.1a2'
+    assert str(requirement.specifier) == '==0.2.1a3'
     return requirement
 
 

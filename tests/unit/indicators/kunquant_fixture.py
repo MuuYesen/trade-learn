@@ -4,7 +4,6 @@ import hashlib
 import json
 import os
 import platform
-import resource
 import subprocess
 from pathlib import Path
 
@@ -50,6 +49,10 @@ def verify_build_owner(
 
 def build(output, *, github_actions=False):
     resource_scope = verify_build_owner(github_actions=github_actions)
+    if platform.system() not in {"Darwin", "Linux"}:
+        raise NotImplementedError("native build qualification currently requires Darwin/Linux")
+    import resource
+
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     width = 2 if platform.machine() in {"arm64", "aarch64"} else 4

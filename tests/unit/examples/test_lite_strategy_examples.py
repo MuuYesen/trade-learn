@@ -81,7 +81,8 @@ def _run_lite(strategy: type[LiteStrategy], **params) -> tuple[float, int]:
 
 
 def _run_engine(strategy: type[bt.Strategy], **params) -> tuple[float, int]:
-    cerebro = bt.Cerebro(trade_on_close=True)
+    cerebro = bt.Cerebro()
+    cerebro.broker.set_coc(True)
     cerebro.adddata(bt.feeds.PandasData(dataname=_sample_data(), name="demo"))
     cerebro.addstrategy(strategy, **params)
     cerebro.addsizer(bt.sizers.AllInSizer)
@@ -144,7 +145,7 @@ def test_lite_macd_example_runs_on_lite_and_engine_runtime() -> None:
                 signalperiod=self.p.m,
             )
             self.lines.macd = values.macd
-            self.lines.signal = values.signal
+            self.lines.signal = values.macdsignal
 
     class EngineMACDCross(bt.Strategy):
         params = (("s", 12), ("l", 26), ("m", 9), ("title", "Long"))

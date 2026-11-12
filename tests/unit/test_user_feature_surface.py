@@ -5,6 +5,9 @@ from typing import Any
 from zipfile import ZipFile
 
 import pandas as pd
+import pytest
+
+from tradelearn.report import Reporter
 
 import tradelearn.engine as bt
 import tradelearn.lite as lite
@@ -52,15 +55,19 @@ class LiteBuyAndHold(Strategy):
 
 
 def test_engine_plot_and_html_use_reporter_after_run(tmp_path: Path) -> None:
-    cerebro = bt.Cerebro(trade_on_close=True)
-    cerebro.adddata(_bars(), name="asset_a")
-    cerebro.adddata(_bars(1.03), name="asset_b")
+    cerebro = bt.Cerebro()
+    cerebro.broker.set_coc(True)
+    cerebro.adddata(bt.feeds.PandasData(dataname=_bars(), name="asset_a"))
+    cerebro.adddata(bt.feeds.PandasData(dataname=_bars(1.03), name="asset_b"))
     cerebro.addstrategy(EngineBuyAndHold)
 
     [strategy] = cerebro.run()
-    charts = cerebro.plot()
+    with pytest.raises(NotImplementedError, match="Reporter"):
+        cerebro.plot()
+    reporter = Reporter(strategy.stats, market_data=_bars())
+    charts = [reporter.market_replay_chart()]
     path = tmp_path / "engine-report.html"
-    result = cerebro.report(path)
+    result = Reporter(strategy.stats).report(path)
 
     assert strategy.stats is not None
     assert strategy.stats.summary["total_fills"] == 2
@@ -70,18 +77,19 @@ def test_engine_plot_and_html_use_reporter_after_run(tmp_path: Path) -> None:
     html = path.read_text()
     assert "TRADELEARN BACKTEST REPORT" in html
     assert "Summary Stats" in html
-    assert hasattr(cerebro, "report")
+    assert not hasattr(cerebro, "report")
     assert not hasattr(cerebro, "html")
 
 
 def test_engine_report_dispatches_to_excel(tmp_path: Path) -> None:
-    cerebro = bt.Cerebro(trade_on_close=True)
-    cerebro.adddata(_bars(), name="asset_a")
+    cerebro = bt.Cerebro()
+    cerebro.broker.set_coc(True)
+    cerebro.adddata(bt.feeds.PandasData(dataname=_bars(), name="asset_a"))
     cerebro.addstrategy(EngineBuyAndHold)
-    cerebro.run()
+    [strategy] = cerebro.run()
 
     path = tmp_path / "engine-report.xlsx"
-    result = cerebro.report(path)
+    result = Reporter(strategy.stats).report(path)
 
     assert result == path
     assert path.exists()
@@ -135,10 +143,16 @@ def test_oco_multitimeframe_multiasset_model_scorer_and_metrics_surfaces() -> No
                     limitprice=12.0,
                 )
 
-    cerebro = bt.Cerebro(trade_on_close=True)
-    daily = cerebro.adddata(_bars(), name="daily")
-    cerebro.resampledata(daily, timeframe=bt.TimeFrame.Weeks, compression=1, name="weekly")
-    cerebro.adddata(_bars(1.01), name="asset_b")
+    cerebro = bt.Cerebro()
+    cerebro.broker.set_coc(True)
+    daily = cerebro.adddata(bt.feeds.PandasData(dataname=_bars(), name="daily"))
+    with pytest.raises(NotImplementedError):
+        cerebro.resampledata(daily, timeframe=bt.TimeFrame.Weeks, compression=1, name="weekly")
+    weekly = _bars().resample("7D", label="right", closed="right").agg(
+        {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+    ).dropna()
+    cerebro.adddata(bt.feeds.PandasData(dataname=weekly, name="weekly"))
+    cerebro.adddata(bt.feeds.PandasData(dataname=_bars(1.01), name="asset_b"))
     cerebro.addstrategy(BracketAndResample)
     [strategy] = cerebro.run()
 
@@ -202,7 +216,8 @@ def test_user_facades_hide_internal_helper_functions() -> None:
 
 
 def test_target_order_constraints_are_available_from_user_facades() -> None:
-    assert bt.TargetOrderConstraints(buy_lot_size=100).buy_lot_size == 100
+    assert not hasattr(bt, "TargetOrderConstraints")
+    assert callable(bt.Strategy.order_target_percent)
     assert lite.TargetOrderConstraints(sell_lot_size=100).sell_lot_size == 100
 
 

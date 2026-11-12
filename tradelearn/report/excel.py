@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -234,6 +235,14 @@ def _excel_safe_frame(frame: pd.DataFrame) -> pd.DataFrame:
         values = result[column]
         if isinstance(values.dtype, pd.DatetimeTZDtype):
             result[column] = values.dt.tz_convert("UTC").dt.tz_localize(None)
+        elif pd.api.types.is_object_dtype(values.dtype):
+            # Metric facts mix timestamps, numeric values and text in one column.
+            # Excel cannot store aware scalar datetimes even in an object column.
+            result[column] = values.map(
+                lambda value: pd.Timestamp(value).tz_convert("UTC").tz_localize(None)
+                if isinstance(value, (pd.Timestamp, datetime)) and value.tzinfo is not None
+                else value
+            )
     return result
 
 

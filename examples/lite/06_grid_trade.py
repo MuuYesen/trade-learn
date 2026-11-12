@@ -16,7 +16,12 @@ class LiteGridTrade(tl.Strategy):
     stop_ratio = 0.5
 
     def init(self) -> None:
-        warmup = self.data.close.df.iloc[: self.prepare_days]
+        self.ready = False
+        self.initial_cash = self.equity
+
+    def _prepare_grid(self):
+        # Wait until these bars have arrived; never inspect a future init frame.
+        warmup = self.window(self.prepare_days)["close"]
         self.max_bound = warmup.max()
         self.min_bound = warmup.min()
         self.initial_cash = self.equity
@@ -48,9 +53,13 @@ class LiteGridTrade(tl.Strategy):
         self.last_grid = -1
         self.last_grid_change = None
         self.is_end = False
-        self.start_on_bar(self.prepare_days)
+        self.ready = True
 
     def next(self) -> None:
+        if not self.ready:
+            if len(self.data.close) < self.prepare_days:
+                return
+            self._prepare_grid()
         if self.is_end:
             return
 

@@ -202,6 +202,10 @@ jobs:
           assert sum(int(s.get('tests', 0)) for s in suites) >= 23
           assert all(int(s.get(k, 0)) == 0 for s in suites for k in ('failures', 'errors', 'skipped'))
           PY
+      - name: Expose all installed native failures
+        if: failure()
+        shell: bash
+        run: python scripts/report_test_failures.py "$RUNNER_TEMP/native-results.xml"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
