@@ -99,7 +99,7 @@ pip install "trade-learn[research]==0.3.4"
 
 実wheelはMac arm64/Windows AMD64/Linux x64のCP310–314、Linux ARM64のCP313を対象とします。Linux CP313+Storea8+NA2rc7のfreshインストールとMac CP313実物を検証済みです。Storeの他OSビルド、自然venue、KQのWindows未実装/LinuxARM未検証は区別します。
 
-公開入口は`bt.stores.NautilusStore`と通常の`bt.Strategy`、唯一の`cerebro.run(monitor=...)`です。内部runtime、SDK戦略基底クラス、公開`Store.run`は使用しません。monitorはendpointとAccessKey pairだけを受け取り、信頼できるbindingがなければ原本をローカルに保持します。[固定テンプレート](https://github.com/MuuYesen/trade-learn/blob/v0.3.4/examples/live/ctrader_monitor.py)と[0.3.4更新ログ](CHANGELOG.md)を参照してください。実Sender/アーカイブroundtripは別途未検証であり、配布完了を送信成功とは扱いません。
+公開入口は`bt.stores.NautilusStore`と通常の`bt.Strategy`、唯一の`cerebro.run(monitor=...)`です。内部runtime、SDK戦略基底クラス、公開`Store.run`は使用しません。monitorはendpointとAccessKey pairだけを受け取り、信頼できるbindingがなければ原本をローカルに保持します。[固定テンプレート](https://github.com/MuuYesen/trade-learn/blob/d202cc1ab0dfd25f3ada8b25eba3315a84a2e27c/examples/live/ctrader_monitor.py)と[0.3.4更新ログ](CHANGELOG.md)を参照してください。実Sender/アーカイブroundtripは別途未検証であり、配布完了を送信成功とは扱いません。
 
 ## クイックスタート
 

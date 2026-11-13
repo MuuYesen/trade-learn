@@ -113,7 +113,7 @@ pip install "trade-learn[research]==0.3.4"
 
 TL0.3.4真实构建范围为Mac arm64、Windows AMD64、Linux x64的CP310–314及Linux ARM64 CP313。Linux CP313+Storea8+NA2rc7全新安装/RECORD/native/pip check已验；Mac CP313实物与独立差量已验。Store的其他平台构建资格、自然venue和KQ后端分别标注，不从TL wheel标签外推。KQ Windows桥未实现/LinuxARM未验，不表示整个TL不支持Windows或ARM。
 
-公开用户通过`bt.stores.NautilusStore`配置，普通`bt.Strategy`后唯一`cerebro.run(monitor=...)`；不导入内部runtime或调用`Store.run`。二字段monitor仅endpoint与AccessKey pair，可信发现失败保本地原件。完整例子见[已冻结模板](https://github.com/MuuYesen/trade-learn/blob/v0.3.4/examples/live/ctrader_monitor.py)，边界与历史差异见[0.3.4更正说明](CHANGELOG.md)。真实Sender/归档roundtrip仍单独验收，不把发行当投递成功。
+公开用户通过`bt.stores.NautilusStore`配置，普通`bt.Strategy`后唯一`cerebro.run(monitor=...)`；不导入内部runtime或调用`Store.run`。二字段monitor仅endpoint与AccessKey pair，可信发现失败保本地原件。完整例子见[已冻结模板](https://github.com/MuuYesen/trade-learn/blob/d202cc1ab0dfd25f3ada8b25eba3315a84a2e27c/examples/live/ctrader_monitor.py)，边界与历史差异见[0.3.4更正说明](CHANGELOG.md)。真实Sender/归档roundtrip仍单独验收，不把发行当投递成功。
 
 ## 快速上手
 
