@@ -631,6 +631,8 @@ def test_ungrouped_arrivals_and_explicit_groups_keep_distinct_market_counts():
     class Probe(Strategy):
         def init(self): self.windows = []
         def next(self): self.windows.append((len(self.data0),len(self.data1)))
+        # Record every arrival through BT warmup too; next alone starts once all feeds are ready.
+        prenext = next
     grouped = StrategyRuntime(Probe,feeds={'a':'bar','b':'bar'})
     single = StrategyRuntime(Probe,feeds={'a':'bar','b':'bar'})
     grouped.start()
