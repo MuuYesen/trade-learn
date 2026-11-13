@@ -285,3 +285,11 @@ NA2.0.0rc7与现有TL-Store原生扩展、当前Python源码组合：93 passed /
 ### 后续源码的原生专属挂单控制（未发行）
 
 `buy/sell(..., post_only=True)` 沿已有 broker kwargs 接入，必须为布尔值，仅对带执行限价的 Limit/StopLimit/StopTrailLimit 生效。固定NA离线撮合与持久恢复证明已通过，尚未进入新wheel或公共版本；当前0.3.1不能据此使用。OHLCV回测不模拟venue的maker准入政策，显式True会拒绝，不忽略；cTrader当前能力边界及未知/断线恢复门保持。其他原生专属字段仍按已列缺口处理，不无条件透传。
+
+### 034候选：原生对象关闭与资格门
+
+033的20项CI和候选安装回归曾通过，但新增实际wheel反例发现关闭Store后的NativeHost/SDK日志器循环引用会由工作线程GC析构固定NA的unsendable策略。因此033正式上传已取消、tag保留，不能把它当公开发行；034修复尚待新wheel与exactCI资格。
+
+034源码在业务stop后退役共同broker的原生gateway，完成workers drain和Node dispose后只保留Python诊断；关闭日志器不再持有原生策略的绑定时钟。保留异常时只释放已结束的框架原生帧局部引用，原异常身份、消息、堆栈位置和未决intent事实不变。关闭后读取原生账户/持仓会明确失败，不从诊断对象制造行情或执行事实。用户策略仍是普通BT接口，不接收Host或清理胶水。
+
+新门包含日志开/关、失败退出、真实NA Node、保留business/logger/error及另一线程强制GC；native unraisable现在作为pytest失败。SDK源码仅strategy.py关闭引用与tradelearn.py有限034/API1边界变化，其余16文件与032冻结相同。私有应用driver及自然交易仍由消费者独立验收，不能把源码通过当已部署。

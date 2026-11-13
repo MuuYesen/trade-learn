@@ -6,7 +6,8 @@ module exposes that implementation under ``tradelearn.engine``.
 """
 
 from tradelearn.backtest.history import build_history_panel
-from tradelearn.backtest.models import ExecutedInfo, Order, Position, Trade
+from tradelearn.backtest.models import ExecutedInfo, Position, Trade
+from tradelearn.engine.order import Order
 from tradelearn.backtest.strategy import Strategy as _BaseStrategy
 from tradelearn.core.strategy_events import (
     assert_observer_allows_mutation,
@@ -158,16 +159,26 @@ class Strategy(_BaseStrategy, LineRoot):
             return None
         if valid is not None:
             import datetime
+            import math
             import numbers
-            if isinstance(valid, numbers.Real):
-                from tradelearn.engine import num2date
-                valid = num2date(valid) if valid else datetime.timedelta(0)
+            from tradelearn.backtest.clock import date2num
             if isinstance(valid, datetime.timedelta):
                 now = data.datetime.datetime(0)
                 if now is None:
-                    raise ValueError("order validity requires a delivered strategy clock")
-                valid = (now.replace(hour=23,minute=59,second=59,microsecond=999999)
-                         if valid == datetime.timedelta(0) else now + valid)
+                    raise ValueError("order validity requires a delivered data clock")
+                # Fixed BT DAY is a timedelta sentinel, distinct from numeric0.
+                deadline = (now.replace(hour=23, minute=59, second=59, microsecond=9999)
+                            if valid == datetime.timedelta(0) else now + valid)
+                valid = date2num(deadline)
+            elif isinstance(valid, datetime.date):
+                valid = date2num(valid)
+            elif isinstance(valid, numbers.Real):
+                if not math.isfinite(float(valid)):
+                    raise ValueError("finite BT ordinal validity required")
+                # Fixed BT retains numeric values literally:0 is unbounded,
+                # other values are absolute ordinal days, never relative seconds.
+            else:
+                raise TypeError("valid must be BT ordinal days, date, datetime or timedelta")
         if tradeid != 0:
             raise NotImplementedError("multiple tradeid accounting is not implemented")
         if plimit is not None:

@@ -21,11 +21,11 @@ def test_strategy_buy_sell_share_submit_order_path() -> None:
     strategy.data = data
     strategy.broker = RecordingBroker()
 
-    buy_order = strategy.buy(size=2, price=10.0, exectype=Order.Limit, valid="day")
+    buy_order = strategy.buy(size=2, price=10.0, exectype=Order.Limit, valid=0)
     sell_order = strategy.sell(size=3, price=11.0, exectype=Order.Stop)
 
     assert buy_order[2:6] == (Order.Buy, 2.0, 10.0, Order.Limit)
-    assert buy_order[6] == {"valid": "day"}
+    assert buy_order[6] == {"valid": 0}
     assert sell_order[2:6] == (Order.Sell, 3.0, 11.0, Order.Stop)
     assert strategy._pending_size[data] == -1.0
 
@@ -98,3 +98,13 @@ def test_strategy_close_uses_current_position_not_pending_size() -> None:
     _owner, _data, side, size, _price, _exectype, _kwargs = strategy.broker.submissions[0]
     assert side == Order.Sell
     assert size == 1.0
+
+
+def test_engine_valid_text_alias_is_not_a_backtrader_expiry_parameter():
+    strategy = Strategy()
+    strategy.data = object()
+    strategy.broker = RecordingBroker()
+    with pytest.raises(TypeError, match="ordinal"):
+        strategy.buy(size=2, price=10, exectype=Order.Limit, valid="day")
+    assert strategy.broker.submissions == []
+    assert strategy._pending_size == {}

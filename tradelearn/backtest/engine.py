@@ -18,7 +18,7 @@ TRADE_STATISTICS_REVISION = "flat-to-flat-fees-v1"
 
 def _build_observer_nexts(strategy: Any) -> tuple[Any, ...]:
     return tuple(
-        observer.next
+        getattr(observer, "_next_step", observer.next)
         for observer in getattr(strategy, "observers", {}).values()
         if callable(getattr(observer, "next", None))
     )
@@ -1239,6 +1239,8 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
 
         # Strategy Next
         ready, _ = runtime.step_bound(i, run_strategy_next_python)
+        if not ready and has_observer_nexts and getattr(runtime, "_bt_line_views", False):
+            _observer_step(runtime, observer_nexts)
         if ready:
             if bool(getattr(cerebro, "_runstop", False)):
                 return []
@@ -1274,6 +1276,8 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
                         notify_cashvalue(broker_getcash(), broker_getvalue())
                     ready, _ = runtime.step_bound(i, run_strategy_next_python)
                     raise_if_runstopped()
+                    if not ready and has_observer_nexts and getattr(runtime, "_bt_line_views", False):
+                        _observer_step(runtime, observer_nexts)
                     if ready:
                         if has_analyzer_bar_callbacks:
                             _analyzer_bar_step(strategy, analyzer_bar_callbacks)
@@ -1299,6 +1303,8 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
                     broker_process_fills(strategy, i)
                     ready, orders = runtime.step_bound(i, run_strategy_next_drained)
                     raise_if_runstopped()
+                    if not ready and has_observer_nexts and getattr(runtime, "_bt_line_views", False):
+                        _observer_step(runtime, observer_nexts)
                     if ready:
                         if has_analyzer_bar_callbacks:
                             _analyzer_bar_step(strategy, analyzer_bar_callbacks)
@@ -1327,6 +1333,8 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
                     notify_cashvalue(broker_getcash(), broker_getvalue())
                     ready, orders = runtime.step_bound(i, run_strategy_next_drained)
                     raise_if_runstopped()
+                    if not ready and has_observer_nexts and getattr(runtime, "_bt_line_views", False):
+                        _observer_step(runtime, observer_nexts)
                     if ready:
                         if has_analyzer_bar_callbacks:
                             _analyzer_bar_step(strategy, analyzer_bar_callbacks)
@@ -1355,6 +1363,8 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
                     broker_process_fills(strategy, i)
                     ready, orders = runtime.step_bound(i, run_strategy_next_drained)
                     raise_if_runstopped()
+                    if not ready and has_observer_nexts and getattr(runtime, "_bt_line_views", False):
+                        _observer_step(runtime, observer_nexts)
                     if ready:
                         if has_analyzer_bar_callbacks:
                             _analyzer_bar_step(strategy, analyzer_bar_callbacks)
@@ -1378,6 +1388,8 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
                     notify_cashvalue(broker_getcash(), broker_getvalue())
                     ready, orders = runtime.step_bound(i, run_strategy_next_drained)
                     raise_if_runstopped()
+                    if not ready and has_observer_nexts and getattr(runtime, "_bt_line_views", False):
+                        _observer_step(runtime, observer_nexts)
                     if ready:
                         if has_analyzer_bar_callbacks:
                             _analyzer_bar_step(strategy, analyzer_bar_callbacks)

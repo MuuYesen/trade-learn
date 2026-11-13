@@ -1041,6 +1041,14 @@ class RustBroker:
         valid = order.valid
         if valid is None:
             return None
+        owner = self._order_owners.get(id(order))
+        if getattr(owner, "_bt_minperiods", False):
+            # The Engine front normalized BT dates/durations to ordinal days.
+            # Market never expires, and numeric0 is distinct from timedelta DAY.
+            if order.exectype == Order.Market or not valid:
+                return None
+            import math
+            return math.floor((float(valid) - 719163.0) * 86400.0)
         import numbers
 
         import pandas as pd

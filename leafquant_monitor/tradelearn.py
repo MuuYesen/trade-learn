@@ -161,8 +161,8 @@ class _Monitor:
 
 
 def _assemble(strategy):
-    if tradelearn.__version__ not in {'0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3'} or OBSERVER_API_VERSION != 1:
-        raise RuntimeError('TradeLearn 0.2.9, 0.3.0, 0.3.1, 0.3.2 or 0.3.3 with observer API v1 required')
+    if tradelearn.__version__ not in {'0.2.9', '0.3.0', '0.3.1', '0.3.2', '0.3.3', '0.3.4'} or OBSERVER_API_VERSION != 1:
+        raise RuntimeError('TradeLearn 0.2.9, 0.3.0, 0.3.1, 0.3.2, 0.3.3 or 0.3.4 with observer API v1 required')
     config = getattr(strategy, 'monitor_config', None)
     if not isinstance(config, TradeLogConfig):
         raise ValueError('explicit TradeLogConfig required before Runtime assembly')

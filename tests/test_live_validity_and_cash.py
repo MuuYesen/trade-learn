@@ -139,7 +139,11 @@ def test_native_gtd_expiry_owns_boundary_without_a_tl_timer(fill_ns,completed):
         native.add_strategy(bridge);native.run()
         assert native.cache.order(bridge.order.client_order_id).status.name==('FILLED' if completed else 'EXPIRED')
         if not completed:assert start+3_000_000_000 in notices
-    finally:native.dispose()
+    finally:
+        native.dispose()
+        # The strict xfail traceback must not retain an unsendable native actor
+        # for a later IO worker's GC. Keep both original expiry assertions.
+        bridge=None
 
 
 def test_unqualified_gtd_is_rejected_before_any_native_intent_or_submission():

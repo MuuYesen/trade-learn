@@ -110,10 +110,12 @@ class LiveComponents:
 
     def after_market(self):
         self.bars+=1
-        if self.runtime._warming_up():return
+        ready = not self.runtime._warming_up()
         from tradelearn.backtest.engine import _analyzer_bar_step,_observer_step
-        _analyzer_bar_step(self.strategy,self._bar_callbacks)
-        _observer_step(self.runtime,self._observer_callbacks)
+        if ready:
+            _analyzer_bar_step(self.strategy,self._bar_callbacks)
+        if ready or getattr(self.runtime, "_bt_line_views", False):
+            _observer_step(self.runtime,self._observer_callbacks)
 
     def order(self,order):
         for analyzer in self.strategy.analyzers.values():

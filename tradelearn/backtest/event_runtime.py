@@ -571,6 +571,36 @@ class BoundFeed(RuntimeFeed):
             self._history = self._buffer.arrays
 
 
+class _BoundClockBuffer:
+    """Borrow the existing preloaded calendar; no second data or price buffer."""
+
+    def __init__(self, runtime):
+        self.runtime = runtime
+        self.arrays = {"datetime": runtime._clock.timestamps}
+        self.capacity = max(2, len(runtime._clock))
+
+    @property
+    def cursor(self):
+        return self.runtime._cursor
+
+
+class _BoundClockFeed(RuntimeFeed):
+    """Output-line clock view for components observing every Strategy step."""
+
+    def __init__(self, runtime):
+        self.runtime, self._name = runtime, object()
+        self._buffer = _BoundClockBuffer(runtime)
+        self.revision = 0
+        self._history = None
+
+    @property
+    def received(self):
+        return self.runtime._cursor + 1
+
+    def retain_full(self):
+        self._history = self._buffer.arrays
+
+
 class StrategyRuntime:
     """One owner thread, one strategy, explicit ordered market/broker steps.
 
@@ -751,6 +781,7 @@ class StrategyRuntime:
         from .clock import BatchClock
         self._clock = BatchClock(datas)
         self._cursor = -1
+        self._clock_feed = _BoundClockFeed(self) if self._bt_line_views else None
         self.strategy = self._construct_strategy(strategy_cls, datas, broker, args, parameters)
         self.strategy._runtime = self
         self.strategy.datas, self.strategy.data = datas, datas[0]

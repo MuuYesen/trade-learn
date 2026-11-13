@@ -88,3 +88,34 @@ def test_recovery_refuses_changed_reduce_only_or_position_route():
     for changed in ({'position_id':'P2','reduce_only':True},{'position_id':'P1','reduce_only':False}):
         with pytest.raises(ValueError,match='route|reduce'):
             ExecutionHost.validate_recovery(host,request,order,native_controls=changed)
+
+
+def test_typed_native_close_uses_standard_sell_and_bt_validity_without_private_user_hooks():
+    from datetime import date
+    from tradelearn import engine as bt
+    from tradelearn.backtest.event_runtime import StrategyRuntime
+    from tradelearn_runtime.broker import NautilusBroker
+    from types import SimpleNamespace
+    calls=[];sent=[]
+    gateway=SimpleNamespace(
+        close_controls=lambda symbol,position_id=None:dict(size=2,side='sell',position_id='P1'),
+        lookup_order=lambda cid:None,
+        submit=lambda request,**controls:sent.append((request,controls)),
+    )
+    broker=NautilusBroker(gateway)
+    class Business(bt.Strategy):
+        def sell(self,*args,**kwargs):
+            calls.append('sell')
+            return super().sell(*args,**kwargs)
+        def next(self):
+            self.order=self.close(size=1,valid=date(2026,1,2),tif='ioc')
+    runtime=StrategyRuntime(Business,feeds={'A':'bar'},broker=broker)
+    try:
+        runtime.start()
+        runtime.step_market('A',dict(ts='2026-01-01T00:00:00Z',open=10,high=10,low=10,close=10,volume=1))
+        assert calls==['sell']
+        assert runtime.strategy.order.valid==bt.date2num(date(2026,1,2))
+        request,controls=sent[0]
+        assert request.side=='sell' and request.qty==1 and request.tif=='ioc'
+        assert controls=={'position_id':'P1','reduce_only':True}
+    finally:runtime.cleanup()

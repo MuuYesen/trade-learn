@@ -106,6 +106,7 @@ class FakeNode:
 
     def dispose(self):
         self.events.append('dispose')
+        self.actor = None  # Match native dispose: exceptions must not retain a registered actor.
 
 
 def test_engine_uses_native_driver_and_always_drains(tmp_path, monkeypatch):

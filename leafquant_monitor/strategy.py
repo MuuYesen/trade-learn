@@ -283,7 +283,12 @@ class TradeLogStrategy(Strategy):
             return self._business('on_strategy_dispose')
         finally:
             # Recorder close is local durability work. No sender/network operation.
-            self._observe(self.logger.close)
+            try:
+                self._observe(self.logger.close)
+            finally:
+                # The default bound method delegates to this same clock. Once
+                # disposed, a retained logger must not retain the native owner.
+                self.logger._monotonic_ns = monotonic_ns
 
     def _monitor_tick(self, event):
         self._observe(self._emit_monitor_tick, event)

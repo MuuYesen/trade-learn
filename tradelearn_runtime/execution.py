@@ -309,21 +309,36 @@ class _RuntimeBridge:
 
     def on_strategy_stop(self):
         self._stopping=True
-        if self.frontend is not None:
-            primary = None
-            try:
-                self.frontend.stop()
-            except BaseException as error:
-                primary = error
-                raise
-            finally:
-                components=getattr(self.frontend,'_cerebro_components',None)
-                if components is not None:
-                    try:components.finish()
-                    except BaseException as error:
-                        if primary is None:raise
-                        from tradelearn.backtest.event_runtime import _safe_cleanup_diagnostic
-                        _safe_cleanup_diagnostic(primary,error)
+        try:
+            if self.frontend is not None:
+                primary = None
+                try:
+                    self.frontend.stop()
+                except BaseException as error:
+                    primary = error
+                    raise
+                finally:
+                    components=getattr(self.frontend,'_cerebro_components',None)
+                    if components is not None:
+                        try:components.finish()
+                        except BaseException as error:
+                            if primary is None:raise
+                            from tradelearn.backtest.event_runtime import _safe_cleanup_diagnostic
+                            _safe_cleanup_diagnostic(primary,error)
+        finally:
+            _RuntimeBridge._release_runtime_owner(self)
+
+    def _release_runtime_owner(self):
+        """Break Python back-references only after business stop, on its owner."""
+        broker = getattr(self, 'frontend_broker', None)
+        if broker is not None:
+            broker._release_gateway(self)
+        logger = getattr(self, 'logger', None)
+        if logger is not None and getattr(logger._monotonic_ns, '__self__', None) is self:
+            # The SDK method delegates to this exact shared clock. A retained
+            # closed logger must not retain an unsendable native Strategy.
+            from tradelearn.core.observation_clock import monotonic_ns
+            logger._monotonic_ns = monotonic_ns
 
     def _symbol(self,iid):
         for symbol,bound in self._instrument_ids.items():
@@ -772,6 +787,38 @@ class _RuntimeBridge:
     def on_strategy_position_opened(self,event):self._project_position(event)
     def on_strategy_position_changed(self,event):self._project_position(event)
     def on_strategy_position_closed(self,event):self._project_position(event,closed=True)
+
+
+def _release_exception_native_owners(error):
+    """Keep failure identity/trace locations, release completed native-frame locals.
+
+    Engine user strategies are Python objects. Only finished framework frames
+    whose self is an official native Strategy can retain its unsendable owner.
+    """
+    pending, seen = [error], set()
+    while pending:
+        current = pending.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        for attribute in ('__cause__', '__context__'):
+            try:
+                pending.append(BaseException.__dict__[attribute].__get__(current))
+            except BaseException:
+                pass
+        trace = BaseException.__dict__["__traceback__"].__get__(current)
+        while trace is not None:
+            frame = trace.tb_frame
+            namespace = frame.f_globals.get('__name__', '')
+            if namespace.startswith(('tradelearn_runtime.', 'leafquant_monitor.')):
+                owner = frame.f_locals.get('self')
+                if isinstance(owner, NautilusStrategy):
+                    try:
+                        frame.clear()
+                    except RuntimeError:
+                        pass  # Never clear an executing frame.
+                del owner
+            trace = trace.tb_next
 
 
 class ExecutionHost(_RuntimeBridge, NautilusStrategy):

@@ -42,6 +42,11 @@ def _valid_expiry_ns(valid, owner):
     return value
 
 
+class _ClosedGateway:
+    def __getattr__(self, name):
+        raise RuntimeError('native execution host has closed')
+
+
 class NautilusBroker:
     def __init__(self, gateway):
         self.gateway = gateway
@@ -67,6 +72,12 @@ class NautilusBroker:
 
     def bind_runtime(self, runtime):
         self.runtime = runtime
+
+    def _release_gateway(self, owner):
+        """Retire only this native owner after stop; never revive a closed route."""
+        self._check_mutation()
+        if self.gateway is owner:
+            self.gateway = _ClosedGateway()
 
     def _notify(self,owner,order):
         oid=order.info['client_oid']
@@ -151,16 +162,25 @@ class NautilusBroker:
         if exectype == Order.Market and price is not None:
             raise ValueError('market order cannot contain a limit price')
         tif_value, valid_value = kwargs.pop('tif', None), kwargs.pop('valid', None)
-        if tif_value is not None and valid_value is not None:
+        bt_validity = bool(getattr(owner, '_bt_minperiods', False))
+        effective_valid = valid_value
+        if bt_validity and (exectype == Order.Market or valid_value == 0):
+            # This is fixed BT Market/zero behavior, not a synthetic GTD order.
+            effective_valid = None
+        if tif_value is not None and effective_valid is not None:
             raise ValueError('tif and valid are mutually exclusive')
         expire_time_ns = None
-        if valid_value is not None and not isinstance(valid_value,str):
+        if effective_valid is not None and not isinstance(effective_valid,str):
             if exectype == Order.Market:
                 raise ValueError('Market order cannot express native GTD expiry')
-            expire_time_ns = _valid_expiry_ns(valid_value,owner)
+            deadline = effective_valid
+            if bt_validity:
+                from tradelearn.backtest.clock import num2date
+                deadline = num2date(effective_valid)
+            expire_time_ns = _valid_expiry_ns(deadline,owner)
             raise NotImplementedError('native GTD expiry boundary is not qualified on pinned NA; explicit deadlines are not admitted')
         else:
-            tif = str(tif_value if tif_value is not None else (valid_value if valid_value is not None else 'gtc')).lower()
+            tif = str(tif_value if tif_value is not None else (effective_valid if effective_valid is not None else 'gtc')).lower()
             if tif not in ('day','gtc','ioc','fok'):
                 raise ValueError('unsupported live time-in-force')
         oid = kwargs.pop('client_oid',None) or str(uuid.uuid4())
@@ -370,6 +390,11 @@ class NautilusBroker:
         if isinstance(size, bool) or not math.isfinite(quantity) or not 0 < quantity <= maximum:
             raise ValueError('close size must be positive and cannot exceed the owned position')
         kwargs.update(position_id=route['position_id'],reduce_only=True)
+        # BT close delegates to the public side method. Preserve user overrides,
+        # Engine validity normalization and the common intent observation seam.
+        public_submit = getattr(owner, 'buy' if route['side']=='buy' else 'sell', None)
+        if callable(public_submit):
+            return public_submit(data=data, size=quantity, **kwargs)
         submit = getattr(owner,'_submit_order',None)
         if callable(submit):
             return submit(Order.Buy if route['side']=='buy' else Order.Sell,

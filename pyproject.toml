@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "trade-learn"
-version = "0.3.3"
+version = "0.3.4"
 description = "Python quantitative research framework for traditional and ML strategies."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -186,6 +186,7 @@ archs = ["AMD64"]
 testpaths = ["tests"]
 addopts = "-ra --import-mode=importlib"
 pythonpath = ["."]
+filterwarnings = ["error::pytest.PytestUnraisableExceptionWarning"]
 
 [tool.ruff]
 line-length = 100

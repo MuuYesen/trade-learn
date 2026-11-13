@@ -196,7 +196,7 @@ jobs:
         run: |
           cd "$RUNNER_TEMP"
           printf '[pytest]\n' > qualification.ini
-          python -m pytest --import-mode=importlib -c qualification.ini "$GITHUB_WORKSPACE/tests/unit/indicators/test_kunquant_native.py" --junitxml=native-results.xml -q
+          python -m pytest --import-mode=importlib -c qualification.ini "$GITHUB_WORKSPACE/tests/unit/indicators/test_kunquant_native.py" --junitxml=native-results.xml -q -W error::pytest.PytestUnraisableExceptionWarning
           python - <<'PY'
           import xml.etree.ElementTree as ET
           suites = list(ET.parse('native-results.xml').getroot().iter('testsuite'))

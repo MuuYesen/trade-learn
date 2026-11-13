@@ -78,3 +78,11 @@ Position空仓price按BT归零；`len(Position)`保固定BT的整数尺寸约束
 随后本地主时钟读接口修复将增量`strategy.datetime`接到共同Runtime的有界日期视图，不再借用Data0最后一根时间。该视图只有日期，不注册为行情Data、不补OHLC；每个源事件的原始ns和执行采样边界不变。显式完整历史请求仍受prefix预算限制，超限在接收下一根行情前失败。固定BT的当前日期/lag/get已对照；完整日期Line代数、多数据迟到情况下Analyzer分桶与完整恢复仍需继续。这也是0.3.2标签之后的未发行源码。
 
 `v0.3.2`之后的本地Store修复允许普通`bt.Strategy`通过`store.run(engine, monitor=...)`启用远程日志，通过`monitor=True`只启用同一原生宿主的本地日志。策略仍只写`params/self.p`及标准回调，不接收monitor_config、宿主或SDK基类。Store按运行生成内部observer class属性，原用户类不变；继承的旧SDK factories按身份去重，不启动第二Sender。普通策略默认不记录；旧`TradeLogStrategy`默认本地记录保留兼容。`monitor=True`当前限通用原生宿主，私有driver尚未接通此本地开关；拒绝不计完成。该修复仅源码/离线验证，未包含在0.3.2发行，完整保护接回与IC迁移仍独立验收。
+
+033候选e14f490之后的本地有效期修复单列：Engine的`valid`按固定BT保留绝对ordinal数字；数字0为无到期，不等于`Order.DAY`（timedelta零）。date/datetime/timedelta公开`order.valid`转换成BT日期数字，DAY对照固定BT的23:59:59.009999。回测Market忽略valid，NA路径同样不构造Market GTD，已有`tif="ioc"`仍保留IOC；None/数字0的Limit走无到期GTC。Lite的相对秒契约不变。非Market明确deadline仍受固定NA GTD资格门约束，两个真实失败不绕过。这些后续字节尚不在033候选wheel中。
+
+同批后续源码的Engine `Order`日期常量视图提供固定BT的`Order.DAY == timedelta(0)`，不会修改Lite/core的字符串TIF常量；Engine的原生TIF控制用已有broker kwargs，例如`tif="ioc"`，不从非BT的`Order.GTC/IOC`读取。回调仍是同一共同Order投影，Engine的isinstance/issubclass视图识别该对象，没有另一个订单账本或交易循环。该视图未进入033候选。
+
+后续canonical还补自定义Observer声明`lines=("measured",)`后，在`__init__`之前取得`self.lines/self.l`及同名线，`next`中可写`self.lines.measured[0]`并读lag/get窗口。调度复用现有市场步及策略暖机阶段，默认`prenext/nextstart`委托`next`；流式输出受原capacity限制。多Data输出使用同一Strategy步时钟，预载仅借用既有BatchClock数组，增量沿已有有界日期时钟，不注册假行情Data。固定BT默认预载的单/多Data、暖机、输出窗口已对照；Observer自有minperiod、内部Indicator归属、_stclock及完整集合/内置单位仍待逐项闭合。这些是未发行源码，不能用来宣称033wheel已包含。
+
+上述valid/Order.DAY/Observer与原生关闭生命周期修复现收拢为034源码候选，尚未正式发行。033tag因实物native owner-GC反例已保留但取消上传；新产物必须使用034版本并重新通过相应安装/native门，不复用033发行资格。

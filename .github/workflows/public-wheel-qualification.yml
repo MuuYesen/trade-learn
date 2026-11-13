@@ -1,21 +1,17 @@
 name: Public wheel qualification
 on:
-  push:
-    branches: [dev]
-    paths:
-      - .github/actions/qualify-public-wheels.py
-      - .github/actions/public_store_binding_test.py
-      - .github/workflows/public-wheel-qualification.yml
+  # Select an actual built candidate/public version explicitly. Editing the
+  # harness alone must not repeat unchanged historical031 qualification.
   workflow_dispatch:
     inputs:
       tl_version:
         type: string
         required: true
-        default: '0.3.1'
+        default: '0.3.4'
       store_version:
         type: string
         required: true
-        default: '0.2.1a4'
+        default: '0.2.1a5'
       source_sha:
         type: string
         required: true
@@ -36,7 +32,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.candidate_run && inputs.source_sha || format('v{0}', inputs.tl_version || '0.3.1') }}
+          ref: ${{ inputs.candidate_run && inputs.source_sha || format('v{0}', inputs.tl_version) }}
           path: qualification-source
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -63,9 +59,9 @@ jobs:
       - name: Actual installed wheels; no build, no publish, no broker connection
         env:
           CANDIDATE_RUN: ${{ inputs.candidate_run }}
-          TL_VERSION: ${{ inputs.tl_version || '0.3.1' }}
-          STORE_VERSION: ${{ inputs.store_version || '0.2.1a4' }}
-          SOURCE_SHA: ${{ inputs.source_sha || '0f08eaba7215ea3b45b4b11649cdcd758b59b19b' }}
+          TL_VERSION: ${{ inputs.tl_version }}
+          STORE_VERSION: ${{ inputs.store_version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
           python - <<'PYCODE'
           import os, pathlib, subprocess, sys

@@ -5,9 +5,17 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
-## [0.3.3] - 2026-11-13
+## [0.3.4] - 2026-11-13
 
-- Candidate: ordinary BT Strategy logging uses Store-owned observer assembly; local-only logging is `store.run(engine, monitor=True)`, remote uses the existing SQS mapping. No SDK superclass or private strategy constructor arguments are required on the common native host. Private application driver migration remains separate.
+- Close native Store ownership explicitly after drain/dispose: retain Python diagnostics, retire the broker route, and release closed SDK logger clock references. This prevents a disposed unsendable NA Strategy from being dropped by another thread's cyclic GC. Native-owner tests cover real Node disposal, logging on/off, failure identity and retained business/logger objects.
+- Match fixed BT validity: numeric0 differs from DAY; dates/durations expose ordinal-day order.valid; Market ignores valid; native Market IOC stays IOC. Engine Order.DAY is timedelta0 over the shared core order projection, while Lite keeps native TIF string constants. Non-Market GTD remains unqualified on fixed NA.
+- Bind custom Observer output lines/aliases to the existing bounded Runtime clock; dispatch default BT warmup/nextstart phases and retain each multi-data strategy step without a fake market subscription. Observer-owned indicators/minperiod and full built-in units remain incomplete.
+- Version/API1 SDK boundary includes034; Store stays pinned to formal a5. This version does not establish every BT/NA feature or live venue support.
+
+## [0.3.3] - 2026-11-13 (held; never published to PyPI)
+
+- Tag v0.3.3/e14 was held after actual installed-wheel native owner-GC failure; Release43336847550 was cancelled before publishing. Existing031/032/a5 bytes stay immutable.
+- Ordinary BT Strategy logging uses Store-owned observer assembly; local-only logging is `store.run(engine, monitor=True)`, remote uses the existing SQS mapping. No SDK superclass or private strategy constructor arguments are required on the common native host. Private application driver migration remains separate.
 - Match fixed BT Engine `Line.get()` array return, multi-data warmup/strategy count, bounded strategy datetime reads, and data datetime lag/arithmetic in ordinal-day units; source/event clocks stay unchanged.
 - Returns/Sharpe calendar sampling follows Strategy datetime, including late secondary sources, without changing the observed-value compatibility profile or public cashflow metrics.
 - Pin standalone Store0.2.1a5 and qualify the SDK finite version/API1 boundary. Existing032/a4 and standalone Storea5 artifacts remain immutable. GTD pinned-NA defects, complete BT Line/Observer/fund semantics and venue limits remain explicit incomplete capabilities.

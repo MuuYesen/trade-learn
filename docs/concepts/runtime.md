@@ -40,7 +40,7 @@ sequenceDiagram
 
 默认 `next()` 新单在下一根 bar 获得撮合机会；启用 close / cheat 配置时使用对应的额外撮合时点。每条 runner 路径共享原生订单控制与终态回传，不另建 Python 撮合循环。Python fallback 同样在成交前执行有效期检查。
 
-Engine的timedelta valid按固定BT目标Feed当前日期换算；数字valid是BT日期序数，0表示DAY。内部/Lite相对秒契约与该入口区别保留。实际共同提交时钟独立记录，不能由旧行情时间代替。撤单、OCO 撤单和过期会更新 broker 状态、待成交数量并触发订单通知。详见[撮合与成交](../internals/matching.md)。
+Engine的BT目标为：timedelta valid按目标Feed当前日期换算，数字valid保留绝对日期序数，数字0无到期，DAY是timedelta零哨兵。截至033候选的中间实现曾把数字0当DAY，这是已确认差异；033候选之后的canonical已修复，尚未正式发行。内部/Lite相对秒契约仍保留。实际共同提交时钟独立记录，不能由旧行情时间代替。撤单、OCO 撤单和过期会更新 broker 状态、待成交数量并触发订单通知。详见[撮合与成交](../internals/matching.md)。
 
 ## 为什么不是纯向量化
 

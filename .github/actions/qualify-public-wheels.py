@@ -42,13 +42,35 @@ TESTS_032 = [
     "tests/test_live_returns_analyzer.py",
     "tests/test_live_post_only.py",
 ]
+TESTS_033 = [
+    "tests/unit/engine/test_bt_line_get_return.py",
+    "tests/unit/engine/test_bt_stream_lifecycle_clock.py",
+    "tests/unit/engine/test_bt_stream_master_datetime.py",
+    "tests/unit/engine/test_bt_analyzer_master_clock.py",
+    "tests/unit/engine/test_bt_datetime_algebra.py",
+    "tests/unit/engine/test_nautilus_store.py",
+    "tests/test_live_engine_transparent.py",
+]
+TESTS_034 = [
+    "tests/test_live_close_routes.py",
+    "tests/unit/engine/test_bt_validity_actual.py",
+    "tests/unit/engine/test_bt_observer_lines.py",
+    "tests/test_live_engine_market_validity.py",
+    "tests/test_live_native_owner_release.py",
+    "tests/test_live_sdk_owner_release.py",
+]
 PACKAGES = {"tradelearn", "tradelearn_runtime", "leafquant_monitor"}
 
 
 def selected_tests(version):
     """Keep historical 031 evidence stable; require new tests on new releases."""
     release = tuple(map(int, re.match(r"(\d+)\.(\d+)\.(\d+)", version).groups()))
-    return TESTS + (TESTS_032 if release >= (0, 3, 2) else [])
+    tests = TESTS + (TESTS_032 if release >= (0, 3, 2) else [])
+    if release >= (0, 3, 3):
+        tests += TESTS_033
+    if release >= (0, 3, 4):
+        tests += TESTS_034
+    return tests
 
 
 def digest(path):
@@ -263,6 +285,8 @@ def prepare(args):
         "tests/test_live_order_mapping.py",
         "tests/windows_private_directory.py",
     ]
+    if "tests/unit/engine/test_nautilus_store.py" in selected_tests(args.tl):
+        paths += ["tests/unit/backtest/_engine_config.py", "docs/guides/live.md"]
     for name in paths:
         destination = work / name
         destination.parent.mkdir(parents=True, exist_ok=True)

@@ -35,6 +35,13 @@ class _Subscription:
         self._compression = self.p.compression
 
 
+@dataclass(frozen=True)
+class _ClosedHost:
+    """Python-only diagnostics retained after the owner-thread native disposal."""
+    frontend: object
+    logger: object = None
+
+
 class NautilusStore:
     """One native Store for official factories and explicitly selected installed adapters.
 
@@ -505,6 +512,16 @@ class NautilusStore:
                     await asyncio.to_thread(self._host.logger.finish_delivery)
                 except BaseException as error:
                     cleanup_errors.append(error)
+            # No unsendable native actor may be left in Store/feed/broker cycles
+            # after the native node and durable workers have been disposed.
+            if self._host is not None:
+                self._host._release_runtime_owner()
+                self._host = _ClosedHost(self._host.frontend, getattr(self._host, 'logger', None))
+            from .execution import _release_exception_native_owners
+            if primary is not None:
+                _release_exception_native_owners(primary)
+            for cleanup in cleanup_errors:
+                _release_exception_native_owners(cleanup)
             if cleanup_errors:
                 error = primary or cleanup_errors.pop(0)
                 for cleanup in cleanup_errors:
