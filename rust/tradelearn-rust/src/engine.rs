@@ -128,6 +128,7 @@ impl BacktestEngine {
             total_bars,
             portfolio: Portfolio::new(cash),
             options: ExecutionOptions {
+                preserve_input_precision: false,
                 trade_on_close,
                 smart_matching,
                 cheat_on_close,
@@ -720,6 +721,12 @@ impl BacktestEngine {
         }
         self.market_close_references.insert(order_id,price);
         Ok(())
+    }
+
+    pub fn configure_bt_precision(&mut self, preserve: bool) {
+        // Selected by the existing private broker command boundary, not a new
+        // Engine user option. Legacy Lite/native direct callers keep their policy.
+        self.options.preserve_input_precision = preserve;
     }
 
     pub fn configure_market_eligibility(&mut self, order_id: OrderId, after: Timestamp) {

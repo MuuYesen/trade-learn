@@ -81,7 +81,11 @@ def test_real_native_node_dispose_releases_actor_even_with_business_result_retai
             async def run_async(self):
                 native.run()
             def dispose(self):
-                native.dispose()
+                nonlocal native
+                try:
+                    native.dispose()
+                finally:
+                    native=None
         value._build_node=lambda:Node()
         result=engine.run(monitor=True) if logging else engine.run()
         return captured[0],result

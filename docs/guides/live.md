@@ -358,3 +358,8 @@ IC 所需的普通 `bt.Strategy`、`bt.stores.NautilusStore`、唯一 `cerebro.r
 ### 组件读取同一账户观察（本轮源码候选）
 
 原生 broker 的组件启动与每次 Analyzer/Observer 采样各有一个只读观察作用域：fund 探测和估值共享同一次 provider 返回，离开作用域即丢弃，不跨 bar 缓存、不代替原生账户事实。默认 `fund=None` 仍在启动时读取真实 mode；DrawDown 只将后续实际 bar 的值计入回撤，不把这个配置读取算入收益样本。原生与历史宿主的采样期继续分列。
+
+
+### Engine 回测数值精度（本轮源码候选）
+
+普通 Engine 的成交数量、输入价格与费用按既定 BT 浮点语义保留；不能无条件截到 6 位而改变仓位、费用或把正数量变成零。模式在同一个 TL Rust broker 绑定点内部选定，包含普通、COC 和其他既有 runner；用户不增加参数，Python 不重算原生成交或账户。直接内核/Lite 的既有数值 profile 与真实 NA venue 的报价/下单精度分别定义，不能借此绕过券商 precision 检查。新 native 的正式发行与平台资格仍待，旧 wheel 字节不覆盖。

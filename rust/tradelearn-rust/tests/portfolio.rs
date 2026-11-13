@@ -54,6 +54,7 @@ fn market_order(order_id: u64, symbol: &str, side: OrderSide, size: f64) -> Orde
 
 fn close_options() -> ExecutionOptions {
     ExecutionOptions {
+        preserve_input_precision: false,
         trade_on_close: true,
         smart_matching: false,
         cheat_on_close: false,

@@ -11,8 +11,9 @@ def test_engine_has_no_non_bt_facade_exports():
         assert not hasattr(bt,name), name
 
 
-def test_nautilus_store_is_only_in_independent_integration_namespace():
-    assert 'NautilusStore' not in dir(bt.stores)
+def test_nautilus_store_has_lazy_public_entry_and_keeps_internal_implementation():
+    assert 'NautilusStore' in dir(bt.stores)
+    assert 'NautilusStore' in bt.stores.__all__
     integration=importlib.import_module('tradelearn_runtime')
     assert 'NautilusStore' in dir(integration)
     assert 'nautilus_trader' not in integration.__dict__

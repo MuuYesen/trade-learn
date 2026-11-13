@@ -171,6 +171,11 @@ class RustBroker:
     @observer_mutation_guard
     def bind_engine(self, engine: Any) -> None:
         """Bind a Rust engine and cache optional FFI methods once."""
+        precision = getattr(engine, '_configure_bt_precision', None)
+        if self._bt_notifications and not callable(precision):
+            raise RuntimeError('BT input precision requires the matching candidate TL native kernel')
+        if callable(precision):
+            precision(bool(self._bt_notifications))
         self._engine = engine
         # The one runtime constructs this native account from the same cash
         # configuration; do not add a second FFI account read during binding.

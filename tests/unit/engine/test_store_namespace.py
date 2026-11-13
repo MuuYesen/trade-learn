@@ -11,7 +11,8 @@ def test_store_namespace_does_not_load_native_engine_or_logging():
     result = subprocess.run([sys.executable, '-I', '-c', 'import sys; sys.path.insert(0, '+repr(_PACKAGE_ROOT)+');\n'+'''
 import sys
 from tradelearn import engine as bt
-assert 'NautilusStore' not in dir(bt.stores)
+assert 'NautilusStore' in dir(bt.stores)
+assert 'NautilusStore' in bt.stores.__all__
 import tradelearn_runtime
 assert 'NautilusStore' in dir(tradelearn_runtime)
 assert 'DefaultStore' not in dir(bt.stores)

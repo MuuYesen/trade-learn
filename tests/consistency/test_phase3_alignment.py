@@ -1,8 +1,8 @@
+import backtrader as official
 import numpy as np
 import pandas as pd
 
 import tradelearn.engine as bt
-from tests.unit.backtest._engine_config import feed as _as_feed
 
 
 class TestStrategy(bt.Strategy):
@@ -21,7 +21,7 @@ class TestStrategy(bt.Strategy):
             self.sell()
 
 
-def run_test_case(coc=False, sizer_stake=10):
+def run_test_case(coc=False, sizer_stake=10, api=bt):
     # Create fake data: 20 bars of upward trend
     dates = pd.date_range("2023-01-01", periods=20)
     data_df = pd.DataFrame(
@@ -35,16 +35,33 @@ def run_test_case(coc=False, sizer_stake=10):
         index=dates,
     )
 
-    cerebro = bt.Cerebro()
-    cerebro.adddata(_as_feed(data_df))
-    cerebro.addstrategy(TestStrategy)
-    cerebro.addsizer(bt.sizers.FixedSize, stake=sizer_stake)
+    class Business(api.Strategy):
+        params = (("buy_bar", 5), ("sell_bar", 10))
+
+        def __init__(self):
+            self.completed = []
+
+        def next(self):
+            if len(self) == self.p.buy_bar:
+                self.buy()
+            elif len(self) == self.p.sell_bar:
+                self.sell()
+
+        def notify_order(self, order):
+            if order.status == order.Completed:
+                self.completed.append((order.executed.dt, self.data.datetime[0],
+                                       order.executed.price))
+
+    cerebro = api.Cerebro()
+    cerebro.adddata(api.feeds.PandasData(dataname=data_df))
+    cerebro.addstrategy(Business)
+    cerebro.addsizer(api.sizers.FixedSize, stake=sizer_stake)
 
     if coc:
         cerebro.broker.set_coc(True)
 
-    cerebro.addanalyzer(bt.analyzers.SharpeRatio, timeframe=bt.TimeFrame.Days, annualize=True)
-    cerebro.addanalyzer(bt.analyzers.DrawDown)
+    cerebro.addanalyzer(api.analyzers.SharpeRatio, timeframe=api.TimeFrame.Days, annualize=True)
+    cerebro.addanalyzer(api.analyzers.DrawDown)
 
     strategies = cerebro.run()
     return strategies[0]
@@ -68,7 +85,12 @@ def test_coc_alignment():
     print(f"WITH COC - Buy Fill Price: {buy_fill_coc['price']}, Date: {buy_fill_coc['datetime']}")
 
     assert buy_fill_coc["price"] != buy_fill_no_coc["price"]
-    assert buy_fill_coc["datetime"] < buy_fill_no_coc["datetime"]
+    # COC executes at the creation close but is applied/notified on the next
+    # broker turn. The raw fills-frame timestamp retains that application turn.
+    assert strat_coc.completed == run_test_case(coc=True, api=official).completed
+    assert strat_no_coc.completed == run_test_case(coc=False, api=official).completed
+    assert strat_coc.completed[0][0] < strat_no_coc.completed[0][0]
+    assert buy_fill_coc["datetime"] == buy_fill_no_coc["datetime"]
 
 
 def test_sizer_alignment():

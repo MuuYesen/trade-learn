@@ -102,8 +102,12 @@ def test_engine_lite_replay_share_async_feed_facts_after_primary_finishes():
     assert e.stats.summary['final_value']==result.summary['final_value']==10001
 
 
-def test_batch_subsecond_timestamps_reject_instead_of_collapsing_two_events():
+def test_batch_subsecond_timestamps_preserve_both_events_and_exact_context():
     bars=frame(['2026-01-01','2026-01-02'])
     bars.index=pd.date_range('2026-01-01',periods=2,freq='500ms')
-    with pytest.raises(NotImplementedError,match='subsecond'):
-        tl.feeds.PandasData(dataname=bars)
+    class Business(tl.Strategy):
+        def __init__(self):self.seen=[]
+        def next(self):self.seen.append((len(self),self.runtime_context.ts_event_ns,self.data.close[0]))
+    c=tl.Cerebro(stdstats=False);c.adddata(tl.feeds.PandasData(dataname=bars));c.addstrategy(Business)
+    s=c.run()[0]
+    assert s.seen==[(1,bars.index[0].value,10.),(2,bars.index[1].value,11.)]

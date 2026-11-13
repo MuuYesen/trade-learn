@@ -84,3 +84,31 @@ def test_actual_plain_live_host_refreshes_formal_cTrader_facts_without_monitor(t
         finally:
             await stopper;host.intent_journal.close();node.dispose()
     asyncio.run(run())
+
+
+def test_stopped_refresh_does_not_retain_the_native_owner_through_cache_or_clock():
+    import asyncio
+    import weakref
+    from tradelearn_runtime.account_refresh import NativeAccountRefresh
+
+    class Owner:
+        pass
+
+    class Handle:
+        def __init__(self, owner):
+            self.owner = owner
+
+    async def check():
+        owner = Owner()
+        reference = weakref.ref(owner)
+        host = N(_offline_test=False, _account_provider=object(), _stopping=False,
+                 _callback_cache=Handle(owner), _callback_clock=Handle(owner),
+                 account=lambda:dict(cash=1., equity=1.))
+        refresh = NativeAccountRefresh(host)
+        refresh.start()
+        await asyncio.sleep(0)
+        refresh.stop()
+        del owner, host
+        assert reference() is None  # Refcount release, no collector/thread dependency.
+
+    asyncio.run(check())

@@ -91,7 +91,14 @@ def test_native_clock_closes_observed_replay_without_new_bar(tmp_path,monkeypatc
             native.end()
             stopped.append([name for name in self.actor._callback_clock.timer_names() if name.startswith('__tl_bar_check_')])
         def dispose(self):
-            errors.append(self.actor._worker_error);native.dispose();self.actor=None
+            nonlocal native
+            errors.append(self.actor._worker_error)
+            try:
+                native.dispose()
+            finally:
+                # This fixture owns the closure retaining the unsendable simulator.
+                self.actor=None
+                native=None
     monkeypatch.setattr(value,'_build_node',Node)
     engine.run()
     assert errors==[None]

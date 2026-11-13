@@ -53,7 +53,7 @@ def test_signal_strategy_does_not_trade_on_zero_signal() -> None:
     cerebro, strategy = _run_with_signal(bt.SIGNAL_LONG, ZeroSignal)
 
     assert len(strategy.stats.fills) == 0
-    assert cerebro.broker.getvalue() == 100000.0
+    assert cerebro.broker.getvalue() == 10000.0
 
 
 def test_signal_strategy_trades_on_positive_long_signal() -> None:
@@ -81,7 +81,7 @@ def test_signal_strategy_treats_invalid_signal_values_as_neutral() -> None:
     cerebro, strategy = _run_with_signal(bt.SIGNAL_LONG, InvalidSignal)
 
     assert len(strategy.stats.fills) == 0
-    assert cerebro.broker.getvalue() == 100000.0
+    assert cerebro.broker.getvalue() == 10000.0
 
 
 def test_add_signal_uses_signal_strategy_when_regular_strategy_exists() -> None:

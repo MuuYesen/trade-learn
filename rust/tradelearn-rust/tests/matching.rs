@@ -50,6 +50,7 @@ fn order(order_type: OrderType, side: OrderSide) -> OrderEvent {
 
 fn options() -> ExecutionOptions {
     ExecutionOptions {
+        preserve_input_precision: false,
         trade_on_close: false,
         smart_matching: false,
         cheat_on_close: false,
@@ -75,6 +76,7 @@ fn market_orders_fill_at_open_or_close_with_side_aware_slippage() {
         ..options()
     };
     let close_options = ExecutionOptions {
+        preserve_input_precision: false,
         trade_on_close: true,
         slippage: SlippageModel::Percent(PercentSlippage { ratio: 0.10 }),
         ..options()
@@ -398,4 +400,27 @@ fn stop_limit_activation_survives_into_a_later_bar() {
             assert_eq!(fills[0].price, expected);
         }
     }
+}
+
+#[test]
+fn bt_precision_retains_input_quantity_price_and_fee_without_rounding() {
+    let mut submitted = order(OrderType::Market, OrderSide::Buy);
+    submitted.size = 0.00000001;
+    let mut current = bar();
+    current.open = 105.21052631578948;
+    current.high = 106.0;
+    current.low = 100.0;
+    current.close = 105.0;
+    let mut exact = options();
+    exact.preserve_input_precision = true;
+    exact.commission = CommissionModel::Percent(PercentCommission { ratio: 0.00123456789 });
+    let fill = match_order(&submitted, &current, &exact).unwrap();
+    assert_eq!(fill.size, submitted.size);
+    assert_eq!(fill.price, current.open);
+    assert_close(fill.commission, current.open * submitted.size * 0.00123456789);
+    assert!(fill.commission > 0.0);
+    // An unchanged direct/Lite policy still has its existing six-place price.
+    submitted.size = 0.125;
+    let legacy = match_order(&submitted, &current, &options()).unwrap();
+    assert_eq!(legacy.price, 105.210526);
 }

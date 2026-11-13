@@ -98,7 +98,14 @@ def test_actual_na_callback_reads_optional_fund_source_on_the_one_runtime(tmp_pa
         def handle(self):return NS(stop=lambda:None)
         async def run_async(self):native.run()
         def dispose(self):
-            errors.append(self.actor._worker_error);native.dispose();self.actor=None
+            nonlocal native
+            errors.append(self.actor._worker_error)
+            try:
+                native.dispose()
+            finally:
+                # This fixture owns the closure retaining the unsendable simulator.
+                self.actor=None
+                native=None
     monkeypatch.setattr(value,'_build_node',ReplayNode)
     [business]=engine.run()
     assert errors==[None] and rows==[(1,120.),(2,120.),(3,120.)]

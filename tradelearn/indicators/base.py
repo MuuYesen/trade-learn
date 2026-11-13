@@ -302,15 +302,18 @@ class StreamBinding:
                 or checkpoint['generation']!=self._checkpoint_generation):
             raise ValueError('foreign or expired indicator replay checkpoint')
         current=self.state.state.get('backend')
-        backend=checkpoint['backend'] if checkpoint['native'] else deepcopy(checkpoint['backend_state'])
+        backend = (checkpoint['backend'] if checkpoint['native']
+                   else deepcopy(checkpoint['backend_state']))
         if current is not None and current is not backend:
             close=getattr(current,'close',None)
-            if callable(close):close()
+            if callable(close):
+                close()
         if checkpoint['native']:
             backend._restore_checkpoint(checkpoint['backend_state'])
         self.state.buffers=deepcopy(checkpoint['buffers'])
         self.state.state=deepcopy(checkpoint['state'])
-        if backend is not None:self.state.state['backend']=backend
+        if backend is not None:
+            self.state.state['backend']=backend
         self.state.params=deepcopy(checkpoint['params'])
         self.state.owner=checkpoint['indicator_owner']
         self.state.failed=checkpoint['failed']

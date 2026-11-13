@@ -1,26 +1,14 @@
+"""The supported resample contract follows the fixed BT completion clock."""
+import backtrader as official
 import numpy as np
 import pandas as pd
-import pytest
 
 import tradelearn.engine as bt
-from tests.unit.backtest._engine_config import feed as _as_feed
-
-
-class MultiTimeframeStrategy(bt.Strategy):
-    def next(self):
-        self.datas[0].close[0]
-        d1_close = self.datas[1].close[0] if len(self.datas[1]) > 0 else None
-
-        d0_ts = self.datas[0].datetime[0]
-        d1_ts = self.datas[1].datetime[0] if len(self.datas[1]) > 0 else None
-
-        print(f"[{self.datas[0].datetime.date(0)}] d0_ts: {d0_ts}, d1_ts: {d1_ts}, d1: {d1_close}")
 
 
 def test_resampling_alignment():
-    # 1-minute data for 15 minutes
     dates = pd.date_range("2023-01-01 10:00", periods=15, freq="1min")
-    df = pd.DataFrame(
+    frame = pd.DataFrame(
         {
             "open": np.linspace(100, 115, 15),
             "high": np.linspace(101, 116, 15),
@@ -30,16 +18,28 @@ def test_resampling_alignment():
         },
         index=dates,
     )
+    def business(api, observed):
+        class Business(api.Strategy):
+            def next(self):
+                sample = self.datas[1]
+                observed.append((len(self.data), len(sample), sample.datetime[0],
+                                 *[float(getattr(sample, field)[0]) for field in
+                                   ("open", "high", "low", "close", "volume")]))
 
-    cerebro = bt.Cerebro()
-    data0 = bt.feeds.PandasData(dataname=df, name="min1")
-    cerebro.adddata(_as_feed(data0))
+        return Business
 
-    # Use the new API
-    with pytest.raises(NotImplementedError, match="incremental"):
-        cerebro.resampledata(data0, timeframe=bt.TimeFrame.Minutes, compression=5)
-    assert cerebro.datas == [data0]
+    results = []
+    for api in (official, bt):
+        observed = []
 
-
-if __name__ == "__main__":
-    test_resampling_alignment()
+        cerebro = api.Cerebro(stdstats=False, runonce=False)
+        raw = api.feeds.PandasData(dataname=frame.copy(), timeframe=api.TimeFrame.Minutes)
+        cerebro.adddata(raw, name="min1")
+        sample = cerebro.resampledata(raw, timeframe=api.TimeFrame.Minutes,
+                                     compression=5, name="min5")
+        assert sample is not raw and len(cerebro.datas) == 2
+        cerebro.addstrategy(business(api, observed))
+        cerebro.run()
+        results.append(observed)
+    assert results[1] == results[0]
+    assert len(results[0]) > 0

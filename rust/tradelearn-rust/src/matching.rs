@@ -84,25 +84,25 @@ pub fn match_order_at_price(
         }
     }?;
 
-    let size = round_precision(signed_order_size(order));
+    let size = execution_precision(signed_order_size(order), options);
     Some(FillEvent {
         order_id: order.order_id,
         symbol: order.symbol.clone(),
         size,
-        price: round_precision(fill_price),
-        commission: round_precision(calculate_commission(
+        price: execution_precision(fill_price, options),
+        commission: execution_precision(calculate_commission(
             fill_price,
             size,
             order.side,
             options.commission,
             options.mult,
-        )),
+        ), options),
         slippage: 0.0,
         ts: bar.ts,
     })
 }
 
-fn apply_slippage(price: f64, side: OrderSide, model: SlippageModel) -> (f64, f64) {
+fn apply_slippage(price: f64, side: OrderSide, model: SlippageModel, preserve: bool) -> (f64, f64) {
     let adjusted = match model {
         SlippageModel::Fixed(model) => match side {
             OrderSide::Buy => price + model.amount,
@@ -113,6 +113,7 @@ fn apply_slippage(price: f64, side: OrderSide, model: SlippageModel) -> (f64, f6
             OrderSide::Sell => price * (1.0 - model.ratio),
         },
     };
+    if preserve { return (adjusted, adjusted - price); }
     let rounded = round_precision(adjusted);
     (rounded, round_precision(rounded - price))
 }
@@ -123,20 +124,20 @@ pub(crate) fn fill_from_raw_price(
     bar: &BarEvent,
     options: &ExecutionOptions,
 ) -> FillEvent {
-    let size = round_precision(signed_order_size(order));
-    let (fill_price, slippage) = apply_slippage(raw_price, order.side, options.slippage);
+    let size = execution_precision(signed_order_size(order), options);
+    let (fill_price, slippage) = apply_slippage(raw_price, order.side, options.slippage, options.preserve_input_precision);
     FillEvent {
         order_id: order.order_id,
         symbol: order.symbol.clone(),
         size,
         price: fill_price,
-        commission: round_precision(calculate_commission(
+        commission: execution_precision(calculate_commission(
             fill_price,
             size,
             order.side,
             options.commission,
             options.mult,
-        )),
+        ), options),
         slippage,
         ts: bar.ts,
     }
@@ -467,6 +468,10 @@ pub(crate) fn calculate_commission(
             commission + transfer_fee + stamp_tax
         }
     }
+}
+
+fn execution_precision(value: f64, options: &ExecutionOptions) -> f64 {
+    if options.preserve_input_precision { value } else { round_precision(value) }
 }
 
 fn round_precision(value: f64) -> f64 {

@@ -136,7 +136,50 @@ def test_incremental_indicator_next_once_before_strategy():
     r.step_market("B", bar(0, 8))
     r.step_market("A", bar(1, 5))
     assert r.strategy.values[0][0] == 6
-    assert r.strategy.values[-1] == (10, 6, 2)
+    # Two absent B loads are required: BT retries the first None within the
+    # initial turn. Then A arrives before B at the same public timestamp. BT invokes the
+    # A-bound Indicator on that prenext turn and again when B becomes ready.
+    import backtrader as official
+
+    class ReferenceCounter(official.Indicator):
+        lines = ("value",)
+
+        def __init__(self):
+            self.calls = 0
+
+        def next(self):
+            self.calls += 1
+            self.lines.value[0] = self.data.close[0] * 2
+
+    class Reference(official.Strategy):
+        def __init__(self):
+            self.counter = ReferenceCounter(self.data)
+            self.values = []
+
+        def next(self):
+            self.values.append((self.counter[0], self.counter[-1], self.counter.calls))
+
+    class DeferredSecond(official.feeds.PandasData):
+        def __init__(self):
+            super().__init__()
+            self.deferred = 0
+
+        def _load(self):
+            if self.deferred < 2:
+                self.deferred += 1
+                return None
+            return super()._load()
+
+    def frame(values):
+        return pd.DataFrame({key: values for key in ("open", "high", "low", "close")},
+                            index=pd.date_range("2026-01-01", periods=len(values), freq="s"))
+
+    oracle = official.Cerebro(stdstats=False, runonce=False, preload=False)
+    oracle.adddata(official.feeds.PandasData(dataname=frame([3., 5.])))
+    oracle.adddata(DeferredSecond(dataname=frame([8.])))
+    oracle.addstrategy(Reference)
+    expected = oracle.run()[0]
+    assert r.strategy.values[-1] == expected.values[-1]
 
 
 def test_unsupported_static_indicator_is_rejected_not_frozen():

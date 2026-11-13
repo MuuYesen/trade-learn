@@ -7,6 +7,14 @@ import backtrader as official
 import tradelearn.engine as bt
 
 
+def _minimum(strategy, period):
+    class Minimum(bt.Indicator):
+        lines=('sample',)
+        def __init__(self):self.addminperiod(period)
+        def next(self):self.lines.sample[0]=self.data.close[0]
+    return Minimum(strategy.data)
+
+
 def bars():
     return pd.DataFrame(dict(open=[10.,11.,12.],high=[11.,12.,13.],low=[9.,10.,11.],close=[10.,11.,12.],volume=[100.]*3),index=pd.date_range('2026-01-01',periods=3))
 
@@ -31,7 +39,7 @@ def test_addstrategy_returns_registration_index():
     assert c.addstrategy(bt.Strategy)==1
 
 
-@pytest.mark.parametrize('method,args',[('add_timer',(datetime.time(9),)),('addcalendar',('NYSE',)),('replaydata',(None,)),('chaindata',(None,)),('rolloverdata',(None,))])
+@pytest.mark.parametrize('method,args',[('replaydata',(None,)),('chaindata',(None,)),('rolloverdata',(None,))])
 def test_unimplemented_bt_semantics_rejected_before_mutation(method,args):
     c=bt.Cerebro()
     with pytest.raises(NotImplementedError): getattr(c,method)(*args)
@@ -40,7 +48,7 @@ def test_unimplemented_bt_semantics_rejected_before_mutation(method,args):
 
 def test_nextstart_runs_once_after_warmup():
     class S(bt.Strategy):
-        def __init__(self): self.calls=[];self.addminperiod(2)
+        def __init__(self): self.calls=[];self.minimum=_minimum(self,2)
         def prenext(self): self.calls.append(('prenext',len(self)))
         def nextstart(self): self.calls.append(('nextstart',len(self)))
         def next(self): self.calls.append(('next',len(self)))
@@ -117,7 +125,7 @@ def test_analyzer_bt_callbacks_and_stop_analysis_are_real():
         def notify_order(self,o):self.calls.append(o.getstatusname())
         def stop(self):self.rets={'calls':list(self.calls)}
     class S(bt.Strategy):
-        def __init__(self):self.addminperiod(2)
+        def __init__(self):self.minimum=_minimum(self,2)
         def next(self):
             if len(self)==2:self.buy(size=1)
     c=bt.Cerebro();c.adddata(bt.feeds.PandasData(dataname=bars()));c.addstrategy(S);c.addanalyzer(A,_name='a')
@@ -172,13 +180,13 @@ def test_order_queries_and_safe_open_order_snapshot_match_bt():
     assert order.status==Order.Partial and order.executed.size==1
 
 
-def test_resample_rejects_until_incremental_feed_semantics_are_qualified():
-    from tradelearn.engine import Cerebro,feeds
+def test_qualified_microsecond_resample_registers_the_feed():
+    from tradelearn.engine import Cerebro,feeds,TimeFrame
     engine=Cerebro();data=feeds.PandasData(dataname=pd.DataFrame({'close':[1.,2.]},index=pd.date_range('2026-01-01',periods=2)))
-    before=list(engine.datas)
-    with pytest.raises(NotImplementedError,match='incremental'):
-        engine.resampledata(data,timeframe=5)
-    assert engine.datas==before
+    sampled=engine.resampledata(data,timeframe=TimeFrame.MicroSeconds)
+    assert engine.datas==[sampled]
+    assert sampled._timeframe==TimeFrame.MicroSeconds
+    assert list(sampled._frame.close)==[1.,2.]
 
 
 @pytest.mark.parametrize('on_close',[False,True])
@@ -367,3 +375,12 @@ def test_sizer_signed_quantity_is_normalized_like_official_bt():
         strategy = c.run()[0]
         results.append((strategy.submitted.size, strategy.submitted.isbuy()))
     assert results == [(2, True), (2, True)]
+
+
+def test_add_timer_registration_and_signature_match_fixed_bt():
+    ours=inspect.signature(bt.Cerebro.add_timer);theirs=inspect.signature(official.Cerebro.add_timer)
+    assert list(ours.parameters)==list(theirs.parameters)
+    assert [p.default for p in ours.parameters.values()]==[p.default for p in theirs.parameters.values()]
+    c=bt.Cerebro();timer=c.add_timer(datetime.time(9),strats=True,marker=42)
+    assert timer.p.tid==0 and timer.p.owner is c and timer.p.strats is True
+    assert timer.kwargs=={'marker':42} and c.datas==[]

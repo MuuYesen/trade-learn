@@ -164,6 +164,7 @@ pub enum CommissionModel {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ExecutionOptions {
+    pub preserve_input_precision: bool,
     pub trade_on_close: bool,
     pub smart_matching: bool,
     pub cheat_on_close: bool,

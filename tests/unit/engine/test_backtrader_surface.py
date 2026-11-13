@@ -208,13 +208,16 @@ def test_strategy_getpositionbyname_resolves_named_data() -> None:
     assert strategy.named_position.size == 1
 
 
-def test_resampledata_rejects_without_mutating_feed_registration() -> None:
+def test_resampledata_clones_registered_source_and_uses_qualified_bar_completion() -> None:
     cerebro = bt.Cerebro()
-    data0 = bt.feeds.PandasData(dataname=_ohlcv(15), name="1m")
+    data0 = bt.feeds.PandasData(dataname=_ohlcv(15), name="1m",
+                               timeframe=bt.TimeFrame.Minutes, compression=1)
     cerebro.adddata(data0)
-    with pytest.raises(NotImplementedError,match="incremental"):
-        cerebro.resampledata(data0,timeframe=bt.TimeFrame.Minutes,compression=5)
-    assert cerebro.datas == [data0]
+    original = data0._frame.copy()
+    sampled = cerebro.resampledata(data0,timeframe=bt.TimeFrame.Minutes,compression=5)
+    assert sampled is not data0 and cerebro.datas == [data0, sampled]
+    pd.testing.assert_frame_equal(data0._frame, original)
+    assert sampled._compression == 5 and data0._compression == 1
 
 
 def test_optstrategy_runs_parameter_grid() -> None:
@@ -321,7 +324,7 @@ def test_runstop_state_is_reset_between_runs() -> None:
     assert strategy.calls == 5
 
 
-def test_addminperiod_extends_warmup_without_backtest_public_api() -> None:
+def test_strategy_addminperiod_does_not_override_bt_data_clock_eligibility() -> None:
     class WarmupStrategy(bt.Strategy):
         def __init__(self) -> None:
             self.addminperiod(4)
@@ -336,7 +339,7 @@ def test_addminperiod_extends_warmup_without_backtest_public_api() -> None:
 
     [strategy] = cerebro.run()
 
-    assert strategy.calls == [4, 5, 6]
+    assert strategy.calls == [1, 2, 3, 4, 5, 6]
 
 
 def test_sizer_observer_and_analyzer_attribute_access() -> None:

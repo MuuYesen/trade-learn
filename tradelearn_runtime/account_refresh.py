@@ -119,3 +119,8 @@ class NativeAccountRefresh:
         self.active=False
         self.pending=None
         self.host=None
+        # These official handles can retain an unsendable native owner. Drop
+        # them on its callback thread, not on a later GC/I/O worker thread.
+        self.cache=None
+        self.clock=None
+        self.loop=None

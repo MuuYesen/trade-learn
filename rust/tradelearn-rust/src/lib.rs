@@ -101,6 +101,7 @@ fn match_order_fill(
         volume,
     };
     let options = ExecutionOptions {
+        preserve_input_precision: false,
         trade_on_close,
         smart_matching: false,
         cheat_on_close: false,
@@ -411,6 +412,10 @@ impl RustBacktestEngine {
 
     fn configure_market_close_reference(&mut self, order_id: u64, price: f64) -> PyResult<()> {
         self.inner.configure_market_close_reference(order_id,price).map_err(pyo3::exceptions::PyValueError::new_err)
+    }
+
+    fn _configure_bt_precision(&mut self, preserve: bool) {
+        self.inner.configure_bt_precision(preserve);
     }
 
     fn configure_market_eligibility(&mut self, order_id: u64, after: i64) {
