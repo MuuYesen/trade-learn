@@ -13,6 +13,7 @@ from tradelearn import engine as bt
 @pytest.mark.parametrize('with_indicators',[False,True])
 @pytest.mark.parametrize('clone',[False,True])
 def test_native_clock_closes_observed_replay_without_new_bar(tmp_path,monkeypatch,clone,with_indicators,kind,profile):
+    pytest.importorskip('nautilus_trader')  # This real-native case requires the optional ABI.
     from nautilus_trader.backtest import BacktestEngine,BacktestEngineConfig
     from nautilus_trader.execution import FixedFeeModel
     from nautilus_trader.model import AccountType,OmsType,Money,Currency,Bar,BarType,QuoteTick

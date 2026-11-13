@@ -28,6 +28,7 @@ def build(api,rows,notices):
 @pytest.mark.parametrize('transform',['raw','dailyclone'])
 @pytest.mark.parametrize('zone,mode',[(None,'none'),('America/New_York','none'),(None,'global'),('America/New_York','global'),('America/New_York','override')])
 def test_actual_native_sessions_dst_and_late_global_calendar_match_fixed_bt(tmp_path,monkeypatch,zone,mode,transform):
+    pytest.importorskip('nautilus_trader')  # This real-native case requires the optional ABI.
     from nautilus_trader.backtest import BacktestEngine,BacktestEngineConfig
     from nautilus_trader.execution import FixedFeeModel
     from nautilus_trader.model import AccountType,OmsType,Money,Currency,Bar,BarType

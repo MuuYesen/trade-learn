@@ -21,6 +21,7 @@ def strategy(api,rows):
 @pytest.mark.parametrize('clone',[False,True])
 @pytest.mark.parametrize('takelate',[False,True])
 def test_actual_na_admitted_late_replay_does_not_rewrite_source_clock(tmp_path,monkeypatch,offsets,clone,takelate):
+    pytest.importorskip('nautilus_trader')  # This real-native case requires the optional ABI.
     from nautilus_trader.backtest import BacktestEngine,BacktestEngineConfig
     from nautilus_trader.config import DataEngineConfig
     from nautilus_trader.execution import FixedFeeModel

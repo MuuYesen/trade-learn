@@ -66,6 +66,7 @@ def test_native_control_events_reach_bt_notices_with_reason_without_rejecting_or
 def pending_fixture():
     from types import SimpleNamespace as NS
     from tradelearn_runtime.broker import NautilusBroker
+    pytest.importorskip('nautilus_trader')  # This real-native case requires the optional ABI.
     from tradelearn_runtime.execution import ExecutionHost
     class GuardedHost:
         @property

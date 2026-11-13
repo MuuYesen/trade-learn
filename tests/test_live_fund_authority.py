@@ -58,6 +58,7 @@ def test_fund_notification_reads_one_atomic_provider_snapshot():
 
 @pytest.mark.parametrize('has_fund',[False,True])
 def test_actual_na_callback_reads_optional_fund_source_on_the_one_runtime(tmp_path,monkeypatch,has_fund):
+    pytest.importorskip('nautilus_trader')  # This real-native case requires the optional ABI.
     from nautilus_trader.backtest import BacktestEngine,BacktestEngineConfig
     from nautilus_trader.execution import FixedFeeModel
     from nautilus_trader.model import AccountType,OmsType,Money,Currency,Bar,BarType

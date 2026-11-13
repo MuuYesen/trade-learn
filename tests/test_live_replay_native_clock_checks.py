@@ -34,6 +34,7 @@ def strategy(api,rows,indicator_order):
 @pytest.mark.parametrize('clone',[False,True])
 @pytest.mark.parametrize('takelate',[False,True])
 def test_actual_na_admitted_late_replay_does_not_rewrite_source_clock(tmp_path,monkeypatch,offsets,clone,takelate):
+    pytest.importorskip('nautilus_trader')  # This real-native case requires the optional ABI.
     from nautilus_trader.backtest import BacktestEngine,BacktestEngineConfig
     from nautilus_trader.config import DataEngineConfig
     from nautilus_trader.execution import FixedFeeModel
@@ -101,3 +102,20 @@ def test_actual_na_admitted_late_replay_does_not_rewrite_source_clock(tmp_path,m
     assert errors==[None]
     assert actual==gold
     assert actual_order==gold_order
+
+
+def test_unpublished_idle_clone_can_accept_a_current_source_before_its_boundary():
+    from tradelearn_runtime.bar_views import LiveReplay
+    options=dict(timeframe=bt.TimeFrame.Minutes,compression=7,bar2edge=True,adjbartime=True,rightedge=True,boundoff=0,takelate=False)
+    plan=LiveReplay(dict(kind='replay',clone=True,source_period=dict(timeframe=bt.TimeFrame.Minutes,compression=1),options=options))
+    stamp=lambda text:pd.Timestamp('2026-01-02T'+text+'Z').value
+    row=lambda price,qty:dict(open=price,high=price+4,low=price-6,close=price+1,volume=qty)
+    plan.push_observed(stamp('09:00:00'),row(100.,1.),stamp('09:00:01'))
+    plan.push_observed(stamp('09:04:00'),row(107.,2.),stamp('09:04:01'))
+    assert plan.push_observed(stamp('09:02:00'),row(94.,3.),stamp('09:05:00'))==[]
+    withdrawn=plan.check(stamp('09:06:00'));assert withdrawn[3]==0
+    output=plan.push_observed(stamp('09:05:00'),row(115.,4.),stamp('09:06:01'))
+    assert len(output)==1
+    label,values,source,count=output[0]
+    assert label==source==stamp('09:05:00') and count==1
+    assert values==dict(open=100.,high=119.,low=94.,close=116.,volume=7.)

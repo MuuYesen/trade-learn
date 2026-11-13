@@ -47,6 +47,7 @@ def test_actual_na_cash_position_subset_matches_fixed_bt_snapshot_views(tmp_path
     import asyncio
     import pandas as pd
     import backtrader as official
+    pytest.importorskip('nautilus_trader')  # This real-native case requires the optional ABI.
     from nautilus_trader.backtest import BacktestEngine,BacktestEngineConfig
     from nautilus_trader.execution import FixedFeeModel
     from nautilus_trader.model import Equity,InstrumentId,Symbol,Price,AccountType,OmsType,Money,Currency,Bar,BarType

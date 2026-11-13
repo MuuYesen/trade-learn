@@ -29,6 +29,7 @@ def build(api,rows,notices):
 @pytest.mark.parametrize('flag',['adjust','unbounded'])
 @pytest.mark.parametrize('zone,mode',[(None,'global'),('America/New_York','override')])
 def test_actual_native_configured_calendar_replay_matches_fixed_bt(tmp_path,monkeypatch,zone,mode,transform,flag,_period='Days',_compression=1,_stamps=None,_calendar_type=Sessions):
+    pytest.importorskip('nautilus_trader')  # This real-native case requires the optional ABI.
     from nautilus_trader.backtest import BacktestEngine,BacktestEngineConfig
     from nautilus_trader.execution import FixedFeeModel
     from nautilus_trader.model import AccountType,OmsType,Money,Currency,Bar,BarType

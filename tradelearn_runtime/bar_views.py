@@ -128,6 +128,9 @@ class LiveReplay:
     def check(self,observed_ns):
         """Complete only the observed aggregate, on its existing native clock."""
         from copy import deepcopy
+        state=getattr(self.builder,'state',None)
+        prior=(getattr(self.builder,'_last_public',None),getattr(state,'_eos',None),getattr(state,'_last_eos',None))
+        deadline=self.next_check_ns()
         closed=self._checked_close(observed_ns)
         if closed is None:return None
         count,label,values=closed
@@ -135,6 +138,8 @@ class LiveReplay:
         if self.clone:
             self.pending=closed
             self._pending_from_idle=True
+            self._idle_prior=prior
+            self._idle_deadline=deadline
             view=(self.published if self.published is not None and self.published[0]<count else self.previous)
             if view is None:view=(0,label,values)
             return (view[1],deepcopy(view[2]),self.last_source_ns,view[0])
@@ -152,6 +157,18 @@ class LiveReplay:
         number=lambda value:date2num(pd.Timestamp(value,unit='ns'))
         if self.pending is not None:
             count,label,values=self.pending
+            if (getattr(self,'_pending_from_idle',False) and not self.builder.options['takelate']
+                    and self._idle_deadline is not None and stamp<=self._idle_deadline
+                    and (self._idle_prior[0] is None or number(stamp)>self._idle_prior[0])):
+                # A native alert may run just before the queued source callback.
+                # The clone's close is still unpublished. Reattach its exact
+                # observed accumulator before accepting this newer in-bucket
+                # source row; do not discard it as late to a future label.
+                state=self.builder.state
+                state._bar=deepcopy(values)
+                self.builder._last_public,state._eos,state._last_eos=self._idle_prior
+                self.pending=None;self._pending_from_idle=False
+                return self.push(stamp,row,check_ns=check_ns)
             if number(label)>number(stamp):return []
             self.pending=None
             self._publish(count,label,values)

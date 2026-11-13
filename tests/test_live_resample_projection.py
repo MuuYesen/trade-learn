@@ -21,6 +21,7 @@ def golden(frame,compression,replay=False,clone=False,unit="minutes"):
 @pytest.mark.parametrize('replay',[False,True])
 @pytest.mark.parametrize('compression,offsets,start',[(2,[0,1,2,3,4,5,6],'2026-01-02T09:00:00Z'),(7,[0,1,6,7,8,13],'2026-01-02T09:00:00Z'),(2,[0,1,2,3],'2026-01-02T09:00:00Z'),(7,[0,1,6,7,8],'2026-01-02T09:00:00Z'),(2,[0,1,9,10],'2026-01-02T09:00:00Z'),(2,[0,1,2,3,4,5,6],'2026-01-02T23:58:00Z'),(7,[0,1,2,3,4,5,6],'2026-01-02T23:58:00Z')])
 def test_actual_native_source_uses_completed_live_resample_without_source_eof(tmp_path,monkeypatch,compression,offsets,start,replay,clone,unit):
+    pytest.importorskip('nautilus_trader')  # This real-native case requires the optional ABI.
     from nautilus_trader.backtest import BacktestEngine,BacktestEngineConfig
     from nautilus_trader.execution import FixedFeeModel
     from nautilus_trader.model import AccountType,OmsType,Money,Currency,Bar,BarType
