@@ -13,6 +13,14 @@ on:
         required: true
         default: false
         type: boolean
+      consumer_python:
+        description: "Build-only consumer ABI (NA entry313; Recorder/SDK311)"
+        required: true
+        default: "3.13"
+        type: choice
+        options:
+          - "3.13"
+          - "3.11"
   push:
     branches:
       - "dev"
@@ -132,7 +140,7 @@ jobs:
       - name: Build wheels
         env:
           CIBW_ARCHS: ${{ matrix.cibw-archs }}
-          CIBW_BUILD: ${{ matrix.cibw-build }}
+          CIBW_BUILD: ${{ inputs.consumer_linux_only && inputs.consumer_python == '3.11' && 'cp311-manylinux_x86_64' || matrix.cibw-build }}
         run: python -m cibuildwheel --output-dir wheelhouse
       - name: Normalize SBOM source references without changing native bytes
         run: python scripts/finalize_wheel.py --directory wheelhouse
@@ -214,7 +222,7 @@ jobs:
             ${{ runner.temp }}/native-results.xml
 
   consumer-public-entry:
-    if: inputs.consumer_linux_only
+    if: inputs.consumer_linux_only && inputs.consumer_python != '3.11'
     needs: wheels
     runs-on: ubuntu-latest
     steps:
@@ -240,6 +248,33 @@ jobs:
           name: ic-public-entry-qualification
           path: consumer-qualification.json
 
+
+  consumer-recorder-sdk:
+    if: inputs.consumer_linux_only && inputs.consumer_python == '3.11'
+    needs: wheels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-ubuntu-latest-auto64
+          path: consumer-wheels
+      - name: Install exact candidate with existing owner SDK dependencies
+        run: |
+          python -m pip install consumer-wheels/*.whl 'boto3==1.41.2' 'botocore==1.41.6'
+          python -m pip check
+      - name: Verify exact installed SDK and real native Recorder on CP311
+        env:
+          PYTHONPATH: ""
+        run: python scripts/check_monitor_owner_wheel.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: monitor-owner-cp311-qualification
+          path: consumer-qualification-311.json
 
   publish:
     name: Publish to PyPI
