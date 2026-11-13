@@ -94,43 +94,28 @@
 
 ## 安装
 
-默认安装提供研究、回测、通用策略生命周期及策略日志组件；不自动连接账户、启用策略或发送日志。源码基线为 Python >=3.10，原生扩展和依赖二进制须匹配操作系统与 Python ABI；本轮实际资格及未验范围见下表。
+本节对应 `0.3.4` 发行目标，冻结源码为 `v0.3.4`/`5af840c`。标签已固定不等于PyPI已上传；以下命令须在[PyPI 0.3.4](https://pypi.org/project/trade-learn/0.3.4/)实际可取后使用。旧0.3.2及其固定依赖继续保留。
 
 ```bash
-pip install trade-learn==0.2.9
+pip install trade-learn==0.3.4
+# 官方NA/cTrader组合需要CPython3.13或3.14及匹配平台wheel
+pip install "trade-learn[nautilus,tl-store]==0.3.4"
+# 研究、Jupyter AI Lite/Skills、本地MLflow
+pip install "trade-learn[research]==0.3.4"
 ```
 
-选择 Nautilus 执行宿主时，在 **Python 3.13 或 3.14** 安装：
-
-```bash
-pip install "trade-learn[nautilus]==0.2.9"
-```
-
-`[nautilus]` 固定官方 `nautilus_trader==2.0.0rc7`。这条可选执行路径使用预发行框架，按实验性接入提供；仍需显式账户、标的、venue 路由与恢复配置。其它 Python 版本的 pip 会按依赖 marker 跳过 Nautilus，不能因此使用执行桥；基础 TL 功能仍可用。详见[安装与运行边界](docs/concepts/runtime.md#runtime-install)。
-
-可选 extras：
-
-| extra | 用途 |
+| 安装组 | 当前契约 |
 |---|---|
-| `[research]` | 数据源、指标、因子、机器学习、Parquet/DuckDB、报表与优化 |
-| `[nautilus]` | 官方NT 2.0.0rc7与AWS SDK；执行桥仍需Python 3.13/3.14 |
-| `[tl-store]` | 按需安装TL-Store当前cTrader独立组件；仅已验证的Python3.13、Mac arm64/Linux x86_64 |
+| 默认 | Engine/Lite、共同Runtime和本地日志；不自动连接账户、交易或发送日志 |
+| `[research]` | 数据查询/指标后端/因子/模型/报表与JupyterLab、AI Lite/Skills；MLflow默认本地记录，不编排服务 |
+| `[nautilus]` | 精确官方`nautilus_trader==2.0.0rc7`与按需云发送依赖；执行ABI限CP313/314 |
+| `[tl-store]` | 精确公开`tl-store==0.2.1a8`；唯一实现命名`tl_store.ctrader`，不保旧adapter别名 |
 
-当前源码提供默认安装及research、nautilus、tl-store三个extras；完整研究工作台组合为 `pip install ".[research]"`，执行/发送使用 `pip install ".[nautilus]"`（从源码根目录安装需要Rust/maturin，亦可使用对应本地wheel）。基础安装仍无AWS；发送必须另配受限授权，不自动联网或交易。Python 3.10–3.12安装nautilus组只得到SDK，NT会被marker跳过，执行入口明确拒绝。
+统一`uv.lock`已闭合并过CI，Store a8已公开，不再沿用“a2未公开/锁不可解”的旧状态。Python3.10–3.12安装extra时官方NA会被marker跳过，不能据此使用NA桥。CLI仅`new/lab/doctor`及help/version；`lab`只管理自有Jupyter，不启动MCP/MLflow附带服务。
 
-已发布PyPI 0.2.9保留原有extras与依赖；这里的源码安装组只描述当前源码，不代表新版本已发行。通过TL使用cTrader的推荐发行目标命令统一为 `pip install "trade-learn[nautilus,tl-store]"`；tl-store是本包extra，自动安装已验证的独立组件，实际选择本地构建的tl-store发行包。用户不用另写adapter版本；完整依赖锁定由metadata维护，当前组合仅验Python3.13 Mac arm64/Linux x86_64。旧公开0.2.9没有统一Store API2和此extra，须使用对应本地候选，待TL正式兼容版本实际发布后才能使用公网命令。独立NA用户不反向依赖TL。开发与文档工具用 `uv sync --group dev` / `uv sync --group docs`，不再作为公开extras。`tradelearn lab`使用 `[research]` 的JupyterLab/AI Lite/Skills，只启动JupyterLab；CLI仅保留new/lab/doctor与help/version，默认MLflow为本地`sqlite:///mlflow.db`，不启动服务。默认安装保留tqdm和TA-Lib；CLI不再依赖Typer；PyYAML只用于显式YAML配置，HTTP数据客户端归research，Nautilus组保留AWS所需urllib3安全约束；基础CLI help/version/doctor无需这两项，读取已有YAML需PyYAML。
+TL0.3.4真实构建范围为Mac arm64、Windows AMD64、Linux x64的CP310–314及Linux ARM64 CP313。Linux CP313+Storea8+NA2rc7全新安装/RECORD/native/pip check已验；Mac CP313实物与独立差量已验。Store的其他平台构建资格、自然venue和KQ后端分别标注，不从TL wheel标签外推。KQ Windows桥未实现/LinuxARM未验，不表示整个TL不支持Windows或ARM。
 
-研究组在 Python 3.12+ 安装 KunQuant 0.1.12；官方 abi3 wheel 从 CPython 3.12 起，macOS ARM 需 14+。图资格以指标指南为准，不由依赖安装推定全部公式已合格。
-
-当前通用 `uv.lock` 尚未闭合：tl-store 0.2.1a2 尚未公开，完整解析会失败。源码研究安装可先使用上述 `pip install ".[research]"`；不要把现有锁文件视为本轮新依赖的冻结结果。
-
-### 原生产物与平台
-
-| 能力 | Python / 平台 |
-|---|---|
-| 研究、回测与原生内核 | 源码基线 Python >=3.10；本机 macOS ARM CPython3.12 安装已验。TA-Lib0.8.3 无 Python3.10 二进制 wheel，ARM 二进制依赖需 macOS14+；其他运行平台待最终产物验收。 |
-| 可选 Nautilus 执行 | Python 3.13/3.14，须存在官方 rc7 对应平台 wheel；订单、产品及真实 venue 的支持另行验收 |
-| 策略日志 | 需匹配的本包 native Recorder；本地持久化与远程发送按平台分别验证，详情见[运行说明](docs/concepts/runtime.md#nautilus-logging) |
+公开用户通过`bt.stores.NautilusStore`配置，普通`bt.Strategy`后唯一`cerebro.run(monitor=...)`；不导入内部runtime或调用`Store.run`。二字段monitor仅endpoint与AccessKey pair，可信发现失败保本地原件。完整例子见[已冻结模板](https://github.com/MuuYesen/trade-learn/blob/v0.3.4/examples/live/ctrader_monitor.py)，边界与历史差异见[0.3.4更正说明](CHANGELOG.md)。真实Sender/归档roundtrip仍单独验收，不把发行当投递成功。
 
 ## 快速上手
 

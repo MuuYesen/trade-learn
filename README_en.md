@@ -86,43 +86,20 @@ Causal/ML research remains part of the strategy workflow. See the [causal guide]
 
 ## Installation
 
-This release provides research/backtesting, an optional Nautilus execution bridge and strategy logging. The `[nautilus]` extra requires Python 3.13/3.14 and pins official `2.0.0rc7`; that execution path remains experimental and needs explicit account/venue routing and recovery configuration. Installation does not connect accounts or trade. See [installation and runtime](docs/concepts/runtime.md#runtime-install).
+This section targets `0.3.4`, frozen at `v0.3.4`/`5af840c`. A tag is not proof of a completed upload: use these commands only when [PyPI 0.3.4](https://pypi.org/project/trade-learn/0.3.4/) is available. Existing 0.3.2 artifacts remain immutable.
 
 ```bash
-pip install trade-learn==0.2.9
+pip install trade-learn==0.3.4
+# Official NA and cTrader require CPython 3.13 or 3.14.
+pip install "trade-learn[nautilus,tl-store]==0.3.4"
+pip install "trade-learn[research]==0.3.4"
 ```
 
-For the optional execution host, use **Python 3.13 or 3.14**:
+The unified lock is resolved and CI-qualified. `[tl-store]` pins public `tl-store==0.2.1a8`; `[nautilus]` pins official `nautilus_trader==2.0.0rc7`. Other Python versions skip NA through metadata markers and cannot run the bridge. The base import is inert. Research includes Jupyter AI Lite/Skills and local MLflow recording; the CLI exposes only `new/lab/doctor`, help and version, without extra service orchestration.
 
-```bash
-pip install "trade-learn[nautilus]==0.2.9"
-```
+Real TL wheels cover macOS arm64/Windows AMD64/Linux x64 CP310–314 and Linux ARM64 CP313. Fresh Linux CP313+Storea8+NA2rc7 installation, RECORD/native/pip-check and the actual Mac CP313 candidate have been qualified. Other Store platform builds and natural venue behavior are separate. KQ Windows integration is unimplemented and Linux ARM remains unverified; this is not a claim that TL itself lacks those OS targets.
 
-Older/newer Python versions skip Nautilus through the dependency marker and cannot use the bridge; base TL remains available.
-
-Optional extras:
-
-| extra | Usage |
-|---|---|
-| `[research]` | Data, indicators, factors, ML, Parquet/DuckDB, reports and optimization |
-| `[nautilus]` | Official NT 2.0.0rc7 and AWS SDK; execution requires Python 3.13/3.14 |
-| `[tl-store]` | Unpublished local cTrader candidate; CPython3.13 Mac arm64/Linux x86_64 |
-
-Current source provides default plus research, nautilus and tl-store extras. From this source root (Rust/maturin required), use `pip install ".[research]"` for the research workbench or `pip install ".[nautilus]"` for execution/sending dependencies; matching local wheels also work. Base use needs no AWS. Sending still requires explicit restricted configuration and never starts trading automatically. Python 3.10–3.12 gets only the SDK from nautilus; NT is skipped by its marker and the execution entry rejects unsupported Python.
-
-Published PyPI 0.2.9 retains its old extras and dependencies; these profiles describe current source, not a new release. Developer/docs tools use `uv sync --group dev` / `uv sync --group docs`. `[research]` includes JupyterLab, AI Lite, Skills and MLflow. The CLI contains only new/lab/doctor and help/version. Lab starts only JupyterLab; MLflow defaults to local `sqlite:///mlflow.db` without a server. TL MCP and service wrappers are removed. Base help/version/doctor needs no Typer or PyYAML; existing YAML configuration requires the research dependency. HTTP data clients belong to research; Nautilus retains the urllib3 security bound needed by AWS.
-
-The research profile selects KunQuant 0.1.12 on Python 3.12+. Its official abi3 wheel starts at CPython 3.12 and requires macOS 14+ on ARM. Formula qualification follows the indicator guide; installing the dependency does not qualify all formulas.
-
-The universal `uv.lock` is not updated for these profiles: tl-store 0.2.1a2 is unpublished and full resolution fails. Use the selected source installation above (`pip install ".[research]"`) for research; the existing lock does not freeze the new dependency set.
-
-### Native wheels and platforms
-
-| Capability | Python / platform |
-|---|---|
-| Research, backtesting, native kernel | Source baseline Python >=3.10; local macOS ARM CPython3.12 installation verified. TA-Lib0.8.3 has no Python3.10 binary wheel; ARM binary dependencies require macOS14+. Other runtime targets await final artifact acceptance. |
-| Optional Nautilus execution | Python 3.13/3.14, matching official rc7 wheel; venue, product and order qualification remain separate |
-| Strategy logging | Matching Recorder required; local persistence and remote delivery are verified separately by platform |
+The public path is `from tradelearn import engine as bt`, lazy `bt.stores.NautilusStore`, ordinary `bt.Strategy`/`bt.talib.SMA`, standard broker/data/strategy assembly and only `cerebro.run(monitor=...)`. No public `Store.run`, internal runtime import or SDK strategy superclass is required. Monitor exposes endpoint and an access-key pair only; trusted binding failure retains local files. See the [frozen template](https://github.com/MuuYesen/trade-learn/blob/v0.3.4/examples/live/ctrader_monitor.py) and [corrected 0.3.4 changelog](CHANGELOG.md). Real Sender/archive roundtrip remains a separate, unqualified integration gate.
 
 ## Quick Start
 

@@ -86,43 +86,20 @@
 
 ## インストール
 
-研究・バックテストに加えて、任意のNautilus実行ブリッジと戦略ログを提供します。`[nautilus]` はPython 3.13/3.14で公式 `2.0.0rc7` を固定します。この実行経路は実験的で、口座・venueルーティング・復旧設定を明示する必要があります。インストールだけでは接続や発注は行いません。[インストールと実行範囲](docs/concepts/runtime.md#runtime-install)。
+この節は `0.3.4`（固定ソース`v0.3.4`/`5af840c`）を対象とします。タグ作成はPyPIアップロード完了を意味しません。[PyPI 0.3.4](https://pypi.org/project/trade-learn/0.3.4/)で取得可能になってから実行してください。既存0.3.2の配布物は変更しません。
 
 ```bash
-pip install trade-learn==0.2.9
+pip install trade-learn==0.3.4
+# 公式NA/cTraderにはCPython3.13または3.14が必要です。
+pip install "trade-learn[nautilus,tl-store]==0.3.4"
+pip install "trade-learn[research]==0.3.4"
 ```
 
-任意の実行ホストには **Python 3.13 または 3.14** を使用します。
+統一lockと必須CIは合格済みです。`[tl-store]`は公開`tl-store==0.2.1a8`、`[nautilus]`は公式`nautilus_trader==2.0.0rc7`に固定します。他のPython ABIではNAがmarkerで除外され、ブリッジは実行できません。CLIは`new/lab/doctor`とhelp/versionのみです。研究環境はJupyter AI Lite/SkillsとローカルMLflow記録を提供し、追加サービスを自動起動しません。
 
-```bash
-pip install "trade-learn[nautilus]==0.2.9"
-```
+実wheelはMac arm64/Windows AMD64/Linux x64のCP310–314、Linux ARM64のCP313を対象とします。Linux CP313+Storea8+NA2rc7のfreshインストールとMac CP313実物を検証済みです。Storeの他OSビルド、自然venue、KQのWindows未実装/LinuxARM未検証は区別します。
 
-他のPython版では依存markerによりNautilusが省略され、実行ブリッジは利用できません。基本TL機能は引き続き利用できます。
-
-オプション（Extras）：
-
-| Extra | 用途 |
-|---|---|
-| `[research]` | データ、指標、因子、ML、Parquet/DuckDB、レポート、最適化 |
-| `[nautilus]` | 公式NT 2.0.0rc7とAWS SDK；実行はPython 3.13/3.14のみ |
-| `[tl-store]` | ローカル候補のcTrader；CPython3.13 Mac arm64/Linux x86_64 |
-
-現在のソースは基本インストールとresearch/nautilus/tl-storeです。ソースルート（Rust/maturin必要）で `pip install ".[research]"` は研究環境、`pip install ".[nautilus]"` は実行・送信依存関係を用意します。対応ローカルwheelも使用できます。基本機能はAWS不要で、送信は明示的な設定・権限が必要です。自動的に取引しません。Python 3.10–3.12ではnautilus組のSDKだけが入り、NTはmarkerで省略され実行入口で拒否されます。
-
-公開済みPyPI 0.2.9の旧extras・依存関係は変更しません。新3組は現在のソースを説明し、新版公開ではありません。開発・文書ツールは `uv sync --group dev` / `uv sync --group docs`。`[research]`にJupyterLab、AI Lite、Skills、MLflowを統合します。CLIはnew/lab/doctorとhelp/versionのみです。labはJupyterLabだけを起動し、MLflowはローカル`sqlite:///mlflow.db`を既定とします。TL MCPとサービス起動ラッパーは削除しました。HTTPデータクライアントはresearchに分離し、NautilusはAWSに必要なurllib3の安全バージョン制約を維持します。
-
-research は Python 3.12+ で KunQuant 0.1.12 を選択します。公式 abi3 wheel は CPython 3.12 以降、ARM Mac は macOS 14 以降が対象です。数式の適格性は指標ガイドを参照してください。依存のインストールだけで全数式の検証完了とはなりません。
-
-汎用 `uv.lock` は未更新です。tl-store 0.2.1a2 が未公開のため、全体の依存解決は失敗します。研究には上記の `pip install ".[research]"` を使ってください。既存lockは新しい依存集合の固定結果ではありません。
-
-### 原生wheelとプラットフォーム
-
-| 機能 | Python / プラットフォーム |
-|---|---|
-| 研究・バックテスト・原生カーネル | ソース基準はPython >=3.10。本機macOS ARM CPython3.12のインストールを検証済み。TA-Lib0.8.3のPython3.10 binary wheelはなく、ARM依存はmacOS14+。他の実行環境は最終成果物の検証待ちです。 |
-| 任意のNautilus実行 | Python 3.13/3.14と対応する公式rc7 wheel。venue・商品・注文の検証は個別 |
-| 戦略ログ | 対応するRecorderが必要。ローカル永続化と遠隔送信をプラットフォーム別に検証 |
+公開入口は`bt.stores.NautilusStore`と通常の`bt.Strategy`、唯一の`cerebro.run(monitor=...)`です。内部runtime、SDK戦略基底クラス、公開`Store.run`は使用しません。monitorはendpointとAccessKey pairだけを受け取り、信頼できるbindingがなければ原本をローカルに保持します。[固定テンプレート](https://github.com/MuuYesen/trade-learn/blob/v0.3.4/examples/live/ctrader_monitor.py)と[0.3.4更新ログ](CHANGELOG.md)を参照してください。実Sender/アーカイブroundtripは別途未検証であり、配布完了を送信成功とは扱いません。
 
 ## クイックスタート
 
@@ -209,7 +186,7 @@ Reporter(strategy.stats).report("report.html")
 研究・バックテストはEngine/Liteを使用します。任意のブリッジはEngine `StrategyRuntime`をNautilusに接続し、adapterが注文・約定・口座の一次情報を提供します。Liteのバッチ指標機能だけでは完全な実取引接続になりません。[実行接続ガイド](docs/guides/live.md)。
 
 ```bash
-python -m tradelearn_runtime.support
+tradelearn doctor
 ```
 
 固定公式版の内蔵adapterとdata/execution factoryを表示します。ディレクトリの存在は注文・paper・実取引・全プラットフォームの検証を意味しません。データ専用providerも含まれ、私有cTrader・戦略・認証情報・口座状態は同梱しません。

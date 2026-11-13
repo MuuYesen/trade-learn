@@ -5,12 +5,18 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
-## [0.3.4] - 2026-11-13
+## [0.3.4] - 2026-11-14
 
-- Close native Store ownership explicitly after drain/dispose: retain Python diagnostics, retire the broker route, and release closed SDK logger clock references. This prevents a disposed unsendable NA Strategy from being dropped by another thread's cyclic GC. Native-owner tests cover real Node disposal, logging on/off, failure identity and retained business/logger objects.
-- Match fixed BT validity: numeric0 differs from DAY; dates/durations expose ordinal-day order.valid; Market ignores valid; native Market IOC stays IOC. Engine Order.DAY is timedelta0 over the shared core order projection, while Lite keeps native TIF string constants. Non-Market GTD remains unqualified on fixed NA.
-- Bind custom Observer output lines/aliases to the existing bounded Runtime clock; dispatch default BT warmup/nextstart phases and retain each multi-data strategy step without a fake market subscription. Observer-owned indicators/minperiod and full built-in units remain incomplete.
-- Version/API1 SDK boundary includes034; Store stays pinned to formal a5. This version does not establish every BT/NA feature or live venue support.
+发行源码固定为 `5af840c97d9feffb34cdf65c7e8ce465046be725`（`v0.3.4`）。本节是冻结标签之后的文档更正；不移动标签、不重建或替换已冻结发行字节。标签内旧更新日志所写 Store a5、内置 Observer 尚未实现等状态已经过期，以下按实际实现和资格说明。PyPI上传/公网安装与真实云端归档验收分开记录。
+
+- **唯一公开实时入口**：`from tradelearn import engine as bt`，惰性 `bt.stores.NautilusStore`（或 `from tradelearn.engine.stores import NautilusStore`）、普通 `bt.Strategy`/`bt.talib.SMA`，标准 `setbroker/adddata/addstrategy` 后只调用 `cerebro.run()`。移除公开 `Store.run`；不要求用户导入内部 `tradelearn_runtime`、继承日志SDK基类或构造私有 execution/settings。
+- **二字段监控装配**：`cerebro.run(monitor={endpoint, credentials: {access_key_id, secret_access_key}})` 经固定受信服务的 IAM/队列绑定发现；无手填归档绑定/回执URL或临时凭据示例。缺少可信响应保本地原件并禁 Sender。真实绑定服务已验；Sender/SQS/archive完整真实回执仍是独立未验项，不以安装、HTTP成功或ACK替代归档证明。
+- **订单、成交与恢复**：Engine普通/COC保留BT输入浮点价格、数量与费用，微小正数量不再被六位截断为零；对齐公开BT日期量化下的Market准入、ordered-feed有效期、批次通知顺序。修复StopLimit回调费用读取、原生pending/拒改原因投影与cache借用时序。Trade费用/分批平仓/翻仓、官方spawn与emulation释放恢复、部分撤销成交及原意图SQLite重开均有定向证据；不改官方NA或重建现金/订单循环。
+- **数据、时钟与指标**：修复时区边界、重复名Data身份、稀疏与跨日resample/replay锚点及可交付时点、配置calendar压缩、迟到/重复修订与idle检查。source UTC/ns、逻辑bar修订与公开BT日期分开保留。已有`runonce=False`正确驱动held次源的命令式Indicator，按注册顺序回调；共享EMA在同一逻辑bar修订时不重复累积。默认批量模式整体副作用预计算顺序与BT不同仍为既有限制，未称全面兼容。
+- **Observer、资金与分析器**：补齐集合访问/重复Observer注册、声明生命周期、静态及研究cashflow/setcash/fund查询；六个内置Observer和适用Returns/Sharpe/DrawDown有实际对照。默认cTrader账户观察复用正式Store a8的只读QueryAccount刷新，普通BT策略无需SDK基类，SDK/查询/Observer共用同次权威观察。单币无杠杆CASH查询及单资产MARGIN原始有符号视图已验；多资产保证金归属、自然基金NAV/份额、FX/hedged不凭空推算。
+- **原生所有权**：停止、drain和dispose后在原owner线程释放actor/关闭SDK持有链；账户刷新器清理自有timer/handle并释放cache/clock/loop。真实Node关闭与错误路径保留unraisable为失败，不屏蔽GC错误。
+- **正式依赖与平台**：`[tl-store]`固定公开 `tl-store==0.2.1a8`，`[nautilus]`固定官方 `2.0.0rc7`；NA组合限CP313/314。本轮统一锁与全部必需CI通过，TL真实wheel覆盖Mac arm64/Windows AMD64/Linux x64 CP310–314、Linux ARM64 CP313；Linux CP313全新组合安装与Mac实际候选/独立验收已通过。Store平台与自然venue、KQ后端资格不外推为同一件事。
+- **精确保留限制**：固定NA GTD模拟器缺陷、public LiveNode缺少pre-venue bar-open cheat阶段、无界订阅没有有限源EOF、tvkit完整Provider替换、KQ Windows桥/LinuxARM资格及上述财务权威来源仍分列。旧031/032、Store旧版本和033未发行标签历史均保留；一次发行不代表移植全部BT/NA能力。
 
 ## [0.3.3] - 2026-11-13 (held; never published to PyPI)
 
