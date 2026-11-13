@@ -1,4 +1,4 @@
-"""Frozen Sentinel preview for the unified TL candidate; not published 0.3.4.
+"""Public Sentinel example for trade-learn 0.3.4 and tl-store 0.2.1a8.
 
 Replace the personal account, cTrader application/OAuth and restricted sender
 values below with your own. This file does not change IAM permissions.
