@@ -45,7 +45,7 @@ def test_plain_strategy_warmup_position_partial_and_rejection_remain_native(
     class Business(bt.Strategy):
         params = (('period', 2),)
         def __init__(self):
-            self.average = talib.SMA(self.data.close, timeperiod=self.p.period)
+            self.average = bt.talib.SMA(self.data.close, timeperiod=self.p.period)
         def prenext(self):
             phases.append(('warmup', len(self)))
         def next(self):
@@ -92,7 +92,7 @@ def test_plain_strategy_warmup_position_partial_and_rejection_remain_native(
                 native = None
 
     monkeypatch.setattr(value, '_build_node', ReplayNode)
-    [business] = value.run(engine, monitor=True) if logging else engine.run()
+    [business] = engine.run(monitor=True) if logging else engine.run()
     assert native is None, 'fixture retained its unsendable replay engine'
     assert phases == [('warmup', 1), ('submit', 2)]
     assert isinstance(business, Business) and business.broker is value.getbroker()

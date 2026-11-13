@@ -47,7 +47,10 @@ def test_live_incremental_observed_equity_has_no_backtest_stats_or_recalculation
     assert result.drawdown==pytest.approx(100/12)
     assert result.moneydown==10 and result.len==2
     assert dict(result.max)==dict(drawdown=25.,moneydown=30.,len=2)
-    assert len(calls)==4
+    # Default fund=None must inspect the authoritative mode once at start;
+    # each bar then shares one source observation for fund probe/value metrics.
+    assert len(calls)==5
+    assert [row['equity'] for row in calls]==[100.,100.,120.,90.,110.]
     assert getattr(runtime.strategy,'stats',None) is None
 
 

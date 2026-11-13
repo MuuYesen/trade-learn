@@ -740,7 +740,25 @@ class RustBroker:
         self._notification_cycle = self._curr_idx
         orders, self._order_notifications = self._order_notifications, []
         trades, self._trade_notifications = self._trade_notifications, []
-        for owner, original, snapshot in orders:
+        # Admission is one broker phase in BT: all submitted intents precede
+        # their accepted snapshots, even though the existing native route is
+        # called synchronously for each intent. Keep terminal/control event
+        # boundaries and native fill order intact; this only projects the
+        # queued admission phase, not another admission or matching loop.
+        phased = []
+        admission = []
+        def flush_admission():
+            phased.extend(item for item in admission if item[2].status == Order.Submitted)
+            phased.extend(item for item in admission if item[2].status == Order.Accepted)
+            admission.clear()
+        for item in orders:
+            if item[2].status in (Order.Submitted, Order.Accepted):
+                admission.append(item)
+            else:
+                flush_admission()
+                phased.append(item)
+        flush_admission()
+        for owner, original, snapshot in phased:
             snapshot.ref = original.ref
             self._deliver_order_notification(owner, snapshot)
         for owner, trade in trades:

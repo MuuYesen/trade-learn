@@ -11,7 +11,7 @@ on:
       store_version:
         type: string
         required: true
-        default: '0.2.1a5'
+        default: '0.2.1a8'
       source_sha:
         type: string
         required: true

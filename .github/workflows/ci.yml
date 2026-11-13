@@ -120,7 +120,7 @@ jobs:
       - run: python .github/actions/prepare-ci-environment.py --python 3.13
       - run: uv pip install -e '.[nautilus,tl-store]' --group dev --group ci --group oracle
       - run: python scripts/check_ci_dependencies.py
-      - run: uv run --no-sync pytest tests/test_observation_clock_domain.py tests/test_sdk_tl_version_boundary.py tests/test_live*.py tests/unit/engine --junitxml=na-results.xml
+      - run: uv run --no-sync pytest tests/test_observation_clock_domain.py tests/test_sdk_tl_version_boundary.py tests/test_live*.py tests/test_native_fill_void_projection.py tests/test_native_cash_subset.py tests/unit/engine --junitxml=na-results.xml
       - name: Expose official NA boundary failures
         if: failure()
         run: python scripts/report_test_failures.py na-results.xml

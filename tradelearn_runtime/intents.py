@@ -37,6 +37,7 @@ class IntentJournal:
                 if row and row[0]!=identity:raise ValueError('intent identity mismatch')
                 db.execute("INSERT OR IGNORE INTO metadata VALUES('identity',?)",(identity,))
                 db.execute('CREATE TABLE IF NOT EXISTS intents(client_oid TEXT PRIMARY KEY,payload TEXT NOT NULL,terminal TEXT)')
+                db.execute('CREATE TABLE IF NOT EXISTS corrections(client_oid TEXT NOT NULL,correction_id TEXT NOT NULL,payload TEXT NOT NULL,previous_terminal TEXT,PRIMARY KEY(client_oid,correction_id))')
         except BaseException:
             self.close();raise
 
@@ -57,12 +58,37 @@ class IntentJournal:
                        (oid,json.dumps(payload,sort_keys=True,separators=(',',':'))))
 
     def terminal(self,oid,evidence):
-        if evidence.get('status') not in ('FILLED','CANCELED','EXPIRED','REJECTED','DENIED'):
+        if evidence.get('status') not in ('FILLED','CANCELED','EXPIRED','REJECTED','DENIED','VOIDED'):
             raise ValueError('native terminal evidence required')
         with self._mutex,self._connection() as db:
             cursor=db.execute('UPDATE intents SET terminal=? WHERE client_oid=?',
                               (json.dumps(evidence,sort_keys=True),oid))
             if cursor.rowcount!=1:raise ValueError('native terminal has no admitted intent')
+
+    def corrected(self,oid,evidence):
+        """Reopen only the same admitted CID, retaining its prior terminal proof."""
+        if (not isinstance(evidence,dict) or evidence.get('client_oid')!=oid or
+                type(evidence.get('is_reopened')) is not bool or
+                not all(isinstance(evidence.get(k),str) and 0<len(evidence[k])<=512
+                        for k in ('correction_id','event_id','account_id','strategy_id','instrument_id'))):
+            raise ValueError('scoped native correction evidence required')
+        status=evidence.get('native_status')
+        if status not in (('SUBMITTED','ACCEPTED','PARTIALLY_FILLED') if evidence['is_reopened'] else ('VOIDED',)):
+            raise ValueError('native correction terminal/reopen evidence differs')
+        correction_key=json.dumps([evidence.get('child_client_oid',oid),evidence['correction_id']],separators=(',',':'))
+        payload=json.dumps(evidence,sort_keys=True,separators=(',',':'))
+        with self._mutex,self._connection() as db:
+            row=db.execute('SELECT terminal FROM intents WHERE client_oid=?',(oid,)).fetchone()
+            if row is None:raise ValueError('native correction has no original admitted intent')
+            prior=db.execute('SELECT payload FROM corrections WHERE client_oid=? AND correction_id=?',
+                (oid,correction_key)).fetchone()
+            if prior is not None:
+                if prior[0]!=payload:raise ValueError('conflicting native correction replay')
+                return
+            db.execute('INSERT INTO corrections VALUES(?,?,?,?)',(oid,correction_key,payload,row[0]))
+            terminal=None if evidence['is_reopened'] else json.dumps(dict(status='VOIDED',
+                filled_qty=evidence['filled_qty'],native_event_id=evidence['event_id'],correction=evidence),sort_keys=True)
+            db.execute('UPDATE intents SET terminal=? WHERE client_oid=?',(terminal,oid))
 
     def unfinished(self):
         with self._mutex,self._connection() as db:

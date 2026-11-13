@@ -55,7 +55,12 @@ class Strategy(_BaseStrategy, LineRoot):
             runtime = getattr(getattr(self, "data", None), "runtime", None)
         if runtime is None:
             return super().__len__()
-        return getattr(runtime, '_strategy_cursor', runtime._cursor) + 1 if runtime.profile == "batch" else runtime._sequence
+        if runtime.profile == "batch":
+            return getattr(runtime, '_strategy_cursor', runtime._cursor) + 1
+        if hasattr(runtime, '_strategy_count'):
+            return (runtime._previous_strategy_count if getattr(runtime,'_timer_phase',False)
+                    else runtime._strategy_count)
+        return runtime._sequence
 
     @property
     def datetime(self):

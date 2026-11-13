@@ -290,6 +290,8 @@ class _RuntimeBridge:
         # Pending command callbacks cannot borrow rc7 Strategy getters. Cache
         # the already-assigned immutable identity before any command is issued.
         self._callback_strategy_id = self.strategy_id
+        self._callback_clock = self.clock
+        self._bar_check_timers = {}
         self._callback_cache = self.cache
         self._callback_portfolio = self.portfolio if self._account_provider is not None else None
         if self._offline_test:
@@ -306,7 +308,7 @@ class _RuntimeBridge:
             if str(order.client_order_id) in recovered:continue
             projection=self._spawn_projection(order)
             if projection is not None and (projection['client_oid'] in recovered
-                    or projection['status']=='FILLED'):
+                    or projection['status'] in ('FILLED','CANCELED','EXPIRED','REJECTED','DENIED','VOIDED')):
                 continue  # Validated cache group, not an orphan independent intent.
             raise RuntimeError('native pending orders lack durable frontend intent; startup blocked')
         if set(self._feeds)!=set(self._instrument_ids):
@@ -321,7 +323,9 @@ class _RuntimeBridge:
                                    broker=self.frontend_broker,parameters=self._parameters,
                                    strategy_args=getattr(self,'_strategy_args',()),
                                    capacity=getattr(self,'_buffer_capacity',512),
-                                   feed_metadata=_feed_period_metadata(self._instrument_ids, self._subscriptions))
+                                   feed_names=getattr(self,'_feed_names',None),
+                                   feed_metadata={**_feed_period_metadata(self._instrument_ids, self._subscriptions),
+                                                  **getattr(self, '_live_feed_metadata', {})})
         from .observers import attach_runtime_observer
         attach_runtime_observer(self.frontend,getattr(self,'_runtime_observer_factory',None))
         for oid,(native,payload) in recovered.items():
@@ -330,7 +334,7 @@ class _RuntimeBridge:
             self.validate_recovery(request,native,group=payload.get('group'),
                 native_controls=payload.get('native_controls'))
             projection=self._spawn_projection(native)
-            if projection is not None and projection['status'] in ('FILLED','CANCELED','EXPIRED','REJECTED','DENIED'):
+            if projection is not None and projection['status'] in ('FILLED','CANCELED','EXPIRED','REJECTED','DENIED','VOIDED'):
                 self._schedule(self._persist_terminal_evidence(oid,
                     dict(status=projection['status'],filled_qty=str(projection['filled_qty']),
                          native_event_id=str(native.last_event.event_id),native_evidence=projection['native_evidence'])))
@@ -340,12 +344,21 @@ class _RuntimeBridge:
         self.frontend.start()
         components = getattr(self.frontend,'_cerebro_components',None)
         if components is not None:components.start()
+        from .account_refresh import NativeAccountRefresh
+        self._account_refresh=NativeAccountRefresh(self)
+        self._account_refresh.start()
         for symbol,mode in self._feeds.items():
             if mode=='tick':self.subscribe_quotes(self._instrument_ids[symbol])
         for bar_type in self._subscriptions:self.subscribe_bars(bar_type)
 
     def on_strategy_stop(self):
         self._stopping=True
+        refresh=getattr(self,'_account_refresh',None)
+        if refresh is not None:refresh.stop()
+        clock=getattr(self,'_callback_clock',None)
+        for name in getattr(self,'_bar_check_timers',{}).values():
+            if clock is not None and name in clock.timer_names():clock.cancel_timer(name)
+        self._bar_check_timers={}
         try:
             if self.frontend is not None:
                 primary = None
@@ -388,6 +401,15 @@ class _RuntimeBridge:
         finally:
             if self.frontend.failed:self._stopping=True
 
+    def _request_monitor_account(self):
+        refresh=getattr(self,'_account_refresh',None)
+        if refresh is not None and refresh.active:
+            return refresh.request()
+        # Before activation, or for untimed custom providers, retain the SDK's
+        # existing observation request policy and configuration unchanged.
+        inherited=getattr(super(),'_request_monitor_account',None)
+        return inherited() if inherited is not None else False
+
     def _notify_cashvalue(self):
         from tradelearn.backtest.strategy import Strategy as CoreStrategy
         if type(self.frontend.strategy).notify_cashvalue is CoreStrategy.notify_cashvalue:
@@ -399,17 +421,92 @@ class _RuntimeBridge:
             raise ValueError('authoritative finite cash/equity snapshot required')
         self.frontend.invoke_business('notify_cashvalue',float(cash),float(equity))
 
+    def _schedule_bar_checks(self):
+        clock=getattr(self,'_callback_clock',None)
+        if clock is None:return
+        for index,(symbol,plan) in enumerate(getattr(self,'_live_bar_views',{}).items()):
+            if not callable(getattr(plan,'next_check_ns',None)):continue
+            name=f'__tl_bar_check_{index}'
+            if name in clock.timer_names():clock.cancel_timer(name)
+            self._bar_check_timers.pop(symbol,None)
+            deadline=plan.next_check_ns()
+            if deadline is None:continue
+            self._bar_check_timers[symbol]=name
+            # Past-due completion is checked on the next native clock turn;
+            # its logical label and original source ns remain untouched.
+            deadline=max(int(deadline),int(clock.timestamp_ns())+1)
+            clock.set_time_alert_ns(name,deadline,
+                callback=lambda event,symbol=symbol:self._on_bar_check(symbol,event))
+
+    def _on_bar_check(self,symbol,event):
+        if self._stopping or self.frontend.failed:return
+        import pandas as pd
+        self._bar_check_timers.pop(symbol,None)
+        try:
+            plan=self._live_bar_views[symbol]
+            projected=plan.check(int(self._callback_clock.timestamp_ns()))
+            if projected is not None:
+                label,values,source_ns,count=projected
+                dispatch=not plan.clone
+                if dispatch:self._notify_cashvalue()
+                self.frontend._step_market_projections([(symbol,
+                    dict(values,ts=pd.Timestamp(label,unit='ns',tz='UTC')),count)],
+                    source_ns,dispatch=dispatch,completion_ns=int(self._callback_clock.timestamp_ns()))
+                components=getattr(self.frontend,'_cerebro_components',None)
+                if dispatch and components is not None:components.after_market()
+            self._schedule_bar_checks()
+        except BaseException as error:
+            self._worker_error=error
+            self.frontend._failed=True
+            self.frontend.cleanup(error)
+            self._stopping=True
+            callback=getattr(self,'_failure_callback',None)
+            if callback is not None:
+                try:callback()
+                except BaseException as secondary:
+                    from tradelearn.backtest.event_runtime import _safe_cleanup_diagnostic
+                    _safe_cleanup_diagnostic(error,secondary)
+            raise
+
     def on_strategy_bar(self,bar):
         if self._stopping or self.frontend.failed:return
         import pandas as pd
         try:
-            self._notify_cashvalue()
-            self.frontend.step_market(self._symbol(bar.bar_type.instrument_id),
-                dict(ts=pd.Timestamp(int(bar.ts_event),unit='ns',tz='UTC'),
-                     open=number(bar.open),high=number(bar.high),low=number(bar.low),
-                     close=number(bar.close),volume=number(bar.volume)))
-            components=getattr(self.frontend,'_cerebro_components',None)
-            if components is not None:components.after_market()
+            row = dict(open=number(bar.open),high=number(bar.high),low=number(bar.low),
+                       close=number(bar.close),volume=number(bar.volume))
+            stamp = int(bar.ts_event)
+            routes = getattr(self,'_source_bar_types',None)
+            symbols = ([symbol for symbol,source in routes.items() if source == bar.bar_type]
+                       if routes is not None else [self._symbol(bar.bar_type.instrument_id)])
+            # An adjusted replay can expose the old logical bar before the
+            # current source row. Keep raw/single-turn views on the final phase,
+            # so an earlier revision cannot see a future raw observation.
+            outputs = []
+            for symbol in symbols:
+                plan = getattr(self,'_live_bar_views',{}).get(symbol)
+                if plan is None:output=[(stamp,row,stamp)]
+                elif callable(getattr(plan,'push_observed',None)):
+                    clock=getattr(self,'_callback_clock',None)
+                    observed=int(clock.timestamp_ns()) if clock is not None else int(bar.ts_init)
+                    output=plan.push_observed(stamp,row,observed)
+                else:output=plan.push(stamp,row)
+                outputs.append((symbol,output))
+            phases = max((len(output) for _,output in outputs),default=0)
+            deliveries = [[] for _ in range(phases)]
+            for symbol,output in outputs:
+                offset = phases-len(output)
+                for index,projected in enumerate(output):
+                    if projected is None:continue
+                    label, values, available = projected[:3]
+                    logical_count = projected[3] if len(projected) == 4 else None
+                    deliveries[offset+index].append((symbol,
+                        dict(values,ts=pd.Timestamp(label,unit='ns',tz='UTC')),logical_count))
+            for delivery in deliveries:
+                self._notify_cashvalue()
+                self.frontend._step_market_projections(delivery,stamp)
+                components=getattr(self.frontend,'_cerebro_components',None)
+                if components is not None:components.after_market()
+            self._schedule_bar_checks()
         except BaseException as error:
             self.frontend.cleanup(error)
             callback = getattr(self, '_failure_callback', None)
@@ -623,13 +720,23 @@ class _RuntimeBridge:
                 self.frontend_broker._notify(self.frontend.strategy,order)
             raise
 
-    async def _persist_terminal(self,oid,order):
+    def _persist_terminal(self,oid,order):
+        # Snapshot on the callback owner before queuing the async write. Native
+        # orders can be reopened by an authoritative correction in the meantime.
         evidence={'status':order.status.name,'filled_qty':str(order.filled_qty),'native_event_id':str(order.last_event.event_id)}
-        await self._persist_terminal_evidence(oid,evidence)
+        return self._persist_terminal_evidence(oid,evidence)
+
+    async def _persist_correction(self,oid,evidence):
+        async with self._io_lock:
+            await asyncio.to_thread(self.intent_journal.corrected,oid,evidence)
 
     async def _persist_terminal_evidence(self,oid,evidence):
         async with self._io_lock:
             await asyncio.to_thread(self.intent_journal.terminal,oid,evidence)
+
+    def _retained_native_voids(self,order):
+        from .order_corrections import retained_native_voids
+        return retained_native_voids(order,_RuntimeBridge._read_cache(self))
 
     def _spawn_projection(self,order):
         from .algorithm_facts import spawn_projection
@@ -787,6 +894,65 @@ class _RuntimeBridge:
         size=number(native.signed_qty)
         return Position(size,number(native.avg_px_open))
 
+    def cash_valuation(self,requests):
+        """Ephemeral signed asset views from the same native position facts.
+
+        One BT stocklike Data requests raw notional even on a margin account;
+        that is not account equity. Cash multi/market views are separately
+        qualified. Selected Data close is the explicit valuation price; native
+        Position owns quantity/instrument/currency and the notional formula.
+        No account or position ledger is reconstructed here.
+        """
+        from nautilus_trader.model import AccountType,Price
+        if requests is not None and any(symbol not in self._instrument_ids for symbol,_ in requests):
+            raise ValueError('native subset route differs from bound instruments')
+        account=self._assert_account_binding()
+        if account.account_type!=AccountType.CASH and (requests is None or len(requests)!=1):
+            raise ValueError('native margin scoped valuation requires its distinct capital source')
+        balances=account.balances_total()
+        if len(balances)!=1:
+            raise ValueError('native cash subset requires one authoritative currency; no FX inference')
+        currency,cash=next(iter(balances.items()))
+        cache=_RuntimeBridge._read_cache(self)
+        identity=_RuntimeBridge._strategy_identity(self)
+        if requests is None:
+            portfolio=getattr(self,'_callback_portfolio',None)
+            if portfolio is None:portfolio=self.portfolio
+            equities=portfolio.equity(account_id=account.id)
+            if set(equities)!={currency}:
+                raise ValueError('native cash equity currency differs; no FX inference')
+            positions=cache.positions_open(account_id=account.id)
+            for venue in {position.instrument_id.venue for position in positions}:
+                if portfolio.missing_price_instruments(venue,account_id=account.id):
+                    raise ValueError('native cash equity has unpriced positions')
+            equity=number(equities[currency]);cash=number(cash)
+            if not math.isfinite(equity) or not math.isfinite(cash):
+                raise ValueError('finite native cash/equity required')
+            return cash,[equity-cash]
+        observations=[]
+        for symbol,close in requests:
+            value=Decimal(str(close))
+            if not value.is_finite() or value<=0:
+                raise ValueError('positive finite selected native valuation price required')
+            price=Price.from_str(format(value,'f'))
+            if price.as_decimal()!=value:
+                raise ValueError('selected native valuation price loses precision')
+            positions=cache.positions_open(instrument_id=self._instrument_ids[symbol],account_id=account.id)
+            if any(position.strategy_id!=identity for position in positions):
+                raise ValueError('native subset includes a foreign strategy position')
+            if len(positions)>1:
+                raise ValueError('hedged native cash subset requires an explicit valuation source')
+            if not positions:
+                observations.append(0.)
+                continue
+            position=positions[0]
+            notional=position.notional_value(price)
+            if notional.currency!=currency:
+                raise ValueError('native subset currency differs from cash; no FX inference')
+            sign=-1. if number(position.signed_qty)<0 else 1.
+            observations.append(sign*number(notional))
+        return number(cash),observations
+
     def account(self):
         # Never infer portfolio equity from wallet/buying power or a quote currency.
         if self._account_provider is None:raise ValueError('explicit authoritative account projection required')
@@ -813,6 +979,8 @@ class _RuntimeBridge:
             return  # Startup recovery validates/cache-projects before business begins.
         from .order_fees import cumulative_native_commission
         commission=cumulative_native_commission(order)
+        from nautilus_trader.model import OrderFillVoided
+        correction=(order,event) if type(event) is OrderFillVoided else None
         projection=self._spawn_projection(order)
         if projection is not None:
             oid=projection.pop('client_oid')
@@ -820,33 +988,41 @@ class _RuntimeBridge:
             if oid not in self.frontend_broker._orders:
                 raise RuntimeError('native execution-spawn lacks admitted frontend primary')
             current=self.frontend_broker._orders[oid]
-            if (current.data._name!=self._symbol(order.instrument_id)
+            if (self._instrument_ids.get(getattr(current.data,'_symbol',current.data._name))!=order.instrument_id
                     or current.isbuy()!=(order.side==OrderSide.BUY)):
                 raise ValueError('native execution-spawn differs from admitted frontend scope')
             if (current.info.get('native_evidence')==projection['native_evidence']
                     and type(event).__name__ not in ('OrderModifyRejected','OrderCancelRejected')):
                 return  # Nested native callbacks can expose the same completed cache view twice.
-            if projection['status'] in ('FILLED','CANCELED','EXPIRED','REJECTED','DENIED') and self.intent_journal is not None:
+            if correction is not None:
+                from .order_corrections import native_void_evidence
+                correction=(order,event,_RuntimeBridge._read_cache(self))
+                evidence=native_void_evidence(correction)
+                if self.intent_journal is not None:self._schedule(self._persist_correction(oid,evidence))
+            elif projection['status'] in ('FILLED','CANCELED','EXPIRED','REJECTED','DENIED','VOIDED') and self.intent_journal is not None:
                 self._schedule(self._persist_terminal_evidence(oid,
                     dict(status=projection['status'],filled_qty=str(projection['filled_qty']),
                          native_event_id=str(event.event_id),native_evidence=projection['native_evidence'])))
             from .notification_evidence import native_event_evidence
             applied=self.frontend_broker.apply(oid,**projection,event_id=str(event.event_id),
-                native_ts_ns=int(event.ts_event),native_event=native_event_evidence(event))
+                native_ts_ns=int(event.ts_event),native_event=native_event_evidence(event),native_correction=correction)
             components=getattr(self.frontend,'_cerebro_components',None)
             if applied and components is not None:
                 components.native_order(event,self.frontend_broker._orders[oid])
             return
+        if correction is not None and self.intent_journal is not None:
+            from .order_corrections import native_void_evidence
+            self._schedule(self._persist_correction(str(event.client_order_id),native_void_evidence(correction)))
         # Native terminal evidence belongs to durable execution, independently of
         # whether the failed/stopped business runtime can accept a notification.
-        if order.is_closed and self.intent_journal is not None:
+        if order.is_closed and self.intent_journal is not None and correction is None:
             self._schedule(self._persist_terminal(str(event.client_order_id),order))
         from .notification_evidence import notification_evidence, native_event_evidence
         applied=self.frontend_broker.apply(str(event.client_order_id),status=status,
             filled_qty=number(order.filled_qty),avg_price=order.avg_px,
             event_id=str(event.event_id),commission=commission,native_ts_ns=int(event.ts_event),
             native_evidence=notification_evidence(order),total_qty=number(order.quantity),
-            native_event=native_event_evidence(event))
+            native_event=native_event_evidence(event),native_correction=correction)
         components=getattr(self.frontend,'_cerebro_components',None)
         if applied and components is not None:
             components.native_order(event,self.frontend_broker._orders[str(event.client_order_id)])
@@ -878,7 +1054,7 @@ class _RuntimeBridge:
                     and str(native.exec_spawn_id) in self.frontend_broker._orders):
                 return self._project_order(event)
             raise RuntimeError('pending native event lacks recovered frontend intent')
-        if order.data._name != self._symbol(event.instrument_id):
+        if self._instrument_ids.get(getattr(order.data,'_symbol',order.data._name)) != event.instrument_id:
             raise ValueError('pending native event differs from admitted instrument')
         price, fee = order.executed.price, order.executed.comm
         applied = self.frontend_broker.apply(oid, status=status,
@@ -903,6 +1079,33 @@ class _RuntimeBridge:
     def on_strategy_order_canceled(self,event):self._project_order(event)
     def on_strategy_order_expired(self,event):self._project_order(event)
     def on_strategy_fill(self,event):self._project_order(event)
+    def on_strategy_order_fill_voided(self,event):
+        from .order_corrections import native_void_payload
+        try:
+            raw=native_void_payload(event)
+            broker=getattr(self,'frontend_broker',None)
+            seen=getattr(broker,'_void_event_payloads',{})
+            for (oid,eid),previous in seen.items():
+                if eid!=str(event.event_id) or previous.get('client_order_id')!=str(event.client_order_id):continue
+                # A different account/strategy callback is foreign, not an owned replay.
+                if any(previous.get(key)!=raw.get(key) for key in ('account_id','strategy_id','instrument_id','trader_id')):return
+                if previous!=raw:raise ValueError('conflicting native correction replay')
+                return  # An exact old callback must not reinterpret a newer cache.
+            self._project_order(event)
+        except BaseException as error:
+            self._worker_error=error;self._stopping=True
+            frontend=getattr(self,'frontend',None)
+            if frontend is not None:
+                frontend._failed=True
+                cleanup=getattr(frontend,'cleanup',None)
+                if callable(cleanup):cleanup(error)
+            callback=getattr(self,'_failure_callback',None)
+            if callback is not None:
+                try:callback()
+                except BaseException as secondary:
+                    from tradelearn.backtest.event_runtime import _safe_cleanup_diagnostic
+                    _safe_cleanup_diagnostic(error,secondary)
+            raise
 
     def _project_position(self,event,closed=False):
         from tradelearn.core.strategy_events import assert_observer_allows_mutation
@@ -923,7 +1126,14 @@ class _RuntimeBridge:
                 self._worker_error=error
                 raise error
             return
-        symbol=self._symbol(event.instrument_id)
+        origin=self.frontend_broker._orders.get(str(event.opening_order_id))
+        if origin is not None and self._instrument_ids.get(
+                getattr(origin.data,'_symbol',origin.data._name)) != event.instrument_id:
+            raise ValueError('native position differs from admitted opening order scope')
+        if origin is None and sum(iid == event.instrument_id for iid in self._instrument_ids.values()) > 1:
+            raise ValueError('native position projection lacks its admitted opening feed route')
+        symbol=(getattr(origin.data,'_symbol',origin.data._name) if origin is not None
+                else self._symbol(event.instrument_id))
         data=self.frontend.feeds[symbol]
         cycle=(str(event.position_id),str(event.opening_order_id))
         opened=type(event).__name__=='PositionOpened'
@@ -1017,6 +1227,7 @@ class ExecutionHost(_RuntimeBridge, NautilusStrategy):
     on_order_canceled = _RuntimeBridge.on_strategy_order_canceled
     on_order_expired = _RuntimeBridge.on_strategy_order_expired
     on_order_filled = _RuntimeBridge.on_strategy_fill
+    on_order_fill_voided = _RuntimeBridge.on_strategy_order_fill_voided
     on_position_opened = _RuntimeBridge.on_strategy_position_opened
     on_position_changed = _RuntimeBridge.on_strategy_position_changed
     on_position_closed = _RuntimeBridge.on_strategy_position_closed

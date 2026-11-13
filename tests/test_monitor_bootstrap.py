@@ -14,7 +14,7 @@ def options():
 def test_connection_is_inert_and_unknown_platform_token_is_rejected(tmp_path, monkeypatch):
     import leafquant_monitor.bootstrap as bootstrap
     monkeypatch.setattr(bootstrap, 'require_sqs_dependencies', lambda: pytest.fail('inert constructor loaded AWS SDK'))
-    value = bootstrap.MonitorConnection.from_options(options())
+    value = bootstrap.MonitorConnection(**options())
     assert value.region == 'ap-southeast-1'
     assert 'synthetic-secret' not in repr(value)
     assert value._client is None
@@ -40,7 +40,7 @@ def test_missing_sdk_rejects_before_state_or_client(tmp_path, monkeypatch):
     def missing():
         raise ImportError('missing optional SDK')
     monkeypatch.setattr(bootstrap, 'require_sqs_dependencies', missing)
-    value = bootstrap.MonitorConnection.from_options(options())
+    value = bootstrap.MonitorConnection(**options())
     with pytest.raises(ImportError):
         value.bind(MonitorSettings('TEST', 's', 'a', str(tmp_path/'state')))
     assert not (tmp_path/'state').exists()
@@ -56,7 +56,7 @@ def test_bound_sender_uses_explicit_credentials_in_memory_and_pins_identity(tmp_
         def client(self, name, **kwargs):
             calls.append((name, kwargs));return Client()
     monkeypatch.setattr(bootstrap, 'require_sqs_dependencies', lambda: (Boto(), lambda **kw: kw))
-    value = bootstrap.MonitorConnection.from_options(options())
+    value = bootstrap.MonitorConnection(**options())
     bound, sender_factory = value.bind(MonitorSettings('TEST', 's', 'a', str(tmp_path/'state')))
     sender = sender_factory(bound, flush=lambda: None)
     assert sender.thread is None and calls == []
@@ -90,7 +90,7 @@ def test_native_log_reaches_existing_source_wire_without_receipt_deletion(tmp_pa
         def client(self, name, **kwargs):return Sqs()
     monkeypatch.setattr(bootstrap, 'require_sqs_dependencies', lambda: (Boto(), lambda **kw: kw))
     monkeypatch.setattr(ArchiveReceiptClient, 'fetch', lambda *args: None)
-    remote = bootstrap.MonitorConnection.from_options(options())
+    remote = bootstrap.MonitorConnection(**options())
     bound, factory = remote.bind(MonitorSettings('TEST', 'strategy', 'account', str(tmp_path/'logs')))
     from tests.windows_private_directory import make_private_test_directory
     make_private_test_directory(tmp_path)
@@ -108,3 +108,28 @@ def test_native_log_reaches_existing_source_wire_without_receipt_deletion(tmp_pa
     finally:
         logger.finish_delivery(timeout=3)
         remote.close()
+
+
+def test_public_monitor_is_only_endpoint_and_long_lived_key_pair():
+    from leafquant_monitor.bootstrap import MonitorConnection
+    public = {k: v for k, v in options().items() if k in ('endpoint', 'credentials')}
+    value = MonitorConnection.from_options(public)
+    assert value.receipt_origin is None and value.archive_binding_id is None
+    assert value._client is None
+    for extra in ({'receipt_origin': options()['receipt_origin']},
+                  {'archive_binding_id': 'synthetic-binding'}):
+        with pytest.raises(ValueError):
+            MonitorConnection.from_options({**public, **extra})
+    with pytest.raises(ValueError):
+        MonitorConnection.from_options({**public, 'credentials': {**public['credentials'], 'session_token': 'temporary'}})
+
+
+def test_unresolved_registration_never_constructs_sender_or_uses_aws(tmp_path, monkeypatch):
+    import leafquant_monitor.bootstrap as bootstrap
+    from leafquant_monitor.logger import MonitorSettings
+    monkeypatch.setattr(bootstrap, 'require_sqs_dependencies', lambda: pytest.fail('unverified binding used AWS'))
+    public = {k: v for k, v in options().items() if k in ('endpoint', 'credentials')}
+    value = bootstrap.MonitorConnection.from_options(public)
+    with pytest.raises(bootstrap.MonitorBindingUnavailable, match='trusted'):
+        value.bind(MonitorSettings('TEST', 's', 'a', str(tmp_path/'state')))
+    assert value._client is None and not (tmp_path/'state').exists()

@@ -46,24 +46,32 @@ def spawn_projection(cache, native, *, strategy_id, account_id, instruments):
         raise ValueError('invalid native execution-spawn cumulative quantity')
     quantities=[Decimal(str(order.filled_qty)) for order in members]
     if sum(quantities)!=filled:raise ValueError('inconsistent native execution-spawn cache quantities')
-    weighted=Decimal(0);fee=Decimal(0);currency=None;fees_known=True
+    weighted=Decimal(0);fee=Decimal(0);currency=None;fees_known=True;has_fees=False
     from .order_fees import cumulative_native_commission
     for order,qty in zip(members,quantities):
-        if not qty:continue
-        price=Decimal(str(order.avg_px))
-        if not price.is_finite():raise ValueError('native execution-spawn fill lacks average price')
-        weighted+=qty*price
+        events=getattr(order,'events',())
+        events=events() if callable(events) else events
+        if len(events)>4096:raise ValueError('native execution-spawn fee history exceeds bound')
+        if qty:
+            price=Decimal(str(order.avg_px))
+            if not price.is_finite():raise ValueError('native execution-spawn fill lacks average price')
+            weighted+=qty*price
+        elif not any(type(event).__name__ in ('OrderFilled','OrderFillVoided') for event in events):
+            continue  # An unfilled primary/child has no execution fee fact.
+        has_fees=True
         amount=cumulative_native_commission(order)
         method=getattr(order,'commissions',None)
         if callable(method):currencies={str(value.currency) for value in method().values()}
-        else:currencies={str(event.commission.currency) for event in order.events() if type(event).__name__=='OrderFilled'}
+        else:currencies=set()
+        if not currencies:currencies={str(event.commission.currency) for event in events if type(event).__name__=='OrderFilled' and event.commission is not None}
         if amount is None or len(currencies)!=1:
             fees_known=False;continue
         [observed]=currencies
         if currency is not None and currency!=observed:fees_known=False
         currency=observed;fee+=Decimal(str(amount))
     if filled==total:status='FILLED'
-    elif root.is_closed and all(order.is_closed for order in members if order is not root):status=root.status.name
+    elif all(order.is_closed for order in members if order.client_order_id!=spawn_id) and (root.is_closed or Decimal(str(root.quantity))==Decimal(str(root.filled_qty))):
+        status='VOIDED' if any(order.status.name=='VOIDED' for order in members) else root.status.name
     elif filled:status='PARTIALLY_FILLED'
     elif any(order.status.name in ('ACCEPTED','PENDING_CANCEL','PENDING_UPDATE','TRIGGERED') for order in members):status='ACCEPTED'
     else:status='SUBMITTED'
@@ -75,4 +83,4 @@ def spawn_projection(cache, native, *, strategy_id, account_id, instruments):
                                 native_event_id=str(order.last_event.event_id)) for order in members])
     return dict(client_oid=str(spawn_id),status=status,total_qty=float(total),
                 filled_qty=float(filled),avg_price=float(weighted/filled) if filled else None,
-                commission=float(fee) if filled and fees_known else None,native_evidence=evidence)
+                commission=float(fee) if has_fees and fees_known else None,native_evidence=evidence)

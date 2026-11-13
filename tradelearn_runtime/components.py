@@ -103,14 +103,18 @@ class LiveComponents:
     def start(self):
         if self._start_done:return
         self._start_done=True
-        for analyzer in self.strategy.analyzers.values():
-            self._started.append(analyzer)
-            for name in ('on_start','start'):
-                callback=getattr(analyzer,name,None)
-                if callable(callback):self.runtime.invoke_component(callback)
-        for observer in self.strategy.observers.values():
-            self._started.append(observer)
-            self.runtime.invoke_component(observer.start)
+        from contextlib import nullcontext
+        scope=getattr(self.strategy.broker,'_account_observation_scope',None)
+        with scope() if callable(scope) else nullcontext():
+            for analyzer in self.strategy.analyzers.values():
+                self._started.append(analyzer)
+                for name in ('on_start','start'):
+                    callback=getattr(analyzer,name,None)
+                    if callable(callback):self.runtime.invoke_component(callback)
+            for observer in self.strategy.observers.values():
+                self._started.append(observer)
+                self.runtime.invoke_component(observer.start)
+
 
     def after_market(self):
         self.bars+=1

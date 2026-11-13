@@ -6433,20 +6433,20 @@ wheels = [
 
 [[package]]
 name = "tl-store"
-version = "0.2.1a6"
+version = "0.2.1a8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "nautilus-trader", marker = "python_full_version >= '3.13'" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f2/b6/06323c221f3604e79524283b106b91432445dbe8d74905a45cc092982834/tl_store-0.2.1a6-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:4ade134862d1e872cb42076f8945937d7311df3ab2d2caaf8d7cecc231588571", size = 46593294 },
-    { url = "https://files.pythonhosted.org/packages/12/68/6ed9f17826f5151b930bc58480a4f01422c47feef64f1c1c0ab191140a6f/tl_store-0.2.1a6-cp313-cp313-manylinux_2_34_aarch64.whl", hash = "sha256:1f1c7b4de1e9655d02e1c55013e4ddb2da01dfad51c96bd2484c8d3eae9a99c6", size = 46959756 },
-    { url = "https://files.pythonhosted.org/packages/fc/69/e3165630c6e43c42b8b5593bb6eaaac59ad045d416cfe23049f909ae2d5c/tl_store-0.2.1a6-cp313-cp313-manylinux_2_34_x86_64.whl", hash = "sha256:3f1539c94c1367c654964ccbe77cb7b557f680f5038a39684eb1af993fc22eb6", size = 46941434 },
-    { url = "https://files.pythonhosted.org/packages/0a/10/e834694f775fe5076b19c445a645c160d07b24cb36a8580647887c0fbd22/tl_store-0.2.1a6-cp313-cp313-win_amd64.whl", hash = "sha256:4f7e42b5793353109b0b0ff668868385c23ba22c72351118137b8202661a1ef0", size = 46239553 },
-    { url = "https://files.pythonhosted.org/packages/57/8a/a5f8de3e557559c35f1ab0c420c0bbd951b794d5c7322ac4c3ba12fc3111/tl_store-0.2.1a6-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:d1f63c7c009cc431b4278ecbf3adb67ff87fd643e3ef94b9d1221744673f7393", size = 46594884 },
-    { url = "https://files.pythonhosted.org/packages/f7/a4/b1d02160316dd8b8ab161f3af5f6de5dd5387c005100e7a9f4a97e77cdfe/tl_store-0.2.1a6-cp314-cp314-manylinux_2_34_aarch64.whl", hash = "sha256:a978ac7dfa8318ba9a3600cf69c7b39c77c3414f8ce2527b487df5c1a1dc19eb", size = 46959183 },
-    { url = "https://files.pythonhosted.org/packages/20/81/0fd15cf4692d3e16db1d6a3712747fc3d634f5fa7b4abc136eeb2dbfdfdc/tl_store-0.2.1a6-cp314-cp314-manylinux_2_34_x86_64.whl", hash = "sha256:9267b1e9da4ad82ff03a28e8cb390b4726e4638c216fd511f9e18be3d88f9ba4", size = 46942840 },
-    { url = "https://files.pythonhosted.org/packages/51/0f/adf9e3ab1daa5286150178dc7079b914d9879a41e5258b7098352467ff53/tl_store-0.2.1a6-cp314-cp314-win_amd64.whl", hash = "sha256:780eb827b334299fd6b7cc3c7c372a75ba18a4593f942cb23357504855af004f", size = 46549652 },
+    { url = "https://files.pythonhosted.org/packages/af/5d/b5ff505b101db7603ce4367d60bfc1fa9d40e90d7078af4318e0f82c4bfe/tl_store-0.2.1a8-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:5d109577f5e753dbae0d83c1fd2e5686a9106dce4d86515077a3475d4f7da4d9", size = 46590699 },
+    { url = "https://files.pythonhosted.org/packages/e3/99/025bd47f352742f84f2c7e35da1ef8cd97e0f5ffe1db3ca2819f8fda879c/tl_store-0.2.1a8-cp313-cp313-manylinux_2_34_aarch64.whl", hash = "sha256:0d05540b5dad25733c56d86e7f91cbbb3a4dc3abd1f7b2f12e9ed7f2b966ae54", size = 46963572 },
+    { url = "https://files.pythonhosted.org/packages/e3/5c/7473adb188bae1e133df1bde8aa294c77492a31e161b0657e09953ac9d41/tl_store-0.2.1a8-cp313-cp313-manylinux_2_34_x86_64.whl", hash = "sha256:b9f0651d513a516a4984f17a3a1a4001be8cd93e1bc65a81a04afc97dfef69cc", size = 46939546 },
+    { url = "https://files.pythonhosted.org/packages/a8/1f/7334fb1d9c6faccb02c7a3f1c85ea8f4c96a918f0f8b5503e5b6820f21fd/tl_store-0.2.1a8-cp313-cp313-win_amd64.whl", hash = "sha256:1ca36bdfc9fb2cdf4c04f04cffa6b39e7ba8d9c8e372e8ce08592be6f8fc2348", size = 46242388 },
+    { url = "https://files.pythonhosted.org/packages/d4/03/90d606c73ddb5d33c7da260a66e9fb3ae524399e26c18473cb6424bae759/tl_store-0.2.1a8-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:a4b2f9ce4fd743f9325fdb3ebe38b4b546dfaf43a071711c7cb499c901daf16c", size = 46597813 },
+    { url = "https://files.pythonhosted.org/packages/ff/c9/818b22a0982d3e9ff7ff5cc74d7f2e5afa7378913c82dfb36788a0a99d21/tl_store-0.2.1a8-cp314-cp314-manylinux_2_34_aarch64.whl", hash = "sha256:d75b65f710281fc70b44f0ea23392f714fd4452ac2a1e6c623eeab9fefca136b", size = 46961062 },
+    { url = "https://files.pythonhosted.org/packages/0b/05/b95b8d82e5556f77de981f3a72116f672f9436fb0ba394a4c364bd1939d4/tl_store-0.2.1a8-cp314-cp314-manylinux_2_34_x86_64.whl", hash = "sha256:248e5c8d02f9f440113bbd3861f2d6822b774574850d100594272ba8ce4cf518", size = 46944586 },
+    { url = "https://files.pythonhosted.org/packages/7f/6e/566e0fd5cdecddcd5c3491fa8f7dc5394efa0b38bc8325108cc2d50a101e/tl_store-0.2.1a8-cp314-cp314-win_amd64.whl", hash = "sha256:ff49c5190bc15c050af62a85861dc8e682914bc13447aa3ce84d9d3a0471960a", size = 46551135 },
 ]
 
 [[package]]
@@ -6683,7 +6683,7 @@ requires-dist = [
     { name = "scikit-learn", marker = "extra == 'research'" },
     { name = "scipy", marker = "extra == 'research'" },
     { name = "ta-lib", specifier = "==0.8.3" },
-    { name = "tl-store", marker = "(python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'arm64' and sys_platform == 'darwin' and extra == 'tl-store') or (python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'tl-store') or (python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'tl-store') or (python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'AMD64' and sys_platform == 'win32' and extra == 'tl-store')", specifier = "==0.2.1a6" },
+    { name = "tl-store", marker = "(python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'arm64' and sys_platform == 'darwin' and extra == 'tl-store') or (python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'tl-store') or (python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'tl-store') or (python_full_version >= '3.13' and python_full_version < '3.15' and platform_machine == 'AMD64' and sys_platform == 'win32' and extra == 'tl-store')", specifier = "==0.2.1a8" },
     { name = "tqdm" },
     { name = "urllib3", marker = "extra == 'nautilus'", specifier = ">=2.8.0,<3" },
     { name = "urllib3", marker = "extra == 'research'", specifier = ">=2.8.0,<3" },

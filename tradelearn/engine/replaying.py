@@ -114,6 +114,61 @@ class _ConfiguredReplaySubday:
         self.closed=True;self.state._bar=None
 
 
+class _ConfiguredReplayCalendar:
+    """Calendar revisions over the existing source-owned completion state."""
+    def __init__(self,source,timeframe,compression,options):
+        from .resampling import _ConfiguredCalendarResampler
+        self.state=_ConfiguredCalendarResampler(source,timeframe,compression,options)
+        self.options=options;self.compression=compression
+        self.count=0;self.closed=False;self._last_public=None
+
+    def push(self,stamp,row):
+        if self.closed:
+            raise RuntimeError('replay source has closed')
+        state=self.state
+        number=state._number(stamp)
+        if self._last_public is not None and number<=self._last_public:
+            if not self.options['takelate']:
+                return []
+            from tradelearn.backtest.clock import num2date
+            import pandas as pd
+            number=self._last_public+.000001
+            label=pd.Timestamp(num2date(number)).value
+            if state._bar is None:
+                self.count+=1
+            state._merge(row,label)
+            self._last_public=number
+            return [(self.count,label,deepcopy(state._bar))]
+        had_open=state._bar is not None
+        completed=state.push(stamp,row)
+        current=state._bar
+        output=[]
+        if current is not None:
+            if completed and had_open and self.options['bar2edge'] and self.options['adjbartime']:
+                label,value,_=completed[-1]
+                # BT only introduces an adjusted tick when its date actually
+                # moves beyond the last visible revision. Week/month/year
+                # completion normally has the same label, not an extra turn.
+                if self._last_public is None or state._number(label)>self._last_public:
+                    output.append((self.count,label,deepcopy(value)))
+            if not had_open or completed:
+                self.count+=1
+            value=current
+        else:
+            if not completed:
+                raise RuntimeError('calendar replay completion lacks observed values')
+            if not had_open:
+                self.count+=1
+            value=completed[-1][1]
+        output.append((self.count,stamp,deepcopy(value)))
+        self._last_public=number
+        return output
+
+    def finish(self):
+        self.closed=True
+        self.state._bar=None
+
+
 class _ReplayBarBuilder:
     def __init__(self,timeframe,compression,source_timeframe,source_compression=1,*,check_ns=None):
         units={TimeFrame.Seconds:1_000_000_000,TimeFrame.Minutes:60_000_000_000}
@@ -224,7 +279,7 @@ def _clone_late_replay_events(frame,builder,source_availability,source_unit,chec
         yield length,label,bar,origin,max(label,seen,ready),2*len(frame)
 
 
-def replay_feed(source,*,clone=False,**options):
+def replay_feed(source,*,clone=False,_target=None,**options):
     """Prepare historical revision storage; public dispatch is integrated separately."""
     import numpy as np
     import pandas as pd
@@ -245,7 +300,11 @@ def replay_feed(source,*,clone=False,**options):
     if timeframe not in (TimeFrame.MicroSeconds,TimeFrame.Seconds,TimeFrame.Minutes,TimeFrame.Days,TimeFrame.Weeks,TimeFrame.Months,TimeFrame.Years):
         raise NotImplementedError('raw tick/subsecond replay is not yet integrated')
     frame=getattr(source,'_frame',None)
-    if frame is None or getattr(source,'is_live',False):raise NotImplementedError('stream replay source integration is not yet implemented')
+    if frame is None or getattr(source,'is_live',False):
+        if getattr(source,'is_live',False) and getattr(source,'_store',None) is not None:
+            from tradelearn_runtime.bar_views import register_resample
+            return register_resample(source,values,clone=clone,kind='replay')
+        raise NotImplementedError('stream replay source integration is not yet implemented')
     check_ns=(pd.Timestamp.now(tz="UTC").value if clone and
               (timeframe,compression)<(source.p.timeframe,source.p.compression) else None)
     declared_session=(source._tz is not None or getattr(source.p,'sessionstart',None) not in (None,__import__('datetime').time.min)
@@ -254,11 +313,9 @@ def replay_feed(source,*,clone=False,**options):
     raw_dates=np.asarray([date2num(stamp) for stamp in frame.index],dtype=np.float64)
     late_source=bool(np.any(raw_dates[1:]<=raw_dates[:-1]))
     configured=nondefault or declared_session or timeframe==TimeFrame.MicroSeconds or late_source
-    if configured and timeframe>=TimeFrame.Days:
-        raise NotImplementedError('configured calendar replay still requires its calendar revision projection')
-    if source._calendar is not None:
-        raise NotImplementedError('calendar replay still requires its source-start calendar projection')
-    builder=(_ConfiguredReplaySubday(source,timeframe,compression,values,check_ns) if configured else
+    calendar_configured=timeframe>=TimeFrame.Days and (configured or source._calendar is not None)
+    builder=(_ConfiguredReplayCalendar(source,timeframe,compression,values) if calendar_configured else
+             _ConfiguredReplaySubday(source,timeframe,compression,values,check_ns) if configured else
              _ReplayBarBuilder(timeframe,compression,source.p.timeframe,source.p.compression,check_ns=check_ns))
     needs_views=bool(values['adjbartime'] and values['bar2edge'] or late_source)
     if needs_views and check_ns is not None:
@@ -281,11 +338,18 @@ def replay_feed(source,*,clone=False,**options):
     builder.finish()
     physical=frame.index.take(source_positions)
     sampled=pd.DataFrame(rows,index=physical,columns=frame.columns)
-    target=copy(source) if clone else source
+    target=_target if _target is not None else copy(source) if clone else source
+    previous_container=target.lines if _target is not None else None
+    previous_lines=({name:getattr(target.lines,name) for name in line_names(type(target))
+                    if hasattr(target.lines,name)} if _target is not None else {})
     parameters=source.p.asdict();name=source._name
     target.lines=Lines(target)
     DataFeed.__init__(target,sampled,name=name,_preserve_row_order=True,**{k:v for k,v in parameters.items() if k!='name'})
     target._timeframe,target._compression=timeframe,compression
+    if clone:
+        target._eos_source=source
+    else:
+        vars(target).pop('_eos_source',None)
     for name in line_names(type(target)):
         if name not in {'datetime','open','high','low','close','volume'}:
             line=LineSeries(target.get_array(name),buffer=target._bar_buffer,buffer_name=name)
@@ -310,6 +374,7 @@ def replay_feed(source,*,clone=False,**options):
     target._source_observation_positions=np.asarray(source_positions,dtype=np.int64)
     target._native_delivery_views=needs_views
     if clone and needs_views:target._replay_source=source
+    else:vars(target).pop('_replay_source',None)
     if needs_views:
         from tradelearn.backtest.clock import date2num
         target._clock_unit='ns'
@@ -351,5 +416,17 @@ def replay_feed(source,*,clone=False,**options):
             target._replay_source_phases=parent_phases
 
 
+    if previous_container is not None:
+        replacements={}
+        for name,previous in previous_lines.items():
+            current=getattr(target.lines,name)
+            previous.__dict__.clear()
+            previous.__dict__.update(current.__dict__)
+            replacements[id(current)]=previous
+            setattr(target,name,previous)
+            setattr(target.lines,name,previous)
+        target._lines_list=[replacements.get(id(line),line) for line in target._lines_list]
+        previous_container.__dict__.update(target.lines.__dict__)
+        target.lines=previous_container
     target.replaying=True
     return target

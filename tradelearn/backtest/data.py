@@ -62,6 +62,13 @@ class RollingBarBuffer:
             if name in self.arrays:
                 self.arrays[name][self._cursor] = value
 
+    def withdraw_current(self) -> None:
+        """Withdraw one visible replay revision, retaining only observed prefix."""
+        if self._size == 0:
+            raise ValueError('cannot withdraw an empty bar window')
+        self._size -= 1
+        self._cursor = self._size - 1
+
     def value(self, name: str, ago: int = 0) -> float:
         arr = self.arrays.get(name)
         if arr is None:

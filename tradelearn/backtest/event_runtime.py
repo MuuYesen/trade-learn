@@ -118,11 +118,11 @@ class RuntimeLine(LineSeries):
         self._version_id = 0
         self._full_ready = False
         count = feed.retained - (
-            1 if self._runtime._stepping and feed._name in self._runtime._active_market_symbols else 0
+            1 if self._runtime._stepping and getattr(feed, '_symbol', feed._name) in self._runtime._active_market_symbols else 0
         )
         self._output = [np.nan] * max(0, count)
         self._all_output = None
-        self._append_received = max(0, feed.received - (1 if self._runtime._stepping and feed._name in self._runtime._active_market_symbols else 0))
+        self._append_received = max(0, feed.received - (1 if self._runtime._stepping and getattr(feed, '_symbol', feed._name) in self._runtime._active_market_symbols else 0))
         if compute is not None:
             if len(self._runtime._plans) >= self._runtime.max_plans:
                 raise RuntimeError("runtime graph plan limit reached")
@@ -417,7 +417,9 @@ class _PersistentIndicatorPlan:
         runtime._register_indicator(self)
 
     def next(self):
-        replay = (hasattr(getattr(self.data, 'source', None), '_replay_lengths')
+        replay = (getattr(self.data, '_live_replay', False)
+                  or self.runtime.profile=='stream' and self.runtime._bt_line_views
+                  or hasattr(getattr(self.data, 'source', None), '_replay_lengths')
                   or self.runtime.profile=='batch' and self.runtime._bt_line_views
                   and getattr(getattr(self.runtime,'_clock',None),'strategy_lengths',None) is not None)
         if replay:
@@ -461,7 +463,7 @@ class _EngineRuntimeDateLine(BTDateLine, RuntimeLine):
 class RuntimeFeed:
     def __init__(self, runtime, symbol, capacity, buffer=None):
         self.runtime = runtime
-        self._name = symbol
+        self._name = self._symbol = symbol
         self._buffer = buffer if buffer is not None else RollingBarBuffer(capacity)
         self.revision = 0
         self.quote = None
@@ -527,7 +529,8 @@ class _RuntimeClockFeed(RuntimeFeed):
         self.last_ns = None
 
     def append(self, timestamp):
-        timestamp = timestamp if self.last_ns is None else max(timestamp, self.last_ns)
+        # This is BT's visible Data clock, not the native source/receive clock.
+        # A legitimately late view can move backwards after its clone withdraws.
         self.last_ns = timestamp
         value = timestamp / 1_000_000_000
         self._buffer.append({"datetime": value})
@@ -544,6 +547,16 @@ class _EngineRuntimeFeed(RuntimeFeed):
     @property
     def _indicator_line(self):
         return self.close
+
+    def date2num(self, value):
+        from tradelearn.backtest.clock import date2num
+        from tradelearn.engine._timezone import localize
+        return date2num(localize(value,getattr(self.datetime,'_tz',None)))
+
+    def num2date(self, value=None, tz=None, naive=True):
+        from tradelearn.backtest.clock import num2date
+        return num2date(self.datetime[0] if value is None else value,
+                       tz=tz or getattr(self.datetime,'_tz',None),naive=naive)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -660,6 +673,7 @@ class StrategyRuntime:
         capacity=4096,
         buffers=None,
         feed_metadata=None,
+        feed_names=None,
         prefix_history_limit=100000,
         max_indicators=1024,
         max_plans=4096,
@@ -708,16 +722,26 @@ class StrategyRuntime:
         )
         feed_type = _EngineRuntimeFeed if self._bt_line_views else RuntimeFeed
         self.feeds = {s: feed_type(self, s, capacity, (buffers or {}).get(s)) for s in feeds}
+        if feed_names is not None:
+            if set(feed_names) != set(self.feeds):
+                raise ValueError('public feed names must match declared runtime symbols')
+            for symbol, feed in self.feeds.items():
+                feed._name = feed_names[symbol]
         metadata = {} if feed_metadata is None else feed_metadata
         if not isinstance(metadata, dict) or set(metadata) - set(self.feeds):
             raise ValueError("feed period metadata must match declared runtime symbols")
         from tradelearn.backtest.parameters import Params
         for symbol, feed in self.feeds.items():
             period = metadata.get(symbol, {})
-            if not isinstance(period, dict) or set(period) - {"timeframe", "compression"}:
+            if not isinstance(period, dict) or set(period) - {"timeframe", "compression", "tz", "sessionstart", "sessionend", "calendar", "_timeframe", "_compression"}:
                 raise ValueError("unknown feed period metadata")
-            feed.p = feed.params = Params({"timeframe": None, "compression": None}, **period)
-            feed._timeframe, feed._compression = feed.p.timeframe, feed.p.compression
+            feed.p = feed.params = Params({"timeframe": None, "compression": None},
+                **{name:value for name,value in period.items() if name not in ('_timeframe','_compression')})
+            feed._timeframe = period.get('_timeframe',feed.p.timeframe)
+            feed._compression = period.get('_compression',feed.p.compression)
+            if 'tz' in period:
+                from tradelearn.engine._timezone import resolve_timezone
+                feed.datetime._tz = resolve_timezone(period['tz'])
         datas = list(self.feeds.values())
         self.broker = broker
         self.strategy = strategy if strategy is not None else self._construct_strategy(
@@ -987,6 +1011,12 @@ class StrategyRuntime:
         return "next"
 
     def _sample_analyzers(self):
+        from contextlib import nullcontext
+        scope=getattr(self.strategy.broker,'_account_observation_scope',None)
+        with scope() if callable(scope) else nullcontext():
+            self._sample_analyzer_observation()
+
+    def _sample_analyzer_observation(self):
         # Observe authoritative broker facts before user business code can mutate them.
         from tradelearn.backtest.strategy import Strategy
         callback = getattr(type(self.strategy), 'notify_fund', Strategy.notify_fund)
@@ -1001,11 +1031,20 @@ class StrategyRuntime:
             # loses logical phases and cannot be an equity authority.
             if not hasattr(self,'_delivery_equity_samples'):self._delivery_equity_samples=[]
             self._delivery_equity_samples.append(float(broker.getvalue()))
-        has_fund = hasattr(broker, 'fundvalue') and hasattr(broker, 'fundshares')
+        fund_source = getattr(broker, '_fund_notification_facts', None)
+        # Native optional facts are read as one provider observation. Merely
+        # inspecting a property must not turn an ordinary strategy into a
+        # requirement for an unavailable venue NAV/units source.
+        native_fund = callable(fund_source)
+        wants_fund = callback is not Strategy.notify_fund or bool(fund_callbacks)
+        facts = fund_source() if native_fund and wants_fund else None
+        has_fund = facts is not None if native_fund else (
+            hasattr(broker, 'fundvalue') and hasattr(broker, 'fundshares'))
         if callback is not Strategy.notify_fund or (has_fund and fund_callbacks):
             if not has_fund:
                 raise NotImplementedError('notify_fund requires authoritative broker fund facts')
-            facts = (broker.getcash(), broker.getvalue(), broker.fundvalue, broker.fundshares)
+            if not native_fund:
+                facts = (broker.getcash(), broker.getvalue(), broker.fundvalue, broker.fundshares)
             if callback is not Strategy.notify_fund:
                 self.invoke_business('notify_fund', *facts)
             for method in fund_callbacks:
@@ -1269,15 +1308,15 @@ class StrategyRuntime:
         self._indicators.append(indicator)
         if self.context is not None:
             feed = self._feed_for(indicator.data)
-            symbol = (feed._name if self._stepping and feed is not None
-                      and feed._name in self._active_market_symbols else self.context.symbol)
+            symbol = (getattr(feed, '_symbol', feed._name) if self._stepping and feed is not None
+                      and getattr(feed, '_symbol', feed._name) in self._active_market_symbols else self.context.symbol)
             self._update_indicator(indicator, symbol)
 
     def _update_bound_replay_indicators(self):
         if self.profile!='batch' or not self._bt_line_views or self._clock.strategy_lengths is None:return
         for indicator in tuple(self._indicators):
             feed=self._feed_for(getattr(indicator,'data',None))
-            if feed is not None:self._update_indicator(indicator,feed._name)
+            if feed is not None:self._update_indicator(indicator,getattr(feed, '_symbol', feed._name))
 
     def _update_indicator(self, indicator, symbol):
         feed = self._feed_for(getattr(indicator, "data", None))
@@ -1298,12 +1337,14 @@ class StrategyRuntime:
                 if (isinstance(line, RuntimeLine) and line.compute is None and line.field is None
                         and getattr(line, "_append_sequence", None) != self._sequence):
                     line._append_sequence = self._sequence
-                    if self.profile=='batch' and self._bt_line_views and self._clock.strategy_lengths is not None:
+                    if (getattr(feed,'_live_replay',False) or
+                            self.profile=='batch' and self._bt_line_views and self._clock.strategy_lengths is not None):
                         # Fixed BT forwards an Indicator output once whenever
                         # its input clock length differs, even if a clone has
                         # temporarily withdrawn its current visible bar.
                         count=getattr(line,'_bt_output_count',len(line._output))
-                        line._bt_output_capacity=len(self._clock)
+                        line._bt_output_capacity=(feed._buffer.capacity if self.profile=='stream'
+                                                  else len(self._clock))
                         if count!=feed.received:
                             line._append_output();count+=1
                         line._bt_output_count=count
@@ -1330,7 +1371,7 @@ class StrategyRuntime:
                 if isinstance(line, RuntimeLine):
                     line.to_series()
 
-    def _prepare_market(self, symbol, event, kind):
+    def _prepare_market(self, symbol, event, kind, *, source_ns=None, source_revision=False, logical_revision=False, completion_ns=None):
         if self.profile != "stream":
             raise ValueError("market ingestion requires the stream profile")
         clock = getattr(self, "_clock_feed", None)
@@ -1352,6 +1393,14 @@ class StrategyRuntime:
         if ts.tzinfo is None:
             raise ValueError("bar timestamp must be timezone aware")
         timestamp = int(ts.value)
+        if completion_ns is not None and (type(completion_ns) is not int or
+                completion_ns<timestamp or type(source_ns) is not int or completion_ns<source_ns):
+            raise ValueError('native completion observation must cover label and source')
+        if source_ns is not None:
+            if (type(source_ns) is not int or source_ns < 0 or
+                    (source_ns < timestamp and not logical_revision and completion_ns is None)):
+                raise ValueError('projected bar requires its observed source availability clock')
+            timestamp = source_ns
         numbers = {name: float(values[name]) for name in ("open", "high", "low", "close", "volume")}
         if not all(math.isfinite(v) for v in numbers.values()) or numbers["volume"] < 0:
             raise ValueError("invalid bar numbers")
@@ -1359,7 +1408,7 @@ class StrategyRuntime:
             numbers["open"], numbers["close"]
         ) <= numbers["high"]:
             raise ValueError("invalid OHLC bounds")
-        if timestamp < self._last_ts.get(symbol, -1):
+        if timestamp < self._last_ts.get(symbol, -1) and not source_revision:
             raise ValueError("bar timestamps must be monotonic per symbol")
         if feed._history is not None and feed.received >= self.prefix_history_limit:
             self._failed = True
@@ -1367,17 +1416,36 @@ class StrategyRuntime:
         normalized = MappingProxyType(dict(symbol=symbol, ts=ts, **numbers))
         return symbol, event, kind, timestamp, dict(numbers, datetime=ts.timestamp()), normalized
 
-    def _advance_market(self, prepared):
+    def _advance_market(self, prepared, *, logical_count=None):
         symbol, event, kind, timestamp, record, _ = prepared
         feed = self.feeds[symbol]
         if kind == "bar":
-            feed._buffer.append(record)
-            feed.revision += 1
-            self._mutation_epoch += 1
-            feed.received += 1
+            withdrawing = logical_count is not None and logical_count<feed.received
+            replacing = logical_count is not None and logical_count<=feed.received
+            if withdrawing:
+                # A BT clone can withdraw its single current logical bar. The
+                # queue/preceding snapshot remains bounded in its source view;
+                # no unobserved bar or earlier market quote is constructed.
+                feed._buffer.withdraw_current()
+                feed.received=logical_count
+                if feed._history is not None:
+                    for values in feed._history.values():values.pop()
+            if replacing:
+                if feed._buffer.cursor>=0:
+                    for name,value in record.items():
+                        feed._buffer.arrays[name][feed._buffer.cursor]=value
+            else:
+                feed._buffer.append(record)
+                feed.received+=1
+            feed._visible_label_ns=(int(pd.Timestamp(prepared[5]['ts']).value)
+                                    if feed.received else None)
+            feed.revision+=1
+            self._mutation_epoch+=1
             if feed._history is not None:
-                for name, value in record.items():
-                    feed._history[name].append(value)
+                for name,value in record.items():
+                    if replacing:
+                        if feed._history[name]:feed._history[name][-1]=value
+                    else:feed._history[name].append(value)
         else:
             feed.quote = event
         self._last_ts[symbol] = max(timestamp, self._last_ts.get(symbol, -1))
@@ -1389,7 +1457,7 @@ class StrategyRuntime:
         ))
         return RuntimeContext(clock_symbol, event, timestamp, self._sequence, entry_clock, market_callback)
 
-    def _dispatch_market(self, prepared, entry_clock=None, market_callback=None):
+    def _dispatch_market(self, prepared, entry_clock=None, market_callback=None, *, clock_count=None):
         # Every explicitly grouped window is visible before any indicator runs.
         self._sequence += 1
         active = [(item[0], item[5]) for item in prepared]
@@ -1397,7 +1465,22 @@ class StrategyRuntime:
         self._active_market_symbols = frozenset(symbol for symbol, _ in active)
         clock = getattr(self, "_clock_feed", None)
         if clock is not None:
-            clock.append(max(item[3] for item in prepared))
+            self._previous_strategy_count = clock.received
+            visible_stamps=[getattr(feed,'_visible_label_ns',None)
+                            for feed in self.feeds.values() if feed.received]
+            visible_stamps=[value for value in visible_stamps if value is not None]
+            stamp = (max(visible_stamps) if visible_stamps else
+                     max(int(pd.Timestamp(item[5]['ts']).value) if item[2] == 'bar'
+                         else item[3] for item in prepared))
+            if clock_count is not None and clock_count == clock.received:
+                clock._buffer.arrays['datetime'][clock._buffer.cursor] = stamp / 1_000_000_000
+                clock.last_ns = stamp
+                clock.revision += 1
+                if clock._history is not None:
+                    clock._history['datetime'][-1] = stamp / 1_000_000_000
+            else:
+                clock.append(stamp)
+            self._strategy_count = clock.received
             self._mutation_epoch += 1
             self._active_market_symbols |= {clock._name}
         self._stepping = True
@@ -1405,11 +1488,24 @@ class StrategyRuntime:
             self.context=context;self.strategy.runtime_context=context
             timer_callback=getattr(self,'_timer_callback',None)
             if callable(timer_callback):timer_callback()
-            for symbol, _, _, timestamp, _, event in prepared:
-                self.context = RuntimeContext(symbol, event, timestamp, self._sequence, entry_clock, market_callback)
-                self.strategy.runtime_context = self.context
+            if self._bt_line_views and self.profile=='stream':
+                by_symbol={item[0]:item for item in prepared}
                 for indicator in tuple(self._indicators):
-                    self._update_indicator(indicator, symbol)
+                    feed=self._feed_for(getattr(indicator,'data',None))
+                    if feed is None:feed=self.strategy.data
+                    symbol=getattr(feed,'_symbol',feed._name)
+                    item=by_symbol.get(symbol)
+                    self.context=(RuntimeContext(symbol,item[5],item[3],self._sequence,
+                        entry_clock,market_callback) if item is not None else context)
+                    self.strategy.runtime_context=self.context
+                    self._update_indicator(indicator,symbol)
+            else:
+                for symbol, _, _, timestamp, _, event in prepared:
+                    self.context=RuntimeContext(symbol,event,timestamp,self._sequence,
+                        entry_clock,market_callback)
+                    self.strategy.runtime_context=self.context
+                    for indicator in tuple(self._indicators):
+                        self._update_indicator(indicator,symbol)
             if clock is not None:
                 for indicator in tuple(self._indicators):
                     self._update_indicator(indicator, clock._name)
@@ -1436,6 +1532,64 @@ class StrategyRuntime:
             prepared = self._prepare_market(symbol, event, kind)
             self._advance_market(prepared)
             return self._dispatch_market((prepared,), entry_clock, 'runtime.step_market')
+        except BaseException as error:
+            self._failed = True
+            self.cleanup(error)
+            raise
+
+    def _step_market_projection(self, symbol, event, source_ns, *, logical_count=None):
+        """One observed native delivery, with a separately labelled bar view."""
+        self._running()
+        entry_clock = self._market_observation_clock()
+        try:
+            if logical_count is not None:
+                count = self.feeds[symbol].received
+                if type(logical_count) is not int or logical_count < 0 or logical_count not in (count-1,count,count+1):
+                    raise ValueError('replay projection must revise current or append next logical bar')
+            prepared = self._prepare_market(symbol,event,'bar',source_ns=source_ns,
+                source_revision=logical_count is not None,logical_revision=logical_count is not None)
+            self._advance_market(prepared,logical_count=logical_count)
+            return self._dispatch_market((prepared,),entry_clock,'runtime.step_market',clock_count=logical_count)
+        except BaseException as error:
+            self._failed = True
+            self.cleanup(error)
+            raise
+
+    def _step_market_projections(self, events, source_ns, *, dispatch=True, completion_ns=None):
+        """Atomically expose views from one native source arrival, then dispatch."""
+        self._running()
+        prepared = []
+        seen = set()
+        prior_counts=getattr(self,'_last_projected_callback_counts',
+            {symbol:feed.received for symbol,feed in self.feeds.items()})
+        entry_clock = self._market_observation_clock()
+        try:
+            for symbol, event, logical_count in events:
+                if symbol in seen:
+                    raise ValueError('one projected revision per feed per delivery required')
+                seen.add(symbol)
+                count = self.feeds[symbol].received
+                if logical_count is not None and (type(logical_count) is not int or
+                        logical_count < 0 or logical_count not in (count-1,count,count+1)):
+                    raise ValueError('replay projection must revise current or append next logical bar')
+                prepared.append((self._prepare_market(symbol,event,'bar',source_ns=source_ns,
+                    source_revision=True,logical_revision=logical_count is not None,
+                    completion_ns=completion_ns),logical_count))
+            if not prepared:
+                return None
+            for value, count in prepared:
+                self._advance_market(value,logical_count=count)
+            if not dispatch:
+                return None  # Native idle clone check only withdraws a queued view.
+            # BT forwards its strategy clock iff any Data length increased
+            # since the previous callback. Restoring a withdrawn clone counts
+            # as an increase even when another feed already has a larger len.
+            clock=getattr(self,'_clock_feed',None)
+            advanced=any(feed.received>prior_counts[symbol] for symbol,feed in self.feeds.items())
+            clock_count=(clock.received+int(advanced) if clock is not None else None)
+            self._last_projected_callback_counts={symbol:feed.received for symbol,feed in self.feeds.items()}
+            return self._dispatch_market(tuple(value for value,_ in prepared),entry_clock,
+                'runtime.step_market',clock_count=clock_count)
         except BaseException as error:
             self._failed = True
             self.cleanup(error)

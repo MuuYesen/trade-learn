@@ -25,14 +25,29 @@ class _Subscription:
     bar_type: object
     _name: str
     is_live: bool = True
+    _view_options: object = None
 
     def __post_init__(self):
         from tradelearn.backtest.parameters import Params
         from ._data_period import bar_period
         metadata = bar_period(self.bar_type)
-        self.p = self.params = Params(metadata)
+        from .bar_views import feed_context
+        self._view_context = feed_context({**metadata, **(self._view_options or {})})
+        self.p = self.params = Params(self._view_context.p.asdict())
+        self._tz = self._view_context._tz
+        self._calendar = self._view_context._calendar
+        self._declared_calendar = self._calendar
         self._timeframe = self.p.timeframe
         self._compression = self.p.compression
+
+    def _getnexteos(self):
+        from datetime import datetime
+        source = getattr(self, '_eos_source', None)
+        if source is not None:
+            return source._getnexteos()
+        feed = getattr(self, '_runtime_feed', None)
+        return ((datetime.min,0.) if feed is None or not len(feed) else
+                self._view_context._session_end_at(feed.datetime[0]))
 
 
 @dataclass(frozen=True)
@@ -265,6 +280,8 @@ class NautilusStore:
             if feed not in self._feeds:
                 self._feeds.append(feed)
             return feed
+        view_options = {name:parameters.pop(name) for name in
+                        ('tz','sessionstart','sessionend','calendar') if name in parameters}
         if parameters:
             if bar_type is not None:
                 raise ValueError('simple and native feed parameters are mutually exclusive')
@@ -282,7 +299,7 @@ class NautilusStore:
         name = str(bar_type.instrument_id) if name is None else name
         if not isinstance(name, str) or not name or any(feed._name == name for feed in self._feeds):
             raise ValueError('unique nonempty feed name required')
-        feed = _Subscription(self, bar_type, name)
+        feed = _Subscription(self, bar_type, name, _view_options=view_options)
         self._feeds.append(feed)
         return feed
 
@@ -307,7 +324,7 @@ class NautilusStore:
         if any(data not in self._feeds for data in engine.datas):
             raise ValueError('native Store cannot mix foreign feeds or polling drivers')
         names = [data._name for data in engine.datas]
-        if len(set(names)) != len(names) or len({id(data) for data in engine.datas}) != len(engine.datas):
+        if len({id(data) for data in engine.datas}) != len(engine.datas):
             raise ValueError('duplicate native feed registration')
         if engine.mode == 'paper' or set(engine.kwargs) - {'buffer_capacity'}:
             raise ValueError('native Store cannot combine paper/polling/runtime options')
@@ -316,8 +333,14 @@ class NautilusStore:
         from .components import strategy_spec,validate_components
         self._compiled_strategy_spec = strategy_spec(engine)
         validate_components(engine,account_provider=getattr(self,'account_provider',None))
-        if engine.calendars:
-            raise NotImplementedError('calendar scheduling is not implemented by the native Store')
+        if engine.calendars and self._driver is not None:
+            raise NotImplementedError('driver calendar scheduling requires its source lifecycle')
+        if self._driver is None:
+            for data in engine.datas:
+                context = data._view_context
+                context._calendar = (data._declared_calendar if getattr(data.p,'calendar',None) is not None
+                                     else engine._tradingcal)
+                data._calendar = context._calendar
         if engine.trade_on_close:
             raise ValueError('native execution cannot use backtest trade_on_close')
         if self._driver is not None:
@@ -333,6 +356,16 @@ class NautilusStore:
         from .components import native_sizer
         runtime.strategy.setsizer(native_sizer(self._engine))
         runtime.strategy.cerebro = self._engine
+        for symbol, data in getattr(self, '_runtime_feed_bindings',
+                                    [(data._name,data) for data in self._engine.datas]):
+            feed = runtime.feeds[symbol]
+            if getattr(data, '_view_context', None) is not None:
+                data._runtime_feed = feed
+                context = data._view_context
+                feed._getnexteos = data._getnexteos
+            recipe = getattr(data, '_live_bar_recipe', None)
+            if recipe is not None and recipe['kind'] == 'replay':
+                runtime.feeds[symbol]._live_replay = True
         runtime._component_after_start_callback=lambda:self._engine._install_timers(runtime)
         provider = getattr(self,'account_provider',None)
         if self._engine.analyzers or self._engine.observers or self._engine.timers or (self._engine.stdstats and provider is not None):
@@ -384,16 +417,42 @@ class NautilusStore:
                                 {'monitor_config': log_config,
                                  'strategy_observer_factories': TradeLogStrategy.strategy_observer_factories,
                                  '__module__': strategy_cls.__module__})
+        # Public names may repeat (a normal BT raw/derived clone). Durable
+        # execution routes use stable private identities, never public aliases.
+        from collections import Counter
+        names = Counter(data._name for data in engine.datas)
+        occupied = set(names)
+        bindings = []
+        for index, data in enumerate(engine.datas):
+            symbol = data._name
+            if not symbol or names[symbol] > 1:
+                symbol = f'__tl_view_{index}'
+                while symbol in occupied:
+                    symbol += '_'
+                occupied.add(symbol)
+            bindings.append((symbol,data))
+        self._runtime_feed_bindings = bindings
         host = create_execution_host(
             self.strategy_config, business_cls=strategy_cls, strategy_args=args,
-            parameters=parameters, feeds={data._name: 'bar' for data in engine.datas},
-            instruments={data._name: data.bar_type.instrument_id for data in engine.datas},
-            subscriptions=[data.bar_type for data in engine.datas],
+            parameters=parameters, feeds={symbol:'bar' for symbol,data in bindings},
+            instruments={symbol:data.bar_type.instrument_id for symbol,data in bindings},
+            subscriptions=list(dict.fromkeys(data.bar_type for data in engine.datas)),
             account_id=self.account_id, account_provider=self.account_provider,
             intent_path=self.state_path / 'intents.sqlite', intent_identity=self.intent_identity,
             frontend_broker=self._broker, buffer_capacity=self.buffer_capacity,
             runtime_observer_factory=self._prepare_runtime, monitor=monitor, sender_factory=sender_factory,
             failure_callback=self.stop)
+        from .bar_views import make_live_view
+        host._live_bar_views = {
+            symbol: make_live_view({**data._live_bar_recipe,'calendar':data._calendar})
+            for symbol,data in bindings if getattr(data, '_live_bar_recipe', None) is not None}
+        host._live_feed_metadata = {
+            symbol: {**{name:getattr(data.p,name,None) for name in
+                        ('timeframe','compression','tz','sessionstart','sessionend','calendar')},
+                     '_timeframe':data._timeframe,'_compression':data._compression}
+            for symbol,data in bindings}
+        host._feed_names = {symbol:data._name for symbol,data in bindings}
+        host._source_bar_types = {symbol:data.bar_type for symbol,data in bindings}
         # Static factory capability is assembly metadata, never Store event forwarding.
         factory = next(iter(self.exec_factories.values()))
         groups = getattr(factory, '_tradelearn_order_groups', None)

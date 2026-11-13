@@ -8,9 +8,9 @@
 
 ## NautilusStore：唯一执行装配入口
 
-通过TL使用cTrader的推荐发行目标命令为 `pip install "trade-learn[nautilus,tl-store]"`。TL的单向optional依赖选择真实发行包tl-store（当前0.2.1a1候选，内置cTrader），不要求用户另装adapter。未来适配器按需选择，不默认全部安装。独立NA用户可以只装tl-store及官方NA，不反向依赖TL或商业监控。当前组合仅验CPython3.13 Mac arm64/Linux x86_64；旧公开TL0.2.9没有新extra和统一Store能力，本地候选可装不表示公网PyPI已可用。
+通过TL使用cTrader的推荐发行目标命令为 `pip install "trade-learn[nautilus,tl-store]"`。TL的单向optional依赖选择真实发行包tl-store（正式TL0.3.2固定0.2.1a4，本轮未发行034源码固定已发行0.2.1a8，内置cTrader），不要求用户另装adapter。未来适配器按需选择，不默认全部安装。独立NA用户可以只装tl-store及官方NA，不反向依赖TL或商业监控。当前组合仅验CPython3.13 Mac arm64/Linux x86_64；旧公开TL0.2.9没有新extra和统一Store能力，本地候选可装不表示公网PyPI已可用。
 
-唯一公开Store类是 `tradelearn_runtime.NautilusStore`。官方适配器仍使用下方的 `NautilusStore(config, data_factories=..., exec_factories=...)`；TL-Store的cTrader使用 `NautilusStore(adapter="ctrader", config=adapter_config)`。随后都沿Cerebro.setbroker/adddata/addstrategy/run，不增加转发Store、第二Runtime或额外事件循环。构造/getdata/getbroker不连接、不读取凭据、不创建持久状态。旧一期DefaultStore及其包装、全局register_adapter入口和NautilusAdapterStore类已退出当前候选；历史验收只证明其原版本。
+当前源码唯一公开Store类是 `tradelearn.engine.stores.NautilusStore`（同一内部实现，正式032历史导入路径不变）。官方适配器仍使用下方的 `NautilusStore(config, data_factories=..., exec_factories=...)`；TL-Store的cTrader使用 `NautilusStore(adapter="ctrader", config=adapter_config)`。随后都沿Cerebro.setbroker/adddata/addstrategy/run，不增加转发Store、第二Runtime或额外事件循环。构造/getdata/getbroker不连接、不读取凭据、不创建持久状态。旧一期DefaultStore及其包装、全局register_adapter入口和NautilusAdapterStore类已退出当前候选；历史验收只证明其原版本。
 
 独立适配器由已安装的 `tradelearn.store_adapters` entrypoint按名称发现，或通过 `NautilusStore.register_adapter(name, factory)` 显式注册可信工厂。注册表只保存工厂，不保存账户实例；未安装、重名、未知/冲突配置明确拒绝。选择独立adapter不能同时另传官方factories、账户或策略组装参数；这些参数由adapter config唯一拥有。官方路径继续核对固定NA版本清单及实际官方factory类型身份，不接受未显式选择的第三方factory。
 
@@ -31,8 +31,7 @@ Store 仅组装配置、订阅、现有 ExecutionHost 与 NautilusBroker。`engi
 ```python
 import os
 from tradelearn import engine as bt
-from tradelearn_runtime import NautilusStore
-from tradelearn.strategy_logging.tradelearn import TradeLogStrategy
+from tradelearn.engine.stores import NautilusStore
 from nautilus_trader.common import Environment
 from nautilus_trader.live import LiveNodeConfig
 from nautilus_trader.model import AccountId, TraderId
@@ -42,9 +41,11 @@ from nautilus_trader.adapters.binance import (
     BinanceInstrumentProviderConfig, BinanceSpotMarketDataMode,
 )
 
-class MyStrategy(TradeLogStrategy):
+class MyStrategy(bt.Strategy):
+    params = (("period", 20),)
+
     def __init__(self):
-        ...
+        self.average = bt.talib.SMA(self.data.close, timeperiod=self.p.period)
 
     def next(self):
         ...
@@ -80,7 +81,7 @@ engine.addstrategy(MyStrategy)
 engine.run()
 ```
 
-`TradeLogStrategy` 在运行时复用同一个原生宿主日志器，工具包生成运行 ID、环境、账户/策略身份及本地日志上下文；用户无需 YAML 或手工创建 Runtime、Node、Sender。该例只记录本地日志，不启动远程 Sender。改用 `bt.Strategy` 则不创建日志器。
+普通 `bt.Strategy` 不需要日志基类。上例未传 monitor，默认不创建日志器；可选日志接线见下节，用户无需手工创建 Runtime、Node 或 Sender。最终简洁 cTrader 用户例的唯一源码为 [ctrader_monitor.py](../../examples/live/ctrader_monitor.py)；其客户端已接固定受信服务契约；真实服务部署和最终安装资格仍待，不能称已可用于生产远程发送。
 
 ### 参数归属与限制
 
@@ -88,7 +89,7 @@ engine.run()
 |---|---|
 | `NautilusStore(config=None, *, adapter=None, data_factories=None, exec_factories=None, strategy_config=None, state_dir=None, account_provider=None)` | `config` 为官方 `LiveNodeConfig`；factory 的键与对应 client config 的键完全匹配，并官方直接配置路径限定于固定NA版本清单及实际factory类型；独立适配器须显式选择已安装/注册的adapter，并校验API2、NA接口、配置及路由。此检查不是二进制来源认证。官方路径每Store恰好一个暴露account_id的exec config；独立路径由已选择的adapter从其权威配置派生，冲突时拒绝。连接、重连、路由、provider 等参数由官方配置拥有，不在 Store 重复定义。 |
 | `strategy_config` | 官方 `StrategyConfig`，省略时为 `StrategyConfig(strategy_id=StrategyId("TL-001"))`。NA 执行身份/OMS 等放这里，业务参数仍放 `addstrategy(MyStrategy, *args, **parameters)`，沿用 TL `params` 与构造参数机制。 |
-| `getdata(bar_type=None, *, name=None, **parameters)` | 接收原生 `BarType` 或其字符串；标的、周期、价格类型、聚合来源由其唯一表达。默认 feed 名为 instrument ID。当前每标的限一个 Bar 订阅，不新增 Tick 回调，不做隐式重采样、补空秒或历史回填。 |
+| `getdata(bar_type=None, *, name=None, **parameters)` | 接收原生 `BarType` 或其字符串；标的、周期、价格类型、聚合来源由其唯一表达。默认 feed 名为 instrument ID。未发行源码接收BT已有的 `tz/sessionstart/sessionend/calendar` 视图元数据；它们不重解释原生UTC输入。每标的仍只有一个原始Bar订阅；标准resample/replay可注册同源派生视图，不新增Tick回调、隐式补空秒或历史回填。 |
 | `getbroker()` | 返回该实例唯一的 `NautilusBroker`；启动时直接绑定 ExecutionHost，无 Store 逐笔转发。启动前读取现金/持仓显式失败。 |
 | `account_provider(cache, portfolio)` | 可选，沿用执行桥已有权威账户投影；涉及现金/权益读取时需要提供合格投影，缺失即拒绝，不推测余额等于权益。使用资格由具体来源验收。 |
 | `state_dir` | 本地状态根目录；按 trader/account/strategy 身份摘要隔离意图与日志。意图复用现有 `IntentJournal` 的独占锁与恢复检查，不是第二订单账本。重启须保留状态并完成原生订单核对，不能清空目录解除未知订单阻断。 |
@@ -98,7 +99,7 @@ engine.run()
 
 `Cerebro.addstore(store)` 可显式登记；正常 `setbroker`/`adddata` 已自动发现所属 Store，不必额外调用。此前的 `stores` 列表和 `addstore()` 仅保存对象，没有连接能力；旧回测与 polling 入口继续沿原路径运行。
 
-每 Store 单次运行，每账户各用独立 Store/Cerebro。重复运行应新建实例，保留同一持久身份；不使用全局 singleton。混合其他 Store、普通 feed、live poller、paper 驱动、多策略或优化均在创建 Node 前拒绝。流式analyzer、显式observer与SignalStrategy已接入现有Runtime；依赖回测Stats的后分析器、TL尚未实现的timer/calendar调度仍明确拒绝。未实现的addwriter生命周期明确拒绝，非BT writer查询便捷入口已退出。`run()` 须在没有运行中 asyncio loop 的线程调用；没有另造后台事件循环或异步 facade。NA 路径不生成回测 Stats，不将原生执行当作模拟撮合。
+每 Store 单次运行，每账户各用独立 Store/Cerebro。重复运行应新建实例，保留同一持久身份；不使用全局 singleton。混合其他 Store、普通 feed、live poller、paper 驱动、多策略或优化均在创建 Node 前拒绝。流式analyzer、显式observer与SignalStrategy已接入现有Runtime；已有普通原生timer、会话/calendar/DST和历史cheat timer已在源码接通同一Runtime；public Store LiveNode不提供pre-venue-match bar-open阶段，不能据官方BacktestEngine的SimulationModule可用就称该实盘阶段可用。依赖回测Stats的后分析器继续区分运行后统计。未实现的addwriter生命周期明确拒绝，非BT writer查询便捷入口已退出。`run()` 须在没有运行中 asyncio loop 的线程调用；没有另造后台事件循环或异步 facade。NA 路径不生成回测 Stats，不将原生执行当作模拟撮合。
 
 未知 Store、feed、native run 参数显式报错；官方适配器自己校验其字段。不支持的订单类型/控制、缺失账户/标的与恢复冲突继续由现有桥拒绝。特定 venue、账户经济数据及订单能力须逐项验收，不能由 factory 存在推定可交易。
 
@@ -136,7 +137,7 @@ a3已提供Mac arm64/Linux x86_64（glibc2.34+）真实wheel。新增平台及AB
 | Strategy.__init__/start/prenext/next/stop、params/self.p、指标 | 唯一StrategyRuntime由NA回调推进 | 已映射 | 源码/离线生命周期，未据此声明现役新接口已验 |
 | addminperiod、OHLCV lines、history_panel | 已交付bar及TL有限可见窗口 | 已映射当前数据，未增加历史请求 | 不做隐式回填；标的类别由券商metadata解析 |
 | getdata(dataname,timeframe,compression,price) | InstrumentId/BarType、官方内部time bar | adapter能力编译接缝已映射 | Seconds/Minutes/Days/Weeks/Months/Years与bid/ask/mid；MicroSeconds仅整毫秒可表达。固定NA实际周/月/年边界回放通过；空秒不补，溢出和不足毫秒拒绝 |
-| broker.getcash/getvalue/getposition | Cache/Portfolio及显式account_provider | 已映射单账户；多hedged仓须显式路由 | 资金投影须权威provider，不能用balance代equity；缺失仍拒绝 |
+| broker.getcash/getvalue/getposition | Cache/Portfolio及显式account_provider | 已映射单账户；多hedged仓须显式路由 | a8候选默认读取同轮cTrader原始free_margin/equity并保来源钟；其他来源须权威provider，不能用balance代equity；新版本组合仍待 |
 | buy/sell、submit_order(size,price,exectype) | OrderFactory.market/limit | Market/Limit已有；Stop/StopLimit、Trailing与原生关联组已补源码；最终安装产物仍须按各自清单核验 | **当前仅Market IOC**，并须通过原费证与账户核验；不能宣传Limit已可交易 |
 | close | 原有反向减仓意图及NA position_id/reduce_only | 已补typed close：自动核同账户/strategy的唯一仓，指定position_id选择hedged仓；reduce_only不可关闭，尺寸不能超过该仓；沿原Journal持久核路由 | typed close已实现；不得把未限定反向Market称券商close |
 | order_target_size/value/percent、target_weights | TL意图计算→同一submit入口 | 公开计算入口保留；依赖资金/仓位与订单类型资格 | 不能绕过缺资金或原仓位/尺寸保护 |
@@ -150,7 +151,7 @@ a3已提供Mac arm64/Linux x86_64（glibc2.34+）真实wheel。新增平台及AB
 | tif/valid | NA TimeInForce/expire_time | day/gtc/ioc/fok已映射；未指定保持GTC。date/datetime/timedelta/相对秒的GTD候选编译与恢复字段保留；固定NA模拟器两项过期边界资格仍未通过，当前新准入在broker/host/group提交前明确拒绝GTD，Market GTD同样拒绝 | 当前只接IOC；不能静默把其他TIF改为IOC |
 | size/price精度、账户路由、reduce_only/position_id | Instrument.make_qty/make_price、精确账户/仓位 | 已映射，不允许隐式四舍五入/路由覆盖 | 原centi-unit、账户/strategy/合约归属保护保留 |
 | notify_order/部分成交/终态/重复回报 | NA订单事件→TL投影 | 当前实现，跨类型/晚到终态修订仍须逐项闭包 | 现有150项协议基线按原来源复用，不覆盖新增类型 |
-| notify_trade | NA权威position事件→TL Trade通知 | 当前映射；不另造财务执行事实 | 须结合具体产品/费用证据验收，非模拟成交 |
+| notify_trade | NA权威position事件及官方关闭快照→TL Trade通知 | 后续未发行源码分列原生net realized_pnl、完整同币种佣金及gross投影；只在open/close发BT通知，partial change更新原生事实；翻仓不误读新周期cache，不重算账户现金 | 固定NA真实离线部分平仓/翻仓及缺费/身份负例已验；缺失/混币/冲突保持未知，逆向/调整/完整恢复和真实venue未据此合格 |
 | notify_cashvalue | NA权威资金投影→TL既有回调 | 已补：原生Bar推进前，经现有Runtime通知一次权威cash/equity快照；未覆盖callback不额外读取provider，缺失/非有限/布尔值拒绝 | 缺资金不填零 |
 | 重启/未决/UNKNOWN | 原IntentJournal→native cache/回报核对 | 已有Market/Limit恢复；Stop/StopLimit/Trailing核原始准入值；组单全部持久准备后一次原生提交，重启核对关联元数据（本地源码验证） | 未知结果不重发、原状态不清；OAuth锁/原子刷新/重启读取保留 |
 | Cerebro流式analyzer | 现有Runtime组件回调 | 已补start/on_bar/on_order/on_broker_event/on_trade/on_end/stop及get_analysis；复用TL现有组件辅助函数 | 不生成伪Backtest Stats；需要完整回测Stats的后分析器仍属回测路径 |
@@ -158,7 +159,7 @@ a3已提供Mac arm64/Linux x86_64（glibc2.34+）真实wheel。新增平台及AB
 | Cerebro.add_signal/signal_strategy | 现有SignalStrategy与唯一Runtime | 已补配置规范化，保留accumulate/concurrent与原signal计算，不改engine.strats/signals | 原生回放核同Broker、唯一Runtime及typed close，未据此声明所有venue支持 |
 | writer、timer/calendar | 独立报告/回测组件；timer/calendar未合格 | 非BT getwriter查询便捷入口已移出Cerebro；不宣称完整writer生命周期 | timer/calendar明确拒绝 |
 | 模拟资金/手续费/滑点/撮合、优化、回测Stats | 回测专属 | 回测保留，不转券商功能 | 无NA基础回测单独验收 |
-| nextstart、标准add_timer/notify_timer | 实时nextstart已由共同Runtime按首次暖机完成调度；默认委托next | timer调度尚未实现，add_timer明确拒绝 | 默认/自定义nextstart均归共同business.next且不双计 |
+| nextstart、标准add_timer/notify_timer | 实时nextstart已由共同Runtime按首次暖机完成调度；默认委托next | 普通/historical-cheat与native普通timer源码已实现；会话/DST/calendar/runtime注册分组已验，最终统一安装仍待 | 默认/自定义nextstart均归共同business.next且不双计 |
 
 固定版本证据入口：TL `tradelearn/backtest/strategy.py`、`engine/strategy.py`、
 `tradelearn_runtime/{broker,execution,store}.py`，NA安装包 `common.OrderFactory`公开签名，
@@ -177,27 +178,23 @@ TL-Store `tl_store/ctrader/execution.py` 的实际提交/拒绝分支。
 
 ### 可选 SQS 监控
 
-**0.3.2之后源码**：通用原生宿主允许普通`bt.Strategy`沿下方`monitor`配置透明接入日志，无需SDK基类或私有构造参数；`store.run(engine, monitor=True)`只开本地日志，不启动Sender。普通策略默认日志关闭，旧SDK基类默认本地日志仍兼容。私有driver的本地True开关尚未实现；其原远程绑定路径不变。普通策略本地开关已用固定官方NA真实离线Bar回放验证，远程链使用合成Sender验证；尚未进入正式wheel或真实AWS/券商验收。
+**最终入口（当前源码候选，未进入正式032）**：用 `from tradelearn.engine.stores import NautilusStore` 或 `bt.stores.NautilusStore` 组装 `getdata/getbroker`。普通 `bt.Strategy` 与 `bt.talib.SMA` 不接收私有运行对象或 SDK 基类；只调用 `cerebro.run()`。源码删除公开 Store.run，内部仍为同一官方 NA 宿主、Runtime 和退出流程。`monitor=True` 仅开通用原生宿主的本地日志；私有 driver 本地开关仍未实现，不计支持。
 
-本地源码已支持 `store.run(engine, monitor=...)` 直接使用受限 SQS 发送配置。`endpoint` 是完整队列 URL；`credentials` 是该队列的 AWS 发送凭据，字段沿现有发送器使用 `access_key_id`、`secret_access_key`、可选 `session_token`。区域从队列 URL 读取，不使用默认 AWS 身份链，不访问 Sentinel 领取配置，也不要求平台 token。
+监控用户配置只公开下列两字段。endpoint 是本人已注册受限发送队列的完整 URL；access_key_id/secret_access_key 是该队列的现有受限长期 IAM 发送钥对。示例字符串明确表示本人参数，不是可用生产凭据：
 
 ```python
-# 接入配置由服务方提供；实际秘密只放在用户私有配置中。
-store.run(engine, monitor={
-    "endpoint": sqs_queue_url,
-    "credentials": restricted_sender_credentials,
-    "receipt_origin": trusted_receipt_origin,
-    "archive_binding_id": archive_binding_id,
+cerebro.run(monitor={
+    "endpoint": "https://sqs.ap-southeast-1.amazonaws.com/123456789012/your-registered-queue.fifo",
+    "credentials": {
+        "access_key_id": "YOUR_RESTRICTED_SENDER_ACCESS_KEY_ID",
+        "secret_access_key": "YOUR_RESTRICTED_SENDER_SECRET_ACCESS_KEY",
+    },
 })
 ```
 
-`receipt_origin`、`archive_binding_id` 沿既有归档证明协议提供，不是交易账户参数，不能猜测或省略后放松原件清理条件。正式0.3.2中使用 `TradeLogStrategy` 时，Store 自动生成运行 ID、环境和策略/账户上下文，原生宿主与 TL observer 共用一个日志器；后台 Sender 复用原有文件 outbox、源段格式、重试和回执校验。仅 SQS ACK 不允许删除原件，缺归档证明保留本地日志。用户不用手工创建 Runtime、Node、Sender。
+用户不手填 receipt_origin/archive_binding_id，不传 session_token 或平台 token；内部已有 STS 兼容并未全局删除。归档绑定必须沿本人 IAM 和精确队列对应的受信服务注册核验，不能猜 URL 或相信未认证响应。**当前源码已接受信发现客户端**：固定 Sentinel TLS 服务的 monitor audience/精确队列挑战及签名证明，校验服务注册返回后启 Sender；WEB 服务已正式部署，既有注册 IAM→真实 STS/当前 PG 精确绑定与重放拒绝已验；同最终目标 wheel 的 Sender/归档原件证明 roundtrip 仍待。未取得可信绑定会明确提示 `TRUSTED_MONITOR_BINDING_UNAVAILABLE`，同一宿主仅保留本地日志，远程发送关闭。不能将本地保护通过冒充二字段远程可用。
 
-连接规格的构造只做语法校验；启用时先检查 SDK 依赖，再创建本地记录和后台发送。凭据仅保留在内存，停止时先关闭记录器、等待发送线程退出，再释放发送客户端；日志不包含发送凭据。IAM 资格只能由实际 AWS 请求确认，本轮以合成凭据/队列客户端验证本地链路，没有调用真实 AWS 或修改 IAM。发送失败保留重试状态和日志，不控制策略交易逻辑。
-
-此前讨论的普通平台 `token` 不作为 SQS 身份，`store.run(engine, monitor={"endpoint": ..., "token": ...})` 会明确拒绝；本轮没有新增平台 HTTP 接收服务或 Bearer 自动引导。
-
-数据说明：仅上传运行日志，不上传策略源码、券商密码、交易API密钥或OAuth凭据。
+内部既有源段/outbox、归档回执和完整原件校验继续保留。仅 SQS ACK 不允许删除原件；缺归档证明保留日志，不改变策略交易逻辑。凭据只留内存，停止时关闭记录器、等待发送器退出，再释放客户端；不记录凭据正文。当前定向验收覆盖普通策略、唯一 logger、真实官方 NA 离线回放、sender 退出和无可信绑定的本地保留；实际服务绑定/真实发送和统一最终 wheel 仍另验。
 
 ### 对标与本地验收
 
@@ -284,7 +281,11 @@ NA2.0.0rc7与现有TL-Store原生扩展、当前Python源码组合：93 passed /
 
 ### 后续源码的原生专属挂单控制（未发行）
 
-`buy/sell(..., post_only=True)` 沿已有 broker kwargs 接入，必须为布尔值，仅对带执行限价的 Limit/StopLimit/StopTrailLimit 生效。固定NA离线撮合与持久恢复证明已通过，尚未进入新wheel或公共版本；当前0.3.1不能据此使用。OHLCV回测不模拟venue的maker准入政策，显式True会拒绝，不忽略；cTrader当前能力边界及未知/断线恢复门保持。其他原生专属字段仍按已列缺口处理，不无条件透传。
+`buy/sell(..., post_only=True)` 沿已有 broker kwargs 接入，必须为布尔值，仅对带执行限价的 Limit/StopLimit/StopTrailLimit 生效。固定NA离线撮合与持久恢复证明已通过，尚未进入新wheel或公共版本；当前0.3.1不能据此使用。OHLCV回测不模拟venue的maker准入政策，显式True会拒绝，不忽略；cTrader当前能力边界及未知/断线恢复门保持。后续源码补入 `display_qty`、`trigger_type`、`emulation_trigger`、`exec_algorithm_id` 与伴随的 `exec_algorithm_params`，仍沿相同BT broker kwargs。display必须为正、精度无损且不超过总量；固定NA的非Market工厂接受该字段（包括StopMarket），但不外推为所有venue都支持冰山。trigger采用固定NA `TriggerType` 对象或名称，算法ID采用字符串或原生ID；固定NA2rc7的算法参数实际要求 `dict[str,str]`，数值不静默转字符串。真实QuoteTick+官方OrderEmulator、配置过的原单转发算法和两子单算法已有源码回放；算法必须预先装入同一官方Node/BacktestEngine，不由策略另外创建执行器。
+
+NA算法派生订单沿官方 `exec_spawn_id` 与缓存聚合API投影到已受理BT父单，累计成交价/完整同币种费用只读原生子单事实，原生主单减量不改变BT请求数量或产生虚假ACK；外来归属、重复分配使总量超过原请求、数量冲突会失败，缺费/混币仍未知。只持有投影，不另存成交账本或创建调度循环。固定NA默认算法取消父单并不保证子单也取消：子单仍活动时保留未完成状态与数量，只有原生全部确认后才报告Canceled。实际算法的子单撤销政策由其原生插件负责；不能把转发/分拆测试外推成任意TWAP、任意venue长期资格。已有SQLite intent保存新字段并复核类型/归属，恢复可从官方已减量主单与子单重建投影；同缓存启动重放已有定向验收，完整进程/断线与最终wheel仍保留验收门。 官方OrderEmulator释放可能把Limit/Stop类转换为Market/Limit；恢复仅在原始初始化、OrderEmulated、转换初始化、OrderReleased的真实同归属/数量/TIF/路由链完整时读取原准入类型、价格与控制proof，不把任意类型变化当合法释放；缺原证明仍拒绝。
+
+这组仅为后续源码，不属于R4安装wheel或已发布032；正式版本、自然venue资格与最终统一发行另核。其他原生专属字段仍按已列缺口处理，不无条件透传。
 
 ### 034候选：原生对象关闭与资格门
 
@@ -293,3 +294,67 @@ NA2.0.0rc7与现有TL-Store原生扩展、当前Python源码组合：93 passed /
 034源码在业务stop后退役共同broker的原生gateway，完成workers drain和Node dispose后只保留Python诊断；关闭日志器不再持有原生策略的绑定时钟。保留异常时只释放已结束的框架原生帧局部引用，原异常身份、消息、堆栈位置和未决intent事实不变。关闭后读取原生账户/持仓会明确失败，不从诊断对象制造行情或执行事实。用户策略仍是普通BT接口，不接收Host或清理胶水。
 
 新门包含日志开/关、失败退出、真实NA Node、保留business/logger/error及另一线程强制GC；native unraisable现在作为pytest失败。SDK源码仅strategy.py关闭引用与tradelearn.py有限034/API1边界变化，其余16文件与032冻结相同。私有应用driver及自然交易仍由消费者独立验收，不能把源码通过当已部署。
+
+
+### 未发行源码：权威基金观测与通知批次（2026-11-13）
+
+现有可信 `account_provider(cache, portfolio)` 返回现金/权益的同一账户观测时，可选携带 `fundmode`（严格bool）、`fundvalue` 与 `fundshares`（有限实数，份额不为负）。三个字段须同时存在；缺失不从现金或权益推造单位值/份额，零及负单位值保留。它们必须来自适配器已核的同账户、同币种、同观测边界的权威来源，不是策略手填的收益参数。普通无基金来源的策略继续使用账户权益；显式基金分析或 `notify_fund` 不把未知当零。现有NautilusBroker提供标准BT `get_fundmode/get_fundvalue/get_fundshares` 与同名属性，通知读取一次provider快照；没有新增用户构造参数、份额账本或现金流推算。
+
+该源码桥已用实际固定NA回放与明确合成provider验收；当前cTrader简单配置与NA自然账户事实**没有提供基金份额/NAV来源**，因此该自然能力仍未验，不能由离线合成值推断支持。正式032字节不变，最终统一候选安装另验。
+
+研究Engine多单通知沿BT broker批次表达：同一admission阶段先按提交次序发送全部Submitted，再按原次序发送Accepted；终态/控制事件边界及原生填单顺序不变。此为通知投影，不改变原生撮合、费用或账户事实；不外推NA异步venue通知为同步批次。
+
+
+### 未发行源码：实时派生Bar视图（2026-11-13）
+
+Store返回的原生Bar订阅可沿普通 `cerebro.resampledata(data, ...)` 或 `cerebro.replaydata(data, ...)` 注册派生视图；先 `adddata(data)` 再注册沿BT clone语义保留raw。唯一NA订阅及原生行情缓存不被派生OHLC替换，同一回调驱动既有有界聚合器和同一Runtime。replay仅替换当前逻辑Bar，持久指标恢复相邻逻辑Bar基线，不能把每个修订累计成新Bar。clone省略名称时沿BT使用空名，显式公共Data名称可以相同；`getdatabyname`选择最后注册的同名Data，内部订单路由按Data身份区分；未知开仓路由不能猜一个clone承接Trade。
+
+当前源码实际NA离线资格为默认Seconds/Minutes的2/7压缩、稀疏/跨午夜、raw＋clone/单视图、有界SMA及订单/Trade数据归属。真实原生订单消费原始源行情，而非重撮合派生Bar；期望价应按该原生行情验证。物理SQLite准入任务按真实Node异步边界运行，没绕过意图落盘。停止/断线/Node结束不是源EOF，不自动冲出未完成Bar。闭合的源交付时点与公开Bar标签分别保留，不能用未来标签补一个不存在的来源事件。
+
+这不是全部实时配置已合格：非默认flags、迟到/重复、calendar/higher-frame已分组实现并按精确源码独立验收；真实有限源EOF生命周期只在有来源完成事实时适用；driver自有派生和串接变换尚未实现。上述源码尚未最终wheel/正式发行，正式032和现役消费者不因此改变。
+
+
+未发行源码的会话接缝已按同一历史源转换函数投影到实时feed：普通SESSION_START/END timer、NY跨DST、晚注册全局calendar及显式来源覆盖，raw和daily clone已有实际NA/BT对照。`data.date2num/num2date` 与datetime视图保持标准BT语义，原生ns不改。独立验收与最终安装另列；这不外推为configured calendar replay或原生cheat已经完成。原生clock在source同刻触发晚于on_bar；官方模拟器的SimulationModule.pre_process则确有当前输入钩子，模拟器组装缺口与真实venue无法倒放的边界须分开，不将拒绝或缺桥写成上游全面不支持。
+
+### 2026-11-14 配置日历 replay 与 Linux 接入候选
+
+当前源码的 Days/Weeks/Months/Years replay 配置复用同一有界日历状态；source 或晚注册的全局 calendar、原生 session/DST 沿相同 feed 上下文转换。调整后的旧逻辑修订先交付，当前 raw bar 在该源事件的最终阶段才可见，普通策略长度取可见 Data 的逻辑长度。BT 的 feed `p.timeframe/p.compression` 保留源构造参数，实际派生周期在 `_timeframe/_compression`，不再混写。
+
+该组已完成固定 BT 及真实 NA 离线回放的源码资格，仍未进入统一正式 wheel。原生 live late/duplicate/撤回、明确源 EOF 和 native cheat 等剩余条目单列；停止 Node 不作为 EOF，不补造未完成 bar。
+
+IC 所需的普通 `bt.Strategy`、`bt.stores.NautilusStore`、唯一 `cerebro.run(monitor=...)` 已有 Linux CP313 单平台 build-only 候选并完成真实安装/离线 NA 资格。其精确文件与 SHA 由集成回执交消费者；不提供尚未正式发行的 `pip install trade-learn==0.3.4` 命令。当前正式版本与候选能力分列，真实本人 IAM/Sender/归档回执联合仍另验。
+
+实时到达子路径现支持官方 NA 明确准入的重复/迟到源事件与逻辑 replay 标签分离：原始 `RuntimeContext.ts_event_ns` 保持券商/源事件时钟，较新的 BT 逻辑标签不替代它。clone 只保存有界待交付修订和前一可见状态；撤回/恢复按 BT 的 Data/Strategy/Indicator 各自长度规则推进。固定状态指标在同一输入长度重算时恢复 checkpoint，不因另一个 feed 的回合重复消费 raw 值。
+
+这项资格不代表默认 NA 会接收乱序输入，也不代表 idle/check、真实源 EOF 或全部迟到订单经济已完成。旧历史 wall-clock clone/check 红例仍保留；节点停止不能被解释为源 EOF。对 NA 账户，cash、equity、notional/exposure、unrealized PnL 是不同原生事实；尚未完成的 scoped valuation 不用 exposure 填作 margin equity，缺 NAV/share 事实时不派生基金份额。
+
+#### 原生 idle 检查源码状态
+
+当前候选在既有 NA Actor Clock 上注册每个派生视图至多一个单次完成检查；没有新源 bar 时，只完成已观察的聚合，不构造新行情。默认子日 resample、启用边界时间调整的 replay 已有同观察时钟 BT/NA 数据与指标阶段对照；clone 的未来标签仍等 raw master，停止仅取消本 Actor 的内部检查，不视作 EOF。完成观察时钟与原始 source ns 分列，不能用检查时钟改写源行情时间。该源码尚未纳入统一正式 wheel。
+
+订单经济资格分开保留：idle 完成的 resample 上提交 Market 后，原生宿主可能在下一 raw 行情成交，而历史 BackBroker 要等被订购的 derived view 再推进。当前定向反例仍红，不能用数据/指标轨迹相同宣称这一成交时序也相同；真实场所成交也不能由第二撮合器改写。最终候选资格须明确各执行宿主与数据视图适用边界。
+
+#### 查询与执行宿主的资格边界
+
+当前源码的 `broker.getvalue/get_value(datas,mkt,lever)` 已补单币、无杠杆stocklike CASH的单/多/重复Data及global市场视图；MARGIN单Data仅投影原生有符号资产notional，不能称账户权益。显式空list/tuple沿固定BT忽略mkt，None才选择global市场组件。MARGIN多资产资本视图、FX/hedged及自然NAV/units缺来源时仍未知，未以拒绝计支持。
+
+原生Live执行不承诺重现历史BackBroker的模拟成交时序。BackBroker自身按orderedData推进才允许Market撮合；固定BT的live broker公开buy/transmit可以在Data未推进时即时发往endpoint。TL的NA路径同样保唯一NA执行权威，不再用另一BackBroker延迟、重算或改写真实成交。历史回测仍按对应BT模拟契约逐项验收，原始跨宿主差异记录保留。
+
+
+### 原生撤销成交与恢复（本轮源码候选）
+
+固定官方 NA 的 `OrderFillVoided` 经原订单缓存投影到同一 BT Order。数量和累计费用只读原生事实；原生 `VOIDED` 显式记录并映射 BT Canceled，原生重开保留原 CID 与待成交余量，不重建现金或补造平仓损益。算法子单按原生 spawn 根 ID 汇总到原始父单，持久意图不为子单新建提交权限；修正身份按子单 ID 与 correction ID 隔离，保留旧终态证明。恢复只装载当前缓存并记住有界原始修正事件，旧回报不会在后续真实成交后再次重开。
+
+这组尚未计入正式 TL 安装产物。`PositionAdjusted.apply_adjustment` 的模型能力与真实生产路径分开：固定 Python ExecutionClient 的标准订单回报入口不能接该非订单事件；本次实际 CfdSwapModule 只变更账户状态，没有发该位置回调，不据此自建调整账本或声称所有 venue 已支持。
+
+
+### 默认账户事实刷新（本轮源码候选）
+
+普通策略无需 SDK 基类来维持默认 cTrader 账户事实。带原生观察时间的 provider 在既有 NA Clock 上触发 `QueryAccount`，实际报表仍由同一账户执行客户端、Session 和原生账户缓存产生。SDK 启用时请求共用该调度，不增加第二轮询器；无实时观察时间的自定义 provider 与历史/离线驱动保持原生命周期。
+
+每次只允许一个在途查询，以新原生账户事件确认响应；无响应时由自有原生 deadline alert 明确失败。原有金额/币种/身份、观察窗口与过期检查不放宽，过期事实不能充作当前余额；停止时取消自有检查和未执行的回调。该源修复尚未计入正式 TL wheel，也不代表自然券商资金刷新或监控归档联合已通过。
+
+
+### 组件读取同一账户观察（本轮源码候选）
+
+原生 broker 的组件启动与每次 Analyzer/Observer 采样各有一个只读观察作用域：fund 探测和估值共享同一次 provider 返回，离开作用域即丢弃，不跨 bar 缓存、不代替原生账户事实。默认 `fund=None` 仍在启动时读取真实 mode；DrawDown 只将后续实际 bar 的值计入回撤，不把这个配置读取算入收益样本。原生与历史宿主的采样期继续分列。

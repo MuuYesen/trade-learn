@@ -69,3 +69,30 @@ def test_live_returns_requires_an_authoritative_account_provider():
     e.addanalyzer(bt.analyzers.Returns, timeframe=bt.TimeFrame.Days, compression=1)
     with pytest.raises(ValueError, match="authoritative account"):
         validate_components(e, account_provider=None)
+
+
+@pytest.mark.parametrize('options',[{}, {'riskfreerate':.03}, {'factor':365,'convertrate':False,'stddev_sample':True,'annualize':True}, {'fund':True}])
+def test_live_legacyannual_sharpe_uses_bounded_annual_state_and_same_bt_observed_values(options):
+    import backtrader as official
+    from tests.unit.engine.test_bt_sharpe_actual import legacy_annual_call
+    state={'cash':100.,'equity':100.}
+    class Business(bt.Strategy):
+        def next(self):state['equity']=float(self.data.close[0])
+    account=lambda:dict(state)
+    broker=NautilusBroker(SimpleNamespace(account=account))
+    runtime=StrategyRuntime(Business,feeds={'A':'bar'},broker=broker,capacity=2)
+    engine=bt.Cerebro(stdstats=False)
+    engine.addanalyzer(bt.analyzers.SharpeRatio,_name='ratio',legacyannual=True,**options)
+    components=LiveComponents(engine,runtime,account_provider=account)
+    try:
+        runtime.start()
+        for day,value in zip(['2023-01-01','2023-12-31','2024-01-01','2024-12-31','2025-01-01','2025-12-31'],[110.,120.,140.,150.,170.,160.]):
+            runtime.step_market('A',dict(ts=day+'T00:00:00Z',open=value,high=value,low=value,close=value,volume=1))
+            components.after_market()
+        runtime.stop();components.finish()
+        analyzer=runtime.strategy.analyzers.ratio
+        assert dict(analyzer.get_analysis())==pytest.approx(legacy_annual_call(official,options))
+        assert analyzer._count==3
+        assert all(len(values)==2 for values in runtime.feeds['A']._buffer.arrays.values())
+        assert not hasattr(analyzer,'anret')
+    finally:runtime.cleanup()

@@ -25,10 +25,10 @@ def test_closed_native_store_actor_is_released_on_its_owner_before_cyclic_gc(tmp
         value._build_node = lambda: Node([], error=primary if failure else None)
         if failure:
             with pytest.raises(ValueError) as caught:
-                value.run(engine, monitor=True) if logging else engine.run()
+                engine.run(monitor=True) if logging else engine.run()
             assert caught.value is primary
         else:
-            value.run(engine, monitor=True) if logging else engine.run()
+            engine.run(monitor=True) if logging else engine.run()
         return captured[0], primary
     enabled = gc.isenabled()
     try:
@@ -83,7 +83,7 @@ def test_real_native_node_dispose_releases_actor_even_with_business_result_retai
             def dispose(self):
                 native.dispose()
         value._build_node=lambda:Node()
-        result=value.run(engine,monitor=True) if logging else engine.run()
+        result=engine.run(monitor=True) if logging else engine.run()
         return captured[0],result
     enabled=gc.isenabled()
     try:
@@ -133,7 +133,7 @@ def test_durable_worker_failure_keeps_original_error_but_releases_native_owner(t
                     task=None
         value._build_node=lambda:Node([])
         with pytest.raises(ValueError) as caught:
-            value.run(engine,monitor=True) if logging else engine.run()
+            engine.run(monitor=True) if logging else engine.run()
         assert caught.value is primary
         assert request.client_oid in value.getbroker()._unresolved
         return captured[0],primary

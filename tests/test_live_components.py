@@ -3,7 +3,7 @@ from tradelearn.backtest.event_runtime import StrategyRuntime
 from types import SimpleNamespace as NS
 import pytest
 pytest.importorskip('nautilus_trader')
-from tradelearn_runtime import NautilusStore
+from tradelearn.engine.stores import NautilusStore
 from tradelearn import engine as bt
 
 
@@ -138,6 +138,11 @@ def test_native_store_components_and_signal_strategy_replay_use_one_runtime(tmp_
         business=bridge.frontend.strategy
         assert isinstance(business,SignalStrategy) and business.broker is store.getbroker()
         assert business.observers.fills.values[-1]==2 and business.observers.trades.values[-1]==1
+        # Public BT marker lines project real native executions, separately
+        # from retained legacy diagnostic counts.
+        assert 1000. in business.observers.fills.buy.get(size=3)
+        assert 1000. in business.observers.fills.sell.get(size=3)
+        assert 0. in business.observers.trades.pnlplus.get(size=3)
         assert engine.analyzer_results['stream']['kinds'].count('fill')==2
         orders=sorted(native.cache.orders(),key=lambda order:order.ts_init)
         assert [order.is_reduce_only for order in orders]==[False,True]

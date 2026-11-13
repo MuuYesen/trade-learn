@@ -190,7 +190,16 @@ class Cerebro:
 
     def replaydata(self, dataname, name=None, **kwargs):
         from .replaying import replay_feed
-        data=replay_feed(dataname,clone=any(dataname is item for item in self.datas),**kwargs)
+        if '_target' in kwargs:
+            raise TypeError('unknown replay parameter: _target')
+        from copy import copy
+        clone=any(dataname is item for item in self.datas)
+        parent=next((recipe for recipe in reversed(self._calendar_transforms)
+                     if recipe['target'] is dataname),None)
+        original=copy(dataname)
+        data=replay_feed(dataname,clone=clone,**kwargs)
+        self._calendar_transforms.append(dict(kind='replay',target=data,source_ref=dataname,
+            original=original,parent=parent,clone=clone,options=dict(kwargs)))
         self.adddata(data,name=name)
         self._doreplay=True
         return data
@@ -327,6 +336,7 @@ class Cerebro:
         from copy import copy
         from ._calendar import resolve_calendar
         from .resampling import resample_feed
+        from .replaying import replay_feed
         for data in self.datas:
             declared = getattr(getattr(data,'p',None),'calendar',None)
             data._calendar = resolve_calendar(declared) if declared is not None else self._tradingcal
@@ -339,10 +349,15 @@ class Cerebro:
             source._calendar = resolve_calendar(declared) if declared is not None else self._tradingcal
             target = recipe['target']
             name, identifier = target._name, target._id
-            resample_feed(source, clone=recipe['clone'], _target=target, **recipe['options'])
+            transform=replay_feed if recipe.get('kind')=='replay' else resample_feed
+            transform(source,clone=recipe['clone'],_target=target,**recipe['options'])
             target._name, target._id = name, identifier
             if recipe['clone']:
                 target._eos_source=recipe['source_ref']
+                if recipe.get('kind')=='replay' and getattr(target,'_native_delivery_views',False):
+                    # Preparation uses an immutable source view, but delivery
+                    # phases belong to the actually registered raw Data.
+                    target._replay_source=recipe['source_ref']
 
     def addsizer(self, sizer: type[Any], **kwargs: Any) -> None:
         self._sizer_spec = (sizer, kwargs)

@@ -5,6 +5,7 @@ or position engine. A submit exception leaves an unresolved intent and is never
 converted into a broker rejection.
 """
 from itertools import count
+from contextlib import contextmanager
 from threading import get_ident
 import math
 import uuid
@@ -55,6 +56,7 @@ class NautilusBroker:
         self._active_orders = {}
         self._owners = {}
         self._seen = {}
+        self._void_event_payloads = {}
         self._unresolved = set()
         self._recovery_blocks = set()
         self._thread = get_ident()
@@ -186,7 +188,7 @@ class NautilusBroker:
         oid = kwargs.pop('client_oid',None) or str(uuid.uuid4())
         if oid in self._orders or self.gateway.lookup_order(oid) is not None:
             raise ValueError('client order ID reuse requires reconciliation, not resubmission')
-        request = OrderRequest(data._name,'buy' if side==Order.Buy else 'sell',float(size),
+        request = OrderRequest(getattr(data,'_symbol',data._name),'buy' if side==Order.Buy else 'sell',float(size),
                                {Order.Market:'market',Order.Limit:'limit',Order.Stop:'stop',Order.StopLimit:'stop_limit',Order.StopTrail:'stop_trail',Order.StopTrailLimit:'stop_trail_limit'}[exectype],
                                limit_price=pricelimit if exectype in (Order.StopLimit,Order.StopTrailLimit) else (price if exectype==Order.Limit else None),
                                stop_price=price if exectype in (Order.Stop,Order.StopLimit,Order.StopTrail,Order.StopTrailLimit) else None,
@@ -269,12 +271,38 @@ class NautilusBroker:
                 self._notify(owner,value)
         return order
 
-    def apply(self, client_oid, *, status, filled_qty, avg_price=None, event_id=None, commission=None, native_ts_ns=None, native_evidence=None, total_qty=None, native_event=None):
+    def apply(self, client_oid, *, status, filled_qty, avg_price=None, event_id=None, commission=None, native_ts_ns=None, native_evidence=None, total_qty=None, native_event=None, native_correction=None):
         self._check_mutation()
         if client_oid not in self._orders:
             raise RuntimeError('strategy order event lacks recovered frontend intent')
+        correction=None
+        raw_correction=None
+        initial_payload=(status,filled_qty,avg_price,commission,total_qty,
+            tuple(sorted(native_event.items())) if native_event is not None else None)
+        if native_correction is not None:
+            from .order_corrections import native_void_evidence,native_void_payload
+            if not isinstance(native_correction,tuple) or len(native_correction) not in (2,3):
+                raise ValueError('native correction requires actual order/event pair')
+            raw_correction=native_void_payload(native_correction[1])
+            correction_key=(client_oid,event_id)
+            if correction_key in self._void_event_payloads:
+                if (self._void_event_payloads[correction_key]!=raw_correction or
+                        (correction_key in self._seen and self._seen[correction_key][:-1]!=initial_payload)):
+                    raise ValueError('conflicting native correction replay')
+                return False
+            if len(self._void_event_payloads)>=4096:
+                raise RuntimeError('native correction retention bound reached; reconciliation required')
+            correction=native_void_evidence(native_correction)
+            if (correction['client_oid']!=client_oid or correction['event_id']!=event_id or
+                    correction['native_status']!=status or float(correction['filled_qty'])!=float(filled_qty) or
+                    correction['avg_price']!=(float(avg_price) if avg_price is not None else None) or correction['commission']!=commission or
+                    correction['native_ts_ns']!=native_ts_ns or not isinstance(native_event,dict) or
+                    native_event.get('type')!='OrderFillVoided' or native_event.get('event_id')!=event_id or
+                    native_event.get('ts_event')!=native_ts_ns):
+                raise ValueError('native correction differs from projected snapshot')
         payload=(status,filled_qty,avg_price,commission,total_qty,
-                 tuple(sorted(native_event.items())) if native_event is not None else None)
+                 tuple(sorted(native_event.items())) if native_event is not None else None,
+                 tuple(sorted(correction.items())) if correction is not None else None)
         key=(client_oid,event_id) if event_id is not None else (client_oid,payload)
         if key in self._seen:
             if self._seen[key] != payload:
@@ -284,7 +312,7 @@ class NautilusBroker:
         mapping={'INITIALIZED':Order.Created,'EMULATED':Order.Submitted,'RELEASED':Order.Submitted,
                  'SUBMITTED':Order.Submitted,'ACCEPTED':Order.Accepted,
                  'PARTIALLY_FILLED':Order.Partial,'FILLED':Order.Completed,'CANCELED':Order.Canceled,
-                 'EXPIRED':Order.Expired,'REJECTED':Order.Rejected,'DENIED':Order.Rejected}
+                 'EXPIRED':Order.Expired,'REJECTED':Order.Rejected,'DENIED':Order.Rejected,'VOIDED':Order.Canceled}
         if status in ('TRIGGERED','PENDING_CANCEL','PENDING_UPDATE'):
             mapping[status] = Order.Partial if float(filled_qty) > 0 else Order.Accepted
         if status not in mapping:
@@ -295,9 +323,11 @@ class NautilusBroker:
         new_total=old_total if total_qty is None else float(total_qty)
         if not math.isfinite(new_total) or new_total <= 0 or new_total < old:
             raise ValueError('invalid native total quantity revision')
-        if not math.isfinite(qty) or qty<old or qty>new_total:
+        if correction is not None and (float(correction['total_qty'])!=new_total or new_total!=old_total or qty>old):
+            raise ValueError('native correction changed total size or increased fills')
+        if not math.isfinite(qty) or (qty<old and correction is None) or qty<0 or qty>new_total:
             raise ValueError('nonmonotonic cumulative fill')
-        if not order.alive() and (mapping[status] != order.status or qty != old or new_total != old_total):
+        if not order.alive() and correction is None and (mapping[status] != order.status or qty != old or new_total != old_total):
             raise ValueError('conflicting terminal replay requires reconciliation')
         if qty and (avg_price is None or not math.isfinite(float(avg_price))):
             raise ValueError('filled order requires authoritative average price')
@@ -319,15 +349,17 @@ class NautilusBroker:
         order.info['submission_state']=status
         order.info['native_status']=status
         order.info['native_evidence']=native_evidence
+        if correction is not None:order.info['native_correction']=dict(correction)
         if native_event is not None:
             order.info['native_event'] = dict(native_event)
             order.info['reason'] = native_event.get('reason')
         if native_ts_ns is not None:order.info['native_ts_ns']=int(native_ts_ns)
         # Match the frontend's pending delta without applying synthetic fills.
-        pending=owner._pending_size.get(order.data,0)+sign*(new_total-old_total)
-        released=(new_total-old) if terminal and was_alive else delta
-        owner._pending_size[order.data]=pending-sign*released
+        old_remaining=(old_total-old) if was_alive else 0.
+        new_remaining=(new_total-qty) if not terminal else 0.
+        owner._pending_size[order.data]=owner._pending_size.get(order.data,0)+sign*(new_remaining-old_remaining)
         self._seen[key]=payload
+        if raw_correction is not None:self._void_event_payloads[key]=raw_correction
         self._unresolved.discard(client_oid)
         if terminal:self._recovery_blocks.discard(client_oid)
         self._notify(owner,order)
@@ -358,6 +390,15 @@ class NautilusBroker:
         from .notification_evidence import native_event_evidence
         projector=getattr(self.gateway,'_spawn_projection',None)
         projection=projector(native) if callable(projector) else None
+        from .order_corrections import native_void_payload,native_void_evidence,retained_native_voids
+        from nautilus_trader.model import OrderFillVoided
+        history=getattr(self.gateway,'_retained_native_voids',None)
+        voids=history(native) if callable(history) else retained_native_voids(native)
+        if len(self._void_event_payloads)+len(voids)>4096:
+            raise RuntimeError('native correction retention bound reached; reconciliation required')
+        for event_id,raw in voids.items():self._void_event_payloads[(oid,event_id)]=raw
+        if type(native.last_event) is OrderFillVoided:
+            order.info['native_correction']=native_void_evidence((native,native.last_event))
         if projection is not None:
             if projection.pop('client_oid')!=oid:raise ValueError('native recovery primary differs from request')
             self.apply(oid,**projection,event_id='recovery:'+str(native.last_event.event_id),
@@ -397,7 +438,7 @@ class NautilusBroker:
             return NotImplemented  # Existing private typed-close policy owns its route.
         if kwargs.get('reduce_only', True) is not True:
             raise ValueError('close cannot disable reduce-only protection')
-        route = controls(data._name, position_id=kwargs.pop('position_id', None))
+        route = controls(getattr(data,'_symbol',data._name), position_id=kwargs.pop('position_id', None))
         if route is None:return None
         maximum = float(route['size'])
         quantity = maximum if not size else float(size)
@@ -423,7 +464,7 @@ class NautilusBroker:
 
     def getposition(self, data):
         self._check_thread()
-        return self.gateway.position(data._name)
+        return self.gateway.position(getattr(data,'_symbol',data._name))
 
     def getcommissioninfo(self, data):
         """Return the BT sizing policy; fills retain their native reported fees."""
@@ -444,16 +485,118 @@ class NautilusBroker:
             interest=interest, interest_long=interest_long, leverage=leverage,
             automargin=automargin), name)
 
+    @contextmanager
+    def _account_observation_scope(self):
+        """Share one read only within a component observation, never across bars."""
+        self._check_thread()
+        depth=getattr(self,'_account_observation_depth',0)
+        if depth==0:self._account_observation_values=None
+        self._account_observation_depth=depth+1
+        try:yield
+        finally:
+            self._account_observation_depth-=1
+            if self._account_observation_depth==0:self._account_observation_values=None
+
+    def _account_values(self):
+        if not getattr(self,'_account_observation_depth',0):return self.gateway.account()
+        if self._account_observation_values is None:
+            self._account_observation_values=dict(self.gateway.account())
+        return self._account_observation_values
+
     def _money(self, name):
         self._check_thread()
-        value=self.gateway.account().get(name)
+        value=self._account_values().get(name)
         if isinstance(value, bool) or value is None or not math.isfinite(float(value)):
             raise ValueError(f'account {name} unavailable')
         return float(value)
 
     def getcash(self): return self._money('cash')
     get_cash=getcash
-    def getvalue(self, datas=None):
-        if datas: raise ValueError('subset valuation is unsupported')
-        return self._money('equity')
+    def getvalue(self, datas=None, mkt=False, lever=False):
+        self._check_thread()
+        # BT routes explicit empty containers through _get_value, which
+        # ignores mkt. None alone selects the cached market-only component.
+        if datas is not None and not datas:mkt=False
+        if not datas and not (mkt or lever):return self._money('equity')
+        selected=list(datas) if datas else None
+        requests=None
+        if selected is not None:
+            owner=getattr(self,'owner',None)
+            if owner is None:raise RuntimeError('native broker has no running strategy')
+            if any(not any(data is owned for owned in owner.datas) for data in selected):
+                raise ValueError('selected Data does not belong to this strategy')
+            requests=[]
+            for data in selected:
+                commission=self.getcommissioninfo(data)
+                if not commission.stocklike or commission.get_leverage()!=1.:
+                    raise ValueError('native cash subset requires unleveraged stocklike valuation')
+                price=float(data.close[0])
+                if not math.isfinite(price) or price<=0:
+                    raise ValueError('selected Data price must be finite and positive')
+                requests.append((getattr(data,'_symbol',data._name),price))
+        source=getattr(self.gateway,'cash_valuation',None)
+        if not callable(source):raise ValueError('authoritative native cash valuation source required')
+        cash,values=source(requests)
+        if ((requests is not None and len(values)!=len(requests)) or
+                isinstance(cash,bool) or not math.isfinite(float(cash)) or
+                any(isinstance(value,bool) or not math.isfinite(float(value)) for value in values)):
+            raise ValueError('complete finite native cash subset observation required')
+        if selected is None:
+            # Cash is unleveraged: mkt selects the actual native asset/equity
+            # component; lever has no effect on this qualified account model.
+            return math.fsum(map(float,values)) if mkt else math.fsum([float(cash),*map(float,values)])
+        # Fixed BT returns raw asset value for one Data; multiple selected
+        # entries include cash and preserve explicit duplicate entries.
+        return float(values[0]) if len(selected)==1 else math.fsum([float(cash),*map(float,values)])
     get_value=getvalue
+
+    @staticmethod
+    def _fund_source(snapshot):
+        """Read optional source facts, never derive units from account equity."""
+        fields = ('fundmode', 'fundvalue', 'fundshares')
+        if not any(name in snapshot for name in fields):
+            return None
+        if not all(name in snapshot for name in fields):
+            raise ValueError('complete authoritative account fund facts required')
+        if type(snapshot['fundmode']) is not bool:
+            raise ValueError('account fundmode must be a boolean')
+        values = []
+        for name in ('cash', 'equity', 'fundvalue', 'fundshares'):
+            value = snapshot.get(name)
+            if isinstance(value, bool) or value is None or not math.isfinite(float(value)):
+                raise ValueError(f'authoritative account fund {name} unavailable')
+            values.append(float(value))
+        if values[-1] < 0:
+            raise ValueError('authoritative account fundshares cannot be negative')
+        return tuple(values)
+
+    def _fund_notification_facts(self):
+        self._check_thread()
+        return self._fund_source(self._account_values())
+
+    def get_fundmode(self):
+        self._check_thread()
+        # Absent fund mode selects ordinary equity analysis, not invented NAV.
+        if getattr(self.gateway, '_account_provider', ...) is None:
+            return False
+        snapshot = self._account_values()
+        facts = self._fund_source(snapshot)
+        return snapshot['fundmode'] if facts is not None else False
+
+    fundmode = property(get_fundmode)
+
+    def get_fundvalue(self):
+        facts = self._fund_notification_facts()
+        if facts is None:
+            raise ValueError('authoritative account fund facts unavailable')
+        return facts[2]
+
+    fundvalue = property(get_fundvalue)
+
+    def get_fundshares(self):
+        facts = self._fund_notification_facts()
+        if facts is None:
+            raise ValueError('authoritative account fund facts unavailable')
+        return facts[3]
+
+    fundshares = property(get_fundshares)

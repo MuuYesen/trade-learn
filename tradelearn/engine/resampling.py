@@ -119,15 +119,15 @@ class _ConfiguredSubdayResampler:
             for name,value in row.items():
                 if name not in {'open','high','low','close','volume'}:self._bar[name]=value
         self._last=stamp
-    def _label(self,greater):
-        if not (self.options['bar2edge'] and self.options['adjbartime']):return self._last
+    def _label(self,greater,*,boundary=False):
+        if not boundary and not (self.options['bar2edge'] and self.options['adjbartime']):return self._last
         if self._eos is None:return self._last_eos
         import pandas as pd
         from datetime import timedelta
         from ._timezone import localize
         d=self._datetime(self._last,True)
         point,_=self._point(self._last,True)
-        point=(point//self.compression+int(self.options['rightedge']))*self.compression
+        point=(point//self.compression+int(boundary or self.options['rightedge']))*self.compression
         days,within=divmod(point*self.unit,86_400_000_000_000)
         seconds,ns=divmod(within,1_000_000_000)
         hour,seconds=divmod(seconds,3600);minute,second=divmod(seconds,60)
@@ -195,7 +195,13 @@ class _ConfiguredCalendarResampler(_ConfiguredSubdayResampler):
     def _crossed(self,stamp):
         if self.timeframe==TimeFrame.Days:return self._check_eos(stamp,False)
         previous=self._datetime(self._last);current=self._datetime(stamp,True)
-        if self.timeframe==TimeFrame.Weeks:return current.isocalendar()[:2]>previous.isocalendar()[:2]
+        if self.timeframe==TimeFrame.Weeks:
+            # Fixed BT asks a supplied calendar for its last trading weekday
+            # even on a generic crossing check. ISO-week rollover is only the
+            # fallback without a calendar; otherwise compression is double-counted.
+            if self.source._calendar is not None:
+                return bool(self.source._calendar.last_weekday(current.date()))
+            return current.isocalendar()[:2]>previous.isocalendar()[:2]
         if self.timeframe==TimeFrame.Months:return (current.year,current.month)>(previous.year,previous.month)
         return current.year>previous.year
     def push(self,stamp,row,available=None):
@@ -214,8 +220,10 @@ class _ConfiguredCalendarResampler(_ConfiguredSubdayResampler):
         if consumed:self._merge(row,stamp)
         output=[]
         if self._bar is not None:
-            complete=onedge or not check
-            if not complete and (self._componly or self._crossed(stamp)):
+            # A calendar period edge suppresses generic crossing checks. It
+            # does not itself complete a compressed bar until count divides.
+            complete=onedge
+            if not complete and check and (self._componly or self._crossed(stamp)):
                 self._count+=1;complete=self._count%self.compression==0
             if complete:output.append(self._emit(stamp if onedge else self._label(True),available))
         if not consumed:self._merge(row,stamp)
@@ -333,6 +341,9 @@ def resample_feed(source, *, clone=False, _target=None, **options):
         raise NotImplementedError('subsecond resample incremental delivery is not yet implemented')
     frame = getattr(source, '_frame', None)
     if frame is None or getattr(source, 'is_live', False):
+        if getattr(source, 'is_live', False) and getattr(source, '_store', None) is not None:
+            from tradelearn_runtime.bar_views import register_resample
+            return register_resample(source, values, clone=clone)
         raise NotImplementedError('stream resample delivery is not yet implemented')
     declared_session=(source._tz is not None or getattr(source.p,'sessionstart',None) not in (None,__import__('datetime').time.min)
                       or getattr(source.p,'sessionend',None) not in (None,__import__('datetime').time(23,59,59,999990)))

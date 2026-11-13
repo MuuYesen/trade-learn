@@ -195,7 +195,7 @@ class Strategy:
         return self._fallback_position(data)
 
     def getdatabyname(self, name: str) -> Any:
-        for data in self.datas:
+        for data in reversed(self.datas):
             if getattr(data, "_name", None) == name:
                 return data
         raise KeyError(f"data feed {name!r} not found")
