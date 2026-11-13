@@ -164,12 +164,9 @@ class Backtest:
             self._cash,
             self._commission,
         )
-        # Reset broker for fresh run
-        self.broker = RustBroker(
-            cash=self._cash,
-            commission=self._commission,
-            match_mode=self.match_mode,
-        )
+        # Preserve the effective economic configuration while resetting run state.
+        from tradelearn.backtest._optimize import fresh_broker
+        self.broker = fresh_broker(self.broker)
         self.broker.configure_matching(trade_on_close=self.trade_on_close)
         self.broker.set_storage(self._storage)
         self.runtime_config = BacktestRuntimeConfig.from_owner(self)
@@ -208,13 +205,27 @@ class Backtest:
         grid = expand_grid(kwargs)
         if not grid:
             raise ValueError("Lite optimize requires a nonempty parameter grid")
+        from copy import deepcopy
+        from tradelearn.backtest._optimize import (
+            historical_template, effective_config, execute_trial, cancel_remaining, strategy_config,
+        )
+        template = historical_template(self)
+        config = effective_config(template)
+        self.trial_records = []
         best_res, best_params = None, None
-        for params in tqdm(grid, desc="Backtest.optimize"):
-            trial = Backtest(
-                self._data, self._strategy_cls, cash=self._cash,
-                commission=self._commission, match_mode=self.match_mode,
-                trade_on_close=self.trade_on_close, stats_mode=self.stats_mode,
-            ).run(**params)
+        for index, params in enumerate(tqdm(grid, desc="Backtest.optimize")):
+            try:
+                owner = deepcopy(template)
+                trial_params = deepcopy(params)
+                owner.strats = [(self._strategy_cls, (), trial_params)]
+                trial = execute_trial(self.trial_records, params,
+                    {**config, "strategies": [strategy_config(self._strategy_cls, (), params)]},
+                    lambda: owner.run(**trial_params), lambda result: result["return_pct"])
+            except BaseException:
+                cancel_remaining(self.trial_records, [(item,
+                    {**config, "strategies": [strategy_config(self._strategy_cls, (), item)]})
+                    for item in grid[index + 1:]])
+                raise
             if best_res is None or trial["return_pct"] > best_res["return_pct"]:
                 best_res, best_params = trial, params
         smart_print(f"Best Params: {best_params}")

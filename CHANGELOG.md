@@ -5,6 +5,14 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
+## [0.3.5] - 2026-11-14
+
+- 四搜索入口共用已有单次历史回测试验执行与完整记录；保 Engine 的 BT 嵌套返回、Lite 最优 Stats、网格结果和 Optuna 原生 Study。隔离每轮数据、broker、费用／滑点及运行状态，保默认值与有效配置；失败／取消保持原异常，未执行的有限候选明确取消。
+- 试验记录复用 ResearchRun 与显式 MLflow，Optuna SQLite 恢复保旧记录；没有强制 Optuna 依赖、新搜索服务、进程池或实时搜索。Lite 单次运行与搜索均使用实际 broker 现金和费率。
+- 本地可信 bundle 共用字段／dtype／Bars／当前时点评分校验，推理只 transform/predict，不 fit／取数／回退旧评分；保本地产物与 Registry 的来源边界。
+- 复用 UTC 查询边界；Dataset／缓存／Provider／Feed 各守原职责。DuckDB 完整 OHLCV 校验在字段投影前，保 Provider 整日 end 和本地精确端点差异，不自动联网或修数据。
+- 官方 NA、TL-Store a8、SDK19 与订单／资金原生实现不改，不要求现役消费者随研究接口升级。原 0.3.4 产物、标签与资格保留。
+
 ## [0.3.4] - 2026-11-14
 
 发行源码固定为 `5af840c97d9feffb34cdf65c7e8ce465046be725`（`v0.3.4`）。本节是冻结标签之后的文档更正；不移动标签、不重建或替换已冻结发行字节。标签内旧更新日志所写 Store a5、内置 Observer 尚未实现等状态已经过期，以下按实际实现和资格说明。正式OIDC/PyPI/GitHub发行成功，17公开文件摘要一致，Linux公网全新组合491通过且零失败/跳过；真实云端归档仍分开验收。

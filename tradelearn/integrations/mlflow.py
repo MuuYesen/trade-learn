@@ -118,6 +118,9 @@ def log(
                 _report(mlflow, stats, prefix)
         if research_result is not None:
             mlflow.log_params(_research_params(research_result))
+            trials = _research_trials(research_result)
+            if trials:
+                mlflow.log_dict(_redact_trials(trials), 'search/trials.json')
         for path in paths:
             if path.is_dir():
                 mlflow.log_artifacts(str(path), artifact_path="attachments/" + path.name)
@@ -176,6 +179,23 @@ def _check_active(mlflow: Any, active: Any, uri: Any, experiment: Any, name: Any
         current = mlflow.get_run(active.info.run_id).data.tags.get("mlflow.runName")
         if name != current:
             raise ValueError("run_name conflicts with active run")
+
+
+def _research_trials(result):
+    artifacts = _field(result, 'artifacts', {}) or {}
+    if 'trials' in artifacts:
+        return artifacts['trials']
+    return [_field(step, 'params', {}) for step in _field(result, 'steps', ())
+            if _field(step, 'category') == 'search.trial']
+
+
+def _redact_trials(value):
+    if isinstance(value, Mapping):
+        return {str(key): _redact_trials(item) for key, item in value.items()
+                if not _SECRET.search(str(key))}
+    if isinstance(value, (list, tuple)):
+        return [_redact_trials(item) for item in value]
+    return value
 
 
 def _research_params(result: Any) -> dict[str, Any]:

@@ -94,3 +94,17 @@ Optuna保留独立`OptunaSearch/OptunaBacktestSearch`和原生trial建议接口�
 
 
 固定符号后端按真实Python边界选择：Python3.10为gplearn0.4.2，Python3.11+为0.4.3（上游0.4.3要求Python>=3.11/sklearn>=1.8）。旧0.4.2与新版sklearn组合仅在TL拥有的该estimator实例上接入sklearn公开validate_data，保输入特征/数量/有限值校验及可pickle状态；不改第三方类/全局实现、不绕过验证。两个版本的候选捕获、transform无标签与恢复分别验收；manifest仍记录实际运行版本，不外推跨minor模型可载。
+
+### 同一冻结 bundle 的推理校验（0.3.5）
+
+本地 `save_bundle/load_bundle(..., trusted=True)` 仍核依赖版本、状态与显式配套代码的 SHA256；hash 完整性不是来源可信证明。`tradelearn.ml.predict_bundle(bundle, bars)` 为研究窗口与 Engine／Lite 策略窗口共用的已拟合推理接缝：先核输入字段／dtype 和 Bars，再仅调用 FeatureSet.transform、Pipeline.transform、Scorer.predict；Scorer 必须引用该 bundle 的 model。输出必须属于输入窗口，当前评分不能来自更早的特征时点，非有限输出明确失败，空窗口／空评分不复用旧评分。该函数不 fit、不取数、不分配订单；需要权重时由原 Allocator 显式处理。现有 `examples/research/_workflow.py` 以及 Engine／Lite 两个研究模板使用此共同接缝。
+
+```python
+from tradelearn.ml import load_bundle, predict_bundle
+
+bundle = load_bundle("fitted-bundle", trusted=True)
+scores = predict_bundle(bundle, bars_window)
+weights = None if scores.empty else bundle["allocator"].build(scores)
+```
+
+本地产物与 MLflow Registry 的 `ModelRegistry.load(reference)` 仍是两个明确来源；不隐式替换、加载或注册模型。数据查询继续沿现有 Dataset／DuckDB／BarsCache 的共同时间、标的、字段过滤和 Bars 校验。DuckDB 先验完整 OHLCV，再投影所选字段；仅选 close 不能掩盖非法 high/low。Provider 复用同一 UTC 边界转换，但保留原整日 end 包含全天的业务语义，本地查询 end 仍是精确包含端点。Feed 保原 BT 日期／时区与执行时钟语义；不把 Provider、缓存、Dataset、Feed 合成新数据层，不隐式联网或修复原数据。

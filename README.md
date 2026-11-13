@@ -94,14 +94,14 @@
 
 ## 安装
 
-TL `0.3.4` 已正式[发布到PyPI](https://pypi.org/project/trade-learn/0.3.4/)，冻结源码为 `v0.3.4`/`5af840c`；17公开文件已核SHA，Linux全新组合安装已通过。当前说明是冻结源码之后的纯文档更正，旧0.3.2及其固定依赖继续保留。
+历史 TL `0.3.4` 已正式[发布到PyPI](https://pypi.org/project/trade-learn/0.3.4/)，冻结源码为 `v0.3.4`/`5af840c`；17公开文件已核SHA，Linux全新组合安装已通过。下列研究整合对应 0.3.5，旧版本及其固定依赖继续保留；构建、安装与正式发行事实以同版本 Release 收据为准。
 
 ```bash
-pip install trade-learn==0.3.4
+pip install trade-learn==0.3.5
 # 官方NA/cTrader组合需要CPython3.13或3.14及匹配平台wheel
-pip install "trade-learn[nautilus,tl-store]==0.3.4"
+pip install "trade-learn[nautilus,tl-store]==0.3.5"
 # 研究、Jupyter AI Lite/Skills、本地MLflow
-pip install "trade-learn[research]==0.3.4"
+pip install "trade-learn[research]==0.3.5"
 ```
 
 | 安装组 | 当前契约 |
@@ -309,3 +309,7 @@ TradeLearn 面向策略研究与回测，不推荐用于真实资金的实盘交
 ## 联系方式
 
 微信公众号：知守溪的收纳屋 · 邮箱：muyes88@gmail.com
+
+### 研究整合 0.3.5
+
+0.3.5 收拢搜索／模型推理／数据查询共同能力，不覆盖 0.3.4 既有产物。四入口返回、配置隔离、失败／取消和显式记录见[优化指南](docs/guides/optimization.md)，可信本地 bundle 共同推理见[研究指南](docs/guides/research.md)。NA／Store／SDK与现役消费者不因该研究候选变化。

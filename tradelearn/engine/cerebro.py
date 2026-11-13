@@ -404,6 +404,9 @@ class Cerebro:
         if monitor is not None and driver is None:
             raise ValueError('remote monitor requires a Store-owned native driver')
         self._apply_run_kwargs(kwargs)
+        if self._dooptimize and (driver is not None or self.mode != 'backtest'
+                or any(getattr(data, 'is_live', False) for data in self.datas)):
+            raise ValueError('search supports historical data only')
         if driver is not None:
             return driver._run_cerebro(self, {} if monitor is None else {'monitor': monitor})
         self._prepare_calendars()
@@ -458,16 +461,44 @@ class Cerebro:
             self.broker.getcash(),
             getattr(self.broker, "_commission", "n/a"),
         )
-        original_strats = self.strats
-        for spec in specs:
-            self._runstop = False
-            self.strats = [spec]
-            self._prepare_strategy_context()
+        if self._dooptimize:
+            from copy import deepcopy
+            from tradelearn.backtest._optimize import (
+                historical_template, effective_config, execute_trial, cancel_remaining, strategy_config,
+            )
+            template = historical_template(self)
+            config = effective_config(template)
+            self.trial_records = []
+            for index, spec in enumerate(specs):
+                try:
+                    owner = deepcopy(template)
+                    owner.strats = [deepcopy(spec)]
+                    def execute():
+                        owner._prepare_strategy_context()
+                        try:
+                            return run_backtest(owner)
+                        finally:
+                            owner._reset_strategy_context()
+                    results.extend(execute_trial(self.trial_records, spec[2],
+                        {**config, "strategies": [strategy_config(*spec)]}, execute,
+                        lambda result: dict(result[0].stats.summary)))
+                except BaseException:
+                    cancel_remaining(self.trial_records, [(item[2],
+                        {**config, "strategies": [strategy_config(*item)]}) for item in specs[index + 1:]])
+                    raise
+        else:
+            original_strats = self.strats
             try:
-                results.extend(run_backtest(self))
+                for spec in specs:
+                    self._runstop = False
+                    self.strats = [spec]
+                    self._prepare_strategy_context()
+                    try:
+                        results.extend(run_backtest(self))
+                    finally:
+                        self._reset_strategy_context()
             finally:
-                self._reset_strategy_context()
-        self.strats = original_strats
+                self.strats = original_strats
         self._last_results = results
         formatted = self._format_run_results(results)
         if results:

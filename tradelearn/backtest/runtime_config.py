@@ -29,13 +29,13 @@ class BacktestRuntimeConfig:
         broker = getattr(owner, "broker", None)
         return cls(
             cash=float(
-                getattr(owner, "_cash", getattr(broker, "_cash", 0.0)) or 0.0
+                getattr(broker, "_cash", getattr(owner, "_cash", 0.0)) or 0.0
             ),
             commission=float(
                 getattr(
-                    owner,
-                    "_commission",
-                    getattr(broker, "commission_ratio", 0.0),
+                    broker,
+                    "commission_ratio",
+                    getattr(owner, "_commission", 0.0),
                 )
                 or 0.0
             ),

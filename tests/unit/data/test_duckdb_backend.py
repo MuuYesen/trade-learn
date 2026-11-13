@@ -68,8 +68,14 @@ def test_duckdb_backend_reads_filtered_column_subset() -> None:
             "timestamp": pd.to_datetime(["2024-01-01", "2024-01-02"], utc=True),
             "symbol": ["AAA", "AAA"],
             "close": [10.5, 11.5],
+            "open": [10., 11.], "high": [11., 12.],
+            "low": [9., 10.], "volume": [100., 120.],
         }
     )
+    # The read now requests full OHLCV for contract validation before projection.
+    for name in ("open", "high", "low", "volume"):
+        if name not in frame:
+            frame[name] = frame["close"]
     conn = _FakeConnection(frame)
     backend = DuckDBBarsBackend(conn=conn)
 
@@ -83,7 +89,7 @@ def test_duckdb_backend_reads_filtered_column_subset() -> None:
     )
 
     sql, params = conn.calls[-1]
-    assert "SELECT timestamp, symbol, close" in sql
+    assert "SELECT timestamp, symbol, open, high, low, close, volume" in sql
     assert "symbol IN (?)" in sql
     assert "timestamp >= ?" in sql
     assert "timestamp <= ?" in sql
@@ -126,6 +132,10 @@ def test_duckdb_backend_reads_cross_section_by_timestamp() -> None:
             "volume": [120.0, 220.0],
         }
     )
+    # The read now requests full OHLCV for contract validation before projection.
+    for name in ("open", "high", "low", "volume"):
+        if name not in frame:
+            frame[name] = frame["close"]
     conn = _FakeConnection(frame)
     backend = DuckDBBarsBackend(conn=conn)
 
@@ -156,6 +166,10 @@ def test_duckdb_backend_read_panel_aliases_bars_contract_read() -> None:
             "close": [10.5, 21.5],
         }
     )
+    # The read now requests full OHLCV for contract validation before projection.
+    for name in ("open", "high", "low", "volume"):
+        if name not in frame:
+            frame[name] = frame["close"]
     conn = _FakeConnection(frame)
     backend = DuckDBBarsBackend(conn=conn)
 

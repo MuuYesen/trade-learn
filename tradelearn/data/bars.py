@@ -119,3 +119,11 @@ def _require_columns(frame: pd.DataFrame, columns: tuple[str, ...]) -> None:
 def _optional_numeric_columns(frame: pd.DataFrame) -> list[str]:
     """Return optional numeric Bars columns present in a frame."""
     return [column for column in ("vwap", "amount", "adj_factor") if column in frame.columns]
+
+
+def _utc_timestamp(value: str | pd.Timestamp) -> pd.Timestamp:
+    """Interpret naive filter values as UTC and convert aware values to UTC."""
+    timestamp = pd.Timestamp(value)
+    if timestamp.tzinfo is None:
+        return timestamp.tz_localize("UTC")
+    return timestamp.tz_convert("UTC")

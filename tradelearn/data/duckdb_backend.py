@@ -8,7 +8,7 @@ from typing import Any
 import pandas as pd
 
 from tradelearn.core.contracts import validate_bars
-from tradelearn.data.bars import REQUIRED_COLUMNS
+from tradelearn.data.bars import REQUIRED_COLUMNS, _utc_timestamp
 
 
 class DuckDBBarsBackend:
@@ -110,8 +110,9 @@ class DuckDBBarsBackend:
         self.ensure_schema()
         selected_columns = _selected_columns(columns)
         where, params = _filters(symbols=symbols, start=start, end=end)
+        validation_columns = list(dict.fromkeys([*REQUIRED_COLUMNS, *selected_columns]))
         sql = (
-            f"SELECT {', '.join(['timestamp', 'symbol', *selected_columns])} "
+            f"SELECT {', '.join(['timestamp', 'symbol', *validation_columns])} "
             f"FROM {self.table}{where} ORDER BY timestamp, symbol"
         )
         frame = self.conn.execute(sql, params).fetchdf()
@@ -128,6 +129,8 @@ class DuckDBBarsBackend:
             frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
             frame["symbol"] = frame["symbol"].astype(str)
             result = frame.set_index(["timestamp", "symbol"]).sort_index()
+            validate_bars(result)
+            result = result[selected_columns]
         result.attrs.update(
             {
                 "engine": "duckdb",
@@ -224,14 +227,6 @@ def _filters(
         clauses.append("timestamp <= ?")
         params.append(_utc_timestamp(end))
     return ("" if not clauses else " WHERE " + " AND ".join(clauses)), params
-
-
-def _utc_timestamp(value: str | pd.Timestamp) -> pd.Timestamp:
-    """Interpret naive filter values as UTC and convert aware values to UTC."""
-    timestamp = pd.Timestamp(value)
-    if timestamp.tzinfo is None:
-        return timestamp.tz_localize("UTC")
-    return timestamp.tz_convert("UTC")
 
 
 def _table_identifier(value: str) -> str:

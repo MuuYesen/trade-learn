@@ -164,4 +164,56 @@ def load_bundle(path: str | Path, *, trusted: bool = False) -> dict[str, Any]:
     return bundle
 
 
-__all__ = ["save_bundle", "load_bundle"]
+__all__ = ["save_bundle", "load_bundle", "predict_bundle"]
+
+
+def predict_bundle(bundle: dict[str, Any], bars):
+    """Apply the same fitted local bundle to a research or strategy window.
+
+    ``load_bundle(..., trusted=True)`` remains the explicit executable-state
+    trust boundary. This function never loads, fits, fetches or caches scores.
+    An empty valid window returns no scores, never a previous prediction.
+    """
+    import pandas as pd
+    from tradelearn.core.contracts import validate_bars
+
+    missing = _REQUIRED - set(bundle)
+    if missing:
+        raise ValueError(f'research bundle missing components: {sorted(missing)}')
+    schema = bundle['input_schema']
+    if not isinstance(schema, dict) or not schema:
+        raise ValueError('research bundle input schema must be a nonempty mapping')
+    frame = pd.DataFrame(bars)
+    for name, dtype in schema.items():
+        if name not in frame.columns:
+            raise ValueError(f'bundle input schema missing field: {name}')
+        if str(frame[name].dtype) != dtype:
+            raise ValueError(f'bundle input dtype differs for field: {name}')
+    validate_bars(frame)
+    scorer = bundle['scorer']
+    if getattr(scorer, 'model', None) is not bundle['model']:
+        raise ValueError('bundle scorer must reference the delivered model')
+    if frame.empty:
+        return pd.Series(dtype=float, name='score')
+    features = bundle['feature_set'].transform(frame)
+    transformed = bundle['pipeline'].transform(features)
+    if not transformed.empty:
+        if not isinstance(transformed.index, pd.MultiIndex) or not transformed.index.isin(frame.index).all():
+            raise ValueError('bundle transformed features must belong to the supplied window')
+        if getattr(scorer, 'current', False) and transformed.index.get_level_values(0).max() != frame.index.get_level_values(0).max():
+            raise ValueError('bundle transformed features lack the current observation')
+    scores = scorer.predict(transformed)
+    if not isinstance(scores, pd.Series):
+        raise TypeError('bundle scorer must produce a Series')
+    if isinstance(scores.index, pd.MultiIndex):
+        valid_index = scores.index.isin(frame.index).all()
+    else:
+        latest = frame.index.get_level_values(0).max()
+        symbols = frame.xs(latest, level=0).index
+        valid_index = bool(getattr(scorer, 'current', False)) and scores.index.isin(symbols).all()
+    if not scores.index.is_unique or not valid_index:
+        raise ValueError('bundle scores must belong to the supplied window')
+    import numpy as np
+    if not np.isfinite(scores.to_numpy(dtype=float)).all():
+        raise ValueError('bundle scorer produced nonfinite scores')
+    return scores

@@ -32,6 +32,7 @@ class OptunaSearch:
         self.sampler = sampler
         self.pruner = pruner
         self.study_kwargs = dict(study_kwargs)
+        self.trial_records = []
 
     def run(self, **optimize_kwargs: Any):
         """Create and optimize an Optuna study, then return it."""
@@ -48,7 +49,42 @@ class OptunaSearch:
         if self.pruner is not None:
             kwargs["pruner"] = self.pruner
         study = optuna.create_study(**kwargs)
-        study.optimize(self.objective, n_trials=self.n_trials, **optimize_kwargs)
+        from tradelearn.backtest._optimize import execute_trial, _publish_record
+        from copy import deepcopy
+        self.trial_records = deepcopy(getattr(study, 'user_attrs', {}).get('tradelearn.trials', []))
+        first_new = len(self.trial_records)
+        def objective(trial):
+            def call():
+                from tradelearn.backtest._optimize import current_trial_record, _describe
+                record = current_trial_record()
+                record['trial_number'] = getattr(trial, 'number', len(self.trial_records) - 1)
+                try:
+                    return self.objective(trial)
+                finally:
+                    record['params'] = _describe(getattr(trial, 'params', record['params']))
+            return execute_trial(self.trial_records, {}, {'objective': 'callable'},
+                call, lambda result: float(result), publish=False)
+        def finalize():
+            frozen = {trial.number: trial for trial in getattr(study, 'trials', ())}
+            for record in self.trial_records[first_new:]:
+                trial = frozen.get(record.get('trial_number'))
+                state = getattr(getattr(trial, 'state', None), 'name', None)
+                if record['status'] != 'cancelled' and state in ('COMPLETE', 'FAIL', 'PRUNED'):
+                    record['status'] = {'COMPLETE': 'completed', 'FAIL': 'failed', 'PRUNED': 'pruned'}[state]
+                    record['optimizer_state'] = state
+                _publish_record(record)
+            if hasattr(study, 'set_user_attr'):
+                study.set_user_attr('tradelearn.trials', self.trial_records)
+        try:
+            study.optimize(objective, n_trials=self.n_trials, **optimize_kwargs)
+        except BaseException as exc:
+            try:
+                finalize()
+            except Exception as tracking_error:
+                exc.tracking_error_type = type(tracking_error).__name__
+            raise
+        else:
+            finalize()
         return study
 
 
@@ -79,11 +115,28 @@ class OptunaBacktestSearch:
         """Run parameter search and return the Optuna study."""
         return self.search.run(**optimize_kwargs)
 
+    @property
+    def trial_records(self):
+        return self.search.trial_records
+
     def _objective(self, trial: Any) -> float:
         params = {
             name: _suggest_param(trial, name, spec) for name, spec in self.param_space.items()
         }
-        backtest = self.backtest_factory(params)
+        from tradelearn.backtest._optimize import (
+            current_trial_record, historical_template, effective_config, _describe,
+        )
+        record = current_trial_record()
+        if record is not None:
+            record['params'] = _describe(params)
+        from copy import deepcopy
+        backtest = self.backtest_factory(deepcopy(params))
+        if hasattr(backtest, 'datas') and hasattr(backtest, 'broker'):
+            backtest = historical_template(backtest)
+            if record is not None:
+                record['config'] = effective_config(backtest)
+        elif record is not None:
+            record['config'] = {'factory_result': _describe(backtest)}
         result = backtest.run() if hasattr(backtest, "run") else backtest(params)
         return _metric_value(result, self.metric)
 

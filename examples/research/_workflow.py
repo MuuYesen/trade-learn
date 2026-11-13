@@ -91,8 +91,8 @@ def train(bars: pd.DataFrame, *, split):
 
 def infer(bundle, bars):
     """Apply fitted state only. Empty input is no decision, never liquidation."""
-    features = bundle["pipeline"].transform(bundle["feature_set"].transform(bars))
-    scores = bundle["scorer"].predict(features)
+    from tradelearn.ml import predict_bundle
+    scores = predict_bundle(bundle, bars)
     return None if scores.empty else bundle["allocator"].build(scores)
 
 

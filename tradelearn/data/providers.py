@@ -13,7 +13,7 @@ from typing import Any, Protocol
 import pandas as pd
 
 from tradelearn.core.logging import get_logger
-from tradelearn.data.bars import Frequency, normalize_bars
+from tradelearn.data.bars import Frequency, normalize_bars, _utc_timestamp
 from tradelearn.utils.console import smart_tqdm as tqdm
 
 LOGGER = get_logger("data.providers")
@@ -568,9 +568,9 @@ def _filter_dates(
     frame = raw.copy()
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
     if start is not None:
-        frame = frame[frame["timestamp"] >= pd.Timestamp(start, tz="UTC")]
+        frame = frame[frame["timestamp"] >= _utc_timestamp(start)]
     if end is not None:
-        end_ts = pd.Timestamp(end, tz="UTC")
+        end_ts = _utc_timestamp(end)
         if end_ts == end_ts.normalize():
             end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(nanoseconds=1)
         frame = frame[frame["timestamp"] <= end_ts]
