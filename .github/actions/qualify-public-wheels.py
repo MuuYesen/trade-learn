@@ -58,6 +58,12 @@ TESTS_034 = [
     "tests/test_live_engine_market_validity.py",
     "tests/test_live_native_owner_release.py",
     "tests/test_live_sdk_owner_release.py",
+    "tests/unit/engine/test_public_store_entry.py",
+    "tests/unit/engine/test_bt_fill_precision.py",
+    "tests/test_live_account_source_refresh.py",
+    "tests/test_native_fill_void_projection.py",
+    "tests/test_live_replay_native_clock_checks.py",
+    "tests/test_monitor_binding.py",
 ]
 PACKAGES = {"tradelearn", "tradelearn_runtime", "leafquant_monitor"}
 
@@ -287,6 +293,8 @@ def prepare(args):
     ]
     if "tests/unit/engine/test_nautilus_store.py" in selected_tests(args.tl):
         paths += ["tests/unit/backtest/_engine_config.py", "docs/guides/live.md"]
+    if "tests/unit/engine/test_public_store_entry.py" in selected_tests(args.tl):
+        paths += ["examples/live/ctrader_monitor.py"]
     for name in paths:
         destination = work / name
         destination.parent.mkdir(parents=True, exist_ok=True)

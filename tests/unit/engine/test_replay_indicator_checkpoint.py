@@ -4,14 +4,24 @@ import pytest
 from tradelearn.indicators.base import StreamBinding
 
 
-def indicators():
-    from tradelearn.indicators import talib,tv,tdx
-    return [('talib',talib.EMA.configured(timeperiod=2)),('tv',tv.ema.configured(length=2)),('tdx',tdx.EMA.configured(N=2))]
+@pytest.fixture(params=['talib', 'tv', 'tdx'])
+def indicator(request):
+    # The pinned PyneCore distribution requires CPython >= 3.11.
+    # Keep the other backends running on CP310; supported profiles must import.
+    import sys
+    import importlib
+    if request.param == 'tv' and sys.version_info < (3, 11):
+        pytest.skip('pynesys-pynecore==6.13.3 requires Python >= 3.11')
+    backend = importlib.import_module('tradelearn.indicators.' + request.param)
+    if request.param == 'talib':
+        return backend.EMA.configured(timeperiod=2)
+    if request.param == 'tv':
+        return backend.ema.configured(length=2)
+    return backend.EMA.configured(N=2)
 
 
-@pytest.mark.parametrize('name,indicator',indicators())
 @pytest.mark.parametrize('prefix',[[],[1.],[1.,2.,4.,8.]])
-def test_replay_checkpoint_restores_finite_backend_without_replaying_committed_prefix(name,indicator,prefix):
+def test_replay_checkpoint_restores_finite_backend_without_replaying_committed_prefix(indicator,prefix):
     binding=StreamBinding(indicator,())
     try:
         for value in prefix:binding.update(value)
@@ -28,8 +38,7 @@ def test_replay_checkpoint_restores_finite_backend_without_replaying_committed_p
     finally:binding.reset()
 
 
-@pytest.mark.parametrize('name,indicator',indicators())
-def test_checkpoint_rejects_foreign_binding_and_expired_generation(name,indicator):
+def test_checkpoint_rejects_foreign_binding_and_expired_generation(indicator):
     a,b=StreamBinding(indicator,()),StreamBinding(indicator,())
     try:
         a.update(1.);checkpoint=a._checkpoint()
@@ -39,8 +48,7 @@ def test_checkpoint_rejects_foreign_binding_and_expired_generation(name,indicato
     finally:a.reset();b.reset()
 
 
-@pytest.mark.parametrize('name,indicator',indicators())
-def test_repeated_revisions_advance_only_current_bar_baseline_over_long_prefix(name,indicator):
+def test_repeated_revisions_advance_only_current_bar_baseline_over_long_prefix(indicator):
     actual,reference=StreamBinding(indicator,()),StreamBinding(indicator,())
     try:
         for index in range(400):

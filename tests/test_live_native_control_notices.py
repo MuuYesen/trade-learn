@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sys
 from tradelearn import engine as bt
+pytest.importorskip('nautilus_trader')
 from tradelearn_runtime.execution import create_execution_host
 from nautilus_trader.backtest import BacktestEngine,BacktestEngineConfig
 from nautilus_trader.config import StrategyConfig
