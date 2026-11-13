@@ -137,7 +137,7 @@ def run_lite(data: pd.DataFrame, *, trade_on_close: bool = False) -> tuple[float
     return float(stats["final_value"]), fills, int(stats["total_trades"])
 
 
-def run_backtrader(data: pd.DataFrame) -> tuple[float, int, int]:
+def run_backtrader(data: pd.DataFrame, *, trade_on_close: bool = False) -> tuple[float, int, int]:
     import backtrader as bt
 
     class PandasData(bt.feeds.PandasData):
@@ -176,6 +176,7 @@ def run_backtrader(data: pd.DataFrame) -> tuple[float, int, int]:
                 self.close()
 
     cerebro = bt.Cerebro()
+    cerebro.broker.set_coc(trade_on_close)
     cerebro.broker.setcash(100_000.0)
     cerebro.adddata(PandasData(dataname=data))
     cerebro.addstrategy(BacktraderSmaCross)

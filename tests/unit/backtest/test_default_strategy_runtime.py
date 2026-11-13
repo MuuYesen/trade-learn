@@ -9,6 +9,16 @@ from tradelearn.backtest import engine
 from tradelearn.backtest.models import Order
 
 
+def _minimum(strategy, period):
+    """A BT indicator owns warmup; Strategy.addminperiod is not a global gate."""
+    from tradelearn.engine import Indicator
+    class Minimum(Indicator):
+        lines=('sample',)
+        def __init__(self):self.addminperiod(period)
+        def next(self):self.lines.sample[0]=self.data.close[0]
+    return Minimum(strategy.data)
+
+
 def _stream_mean(name, calls=None):
     from tradelearn.indicators.base import FunctionIndicator
     def step(buffers,state,params):
@@ -35,7 +45,7 @@ def test_default_runner_owns_strategy_lifecycle(runner, cash_notify, monkeypatch
             self.trace = [('init', self._runtime)]
             self.notifications = []
             self.cash = []
-            self.addminperiod(2)
+            self.minimum = _minimum(self, 2)
         def start(self): self.trace.append(('start', self._runtime))
         def next(self):
             self.trace.append(('next', self._runtime))
@@ -108,7 +118,7 @@ def test_lite_uses_shared_persistent_runtime():
 @pytest.mark.parametrize('on_close', [False, True])
 def test_warmup_callback_orders_use_the_same_backend_buffer(on_close):
     class Probe(Strategy):
-        def init(self): self.addminperiod(3)
+        def init(self): self.minimum = _minimum(self, 3)
         def prenext(self):
             if len(self.data) == 1: self.order = self.buy(size=1)
     c = configured_engine(trade_on_close=on_close)
@@ -406,7 +416,9 @@ def test_explicit_market_groups_match_default_clock_trace_and_preserve_sparse_fe
     c.adddata(_as_feed(bars),name='a')
     c.adddata(_as_feed(bars.iloc[[0,2]]),name='b')
     c.addstrategy(Probe)
-    default = c.run()[0]
+    # Explicit streaming groups match BT event execution, not runonce precomputation
+    # of imperative Indicator.next side effects on a held secondary feed.
+    default = c.run(runonce=False)[0]
     grouped = StrategyRuntime(Probe,feeds={'a':'bar','b':'bar'},broker=IntentBroker())
     grouped.start()
     ungrouped = StrategyRuntime(Probe,feeds={'a':'bar','b':'bar'},broker=IntentBroker())
@@ -611,7 +623,7 @@ def test_event_driver_primary_error_survives_stop_and_observer_failures(failure_
 def test_default_runstop_from_warmup_stops_before_another_callback(runner,monkeypatch):
     trace = []
     class Probe(Strategy):
-        def init(self): self.addminperiod(3)
+        def init(self): self.minimum = _minimum(self, 3)
         def prenext(self):
             trace.append('pre')
             self.cerebro.runstop()

@@ -146,12 +146,7 @@ def test_oco_multitimeframe_multiasset_model_scorer_and_metrics_surfaces() -> No
     cerebro = bt.Cerebro()
     cerebro.broker.set_coc(True)
     daily = cerebro.adddata(bt.feeds.PandasData(dataname=_bars(), name="daily"))
-    with pytest.raises(NotImplementedError):
-        cerebro.resampledata(daily, timeframe=bt.TimeFrame.Weeks, compression=1, name="weekly")
-    weekly = _bars().resample("7D", label="right", closed="right").agg(
-        {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
-    ).dropna()
-    cerebro.adddata(bt.feeds.PandasData(dataname=weekly, name="weekly"))
+    cerebro.resampledata(daily, timeframe=bt.TimeFrame.Weeks, compression=1, name='weekly')
     cerebro.adddata(bt.feeds.PandasData(dataname=_bars(1.01), name="asset_b"))
     cerebro.addstrategy(BracketAndResample)
     [strategy] = cerebro.run()

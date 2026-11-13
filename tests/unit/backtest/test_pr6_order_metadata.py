@@ -35,12 +35,18 @@ def test_order_history_keeps_creation_and_execution_times(mode, feeds, on_close)
             if self.bar==5: self.cancel(self.unfilled)
     s=run(Timed,mode,feeds,on_close)
     frame=_orders_frame(s.broker).set_index('ref')
-    expected=[(s.entry,1,1 if on_close else 2),(s.exit,3,3 if on_close else 4),(s.unfilled,4,None)]
+    # Raw execution frame records the actual next native application turn;
+    # public order.executed.dt independently retains creation-close for COC.
+    expected=[(s.entry,1,2),(s.exit,3,4),(s.unfilled,4,None)]
     for order,created,executed in expected:
         row=frame.loc[order.ref]
         assert row['datetime']==pd.Timestamp(f'2026-01-{created:02}',tz='UTC')
         if executed is None: assert pd.isna(row['executed_dt'])
         else: assert row['executed_dt']==pd.Timestamp(f'2026-01-{executed:02}',tz='UTC')
+        if executed is not None:
+            from tradelearn.engine import num2date
+            public_day=created if on_close else executed
+            assert num2date(order.executed.dt).day==public_day
     assert frame.loc[s.entry.ref,'tag']=='entry'
     assert frame.loc[s.entry.ref,'info']=={'tag':'entry'}
     assert frame.loc[s.unfilled.ref,'price']==1

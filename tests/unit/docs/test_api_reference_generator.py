@@ -123,4 +123,5 @@ def test_generated_guides_use_current_strict_facades_and_independent_integration
     assert "Strategy.I" not in lite
     assert "pandas-ta-classic" not in engine + lite + strategy
     assert "tradelearn.integrations.mlflow" in strategy
-    assert "tradelearn_runtime" in strategy
+    assert "tradelearn.engine.stores" in strategy
+    assert "tradelearn_runtime" not in strategy

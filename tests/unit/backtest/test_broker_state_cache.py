@@ -23,6 +23,15 @@ class _Engine:
         self.position_calls += 1
         return (2.0, 5.0)
 
+    def observe_valuation(self, symbols, include_cash, settle):
+        if symbols is not None:
+            assert symbols == ['A'] and not include_cash and settle
+            return (90.0, 20.0, 20.0)
+        return (90.0, 100.0, 40.0)
+
+    def drain_cash_events(self):
+        return []
+
     def get_cash(self) -> float:
         return 90.0
 

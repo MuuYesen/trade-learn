@@ -421,7 +421,8 @@ class _PersistentIndicatorPlan:
                   or self.runtime.profile=='stream' and self.runtime._bt_line_views
                   or hasattr(getattr(self.data, 'source', None), '_replay_lengths')
                   or self.runtime.profile=='batch' and self.runtime._bt_line_views
-                  and getattr(getattr(self.runtime,'_clock',None),'strategy_lengths',None) is not None)
+                  and (getattr(getattr(self.runtime,'_clock',None),'strategy_lengths',None) is not None
+                       or getattr(self.runtime,'_bt_event_indicators',False)))
         if replay:
             count=self.data.received
             baseline=self._replay_checkpoints.get(count)
@@ -550,7 +551,7 @@ class _EngineRuntimeFeed(RuntimeFeed):
 
     def date2num(self, value):
         from tradelearn.backtest.clock import date2num
-        from tradelearn.engine._timezone import localize
+        from tradelearn.core._timezone import localize
         return date2num(localize(value,getattr(self.datetime,'_tz',None)))
 
     def num2date(self, value=None, tz=None, naive=True):
@@ -740,7 +741,7 @@ class StrategyRuntime:
             feed._timeframe = period.get('_timeframe',feed.p.timeframe)
             feed._compression = period.get('_compression',feed.p.compression)
             if 'tz' in period:
-                from tradelearn.engine._timezone import resolve_timezone
+                from tradelearn.core._timezone import resolve_timezone
                 feed.datetime._tz = resolve_timezone(period['tz'])
         datas = list(self.feeds.values())
         self.broker = broker
@@ -936,7 +937,7 @@ class StrategyRuntime:
                     pending=getattr(self,'_pending_bound_indicators',None)
                     if pending is None:self._pending_bound_indicators=pending=[]
                     pending.append((symbol,self.context))
-                elif not (self._bt_line_views and self._clock.strategy_lengths is not None):
+                elif not (self._bt_line_views and (self._clock.strategy_lengths is not None or getattr(self,'_bt_event_indicators',False))):
                     for indicator in tuple(self._indicators):
                         self._update_indicator(indicator, symbol)
             self.context = primary_context
@@ -1098,7 +1099,7 @@ class StrategyRuntime:
                 for symbol,event_context in pending:
                     self.context=event_context
                     self.strategy.runtime_context=event_context
-                    if not (self._bt_line_views and self._clock.strategy_lengths is not None):
+                    if not (self._bt_line_views and (self._clock.strategy_lengths is not None or getattr(self,'_bt_event_indicators',False))):
                         for indicator in tuple(self._indicators):
                             self._update_indicator(indicator,symbol)
             finally:
@@ -1313,7 +1314,8 @@ class StrategyRuntime:
             self._update_indicator(indicator, symbol)
 
     def _update_bound_replay_indicators(self):
-        if self.profile!='batch' or not self._bt_line_views or self._clock.strategy_lengths is None:return
+        if (self.profile!='batch' or not self._bt_line_views or
+                self._clock.strategy_lengths is None and not getattr(self,'_bt_event_indicators',False)):return
         for indicator in tuple(self._indicators):
             feed=self._feed_for(getattr(indicator,'data',None))
             if feed is not None:self._update_indicator(indicator,getattr(feed, '_symbol', feed._name))
@@ -1338,7 +1340,7 @@ class StrategyRuntime:
                         and getattr(line, "_append_sequence", None) != self._sequence):
                     line._append_sequence = self._sequence
                     if (getattr(feed,'_live_replay',False) or
-                            self.profile=='batch' and self._bt_line_views and self._clock.strategy_lengths is not None):
+                            self.profile=='batch' and self._bt_line_views and (self._clock.strategy_lengths is not None or getattr(self,'_bt_event_indicators',False))):
                         # Fixed BT forwards an Indicator output once whenever
                         # its input clock length differs, even if a clone has
                         # temporarily withdrawn its current visible bar.

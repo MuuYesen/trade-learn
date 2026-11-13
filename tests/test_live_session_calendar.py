@@ -74,6 +74,7 @@ def test_actual_native_sessions_dst_and_late_global_calendar_match_fixed_bt(tmp_
 
 @pytest.mark.parametrize('options',[dict(tz=False),dict(tz=3),dict(sessionstart='09:30'),dict(sessionend=16),dict(calendar=object())])
 def test_bad_live_view_metadata_fails_before_registering_a_subscription(tmp_path,options):
+    pytest.importorskip('nautilus_trader')
     from tests.unit.engine.test_nautilus_store import store
     value=store(tmp_path)
     with pytest.raises((TypeError,ValueError)):

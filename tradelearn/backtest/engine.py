@@ -1009,6 +1009,11 @@ def run_backtest(cerebro: Any) -> list[Any]:
     from .event_runtime import StrategyRuntime
     runtime = StrategyRuntime(strategy_cls, strategy_args=args, parameters=kwargs,
                               profile="batch", data_feeds=cerebro.datas, broker=cerebro.broker)
+    # Preserve bound historical buffers while honoring BT's event-mode callback
+    # policy for imperative Indicators on held secondary source clocks.
+    runtime._bt_event_indicators = runtime._bt_line_views and not bool(
+        getattr(getattr(cerebro, "p", None), "runonce", True)
+    )
     try:
         return _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_context)
     except BaseException as error:

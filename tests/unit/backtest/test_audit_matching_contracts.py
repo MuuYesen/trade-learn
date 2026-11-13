@@ -1,6 +1,6 @@
 from tests.unit.backtest._engine_config import feed as _as_feed
 from tests.unit.backtest._engine_config import configured_engine
-"""Orders expire on the runtime clock, including while their feed is inactive."""
+"""BT orders use their ordered feed; native direct controls retain explicit clocks."""
 import pandas as pd
 from datetime import timedelta
 import pytest
@@ -20,7 +20,7 @@ def _bars(dates):
 @pytest.mark.parametrize("runner", ["single", "native-multi", "python-multi"])
 @pytest.mark.parametrize("mode", ["exact", "smart"])
 @pytest.mark.parametrize("on_close", [False, True])
-def test_expiry_uses_primary_clock_without_a_target_bar(monkeypatch, runner, mode, on_close):
+def test_bt_expiry_waits_for_ordered_feed_even_if_primary_keeps_advancing(monkeypatch, runner, mode, on_close):
     class Expiry(Strategy):
         def init(self):
             self.events = []
@@ -47,7 +47,29 @@ def test_expiry_uses_primary_clock_without_a_target_bar(monkeypatch, runner, mod
     cerebro.addstrategy(Expiry)
     [strategy] = cerebro.run()
 
-    assert strategy.states == [(Order.Accepted, 1), (Order.Accepted, 1),
-                               (Order.Expired, 0), (Order.Expired, 0)]
-    assert strategy.events == [pd.Timestamp("2026-01-03", tz="UTC")]
+    if runner == "single":
+        assert strategy.states == [(Order.Accepted, 1), (Order.Accepted, 1),
+                                   (Order.Expired, 0), (Order.Expired, 0)]
+        assert strategy.events == [pd.Timestamp("2026-01-03", tz="UTC")]
+    else:
+        # Fixed BT does not advance an inactive order's own expiry clock.
+        # The paired ordinary-BT counterexample lives in test_bt_subsecond_clock.
+        assert strategy.states == [(Order.Accepted, 1)] * 4
+        assert strategy.events == []
     assert strategy.getposition(strategy.datas[-1]).size == 0
+
+
+@pytest.mark.parametrize('target_clock',[False,True])
+def test_native_expiry_clock_is_explicit_and_default_global_policy_stays_unchanged(target_clock):
+    from tradelearn import _rust
+    native=_rust.RustBacktestEngine([],[],[],[],[],[],1000.,0.,False,False,False,0.,0.,False,False,False)
+    ref=native.submit_order_for_symbol('target','buy','limit',.25,1.,None)
+    native.configure_order(ref,1,None)
+    if target_clock:native.configure_order_expiry_clock(ref,True)
+    def step(primary,target):
+        native.step_open_bars_compact(['primary','target'],[primary,target],[10.,10.],[10.,10.],[10.,10.],[10.,10.],[1.,1.])
+        return native.drain_order_events()
+    assert step(0,0)==[]
+    assert step(2,0)==([] if target_clock else [(ref,'expired')])
+    assert step(3,2)==([(ref,'expired')] if target_clock else [])
+    assert native.get_cash()==1000.

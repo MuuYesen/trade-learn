@@ -1248,7 +1248,7 @@ def test_backtest_engine_multi_data_uses_clocked_runner_without_python_bar_vecto
     assert strategy.getpositionbyname("BBB").size == 1.0
 
 
-def test_backtest_engine_trade_on_close_clocked_runner_only_uses_python_vectors_for_close(
+def test_backtest_engine_trade_on_close_clocked_runner_keeps_vectors_native(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     index = pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"], utc=True)
@@ -1295,7 +1295,7 @@ def test_backtest_engine_trade_on_close_clocked_runner_only_uses_python_vectors_
     [strategy] = cerebro.run()
 
     assert strategy.getpositionbyname("BBB").size == 1.0
-    assert vector_calls == 1
+    assert vector_calls == 0
 
 
 def test_data_advance_plan_skips_cursor_matrix_for_aligned_feeds() -> None:

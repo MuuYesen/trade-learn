@@ -587,11 +587,16 @@ def test_lite_target_weights_match_engine_when_previous_order_is_pending() -> No
         check_dtype=False,
     )
     pd.testing.assert_frame_equal(
-        lite_stats.fills[["datetime", "data", "side", "size", "price"]].reset_index(drop=True),
-        engine_stats.fills[["datetime", "data", "side", "size", "price"]].reset_index(drop=True),
+        lite_stats.fills[["data", "side", "size", "price"]].reset_index(drop=True),
+        engine_stats.fills[["data", "side", "size", "price"]].reset_index(drop=True),
         check_dtype=False,
     )
     assert lite_stats.summary["final_value"] == engine_stats.summary["final_value"]
+
+    # COC public execution dates and raw native application-turn frames have
+    # distinct contracts. Neither profile's historical bytes are rewritten.
+    assert list(lite_stats.fills['datetime']) == [pd.Timestamp('2024-01-03',tz='UTC')]*2
+    assert list(engine_stats.fills['datetime']) == [pd.Timestamp('2024-01-04',tz='UTC')]*2
 
 
 def test_lite_research_result_weights_current_bar_slice_records_result() -> None:

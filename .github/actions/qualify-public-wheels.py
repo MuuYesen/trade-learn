@@ -60,6 +60,7 @@ TESTS_034 = [
     "tests/test_live_sdk_owner_release.py",
     "tests/unit/engine/test_public_store_entry.py",
     "tests/unit/engine/test_bt_fill_precision.py",
+    "tests/unit/engine/test_bt_event_sparse_indicator.py",
     "tests/test_live_account_source_refresh.py",
     "tests/test_native_fill_void_projection.py",
     "tests/test_live_replay_native_clock_checks.py",

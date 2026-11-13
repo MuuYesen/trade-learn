@@ -9,7 +9,7 @@ from benchmarks.runners.benchmark_target_weights import (
     run_benchmark as run_target_weights_benchmark,
 )
 from benchmarks.runners.benchmark_target_weight_parity import run_parity_benchmark
-from benchmarks.runners.benchmark_throughput import make_data, run_benchmark, run_engine, run_lite
+from benchmarks.runners.benchmark_throughput import make_data, run_benchmark, run_engine, run_lite, run_backtrader
 from benchmarks.runners.benchmark_research_pipeline import (
     run_benchmark as run_research_pipeline_benchmark,
 )
@@ -94,17 +94,20 @@ def test_throughput_benchmark_function_returns_results() -> None:
     assert all(result.bars_per_sec > 0 for result in results)
     assert all(result.fills >= result.closed_trades for result in results)
     engine, lite = results
-    assert engine.final_value == lite.final_value
+    assert engine.final_value == run_backtrader(make_data(1000))[0]
     assert engine.fills == lite.fills
     assert engine.closed_trades == lite.closed_trades
 
 
-def test_throughput_engine_and_lite_trade_on_close_are_same_semantics() -> None:
-    data = make_data(1000)
+def test_throughput_engine_and_lite_trade_on_close_agree_on_exact_input_grid() -> None:
+    # Native/Lite retains its six-place profile; compare exact-grid economics
+    # here and retain the separate Engine f64 vs BT precision tests.
+    data = make_data(1000).round(4)
 
     engine_value, engine_fills, engine_closed = run_engine(data, trade_on_close=True)
     lite_value, lite_fills, lite_closed = run_lite(data, trade_on_close=True)
 
+    assert engine_value == run_backtrader(data, trade_on_close=True)[0]
     assert engine_value == lite_value
     assert engine_fills == lite_fills
     assert engine_closed == lite_closed
