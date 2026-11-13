@@ -53,7 +53,12 @@ jobs:
           assert data['head_sha'] == os.environ['SOURCE_SHA']
           assert data['path'] == '.github/workflows/release.yml'
           assert data['conclusion'] == 'success'
-          assert data['event'] == 'push' and data['head_branch'] == 'dev'
+          assert data['event'] in {'push', 'workflow_dispatch'} and data['head_branch'] == 'dev'
+          # A test-only fix can use an explicit build-only dispatch because it
+          # intentionally does not retrigger unchanged wheel inputs on push.
+          jobs = json.loads(subprocess.check_output(['gh', 'api', 'repos/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + run + '/jobs?per_page=100']))['jobs']
+          publication = {job['name']: job['conclusion'] for job in jobs if job['name'] in {'Publish to PyPI', 'Publish GitHub Release'}}
+          assert publication == {'Publish to PyPI': 'skipped', 'Publish GitHub Release': 'skipped'}, publication
           subprocess.run(['gh', 'run', 'download', run, '--repo', os.environ['GITHUB_REPOSITORY'], '--name', 'wheels-ubuntu-latest-auto64', '--dir', os.environ['RUNNER_TEMP'] + '/candidate-wheels'], check=True)
           PYCODE
       - name: Actual installed wheels; no build, no publish, no broker connection
