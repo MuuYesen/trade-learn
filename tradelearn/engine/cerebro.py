@@ -464,7 +464,7 @@ class Cerebro:
         if self._dooptimize:
             from copy import deepcopy
             from tradelearn.backtest._optimize import (
-                historical_template, effective_config, execute_trial, cancel_remaining, strategy_config, materialize_spec,
+                historical_template, effective_config, execute_trial, cancel_remaining, strategy_config, materialize_spec, feed_memo,
             )
             template = historical_template(self)
             config = effective_config(template)
@@ -472,7 +472,7 @@ class Cerebro:
             for index, spec in enumerate(specs):
                 try:
                     owner = deepcopy(template)
-                    owner.strats = [materialize_spec(spec)]
+                    owner.strats = [materialize_spec(spec, memo=feed_memo(self, owner))]
                     def execute():
                         owner._prepare_strategy_context()
                         try:

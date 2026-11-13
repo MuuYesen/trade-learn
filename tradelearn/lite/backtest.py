@@ -207,7 +207,7 @@ class Backtest:
             raise ValueError("Lite optimize requires a nonempty parameter grid")
         from copy import deepcopy
         from tradelearn.backtest._optimize import (
-            historical_template, effective_config, execute_trial, cancel_remaining, strategy_config, materialize_spec,
+            historical_template, effective_config, execute_trial, cancel_remaining, strategy_config, materialize_spec, feed_memo,
         )
         template = historical_template(self)
         config = effective_config(template)
@@ -216,7 +216,7 @@ class Backtest:
         for index, params in enumerate(tqdm(grid, desc="Backtest.optimize")):
             try:
                 owner = deepcopy(template)
-                trial_params = materialize_spec((self._strategy_cls, (), params))[2]
+                trial_params = materialize_spec((self._strategy_cls, (), params), memo=feed_memo(self, owner))[2]
                 owner.strats = [(self._strategy_cls, (), trial_params)]
                 trial = execute_trial(self.trial_records, params,
                     {**config, "strategies": [strategy_config(self._strategy_cls, (), params)]},

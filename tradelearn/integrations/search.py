@@ -39,9 +39,10 @@ def grid_search(
         cancel_remaining,
         effective_config,
         execute_trial,
+        feed_memo,
         historical_template,
+        materialize_spec,
         strategy_config,
-        strategy_defaults,
     )
     grid = expand_grid(param_grid)
     if not grid:
@@ -49,6 +50,7 @@ def grid_search(
     owner = Cerebro() if cerebro_factory is None else cerebro_factory()
     if not isinstance(owner, Cerebro):
         raise TypeError('cerebro_factory must return a Cerebro')
+    configured_owner = owner
     owner = historical_template(owner)
     owner.adddata(PandasData(dataname=data))
     template = historical_template(owner)
@@ -60,7 +62,8 @@ def grid_search(
             cerebro = deepcopy(template)
             cerebro.strats = []
             cerebro._dooptimize = False
-            cerebro.addstrategy(strategy, **deepcopy({**strategy_defaults(strategy), **params}))
+            cerebro.addstrategy(strategy, **materialize_spec((strategy, (), params),
+                memo=feed_memo(configured_owner, cerebro))[2])
             [instance] = execute_trial(records, params,
                 {**config, "strategies": [strategy_config(strategy, (), params)]}, cerebro.run,
                 lambda value: dict(value[0].stats.summary))

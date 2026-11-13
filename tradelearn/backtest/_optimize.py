@@ -134,7 +134,9 @@ def historical_template(owner):
             memo[id(runtime)] = None
     template = deepcopy(owner, memo)
     template.broker = broker
-    template.strats = [materialize_spec(spec) for spec in template.strats]
+    template.strats = [
+        materialize_spec(spec, memo=feed_memo(owner, template)) for spec in template.strats
+    ]
     template._runstop = False
     return template
 
@@ -275,12 +277,20 @@ def strategy_defaults(strategy):
     return defaults
 
 
-def materialize_spec(spec):
+def feed_memo(source, target):
+    """Keep parameter references to owned feeds on the same isolated graph."""
+    memo = {id(old): new for old, new in zip(source.datas, target.datas)}
+    memo.update({id(data): data for data in target.datas})
+    return memo
+
+
+def materialize_spec(spec, *, memo=None):
     """Own mutable default and selected values at the trial boundary only."""
     from copy import deepcopy
 
     strategy, args, params = spec
-    return strategy, deepcopy(args), deepcopy({**strategy_defaults(strategy), **params})
+    memo = {} if memo is None else dict(memo)
+    return strategy, deepcopy(args, memo), deepcopy({**strategy_defaults(strategy), **params}, memo)
 
 
 def strategy_config(strategy, args, params):

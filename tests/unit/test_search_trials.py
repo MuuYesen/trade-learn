@@ -370,3 +370,27 @@ def test_all_searches_materialize_mutable_defaults_without_mutating_class(entry)
         ).run()
     assert snapshots == [[7], [7]]
     assert default == {"values": [7]}
+
+
+@pytest.mark.parametrize("implicit_default", [False, True])
+def test_trial_parameter_feed_identity_follows_its_isolated_owner_feed(implicit_default):
+    feed = bt.feeds.PandasData(dataname=bars())
+
+    class FeedParameter(bt.Strategy):
+        params = (("source", feed if implicit_default else None), ("n", 1))
+
+        def start(self):
+            self.same_source = self.p.source is self.data
+
+        def next(self):
+            assert self.p.source.close[0] == self.data.close[0]
+
+    owner = bt.Cerebro(stdstats=False)
+    owner.adddata(feed)
+    if implicit_default:
+        owner.optstrategy(FeedParameter, n=[1, 2])
+    else:
+        owner.optstrategy(FeedParameter, source=[feed], n=[1, 2])
+    out = owner.run(optreturn=False)
+    assert all(item[0].same_source for item in out)
+    assert out[0][0].data is not out[1][0].data
