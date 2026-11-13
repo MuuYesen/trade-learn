@@ -82,10 +82,18 @@ def test_plain_strategy_warmup_position_partial_and_rejection_remain_native(
                     await asyncio.gather(*tuple(self.actor._tasks))
             native.end()
         def dispose(self):
-            native.dispose()
+            nonlocal native
+            try:
+                native.dispose()
+            finally:
+                # This replay fixture owns a Python class/closure/native cycle.
+                # Release its simulator and registered actor on the owner thread.
+                self.actor = None
+                native = None
 
     monkeypatch.setattr(value, '_build_node', ReplayNode)
     [business] = value.run(engine, monitor=True) if logging else engine.run()
+    assert native is None, 'fixture retained its unsendable replay engine'
     assert phases == [('warmup', 1), ('submit', 2)]
     assert isinstance(business, Business) and business.broker is value.getbroker()
     assert business._runtime is value._host.frontend
