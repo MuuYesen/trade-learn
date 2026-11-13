@@ -3,34 +3,7 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      consumer-public-entry:
-    if: inputs.consumer_linux_only
-    needs: wheels
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - uses: actions/download-artifact@v4
-        with:
-          name: wheels-ubuntu-latest-auto64
-          path: consumer-wheels
-      - name: Install exact candidate and fixed official dependencies
-        run: |
-          python -m pip install consumer-wheels/*.whl 'nautilus_trader==2.0.0rc7' 'tl-store==0.2.1a6' pytest pandas
-          python -m pip check
-      - name: Verify installed public entry, plain strategy, native lifecycle and frozen template
-        env:
-          PYTHONPATH: ""
-        run: python scripts/check_ic_public_entry.py
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ic-public-entry-qualification
-          path: consumer-qualification.json
-
-  publish:
+      publish:
         description: "Publish artifacts to PyPI after building"
         required: true
         default: false
@@ -239,6 +212,34 @@ jobs:
             ${{ runner.temp }}/native-fixture
             ${{ runner.temp }}/native-build.log
             ${{ runner.temp }}/native-results.xml
+
+  consumer-public-entry:
+    if: inputs.consumer_linux_only
+    needs: wheels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-ubuntu-latest-auto64
+          path: consumer-wheels
+      - name: Install exact candidate and fixed official dependencies
+        run: |
+          python -m pip install consumer-wheels/*.whl 'nautilus_trader==2.0.0rc7' 'tl-store==0.2.1a6' pytest pandas
+          python -m pip check
+      - name: Verify installed public entry, plain strategy, native lifecycle and frozen template
+        env:
+          PYTHONPATH: ""
+        run: python scripts/check_ic_public_entry.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ic-public-entry-qualification
+          path: consumer-qualification.json
+
 
   publish:
     name: Publish to PyPI
