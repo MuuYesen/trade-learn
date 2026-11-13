@@ -86,7 +86,7 @@
 
 ## インストール
 
-この節は `0.3.4`（固定ソース`v0.3.4`/`5af840c`）を対象とします。タグ作成はPyPIアップロード完了を意味しません。[PyPI 0.3.4](https://pypi.org/project/trade-learn/0.3.4/)で取得可能になってから実行してください。既存0.3.2の配布物は変更しません。
+`0.3.4`は[PyPI](https://pypi.org/project/trade-learn/0.3.4/)へ正式公開済みです。固定ソースは`v0.3.4`/`5af840c`、公開17ファイルのSHAとLinux fresh組合せを検証済みです。この文書修正は固定配布物と既存0.3.2を変更しません。
 
 ```bash
 pip install trade-learn==0.3.4
@@ -99,7 +99,7 @@ pip install "trade-learn[research]==0.3.4"
 
 実wheelはMac arm64/Windows AMD64/Linux x64のCP310–314、Linux ARM64のCP313を対象とします。Linux CP313+Storea8+NA2rc7のfreshインストールとMac CP313実物を検証済みです。Storeの他OSビルド、自然venue、KQのWindows未実装/LinuxARM未検証は区別します。
 
-公開入口は`bt.stores.NautilusStore`と通常の`bt.Strategy`、唯一の`cerebro.run(monitor=...)`です。内部runtime、SDK戦略基底クラス、公開`Store.run`は使用しません。monitorはendpointとAccessKey pairだけを受け取り、信頼できるbindingがなければ原本をローカルに保持します。[固定テンプレート](https://github.com/MuuYesen/trade-learn/blob/d202cc1ab0dfd25f3ada8b25eba3315a84a2e27c/examples/live/ctrader_monitor.py)と[0.3.4更新ログ](CHANGELOG.md)を参照してください。実Sender/アーカイブroundtripは別途未検証であり、配布完了を送信成功とは扱いません。
+公開入口は`bt.stores.NautilusStore`と通常の`bt.Strategy`、唯一の`cerebro.run(monitor=...)`です。内部runtime、SDK戦略基底クラス、公開`Store.run`は使用しません。monitorはendpointとAccessKey pairだけを受け取り、信頼できるbindingがなければ原本をローカルに保持します。[固定テンプレート](https://github.com/MuuYesen/trade-learn/blob/d202cc1ab0dfd25f3ada8b25eba3315a84a2e27c/examples/live/ctrader_monitor.py)と[0.3.4更新ログ](CHANGELOG.md)を参照してください。実Sender/アーカイブroundtripは別途未検証であり、配布完了を送信成功とは扱いません。cTrader a8の執行範囲は通常Market IOC/typed closeのみで、汎用NAの条件注文/注文グループ資格を外挿しません。
 
 ## クイックスタート
 

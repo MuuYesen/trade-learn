@@ -86,7 +86,7 @@ Causal/ML research remains part of the strategy workflow. See the [causal guide]
 
 ## Installation
 
-This section targets `0.3.4`, frozen at `v0.3.4`/`5af840c`. A tag is not proof of a completed upload: use these commands only when [PyPI 0.3.4](https://pypi.org/project/trade-learn/0.3.4/) is available. Existing 0.3.2 artifacts remain immutable.
+Version `0.3.4` is formally [published on PyPI](https://pypi.org/project/trade-learn/0.3.4/), frozen at `v0.3.4`/`5af840c`. All 17 public files are hash-verified and the fresh Linux combination is qualified. This documentation correction does not change frozen artifacts; existing 0.3.2 remains immutable.
 
 ```bash
 pip install trade-learn==0.3.4
@@ -99,7 +99,7 @@ The unified lock is resolved and CI-qualified. `[tl-store]` pins public `tl-stor
 
 Real TL wheels cover macOS arm64/Windows AMD64/Linux x64 CP310–314 and Linux ARM64 CP313. Fresh Linux CP313+Storea8+NA2rc7 installation, RECORD/native/pip-check and the actual Mac CP313 candidate have been qualified. Other Store platform builds and natural venue behavior are separate. KQ Windows integration is unimplemented and Linux ARM remains unverified; this is not a claim that TL itself lacks those OS targets.
 
-The public path is `from tradelearn import engine as bt`, lazy `bt.stores.NautilusStore`, ordinary `bt.Strategy`/`bt.talib.SMA`, standard broker/data/strategy assembly and only `cerebro.run(monitor=...)`. No public `Store.run`, internal runtime import or SDK strategy superclass is required. Monitor exposes endpoint and an access-key pair only; trusted binding failure retains local files. See the [frozen template](https://github.com/MuuYesen/trade-learn/blob/d202cc1ab0dfd25f3ada8b25eba3315a84a2e27c/examples/live/ctrader_monitor.py) and [corrected 0.3.4 changelog](CHANGELOG.md). Real Sender/archive roundtrip remains a separate, unqualified integration gate.
+The public path is `from tradelearn import engine as bt`, lazy `bt.stores.NautilusStore`, ordinary `bt.Strategy`/`bt.talib.SMA`, standard broker/data/strategy assembly and only `cerebro.run(monitor=...)`. No public `Store.run`, internal runtime import or SDK strategy superclass is required. Monitor exposes endpoint and an access-key pair only; trusted binding failure retains local files. See the [frozen template](https://github.com/MuuYesen/trade-learn/blob/d202cc1ab0dfd25f3ada8b25eba3315a84a2e27c/examples/live/ctrader_monitor.py) and [corrected 0.3.4 changelog](CHANGELOG.md). Real Sender/archive roundtrip remains a separate, unqualified integration gate. Formal cTrader a8 execution admits plain Market IOC/typed close only; generic NA conditional/group qualifications do not extend that adapter.
 
 ## Quick Start
 

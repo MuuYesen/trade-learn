@@ -7,7 +7,7 @@
 
 ## [0.3.4] - 2026-11-14
 
-发行源码固定为 `5af840c97d9feffb34cdf65c7e8ce465046be725`（`v0.3.4`）。本节是冻结标签之后的文档更正；不移动标签、不重建或替换已冻结发行字节。标签内旧更新日志所写 Store a5、内置 Observer 尚未实现等状态已经过期，以下按实际实现和资格说明。PyPI上传/公网安装与真实云端归档验收分开记录。
+发行源码固定为 `5af840c97d9feffb34cdf65c7e8ce465046be725`（`v0.3.4`）。本节是冻结标签之后的文档更正；不移动标签、不重建或替换已冻结发行字节。标签内旧更新日志所写 Store a5、内置 Observer 尚未实现等状态已经过期，以下按实际实现和资格说明。正式OIDC/PyPI/GitHub发行成功，17公开文件摘要一致，Linux公网全新组合491通过且零失败/跳过；真实云端归档仍分开验收。
 
 - **唯一公开实时入口**：`from tradelearn import engine as bt`，惰性 `bt.stores.NautilusStore`（或 `from tradelearn.engine.stores import NautilusStore`）、普通 `bt.Strategy`/`bt.talib.SMA`，标准 `setbroker/adddata/addstrategy` 后只调用 `cerebro.run()`。移除公开 `Store.run`；不要求用户导入内部 `tradelearn_runtime`、继承日志SDK基类或构造私有 execution/settings。
 - **二字段监控装配**：`cerebro.run(monitor={endpoint, credentials: {access_key_id, secret_access_key}})` 经固定受信服务的 IAM/队列绑定发现；无手填归档绑定/回执URL或临时凭据示例。缺少可信响应保本地原件并禁 Sender。真实绑定服务已验；Sender/SQS/archive完整真实回执仍是独立未验项，不以安装、HTTP成功或ACK替代归档证明。
@@ -15,7 +15,7 @@
 - **数据、时钟与指标**：修复时区边界、重复名Data身份、稀疏与跨日resample/replay锚点及可交付时点、配置calendar压缩、迟到/重复修订与idle检查。source UTC/ns、逻辑bar修订与公开BT日期分开保留。已有`runonce=False`正确驱动held次源的命令式Indicator，按注册顺序回调；共享EMA在同一逻辑bar修订时不重复累积。默认批量模式整体副作用预计算顺序与BT不同仍为既有限制，未称全面兼容。
 - **Observer、资金与分析器**：补齐集合访问/重复Observer注册、声明生命周期、静态及研究cashflow/setcash/fund查询；六个内置Observer和适用Returns/Sharpe/DrawDown有实际对照。默认cTrader账户观察复用正式Store a8的只读QueryAccount刷新，普通BT策略无需SDK基类，SDK/查询/Observer共用同次权威观察。单币无杠杆CASH查询及单资产MARGIN原始有符号视图已验；多资产保证金归属、自然基金NAV/份额、FX/hedged不凭空推算。
 - **原生所有权**：停止、drain和dispose后在原owner线程释放actor/关闭SDK持有链；账户刷新器清理自有timer/handle并释放cache/clock/loop。真实Node关闭与错误路径保留unraisable为失败，不屏蔽GC错误。
-- **正式依赖与平台**：`[tl-store]`固定公开 `tl-store==0.2.1a8`，`[nautilus]`固定官方 `2.0.0rc7`；NA组合限CP313/314。本轮统一锁与全部必需CI通过，TL真实wheel覆盖Mac arm64/Windows AMD64/Linux x64 CP310–314、Linux ARM64 CP313；Linux CP313全新组合安装与Mac实际候选/独立验收已通过。Store平台与自然venue、KQ后端资格不外推为同一件事。
+- **正式依赖与平台**：`[tl-store]`固定公开 `tl-store==0.2.1a8`，`[nautilus]`固定官方 `2.0.0rc7`；NA组合限CP313/314。本轮统一锁与全部必需CI通过，TL真实wheel覆盖Mac arm64/Windows AMD64/Linux x64 CP310–314、Linux ARM64 CP313；Linux CP313全新组合安装与Mac实际候选/独立验收已通过。Store平台与自然venue、KQ后端资格不外推为同一件事。 当前cTrader a8执行只接plain Market IOC/typed close，通用NA条件单/订单组等资格不外推到该适配器。
 - **精确保留限制**：固定NA GTD模拟器缺陷、public LiveNode缺少pre-venue bar-open cheat阶段、无界订阅没有有限源EOF、tvkit完整Provider替换、KQ Windows桥/LinuxARM资格及上述财务权威来源仍分列。旧031/032、Store旧版本和033未发行标签历史均保留；一次发行不代表移植全部BT/NA能力。
 
 ## [0.3.3] - 2026-11-13 (held; never published to PyPI)
