@@ -169,6 +169,13 @@ class LiveReplay:
                 self.builder._last_public,state._eos,state._last_eos=self._idle_prior
                 self.pending=None;self._pending_from_idle=False
                 return self.push(stamp,row,check_ns=check_ns)
+            if (getattr(self,'_pending_from_idle',False) and not self.builder.options['takelate']
+                    and self._idle_prior[0] is not None and number(stamp)<=self._idle_prior[0]):
+                # This rejected source has consumed the clone's check/load
+                # turn. The next source can restore the queued close, but is
+                # not also a fresh aggregate input in that same load turn.
+                self._pending_from_idle=False
+                return []
             if number(label)>number(stamp):return []
             self.pending=None
             self._publish(count,label,values)

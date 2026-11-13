@@ -119,3 +119,22 @@ def test_unpublished_idle_clone_can_accept_a_current_source_before_its_boundary(
     label,values,source,count=output[0]
     assert label==source==stamp('09:05:00') and count==1
     assert values==dict(open=100.,high=119.,low=94.,close=116.,volume=7.)
+
+
+@pytest.mark.parametrize('rejected',['09:03:00','09:04:00'])
+def test_rejected_preclose_clone_source_consumes_the_next_restore_turn(rejected):
+    from tradelearn_runtime.bar_views import LiveReplay
+    options=dict(timeframe=bt.TimeFrame.Minutes,compression=7,bar2edge=True,adjbartime=True,rightedge=True,boundoff=0,takelate=False)
+    plan=LiveReplay(dict(kind='replay',clone=True,source_period=dict(timeframe=bt.TimeFrame.Minutes,compression=1),options=options))
+    stamp=lambda text:pd.Timestamp('2026-01-02T'+text+'Z').value
+    row=lambda price,qty:dict(open=price,high=price+4,low=price-6,close=price+1,volume=qty)
+    plan.push_observed(stamp('09:00:00'),row(100.,1.),stamp('09:00:01'))
+    plan.push_observed(stamp('09:04:00'),row(107.,2.),stamp('09:04:01'))
+    assert plan.push_observed(stamp('09:02:00'),row(94.,3.),stamp('09:05:00'))==[]
+    plan.check(stamp('09:06:00'))
+    assert plan.push_observed(stamp(rejected),row(115.,4.),stamp('09:06:01'))==[]
+    output=plan.push_observed(stamp('09:08:00'),row(81.,5.),stamp('09:08:01'))
+    assert output[-1] is None  # Actual raw master advances, queued derived only restores.
+    assert output[0][3]==1 and output[0][1]['close']==108. and output[0][1]['volume']==3.
+    [current]=plan.push_observed(stamp('09:09:00'),row(88.,6.),stamp('09:09:01'))
+    assert current[3]==2 and current[1]['close']==89. and current[1]['volume']==6.
