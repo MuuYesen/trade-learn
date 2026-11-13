@@ -336,10 +336,12 @@ class Order:
         self.created_ts = submitted_at
         self._bt_dates = bool(getattr(owner, "_bt_minperiods", False))
         clock = getattr(self.data, "datetime", None)
-        date = clock.datetime() if clock is not None else None
-        if self._bt_dates and date is not None:
-            from tradelearn.backtest.clock import date2num
-            date = date2num(date)
+        # BT records the numeric UTC-like line value, independently of the
+        # timezone used by datetime() for display. Re-localizing that display
+        # date shifts both created.dt and the native Market eligibility gate.
+        date = (clock[0] if self._bt_dates else clock.datetime()) if clock is not None else None
+        if self._bt_dates and pd.isna(date):
+            date = None  # No delivered bar at bootstrap; never invent a date.
         close_line = getattr(self.data, "close", None)
         close = float(close_line[0]) if close_line is not None else float("nan")
         price = close if not self.price and not self.pricelimit else self.price
@@ -358,7 +360,8 @@ class Order:
         self.executed.dt = self._executed_dt_raw
         if getattr(self, "_bt_dates", False):
             from tradelearn.backtest.clock import date2num
-            self.executed.dt = date2num(self._executed_dt_raw)
+            self.executed.dt = (float(self.data.datetime[0]) if getattr(self.data,'_native_delivery_views',False)
+                                else date2num(self._executed_dt_raw))
 
     def trailadjust(self, price):
         """Adjust the BT order projection; execution remains owned by its broker."""
@@ -461,6 +464,12 @@ class Trade:
     status: int = Created
     dtopen: Any = None
     dtclose: Any | None = None
+    justopened: bool = False
+    long: bool = False
+    tradeid: int = 0
+    baropen: int = 0
+    barclose: int = 0
+    barlen: int = 0
 
     def getstatusname(self) -> str:
         return ["Created", "Open", "Closed"][self.status]

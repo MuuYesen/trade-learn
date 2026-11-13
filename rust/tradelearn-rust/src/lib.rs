@@ -1,8 +1,8 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-mod logging;
 pub mod engine;
+mod logging;
 pub mod matching;
 pub mod resampler;
 pub mod runner;
@@ -261,6 +261,54 @@ impl RustBacktestEngine {
     }
 
     #[allow(clippy::too_many_arguments)]
+    fn step_bars_with_quotes_compact(
+        &mut self,
+        symbols: Vec<String>,
+        timestamps: Vec<i64>,
+        opens: Vec<f64>,
+        highs: Vec<f64>,
+        lows: Vec<f64>,
+        closes: Vec<f64>,
+        volumes: Vec<f64>,
+        quote_opens: Vec<f64>,
+        quote_highs: Vec<f64>,
+        quote_lows: Vec<f64>,
+        quote_closes: Vec<f64>,
+        trade_on_close: bool,
+    ) -> PyResult<(Option<CompactFills>, f64, f64, f64)> {
+        let (bars, quotes) = build_quote_bars(symbols, timestamps, opens, highs, lows, closes, volumes,
+            quote_opens, quote_highs, quote_lows, quote_closes)?;
+        let records = self
+            .inner
+            .step_bars_with_quotes(bars, &quotes, trade_on_close);
+        let fills = self.map_fills_compact(records);
+        let cash = self.inner.get_cash();
+        let (size, price) = self.inner.get_position();
+        Ok((fills, cash, size, price))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn step_bars_with_quote_views_compact(
+        &mut self, symbols: Vec<String>, timestamps: Vec<i64>, opens: Vec<f64>, highs: Vec<f64>,
+        lows: Vec<f64>, closes: Vec<f64>, volumes: Vec<f64>, quote_opens: Vec<f64>,
+        quote_highs: Vec<f64>, quote_lows: Vec<f64>, quote_closes: Vec<f64>,
+        trade_on_close: bool, delivery_views: Vec<(String, u64, i64)>,
+    ) -> PyResult<(Option<CompactFills>, f64, f64, f64)> {
+        let (bars, quotes) = build_quote_bars(symbols, timestamps, opens, highs, lows, closes, volumes,
+            quote_opens, quote_highs, quote_lows, quote_closes)?;
+        let count = delivery_views.len();
+        let views: std::collections::HashMap<String, (u64, i64)> = delivery_views.into_iter()
+            .map(|(symbol, turn, clock)| (symbol, (turn, clock))).collect();
+        if views.len() != count { return Err(PyValueError::new_err("duplicate delivery view symbol")); }
+        let records = self.inner.step_bars_with_quote_views(bars, &quotes, &views, trade_on_close)
+            .map_err(PyValueError::new_err)?;
+        let fills = self.map_fills_compact(records);
+        let cash = self.inner.get_cash();
+        let (size, price) = self.inner.get_position();
+        Ok((fills, cash, size, price))
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn step_close_bars_compact(
         &mut self,
         symbols: Vec<String>,
@@ -280,24 +328,29 @@ impl RustBacktestEngine {
     }
 
     fn run_bar_loop(
-        &mut self,
+        slf: Py<Self>,
         py: Python<'_>,
         broker: Py<PyAny>,
         on_bar: Py<PyAny>,
         start: usize,
         end: usize,
     ) -> PyResult<()> {
-        let stop = end.min(self.inner.total_bars());
+        let stop = end.min(slf.borrow(py).inner.total_bars());
         for cursor in start..stop {
-            self.sync_broker_controls(py, &broker)?;
-            let fill_records = self.inner.step_open(cursor);
-            self.deliver_order_events(py, &broker)?;
-            let fills = self.map_fills_compact(fill_records);
-            let cash = self.inner.get_cash();
-            let (size, price) = self.inner.get_position();
-            let drained = on_bar.call1(py, (cursor, fills, cash, size, price))?;
-
-            self.consume_broker_callback(py, &broker, drained)?;
+            let (fills,cash,size,price) = {
+                let mut engine=slf.borrow_mut(py);
+                engine.sync_broker_controls(py,&broker)?;
+                let records=engine.inner.step_open(cursor);
+                engine.deliver_order_events(py,&broker)?;
+                let fills=engine.map_fills_compact(records);
+                let cash=engine.inner.get_cash();
+                let (size,price)=engine.inner.get_position();
+                (fills,cash,size,price)
+            };
+            // No mutable owner loan spans arbitrary Python business. Public
+            // BT reads/explicit valuation still address this exact account.
+            let drained=on_bar.call1(py,(cursor,fills,cash,size,price))?;
+            slf.borrow_mut(py).consume_broker_callback(py,&broker,drained)?;
         }
         Ok(())
     }
@@ -351,6 +404,19 @@ impl RustBacktestEngine {
         )
     }
 
+    fn configure_order_expiry_clock(&mut self, order_id: u64, target_clock: bool) {
+        self.inner
+            .configure_order_expiry_clock(order_id, target_clock);
+    }
+
+    fn configure_market_close_reference(&mut self, order_id: u64, price: f64) -> PyResult<()> {
+        self.inner.configure_market_close_reference(order_id,price).map_err(pyo3::exceptions::PyValueError::new_err)
+    }
+
+    fn configure_market_eligibility(&mut self, order_id: u64, after: i64) {
+        self.inner.configure_market_eligibility(order_id, after);
+    }
+
     #[pyo3(signature = (order_ref, deadline=None, oco_peer=None))]
     fn configure_order(&mut self, order_ref: u64, deadline: Option<i64>, oco_peer: Option<u64>) {
         self.inner.configure_order(order_ref, deadline, oco_peer);
@@ -368,8 +434,25 @@ impl RustBacktestEngine {
         self.inner.get_position_for_symbol(symbol)
     }
 
+    fn configure_submission_check(&mut self, order_ref: u64, price: f64) -> PyResult<()> {
+        self.inner.configure_submission_check(order_ref, price).map_err(PyValueError::new_err)
+    }
+
+    fn apply_cash_controls(&mut self, commands: Vec<(u64, String, f64)>) -> PyResult<()> {
+        self.inner.apply_cash_controls(commands).map_err(PyValueError::new_err)
+    }
+
+    fn drain_cash_events(&mut self) -> PyResult<Vec<(u64, String, f64, f64)>> {
+        self.inner.drain_cash_events().map_err(PyValueError::new_err)
+    }
+
     fn get_cash(&self) -> f64 {
         self.inner.get_cash()
+    }
+
+    #[pyo3(signature=(symbols,include_cash,settle_cash))]
+    fn observe_valuation(&mut self, symbols: Option<Vec<String>>, include_cash: bool, settle_cash: bool) -> PyResult<(f64,f64,f64)> {
+        self.inner.observe_valuation(symbols.as_deref(),include_cash,settle_cash).map_err(PyValueError::new_err)
     }
 
     fn get_equity(&self) -> f64 {
@@ -582,6 +665,17 @@ impl RustBacktestEngine {
         py: Python<'_>,
         broker: &Py<PyAny>,
     ) -> PyResult<()> {
+        if broker.bind(py).hasattr("drain_cash_controls")? {
+            let commands: Vec<(u64, String, f64)> = broker.call_method0(py, "drain_cash_controls")?.extract(py)?;
+            self.inner.apply_cash_controls(commands).map_err(PyValueError::new_err)?;
+            self.deliver_cash_events(py, broker)?;
+        }
+        if broker.bind(py).hasattr("drain_submission_checks")? {
+            let checks: Vec<(u64, f64)> = broker.call_method0(py, "drain_submission_checks")?.extract(py)?;
+            for (id, price) in checks {
+                self.inner.configure_submission_check(id, price).map_err(PyValueError::new_err)?;
+            }
+        }
         if broker.bind(py).hasattr("drain_order_controls")? {
             let (cancels, updates): (Vec<u64>, Vec<(u64, Option<i64>, Option<u64>)>) = broker
                 .call_method0(py, "drain_order_controls")?
@@ -593,6 +687,22 @@ impl RustBacktestEngine {
                 self.inner.remove_order(order_id);
             }
         }
+        if broker.bind(py).hasattr("drain_target_expiry_clocks")? {
+            let updates: Vec<u64> = broker
+                .call_method0(py, "drain_target_expiry_clocks")?
+                .extract(py)?;
+            for order_id in updates {
+                self.inner.configure_order_expiry_clock(order_id, true);
+            }
+        }
+        if broker.bind(py).hasattr("drain_market_eligibility")? {
+            let updates: Vec<(u64, i64)> = broker
+                .call_method0(py, "drain_market_eligibility")?
+                .extract(py)?;
+            for (order_id, after) in updates {
+                self.inner.configure_market_eligibility(order_id, after);
+            }
+        }
         Ok(())
     }
 
@@ -601,9 +711,18 @@ impl RustBacktestEngine {
         py: Python<'_>,
         broker: &Py<PyAny>,
     ) -> PyResult<()> {
+        self.deliver_cash_events(py, broker)?;
         let events = self.inner.drain_order_events();
         if !events.is_empty() && broker.bind(py).hasattr("receive_order_events")? {
             broker.call_method1(py, "receive_order_events", (events,))?;
+        }
+        Ok(())
+    }
+
+    fn deliver_cash_events(&mut self, py: Python<'_>, broker: &Py<PyAny>) -> PyResult<()> {
+        let events = self.inner.drain_cash_events().map_err(PyValueError::new_err)?;
+        if !events.is_empty() {
+            broker.call_method1(py, "receive_cash_events", (events,))?;
         }
         Ok(())
     }
@@ -645,4 +764,52 @@ impl RustBacktestEngine {
         }
         self.sync_broker_controls(py, broker)
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_quote_bars(
+    symbols: Vec<String>, timestamps: Vec<i64>, opens: Vec<f64>, highs: Vec<f64>,
+    lows: Vec<f64>, closes: Vec<f64>, volumes: Vec<f64>, quote_opens: Vec<f64>,
+    quote_highs: Vec<f64>, quote_lows: Vec<f64>, quote_closes: Vec<f64>,
+) -> PyResult<(Vec<BarEvent>, Vec<BarEvent>)> {
+        let count = symbols.len();
+        if [
+            timestamps.len(),
+            opens.len(),
+            highs.len(),
+            lows.len(),
+            closes.len(),
+            volumes.len(),
+            quote_opens.len(),
+            quote_highs.len(),
+            quote_lows.len(),
+            quote_closes.len(),
+        ]
+        .iter()
+        .any(|length| *length != count)
+        {
+            return Err(PyValueError::new_err(
+                "execution quote and valuation bar lengths differ",
+            ));
+        }
+        if quote_opens
+            .iter()
+            .chain(&quote_highs)
+            .chain(&quote_lows)
+            .chain(&quote_closes)
+            .any(|price| !price.is_finite())
+        {
+            return Err(PyValueError::new_err("execution quotes must be finite"));
+        }
+        let quotes = build_bars(
+            symbols.clone(),
+            timestamps.clone(),
+            quote_opens,
+            quote_highs,
+            quote_lows,
+            quote_closes,
+            volumes.clone(),
+        );
+        let bars = build_bars(symbols, timestamps, opens, highs, lows, closes, volumes);
+    Ok((bars, quotes))
 }

@@ -445,7 +445,7 @@ fn smart_segment_rank(segment_idx: usize, start: f64, end: f64, price: f64) -> f
     segment_idx as f64 + ratio
 }
 
-fn calculate_commission(
+pub(crate) fn calculate_commission(
     price: f64,
     size: f64,
     side: OrderSide,
@@ -512,25 +512,45 @@ mod bt_trailing_contracts {
             (OrderSide::Buy, 103.0, 90.0, 91.0, 93.0),
         ] {
             let mut order = OrderEvent {
-                order_id: 1, symbol: "DATA".into(), side,
-                order_type: OrderType::StopTrailLimit, size: 1.0,
-                limit_price: Some(initial_limit), stop_price: Some(100.0),
-                created_ts: 0, trail_amount: Some(1.0), trail_percent: None,
-                trail_watermark: Some(100.0), trail_triggered: false,
+                order_id: 1,
+                symbol: "DATA".into(),
+                side,
+                order_type: OrderType::StopTrailLimit,
+                size: 1.0,
+                limit_price: Some(initial_limit),
+                stop_price: Some(100.0),
+                created_ts: 0,
+                trail_amount: Some(1.0),
+                trail_percent: None,
+                trail_watermark: Some(100.0),
+                trail_triggered: false,
             };
             // Extreme is deliberately different from close, without triggering
             // the old stop. BT trails once from completed close, not high/low.
             let bar = BarEvent {
-                ts: 1, symbol: "DATA".into(), open: 100.0,
-                high: if side == OrderSide::Sell { 120.0 } else { 100.5 },
+                ts: 1,
+                symbol: "DATA".into(),
+                open: 100.0,
+                high: if side == OrderSide::Sell {
+                    120.0
+                } else {
+                    100.5
+                },
                 low: if side == OrderSide::Buy { 80.0 } else { 99.5 },
-                close, volume: 10.0,
+                close,
+                volume: 10.0,
             };
             advance_trailing_order(&mut order, &bar);
             assert_eq!(trailing_stop_price(&order), Some(want_trigger));
             assert_eq!(order.limit_price, Some(want_limit));
             order.trail_triggered = true;
-            advance_trailing_order(&mut order, &BarEvent { close: 200.0, ..bar });
+            advance_trailing_order(
+                &mut order,
+                &BarEvent {
+                    close: 200.0,
+                    ..bar
+                },
+            );
             assert_eq!(order.limit_price, Some(want_limit));
         }
     }
@@ -538,14 +558,28 @@ mod bt_trailing_contracts {
     #[test]
     fn bt_percent_trailing_limit_keeps_price_delta_not_percent_delta() {
         let mut order = OrderEvent {
-            order_id: 1, symbol: "DATA".into(), side: OrderSide::Sell,
-            order_type: OrderType::StopTrailLimit, size: 1.0,
-            limit_price: Some(88.0), stop_price: Some(100.0),
-            created_ts: 0, trail_amount: None, trail_percent: Some(0.1),
-            trail_watermark: Some(100.0), trail_triggered: false,
+            order_id: 1,
+            symbol: "DATA".into(),
+            side: OrderSide::Sell,
+            order_type: OrderType::StopTrailLimit,
+            size: 1.0,
+            limit_price: Some(88.0),
+            stop_price: Some(100.0),
+            created_ts: 0,
+            trail_amount: None,
+            trail_percent: Some(0.1),
+            trail_watermark: Some(100.0),
+            trail_triggered: false,
         };
-        let bar = BarEvent { ts: 1, symbol: "DATA".into(), open: 100.0,
-            high: 120.0, low: 99.0, close: 110.0, volume: 10.0 };
+        let bar = BarEvent {
+            ts: 1,
+            symbol: "DATA".into(),
+            open: 100.0,
+            high: 120.0,
+            low: 99.0,
+            close: 110.0,
+            volume: 10.0,
+        };
         advance_trailing_order(&mut order, &bar);
         assert!((trailing_stop_price(&order).unwrap() - 99.0).abs() < 1e-12);
         assert!((order.limit_price.unwrap() - 97.0).abs() < 1e-12);

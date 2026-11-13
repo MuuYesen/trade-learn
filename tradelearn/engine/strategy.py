@@ -5,6 +5,8 @@ The core backtest API already follows backtrader's line convention:
 module exposes that implementation under ``tradelearn.engine``.
 """
 
+from datetime import timedelta
+
 from tradelearn.backtest.history import build_history_panel
 from tradelearn.backtest.models import ExecutedInfo, Position, Trade
 from tradelearn.engine.order import Order
@@ -53,7 +55,7 @@ class Strategy(_BaseStrategy, LineRoot):
             runtime = getattr(getattr(self, "data", None), "runtime", None)
         if runtime is None:
             return super().__len__()
-        return runtime._cursor + 1 if runtime.profile == "batch" else runtime._sequence
+        return getattr(runtime, '_strategy_cursor', runtime._cursor) + 1 if runtime.profile == "batch" else runtime._sequence
 
     @property
     def datetime(self):
@@ -69,10 +71,39 @@ class Strategy(_BaseStrategy, LineRoot):
         line = getattr(self, "_clock_datetime_line", None)
         if line is None:
             from tradelearn.engine.datafeed import _DateLine
-            line = _DateLine(runtime._clock.timestamps, is_datetime=True)
-            line._cursor_source, line._runtime = runtime, runtime
+            clock_feed = runtime._clock_feed
+            replay = getattr(runtime._clock,'strategy_lengths',None) is not None
+            values = clock_feed._buffer.arrays['datetime'] if replay else runtime._clock.unixseconds
+            line = _DateLine(values, is_datetime=True)
+            line._cursor_source, line._runtime = (clock_feed if replay else runtime), runtime
+            if runtime._clock.unit == 'ns':
+                line._epoch_ns_values = clock_feed._buffer._epoch_ns_values if replay else runtime._clock.timestamps
             self._clock_datetime_line = line
         return line
+
+    def add_timer(self, when, offset=timedelta(), repeat=timedelta(),
+                  weekdays=[], weekcarry=False, monthdays=[], monthcarry=True,
+                  allow=None, tzdata=None, cheat=False, *args, **kwargs):
+        """Register a BT-owned timer; startup prepares its bar-clock state."""
+        assert_observer_allows_mutation()
+        return self.cerebro._add_timer(owner=self,when=when,offset=offset,repeat=repeat,
+            weekdays=weekdays,weekcarry=weekcarry,monthdays=monthdays,monthcarry=monthcarry,
+            allow=allow,tzdata=tzdata,strats=False,cheat=cheat,*args,**kwargs)
+
+    def notify_timer(self,timer,when,*args,**kwargs):
+        pass
+
+    def addminperiod(self, minperiod):
+        """Apply BT line minimums without overriding per-data eligibility.
+
+        BT Strategy._periodset derives callback readiness from its feeds and
+        indicators. Direct Strategy.addminperiod affects its own lines only;
+        Lite retains its separate convenient strategy-wide warmup control.
+        """
+        assert_observer_allows_mutation()
+        for line in self.lines:
+            if line is not None:
+                line.min_period = getattr(line, 'min_period', 1) + minperiod - 1
 
     def getposition(self, data=None, broker=None):
         return (broker or self.broker).getposition(self._resolve_data(data))

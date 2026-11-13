@@ -388,6 +388,11 @@ impl Portfolio {
         self.cash
     }
 
+    pub(crate) fn set_cash(&mut self, cash: f64) {
+        self.cash = cash;
+    }
+
+
     /// Keep short proceeds and equal entry-cost collateral unavailable to new
     /// exposure. Book cash remains unchanged; only fill admission uses this reserve.
     pub(crate) fn can_apply_fill(&self, fill: &FillEvent, mult: f64) -> bool {
@@ -400,17 +405,16 @@ impl Portfolio {
             .get(&fill.symbol)
             .cloned()
             .unwrap_or_else(|| Position::new(fill.symbol.clone()));
-        let reduces_only = projected.size * fill.size < 0.0
-            && fill.size.abs() <= projected.size.abs();
+        let reduces_only =
+            projected.size * fill.size < 0.0 && fill.size.abs() <= projected.size.abs();
         // A losing cover may leave a collateral deficit. Permit pure risk
         // reduction if cash stays nonnegative; never grant new exposure on it.
         if reduces_only {
             return true;
         }
         projected.apply_fill(fill.size, fill.price, mult);
-        let reserve = |position: &Position| {
-            (-position.size).max(0.0) * position.avg_price * mult * 2.0
-        };
+        let reserve =
+            |position: &Position| (-position.size).max(0.0) * position.avg_price * mult * 2.0;
         let reserved_after = self
             .positions
             .values()
@@ -419,6 +423,14 @@ impl Portfolio {
             .sum::<f64>()
             + reserve(&projected);
         reserved_after.is_finite() && cash_after + 1e-9 >= reserved_after
+    }
+
+    pub fn position_value(&self, symbols: Option<&[String]>, mult: f64) -> f64 {
+        match symbols {
+            Some(names)=>names.iter().filter_map(|name|self.positions.get(name))
+                .map(|position|position.size*position.mark_price*mult).sum(),
+            None=>self.positions.values().map(|position|position.size*position.mark_price*mult).sum(),
+        }
     }
 
     pub fn equity(&self, mult: f64) -> f64 {

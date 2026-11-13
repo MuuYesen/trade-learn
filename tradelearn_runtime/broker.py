@@ -117,11 +117,11 @@ class NautilusBroker:
         self._check_mutation()
         if self._unresolved or self._recovery_blocks:
             raise RuntimeError('unresolved submission blocks new orders until reconciliation')
-        unsupported = set(kwargs) - {'client_oid','tif','valid','reduce_only','position_id','pricelimit','trailamount','trailpercent','parent','oco','transmit','info','post_only'}
+        unsupported = set(kwargs) - {'client_oid','tif','valid','reduce_only','position_id','pricelimit','trailamount','trailpercent','parent','oco','transmit','info','post_only','display_qty','trigger_type','emulation_trigger','exec_algorithm_id','exec_algorithm_params'}
         if unsupported:
             raise ValueError(f'unsupported live order controls: {sorted(unsupported)}')
         info = dict(kwargs.pop('info', {}))
-        if any(key in info for key in ('client_oid', 'submission_state', 'native_status', 'native_evidence')):
+        if any(key in info for key in ('client_oid', 'submission_state', 'native_status', 'native_evidence', 'native_event')):
             raise ValueError('reserved native order metadata cannot be supplied')
         parent, oco = kwargs.pop('parent', None), kwargs.pop('oco', None)
         transmit = kwargs.pop('transmit', True)
@@ -269,18 +269,20 @@ class NautilusBroker:
                 self._notify(owner,value)
         return order
 
-    def apply(self, client_oid, *, status, filled_qty, avg_price=None, event_id=None, commission=None, native_ts_ns=None, native_evidence=None, total_qty=None):
+    def apply(self, client_oid, *, status, filled_qty, avg_price=None, event_id=None, commission=None, native_ts_ns=None, native_evidence=None, total_qty=None, native_event=None):
         self._check_mutation()
         if client_oid not in self._orders:
             raise RuntimeError('strategy order event lacks recovered frontend intent')
-        payload=(status,filled_qty,avg_price,commission,total_qty)
+        payload=(status,filled_qty,avg_price,commission,total_qty,
+                 tuple(sorted(native_event.items())) if native_event is not None else None)
         key=(client_oid,event_id) if event_id is not None else (client_oid,payload)
         if key in self._seen:
             if self._seen[key] != payload:
                 raise ValueError('conflicting native event replay requires reconciliation')
             return False
         order=self._orders[client_oid];owner=self._owners[client_oid]
-        mapping={'INITIALIZED':Order.Created,'SUBMITTED':Order.Submitted,'ACCEPTED':Order.Accepted,
+        mapping={'INITIALIZED':Order.Created,'EMULATED':Order.Submitted,'RELEASED':Order.Submitted,
+                 'SUBMITTED':Order.Submitted,'ACCEPTED':Order.Accepted,
                  'PARTIALLY_FILLED':Order.Partial,'FILLED':Order.Completed,'CANCELED':Order.Canceled,
                  'EXPIRED':Order.Expired,'REJECTED':Order.Rejected,'DENIED':Order.Rejected}
         if status in ('TRIGGERED','PENDING_CANCEL','PENDING_UPDATE'):
@@ -317,6 +319,9 @@ class NautilusBroker:
         order.info['submission_state']=status
         order.info['native_status']=status
         order.info['native_evidence']=native_evidence
+        if native_event is not None:
+            order.info['native_event'] = dict(native_event)
+            order.info['reason'] = native_event.get('reason')
         if native_ts_ns is not None:order.info['native_ts_ns']=int(native_ts_ns)
         # Match the frontend's pending delta without applying synthetic fills.
         pending=owner._pending_size.get(order.data,0)+sign*(new_total-old_total)
@@ -349,11 +354,20 @@ class NautilusBroker:
         sign=1 if order.isbuy() else -1
         self.owner._pending_size[data]=self.owner._pending_size.get(data,0)+sign*abs(order.size)
         status=native.status.name
-        fees=list(native.commissions().values())
-        self.apply(oid,status=status,filled_qty=float(native.filled_qty.as_double()),
-                   avg_price=native.avg_px,event_id='recovery:'+str(native.last_event.event_id),
-                   commission=float(fees[0].as_double()) if len(fees)==1 else None,
-                   native_ts_ns=int(native.ts_last),total_qty=float(native.quantity.as_double()))
+        from .order_fees import cumulative_native_commission
+        from .notification_evidence import native_event_evidence
+        projector=getattr(self.gateway,'_spawn_projection',None)
+        projection=projector(native) if callable(projector) else None
+        if projection is not None:
+            if projection.pop('client_oid')!=oid:raise ValueError('native recovery primary differs from request')
+            self.apply(oid,**projection,event_id='recovery:'+str(native.last_event.event_id),
+                       native_ts_ns=int(native.ts_last),native_event=native_event_evidence(native.last_event))
+        else:
+            self.apply(oid,status=status,filled_qty=float(native.filled_qty.as_double()),
+                       avg_price=native.avg_px,event_id='recovery:'+str(native.last_event.event_id),
+                       commission=cumulative_native_commission(native),
+                       native_ts_ns=int(native.ts_last),total_qty=float(native.quantity.as_double()),
+                       native_event=native_event_evidence(native.last_event))
         if order.alive():self._recovery_blocks.add(oid)
         return order
 

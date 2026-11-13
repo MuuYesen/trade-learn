@@ -281,6 +281,40 @@ class StreamBinding:
         self.indicator, self.inputs = indicator, inputs
         self.state = indicator.new_state()
         self.value = None
+        self._checkpoint_generation = 0
+
+    def _checkpoint(self):
+        """One in-process bar baseline; never serialize or replay full history."""
+        backend = self.state.state.get('backend')
+        capture = getattr(backend, '_checkpoint', None)
+        native = callable(capture)
+        payload = capture() if native else deepcopy(backend)
+        return dict(owner=weakref.ref(self), generation=self._checkpoint_generation,
+                    buffers=deepcopy(self.state.buffers),
+                    state=deepcopy({k:v for k,v in self.state.state.items() if k!='backend'}),
+                    backend=backend if native else None, backend_state=payload,
+                    native=native, params=deepcopy(self.state.params),
+                    indicator_owner=self.state.owner, failed=self.state.failed,
+                    value=deepcopy(self.value))
+
+    def _restore_checkpoint(self, checkpoint):
+        if (checkpoint['owner']() is not self
+                or checkpoint['generation']!=self._checkpoint_generation):
+            raise ValueError('foreign or expired indicator replay checkpoint')
+        current=self.state.state.get('backend')
+        backend=checkpoint['backend'] if checkpoint['native'] else deepcopy(checkpoint['backend_state'])
+        if current is not None and current is not backend:
+            close=getattr(current,'close',None)
+            if callable(close):close()
+        if checkpoint['native']:
+            backend._restore_checkpoint(checkpoint['backend_state'])
+        self.state.buffers=deepcopy(checkpoint['buffers'])
+        self.state.state=deepcopy(checkpoint['state'])
+        if backend is not None:self.state.state['backend']=backend
+        self.state.params=deepcopy(checkpoint['params'])
+        self.state.owner=checkpoint['indicator_owner']
+        self.state.failed=checkpoint['failed']
+        self.value=deepcopy(checkpoint['value'])
 
     def update(self, *values: float) -> Any:
         """Validate input arity and advance exactly this binding's isolated indicator state."""
@@ -295,6 +329,7 @@ class StreamBinding:
         """Reset this binding's backend state and forget its last emitted value."""
         self.indicator.reset(state=self.state)
         self.value = None
+        self._checkpoint_generation += 1
 
 
 def _line_owner(args: tuple[Any, ...]) -> Any | None:

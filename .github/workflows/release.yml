@@ -3,8 +3,40 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      publish:
+      consumer-public-entry:
+    if: inputs.consumer_linux_only
+    needs: wheels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-ubuntu-latest-auto64
+          path: consumer-wheels
+      - name: Install exact candidate and fixed official dependencies
+        run: |
+          python -m pip install consumer-wheels/*.whl 'nautilus_trader==2.0.0rc7' 'tl-store==0.2.1a6' pytest pandas
+          python -m pip check
+      - name: Verify installed public entry, plain strategy, native lifecycle and frozen template
+        env:
+          PYTHONPATH: ""
+        run: python scripts/check_ic_public_entry.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ic-public-entry-qualification
+          path: consumer-qualification.json
+
+  publish:
         description: "Publish artifacts to PyPI after building"
+        required: true
+        default: false
+        type: boolean
+      consumer_linux_only:
+        description: "Build-only installed public-entry consumer qualification (no publication)"
         required: true
         default: false
         type: boolean
@@ -75,12 +107,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Reject consumer publication
+        if: inputs.consumer_linux_only && inputs.publish
+        run: exit 1
       - id: check
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/check_release_metadata.py --publish "${{ github.event.inputs.publish || 'false' }}"
 
   sdist:
+    if: ${{ !inputs.consumer_linux_only }}
     name: Build source distribution
     needs: release-metadata
     runs-on: ubuntu-latest
@@ -106,20 +142,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            cibw-archs: auto64
-            cibw-build: "cp310-* cp311-* cp312-* cp313-* cp314-*"
-          - os: ubuntu-latest
-            cibw-archs: aarch64
-            cibw-build: "cp313-*"
-          - os: macos-15
-            cibw-archs: arm64
-            cibw-build: "cp310-* cp311-* cp312-* cp313-* cp314-*"
-          - os: windows-latest
-            cibw-archs: AMD64
-            cibw-build: "cp310-* cp311-* cp312-* cp313-* cp314-*"
+      matrix: ${{ fromJSON(inputs.consumer_linux_only && '{"include":[{"os":"ubuntu-latest","cibw-archs":"auto64","cibw-build":"cp313-manylinux_x86_64"}]}' || '{"include":[{"os":"ubuntu-latest","cibw-archs":"auto64","cibw-build":"cp310-* cp311-* cp312-* cp313-* cp314-*"},{"os":"ubuntu-latest","cibw-archs":"aarch64","cibw-build":"cp313-*"},{"os":"macos-15","cibw-archs":"arm64","cibw-build":"cp310-* cp311-* cp312-* cp313-* cp314-*"},{"os":"windows-latest","cibw-archs":"AMD64","cibw-build":"cp310-* cp311-* cp312-* cp313-* cp314-*"}]}') }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -147,6 +170,7 @@ jobs:
           if-no-files-found: error
 
   native-indicators:
+    if: ${{ !inputs.consumer_linux_only }}
     name: Installed native indicators (${{ matrix.os }})
     needs: wheels
     runs-on: ${{ matrix.os }}

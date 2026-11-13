@@ -96,7 +96,7 @@ class Cerebro:
         self.optreturn = bool(kwargs.pop("optreturn", True))
         self.kwargs = kwargs
         from tradelearn.backtest.broker import RustBroker
-        self.setbroker(RustBroker(match_mode=match_mode))
+        self.setbroker(RustBroker(cash=10000.0,match_mode=match_mode))
         self.broker.configure_matching(
             trade_on_close=self.trade_on_close,
             slippage=slippage or FixedSlippage(),
@@ -106,11 +106,14 @@ class Cerebro:
         self._sizer_spec = (FixedSize, {})
         self.analyzers: dict[str, tuple[type[Analyzer], tuple[Any, ...], dict[str, Any]]] = {}
         self._analyzer_name_counts: dict[str, int] = {}
-        self.observers: dict[str, tuple[type[Any], tuple[Any, ...], dict]] = {}
+        self.observers = ObserverCollection()
         self.writers: list[tuple[type[Any], tuple, dict]] = []
         self.stores: list[Any] = []
-        self.timers: list[tuple[tuple, dict]] = []
+        self.timers: list[Any] = []
+        self._timers=self.timers
         self.calendars: list[Any] = []
+        self._tradingcal = None
+        self._calendar_transforms = []
         self._runstop = False
         self.signals: list[tuple[int, type, tuple, dict]] = []
         self._signal_strat: tuple[type, tuple, dict] | None = None
@@ -172,10 +175,25 @@ class Cerebro:
         raise NotImplementedError("rolloverdata requires native feed lifecycle semantics; no multi-feed substitution")
 
     def resampledata(self, dataname, name=None, **kwargs):
-        raise NotImplementedError("resampledata incremental feed semantics are not implemented; prepare explicit source feeds")
+        from .resampling import resample_feed
+        if '_target' in kwargs:
+            raise TypeError('unknown resample parameter: _target')
+        from copy import copy
+        clone = any(dataname is item for item in self.datas)
+        parent = next((recipe for recipe in reversed(self._calendar_transforms) if recipe['target'] is dataname), None)
+        original = copy(dataname)
+        data = resample_feed(dataname, clone=clone, **kwargs)
+        self._calendar_transforms.append(dict(target=data, source_ref=dataname, original=original, parent=parent, clone=clone, options=dict(kwargs)))
+        self.adddata(data, name=name)
+        self._doreplay = True
+        return data
 
-    def replaydata(self, data, **kwargs):
-        raise NotImplementedError("replaydata incremental replay is not implemented")
+    def replaydata(self, dataname, name=None, **kwargs):
+        from .replaying import replay_feed
+        data=replay_feed(dataname,clone=any(dataname is item for item in self.datas),**kwargs)
+        self.adddata(data,name=name)
+        self._doreplay=True
+        return data
 
     def addstrategy(self, strategy: type[Strategy], *args: Any, **kwargs: Any) -> int:
         self.strats.append((strategy, args, kwargs))
@@ -240,11 +258,91 @@ class Cerebro:
     def addstore(self, store: Any) -> None:
         self.stores.append(store)
 
-    def add_timer(self, when, offset=__import__("datetime").timedelta(0), repeat=__import__("datetime").timedelta(0), weekdays=[], weekcarry=False, monthdays=[], monthcarry=True, allow=None, tzdata=None, cheat=False, *args, **kwargs):
-        raise NotImplementedError("timer scheduling is not implemented")
+    def add_timer(self, when, offset=__import__("datetime").timedelta(0), repeat=__import__("datetime").timedelta(0), weekdays=[], weekcarry=False, monthdays=[], monthcarry=True, allow=None, tzdata=None, strats=False, cheat=False, *args, **kwargs):
+        return self._add_timer(owner=self,when=when,offset=offset,repeat=repeat,
+            weekdays=weekdays,weekcarry=weekcarry,monthdays=monthdays,monthcarry=monthcarry,
+            allow=allow,tzdata=tzdata,strats=strats,cheat=cheat,*args,**kwargs)
+
+    def _add_timer(self,owner,when,offset=__import__('datetime').timedelta(0),repeat=__import__('datetime').timedelta(0),
+                   weekdays=[],weekcarry=False,monthdays=[],monthcarry=True,allow=None,tzdata=None,
+                   strats=False,cheat=False,*args,**kwargs):
+        from tradelearn.core.strategy_events import assert_observer_allows_mutation
+        from .timer import Timer
+        assert_observer_allows_mutation()
+        timer=Timer(*args,tid=len(self._timers),owner=owner,when=when,offset=offset,repeat=repeat,
+            weekdays=weekdays,weekcarry=weekcarry,monthdays=monthdays,monthcarry=monthcarry,
+            allow=allow,tzdata=tzdata,strats=strats,cheat=cheat,**kwargs)
+        self._timers.append(timer)
+        return timer
+
+    def notify_timer(self,timer,when,*args,**kwargs):
+        pass
+
+    def _install_timers(self,runtime):
+        if not self._timers:return
+        active=tuple(self._timers)  # Fixed BT prepares the startup registration set.
+        for timer in active:timer.start(runtime.strategy.data)
+        bound=runtime.profile=='batch'
+        if not bound and any(timer.p.cheat for timer in active):
+            raise NotImplementedError('native cheat timer pre-match clock integration is not yet qualified')
+        runtime._defer_bound_indicators=bound
+        def dispatch(cheat=False):
+            import pandas as pd
+            from tradelearn.backtest.clock import date2num
+            timer_ns=(int(runtime._clock.timestamps[runtime._cursor])*(1_000_000_000 if runtime._clock.unit=='s' else 1)
+                      if bound and getattr(runtime._clock,'has_delivery_views',False) else runtime.context.ts_event_ns)
+            stamp=date2num(pd.Timestamp(timer_ns,unit='ns').to_pydatetime())
+            if bound:
+                cursor=runtime._cursor;strategy_cursor=runtime._strategy_cursor
+                logical=runtime._clock.strategy_lengths
+                previous=cursor-1 if logical is None else (int(logical[cursor-1])-1 if cursor else -1)
+            else:sequence=runtime._sequence
+            try:
+                if bound:runtime._cursor=cursor-1;runtime._strategy_cursor=previous
+                else:runtime._sequence=sequence-1;runtime._timer_phase=True
+                for timer in active:
+                    if bool(timer.p.cheat)!=cheat:continue
+                    if not timer.check(stamp):continue
+                    if timer.p.owner is runtime.strategy:
+                        runtime.invoke_business('notify_timer',timer,timer.lastwhen,*timer.args,**timer.kwargs)
+                    else:
+                        runtime.invoke_component(timer.p.owner.notify_timer,timer,timer.lastwhen,*timer.args,**timer.kwargs)
+                    notify=getattr(runtime.strategy,'notify_timer',None)
+                    if timer.p.strats and callable(notify):
+                        runtime.invoke_business('notify_timer',timer,timer.lastwhen,*timer.args,**timer.kwargs)
+            finally:
+                if bound:runtime._cursor=cursor;runtime._strategy_cursor=strategy_cursor
+                else:runtime._sequence=sequence;runtime._timer_phase=False
+        runtime._timer_callback=dispatch
+        runtime._timer_cheat_callback=lambda:dispatch(True)
 
     def addcalendar(self, calendar: Any) -> None:
-        raise NotImplementedError("calendar scheduling is not implemented")
+        from ._calendar import resolve_calendar
+        self._tradingcal = resolve_calendar(calendar)
+        self.calendars[:] = [] if self._tradingcal is None else [self._tradingcal]
+
+    def _prepare_calendars(self):
+        if self._tradingcal is None and not any(getattr(getattr(data,'p',None),'calendar',None) is not None for data in self.datas):
+            return
+        from copy import copy
+        from ._calendar import resolve_calendar
+        from .resampling import resample_feed
+        for data in self.datas:
+            declared = getattr(getattr(data,'p',None),'calendar',None)
+            data._calendar = resolve_calendar(declared) if declared is not None else self._tradingcal
+        # BT resolves calendars on feed start, so addcalendar after registration
+        # must also affect already registered derived feeds. Retain source rows
+        # and refresh the same target identities before constructing strategies.
+        for recipe in self._calendar_transforms:
+            source = copy(recipe['parent']['target'] if recipe['parent'] is not None else recipe['original'])
+            declared = getattr(source.p,'calendar',None)
+            source._calendar = resolve_calendar(declared) if declared is not None else self._tradingcal
+            target = recipe['target']
+            name, identifier = target._name, target._id
+            resample_feed(source, clone=recipe['clone'], _target=target, **recipe['options'])
+            target._name, target._id = name, identifier
+            if recipe['clone']:
+                target._eos_source=recipe['source_ref']
 
     def addsizer(self, sizer: type[Any], **kwargs: Any) -> None:
         self._sizer_spec = (sizer, kwargs)
@@ -284,14 +382,16 @@ class Cerebro:
         return self._last_reporter().report(path, benchmark=benchmark, sections=sections)
 
     def run(self, **kwargs: Any) -> list[Strategy]:
+        monitor = kwargs.pop('monitor', None)
         self._validate_options(kwargs)
         from tradelearn_runtime.assembly import select_driver
         driver = select_driver(self)
-        if kwargs.get('monitor') is not None and driver is None:
+        if monitor is not None and driver is None:
             raise ValueError('remote monitor requires a Store-owned native driver')
-        if driver is not None:
-            return driver._run_cerebro(self, kwargs)
         self._apply_run_kwargs(kwargs)
+        if driver is not None:
+            return driver._run_cerebro(self, {} if monitor is None else {'monitor': monitor})
+        self._prepare_calendars()
         self.trade_on_close = bool(getattr(self.broker, "_trade_on_close", self.trade_on_close))
         has_live_data = any(bool(getattr(data, "is_live", False)) for data in self.datas)
         if self.mode == "backtest" and has_live_data:
@@ -402,7 +502,8 @@ class Cerebro:
 
     def _attach_observers(self, strategy: Any) -> None:
         strategy.observers = ObserverCollection()
-        observer_specs = dict(self.observers)
+        strategy._observer_runonce = bool(getattr(getattr(self, "p", None), "runonce", True))
+        observer_specs = ObserverCollection(self.observers)
         if self.stdstats:
             observer_specs.setdefault("value", (Value, {}))
         for name, spec in observer_specs.items():
@@ -532,6 +633,7 @@ class Cerebro:
         strategy.setsizer(sizer_cls(**sizer_kwargs))
         self._attach_analyzers(strategy)
         try:
+            self._install_timers(runtime)
             self._start_analyzers(strategy)
             pump = self.kwargs.get("broker_event_pump")
             if pump is None:

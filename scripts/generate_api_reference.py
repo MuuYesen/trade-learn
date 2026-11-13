@@ -83,9 +83,9 @@ API_REFERENCE_MODULES: tuple[ApiReferenceModule, ...] = (
         ("log", "LogResult"),
     ),
     ApiReferenceModule(
-        "Runtime",
-        "tradelearn_runtime",
-        "Independent official Nautilus execution host and Store integration.",
+        "Stores",
+        "tradelearn.engine.stores",
+        "Lazy public Store namespace; Cerebro owns the single official Nautilus driver.",
         ("NautilusStore",),
     ),
     ApiReferenceModule(
@@ -448,7 +448,7 @@ strategies = cerebro.run()
 ```
 
 非BT功能显式独立接入，不在Cerebro增加report/window/交易Runtime方法。
-实时Store位于 `from tradelearn_runtime import NautilusStore`，由官方NA单一宿主执行。
+实时Store位于 `from tradelearn.engine.stores import NautilusStore`，由官方NA单一宿主执行。
 
 ## Lite 策略
 

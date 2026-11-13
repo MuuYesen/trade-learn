@@ -11,6 +11,7 @@ class _GlobalContext(local):
         self.current_data = None
         self.current_datas = []
         self.current_strategy = None
+        self.current_component = None
 
 _G = _GlobalContext()
 _MISSING = object()
@@ -34,11 +35,13 @@ def engine_context(
     data: Any = _MISSING,
     datas: Any = _MISSING,
     strategy: Any = _MISSING,
+    component: Any = _MISSING,
 ):
     """Temporarily bind engine construction context and restore it reliably."""
     prev_data = _G.current_data
     prev_datas = list(_G.current_datas)
     prev_strategy = _G.current_strategy
+    prev_component = _G.current_component
     try:
         if data is not _MISSING:
             set_current_data(data)
@@ -46,8 +49,11 @@ def engine_context(
             set_current_datas(list(datas or []))
         if strategy is not _MISSING:
             set_current_strategy(strategy)
+        if component is not _MISSING:
+            _G.current_component = component
         yield
     finally:
         set_current_data(prev_data)
         set_current_datas(prev_datas)
         set_current_strategy(prev_strategy)
+        _G.current_component = prev_component

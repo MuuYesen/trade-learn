@@ -255,6 +255,14 @@ class SourceState:
             raise ValueError("dynamic formula topology is not qualified")
         return self.nodes[key].update(name, *args)
 
+    def _checkpoint(self):
+        from copy import deepcopy
+        return deepcopy(self.nodes),self.position
+
+    def _restore_checkpoint(self, checkpoint):
+        from copy import deepcopy
+        self.nodes,self.position=deepcopy(checkpoint[0]),checkpoint[1]
+
     def update(self, *values):
         self.position = 0
         args = tuple(np.float64(x) for x in values)

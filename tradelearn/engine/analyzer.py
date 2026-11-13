@@ -66,6 +66,8 @@ class Analyzer(BaseAnalyzer, metaclass=MetaParams):
     def notify_order(self, order): pass
     def notify_trade(self, trade): pass
     def notify_cashvalue(self, cash, value): pass
+    def notify_fund(self, cash, value, fundvalue, shares): pass
+    notify_fund._default_fund_notification = True
 
     def get_analysis(self) -> dict[str, Any]:
         if (

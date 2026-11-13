@@ -25,6 +25,9 @@ class SharedBarBuffer:
         if arr is None:
             return np.nan
         idx = self.cursor - ago
+        if idx<0 and ago==0:
+            held=getattr(self._source,'_empty_current',None)
+            if held is not None:return float(held.get(name,np.nan))
         if idx < 0 or idx >= len(arr):
             return np.nan
         return float(arr[idx])
@@ -113,14 +116,24 @@ class DataContainer:
             return np.full(len(df), default_val, dtype=np.float64)
 
         frame = self._frame
+        self._clock_unit = 's'
+        self._clock_timestamps = None
+        subsecond = False
         if isinstance(frame.index, pd.DatetimeIndex):
+            if frame.index.hasnans:
+                raise ValueError('bar timestamps cannot contain NaT')
             whole_seconds = frame.index.as_unit("s").as_unit(frame.index.unit)
-            if not frame.index.equals(whole_seconds):
-                raise NotImplementedError("subsecond batch timestamps require a qualified native clock; refusing second truncation")
+            subsecond = not frame.index.equals(whole_seconds)
+            if subsecond:
+                # The existing native ABI uses opaque int64 timestamps. Keep
+                # exact ticks independently of the public Unix-second view.
+                self._clock_unit = 'ns'
+                self._clock_timestamps = frame.index.as_unit('ns').asi8
         if datetime_array is not None:
             self._datetime = datetime_array
         elif isinstance(frame.index, pd.DatetimeIndex):
-            self._datetime = frame.index.values.astype("datetime64[s]").view(np.int64)
+            self._datetime = (self._clock_timestamps / 1_000_000_000.0 if subsecond else
+                              frame.index.values.astype("datetime64[s]").view(np.int64))
         else:
             self._datetime = frame.index.to_numpy()
 
@@ -206,3 +219,20 @@ class DataContainer:
                 }
             )
         return buffer
+
+
+def native_data_symbols(datas):
+    """Stable private execution identities, including unnamed/duplicate BT names."""
+    if len(datas) <= 1:
+        return ['data0'] if datas else []
+    names = [str(getattr(data, '_name', None) or f'data{i}') for i, data in enumerate(datas)]
+    used = set(names)
+    result = []
+    for index, name in enumerate(names):
+        if names.count(name) > 1:
+            name = f'__tradelearn_data{index}'
+            while name in used:
+                name += '_'
+            used.add(name)
+        result.append(name)
+    return result

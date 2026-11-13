@@ -163,6 +163,7 @@ class NautilusStore:
         self._handle = self._host = self._engine = None
         self._remote_monitor = None
         self._local_monitor = False
+        self._monitor_error = None
 
     @staticmethod
     def _validate_factory_types(data_factories, exec_factories):
@@ -215,6 +216,7 @@ class NautilusStore:
         self._handle = self._host = self._engine = None
         self._remote_monitor = self._monitor_binding = None
         self._local_monitor = False
+        self._monitor_error = None
 
     @property
     def strategy_spec(self):
@@ -314,8 +316,8 @@ class NautilusStore:
         from .components import strategy_spec,validate_components
         self._compiled_strategy_spec = strategy_spec(engine)
         validate_components(engine,account_provider=getattr(self,'account_provider',None))
-        if engine.timers or engine.calendars:
-            raise NotImplementedError('TL timer/calendar scheduling is not implemented by the native Store')
+        if engine.calendars:
+            raise NotImplementedError('calendar scheduling is not implemented by the native Store')
         if engine.trade_on_close:
             raise ValueError('native execution cannot use backtest trade_on_close')
         if self._driver is not None:
@@ -331,8 +333,9 @@ class NautilusStore:
         from .components import native_sizer
         runtime.strategy.setsizer(native_sizer(self._engine))
         runtime.strategy.cerebro = self._engine
+        runtime._component_after_start_callback=lambda:self._engine._install_timers(runtime)
         provider = getattr(self,'account_provider',None)
-        if self._engine.analyzers or self._engine.observers or (self._engine.stdstats and provider is not None):
+        if self._engine.analyzers or self._engine.observers or self._engine.timers or (self._engine.stdstats and provider is not None):
             from .components import LiveComponents
             runtime._cerebro_components = LiveComponents(self._engine,runtime,account_provider=provider)
         def failed(event):
@@ -358,7 +361,16 @@ class NautilusStore:
                 account_id=self.account_id, state_dir=str(self.state_path / 'logs'),
                 framework_strategy_id=str(self.strategy_config.strategy_id), framework_account_id=self.account_id)
             if self._remote_monitor is not None:
-                monitor, sender_factory = self._remote_monitor.bind(monitor)
+                from leafquant_monitor.bootstrap import MonitorBindingUnavailable
+                try:
+                    monitor, sender_factory = self._remote_monitor.bind(monitor)
+                except MonitorBindingUnavailable:
+                    # A queue ACK cannot establish archive authority. Keep the
+                    # same native recorder locally, without a remote sender.
+                    import warnings
+                    self._monitor_error = 'TRUSTED_MONITOR_BINDING_UNAVAILABLE'
+                    warnings.warn('trusted monitor binding unavailable; local logs retained, remote delivery disabled',
+                                  RuntimeWarning, stacklevel=2)
             # Provider runs after host construction; the native host owns the one
             # recorder/run_id. The business observer borrows it and starts no Sender.
             log_config = TradeLogConfig(
@@ -389,14 +401,13 @@ class NautilusStore:
             raise TypeError('adapter linked-order capability must be boolean')
         host._adapter_supports_groups = groups
         if monitor is not None:
+            if self._monitor_error is not None:
+                host.logger.record('monitor_error', {'code': self._monitor_error,
+                                                    'remote_delivery': False})
             context = log_config.context
             context['run_id'] = host.logger.run_id
             context['environment'] = 'paper' if str(self.config.environment).lower() == 'sandbox' else 'live'
         return host
-
-    def run(self, engine, *, monitor=None):
-        """Explicit integration options outside the strict Cerebro parameter set."""
-        return self._run_cerebro(engine, {} if monitor is None else {'monitor':monitor})
 
     def _run_cerebro(self, engine, run_kwargs):
         run_kwargs = dict(run_kwargs)

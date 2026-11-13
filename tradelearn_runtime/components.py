@@ -53,8 +53,10 @@ def native_sizer(engine):
 
 
 def validate_components(engine,*,account_provider):
-    from tradelearn.engine.observers import Value,DrawDown,TimeReturn
+    from tradelearn.engine.observers import Value,Broker,DrawDown,TimeReturn
     native_sizer(engine)
+    if any(timer.p.cheat for timer in getattr(engine,'_timers',())):
+        raise NotImplementedError('native cheat timer pre-match clock integration is not yet qualified')
     for spec in engine.analyzers.values():
         cls=spec[0]
         if getattr(cls,'_metric_key','') and not getattr(cls,'_is_streaming',False):
@@ -62,7 +64,7 @@ def validate_components(engine,*,account_provider):
     if account_provider is None and any(getattr(spec[0], '_requires_account_value', False)
                                        for spec in engine.analyzers.values()):
         raise ValueError('value analyzer requires an authoritative account provider')
-    if account_provider is None and any(issubclass(spec[0],(Value,DrawDown,TimeReturn))
+    if account_provider is None and any(issubclass(spec[0],(Value,Broker,DrawDown,TimeReturn))
                                        for spec in engine.observers.values()):
         raise ValueError('value observer requires an authoritative account provider')
 
@@ -77,7 +79,7 @@ class LiveComponents:
         self._start_done=False
         engine._attach_analyzers(self.strategy)
         # Default backtest statistics require a real value source in live mode.
-        view=SimpleNamespace(observers=engine.observers,
+        view=SimpleNamespace(observers=engine.observers,p=getattr(engine,"p",None),
             stdstats=engine.stdstats and account_provider is not None)
         type(engine)._attach_observers(view,self.strategy)
         capacity = max((feed._buffer.capacity for feed in runtime.feeds.values()), default=512)
@@ -88,13 +90,15 @@ class LiveComponents:
             # Counts are projections of deduplicated native events in this run,
             # not fabricated _fills/_trades collections or another order ledger.
             if type(observer)._observe is BuySell._observe:
-                observer._observe=lambda:self.fill_events
+                observer._compat_count=lambda:self.fill_events
             elif type(observer)._observe is Trades._observe:
-                observer._observe=lambda:self.closed_trades
+                observer._compat_count=lambda:self.closed_trades
         from tradelearn.backtest.engine import _build_analyzer_bar_callbacks,_build_observer_nexts
         self._bar_callbacks=_build_analyzer_bar_callbacks(self.strategy)
         self._observer_callbacks=_build_observer_nexts(self.strategy)
         runtime._component_start_callback=self.start
+        install_timers=getattr(engine,'_install_timers',None)
+        if callable(install_timers):runtime._component_after_start_callback=lambda:install_timers(runtime)
 
     def start(self):
         if self._start_done:return
@@ -118,6 +122,9 @@ class LiveComponents:
             _observer_step(self.runtime,self._observer_callbacks)
 
     def order(self,order):
+        for observer in self.strategy.observers.values():
+            callback=getattr(observer,'_notify_order',None)
+            if callable(callback):self.runtime.invoke_component(callback,order)
         for analyzer in self.strategy.analyzers.values():
             callback=getattr(analyzer,'notify_order',None)
             if callable(callback):self.runtime.invoke_component(callback,order)
@@ -142,6 +149,9 @@ class LiveComponents:
 
     def trade(self,trade):
         if trade.isclosed:self.closed_trades+=1
+        for observer in self.strategy.observers.values():
+            callback=getattr(observer,'_notify_trade',None)
+            if callable(callback):self.runtime.invoke_component(callback,trade)
         for analyzer in self.strategy.analyzers.values():
             callback=getattr(analyzer,'notify_trade',None)
             if callable(callback):self.runtime.invoke_component(callback,trade)

@@ -167,6 +167,9 @@ class MetaParams(type):
         runtime = getattr(datas[0], "runtime", None) if datas else None
         if runtime is not None and hasattr(runtime, "broker"):
             instance.broker = runtime.broker
+            owner=getattr(runtime.broker,'cerebro',None)
+            if isinstance(instance,CoreStrategy) and owner is not None:
+                instance.cerebro=owner
 
         component_context = (getattr(instance, '_initialize_component_context', None)
                              if isinstance(instance, (BaseAnalyzer, BaseObserver)) else None)
@@ -188,6 +191,8 @@ class MetaParams(type):
         prev_strat = _G.current_strategy
         
         context_kwargs = {}
+        if isinstance(instance, BaseObserver):
+            context_kwargs["component"] = instance
         if not prev_strat and hasattr(instance, 'next'): # Likely a strategy
             context_kwargs["strategy"] = instance
             if hasattr(instance, 'data'):

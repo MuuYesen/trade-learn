@@ -81,9 +81,14 @@ def _require_qualified_expiry(request):
 
 def _native_route_proof(native, controls):
     """Persist immutable admission flags separately from native command routing."""
-    return dict(reduce_only=bool(native.is_reduce_only),
-                position_id=str(controls['position_id']) if controls.get('position_id') is not None else None,
-                post_only=bool(getattr(native, 'is_post_only', False)))
+    from .native_controls import native_control_proof
+    return native_control_proof(native,controls)
+
+
+def _unclosed_native_orders(cache,strategy_id):
+    # Initialized algorithm roots and locally emulated orders are not necessarily
+    # in orders_open/inflight. All are outstanding existence witnesses, not ACKs.
+    return [order for order in cache.orders(strategy_id=strategy_id) if not order.is_closed]
 
 
 class _RuntimeBridge:
@@ -129,7 +134,9 @@ class _RuntimeBridge:
         self._subscriptions=tuple(subscriptions)
         self.frontend=None
         self.frontend_broker=None
-        self._position_events=set()
+        self._position_events={}
+        self._position_trade_views={}
+        self._next_position_trade_ref=1
         self._tasks=set()
         self._io_lock=asyncio.Lock()
         self._worker_error=None
@@ -158,33 +165,48 @@ class _RuntimeBridge:
                     except BaseException as cleanup:_safe_cleanup_diagnostic(primary,cleanup)
             raise
 
+    @staticmethod
+    def _read_cache(host):
+        # Read-only native handle, captured while its Strategy getter is free.
+        # This is the same NA cache, not a Python position/account ledger.
+        cache = getattr(host, '_callback_cache', None)
+        return cache if cache is not None else host.cache
+
+    @staticmethod
+    def _strategy_identity(host):
+        identity = getattr(host, '_callback_strategy_id', None)
+        return identity if identity is not None else host.strategy_id
+
     def _assert_account_binding(self):
         if not self._account_id:
             raise ValueError('explicit native account binding required')
-        account=self.cache.account(AccountId(self._account_id))
+        cache = _RuntimeBridge._read_cache(self)
+        account=cache.account(AccountId(self._account_id))
         if account is None or str(account.id)!=self._account_id:
             raise ValueError('native account is absent or differs from explicit binding')
         for iid in self._instrument_ids.values():
-            routed=self.cache.account_for_venue(iid.venue)
+            routed=cache.account_for_venue(iid.venue)
             if routed is None or str(routed.id)!=self._account_id:
                 raise ValueError('venue execution account differs from explicit binding')
         return account
 
     def _owns_native_order(self,order,event=None):
-        if order.strategy_id!=self.strategy_id or order.instrument_id not in self._instrument_ids.values():
+        identity = _RuntimeBridge._strategy_identity(self)
+        if order.strategy_id!=identity or order.instrument_id not in self._instrument_ids.values():
             return False
         if order.account_id is not None and str(order.account_id)!=self._account_id:
             return False
         if event is not None:
-            if getattr(event,'strategy_id',self.strategy_id)!=self.strategy_id:
+            if getattr(event,'strategy_id',identity)!=identity:
                 return False
             account=getattr(event,'account_id',None)
             if account is not None and str(account)!=self._account_id:
                 return False
         if order.account_id is None:
-            # A local denial can precede native account assignment. It is only
-            # ours if the explicitly bound frontend already admitted this CID.
-            return (order.status.name in ('DENIED','REJECTED') and self.frontend_broker is not None
+            # Local emulation/algorithm ownership and cancellation/denial can
+            # precede venue account assignment. Only an already admitted CID
+            # belongs to this explicitly bound frontend; this is not an ACK.
+            return (order.status.name in ('INITIALIZED','EMULATED','RELEASED','DENIED','REJECTED','CANCELED') and self.frontend_broker is not None
                     and str(order.client_order_id) in self.frontend_broker._orders)
         return True
 
@@ -197,7 +219,7 @@ class _RuntimeBridge:
         order=value if hasattr(value,'client_order_id') else self.cache.order(ClientOrderId(str(value)))
         if (order is None or order.strategy_id!=self.strategy_id
                 or order.instrument_id not in self._instrument_ids.values()
-                or (order.account_id is None and not new)
+                or (order.account_id is None and not new and not self._owns_native_order(order))
                 or (order.account_id is not None and str(order.account_id)!=self._account_id)):
             raise ValueError('native order does not belong to the explicit account/strategy/instrument')
         return order
@@ -265,6 +287,11 @@ class _RuntimeBridge:
 
     def on_strategy_start(self):
         self._assert_account_binding()
+        # Pending command callbacks cannot borrow rc7 Strategy getters. Cache
+        # the already-assigned immutable identity before any command is issued.
+        self._callback_strategy_id = self.strategy_id
+        self._callback_cache = self.cache
+        self._callback_portfolio = self.portfolio if self._account_provider is not None else None
         if self._offline_test:
             try:self.clock.set_time(self.clock.timestamp_ns())
             except ValueError:raise RuntimeError('offline_test requires the native virtual clock') from None
@@ -274,8 +301,13 @@ class _RuntimeBridge:
             if native is None or native.strategy_id!=self.strategy_id:
                 raise RuntimeError('durable admitted intent lacks authoritative native reconciliation; startup blocked')
             recovered[oid]=(native,payload)
-        existing=self.cache.orders_open(strategy_id=self.strategy_id)+self.cache.orders_inflight(strategy_id=self.strategy_id)
-        if any(str(order.client_order_id) not in recovered for order in existing):
+        existing=_unclosed_native_orders(self._callback_cache,self._callback_strategy_id)
+        for order in existing:
+            if str(order.client_order_id) in recovered:continue
+            projection=self._spawn_projection(order)
+            if projection is not None and (projection['client_oid'] in recovered
+                    or projection['status']=='FILLED'):
+                continue  # Validated cache group, not an orphan independent intent.
             raise RuntimeError('native pending orders lack durable frontend intent; startup blocked')
         if set(self._feeds)!=set(self._instrument_ids):
             raise ValueError('startup requires explicit instrument bindings')
@@ -297,7 +329,12 @@ class _RuntimeBridge:
             request=OrderRequest(**payload['request'])
             self.validate_recovery(request,native,group=payload.get('group'),
                 native_controls=payload.get('native_controls'))
-            if native.is_closed:
+            projection=self._spawn_projection(native)
+            if projection is not None and projection['status'] in ('FILLED','CANCELED','EXPIRED','REJECTED','DENIED'):
+                self._schedule(self._persist_terminal_evidence(oid,
+                    dict(status=projection['status'],filled_qty=str(projection['filled_qty']),
+                         native_event_id=str(native.last_event.event_id),native_evidence=projection['native_evidence'])))
+            elif native.is_closed and projection is None:
                 self._schedule(self._persist_terminal(oid,native))
             self.frontend_broker.restore(request,self.frontend.feeds[request.symbol],native)
         self.frontend.start()
@@ -388,13 +425,9 @@ class _RuntimeBridge:
 
     def _make_order(self,request,controls):
         self._assert_account_binding()
-        if set(controls)-{'reduce_only','position_id','post_only'}:
+        from .native_controls import CONTROL_NAMES,factory_control_kwargs
+        if set(controls)-CONTROL_NAMES:
             raise ValueError('unsupported execution controls; configure verified Node venue routing')
-        post_only = controls.pop('post_only', False)
-        if type(post_only) is not bool:
-            raise TypeError('post_only must be boolean')
-        if post_only and request.order_type not in ('limit', 'stop_limit', 'stop_trail_limit'):
-            raise ValueError('post-only requires a limit execution order')
         position_id=controls.get('position_id')
         if position_id is not None:self._bound_position(position_id,self._instrument_ids[request.symbol])
         iid=self._instrument_ids[request.symbol]
@@ -407,9 +440,8 @@ class _RuntimeBridge:
             raise ValueError('native client order ID already exists')
         kwargs=dict(instrument_id=iid,order_side=OrderSide.BUY if request.side=='buy' else OrderSide.SELL,
                     quantity=quantity,time_in_force={'day':TimeInForce.DAY,'gtc':TimeInForce.GTC,'ioc':TimeInForce.IOC,'fok':TimeInForce.FOK,'gtd':TimeInForce.GTD}[request.tif],
-                    client_order_id=ClientOrderId(request.client_oid),reduce_only=controls.pop('reduce_only',False))
-        if request.order_type in ('limit', 'stop_limit', 'stop_trail_limit'):
-            kwargs['post_only'] = post_only
+                    client_order_id=ClientOrderId(request.client_oid))
+        kwargs.update(factory_control_kwargs(request,controls,instrument))
         expiry = getattr(request, 'expire_time_ns', None)
         if request.tif == 'gtd':
             if request.order_type == 'market' or type(expiry) is not int or not 0 < expiry <= 2**64-1:
@@ -593,8 +625,17 @@ class _RuntimeBridge:
 
     async def _persist_terminal(self,oid,order):
         evidence={'status':order.status.name,'filled_qty':str(order.filled_qty),'native_event_id':str(order.last_event.event_id)}
+        await self._persist_terminal_evidence(oid,evidence)
+
+    async def _persist_terminal_evidence(self,oid,evidence):
         async with self._io_lock:
             await asyncio.to_thread(self.intent_journal.terminal,oid,evidence)
+
+    def _spawn_projection(self,order):
+        from .algorithm_facts import spawn_projection
+        return spawn_projection(_RuntimeBridge._read_cache(self),order,
+            strategy_id=_RuntimeBridge._strategy_identity(self),account_id=self._account_id,
+            instruments=self._instrument_ids.values())
 
     async def drain(self):
         self._stopping=True
@@ -638,7 +679,17 @@ class _RuntimeBridge:
                 raise ValueError('native linked-order recovery differs from durable group')
 
     def validate_recovery(self,request,native,*,group=None,native_controls=None):
-        admitted_quantity=native.quantity
+        from .native_controls import emulation_admission
+        admission=emulation_admission(native)
+        if admission is not None and native_controls is None:
+            raise ValueError('native emulation recovery requires durable admission controls')
+        reference=admission if admission is not None else native
+        admitted_quantity=reference.quantity
+        if (getattr(native,'exec_algorithm_id',None) is not None
+                and getattr(native,'exec_spawn_id',None)==native.client_order_id):
+            # NA reduces primary quantity as it transfers size into spawned
+            # children. Its initialization still proves the admitted request.
+            admitted_quantity=native.init_event.quantity
         if group is not None:
             self._validate_group_recovery(group,native)
             # Only an intact native initialization proves a linked child's original size.
@@ -649,39 +700,41 @@ class _RuntimeBridge:
         expected_type=types[request.order_type]
         if (native.strategy_id!=self.strategy_id or str(native.client_order_id)!=request.client_oid
             or native.instrument_id!=self._instrument_ids[request.symbol]
-            or native.side.name!=request.side.upper() or native.order_type.name!=expected_type
+            or (admission.order_side.name if admission is not None else native.side.name)!=request.side.upper() or reference.order_type.name!=expected_type
             or Decimal(str(admitted_quantity))!=Decimal(str(request.qty))
-            or native.time_in_force.name!=request.tif.upper()):
+            or reference.time_in_force.name!=request.tif.upper()):
             raise ValueError('native recovery order differs from durable strategy request')
-        if expected_type in ('LIMIT','STOP_LIMIT') and Decimal(str(native.price))!=Decimal(str(request.limit_price)):
+        if expected_type in ('LIMIT','STOP_LIMIT') and Decimal(str(reference.price))!=Decimal(str(request.limit_price)):
             raise ValueError('native recovery limit price differs from request')
-        if expected_type in ('STOP_MARKET','STOP_LIMIT') and Decimal(str(native.trigger_price))!=Decimal(str(request.stop_price)):
+        if expected_type in ('STOP_MARKET','STOP_LIMIT') and Decimal(str(reference.trigger_price))!=Decimal(str(request.stop_price)):
             raise ValueError('native recovery trigger price differs from request')
         if expected_type in ('TRAILING_STOP_MARKET','TRAILING_STOP_LIMIT'):
             trigger, offset, offset_type = _trailing_parameters(request)
             initial = native.init_event
-            if (native.trailing_offset != offset or native.trailing_offset_type != offset_type
+            if (reference.trailing_offset != offset or reference.trailing_offset_type != offset_type
                     or initial.trigger_price is None or Decimal(str(initial.trigger_price)) != trigger):
                 raise ValueError('native recovery trailing admission differs from request')
             if expected_type == 'TRAILING_STOP_LIMIT':
                 _, limit, limit_offset, _, _ = _trailing_limit_parameters(request)
-                if (native.limit_offset != limit_offset or initial.price is None
+                if (reference.limit_offset != limit_offset or initial.price is None
                         or Decimal(str(initial.price)) != limit):
                     raise ValueError('native recovery trailing limit admission differs from request')
         expiry = getattr(request, 'expire_time_ns', None)
         if request.tif == 'gtd' and (expiry is None or native.expire_time_ns != expiry):
             raise ValueError('native recovery expiry differs from durable request')
         if native_controls is not None:
+            from .native_controls import CONTROL_NAMES,validate_extra_control_proof
             if (not isinstance(native_controls,dict)
                     or not {'reduce_only','position_id'}.issubset(native_controls)
-                    or set(native_controls) - {'reduce_only','position_id','post_only'}
+                    or set(native_controls) - CONTROL_NAMES
                     or type(native_controls['reduce_only']) is not bool):
                 raise ValueError('invalid durable native route proof')
             admitted_post_only = native_controls.get('post_only', False)
             if (type(admitted_post_only) is not bool
-                    or admitted_post_only != getattr(native, 'is_post_only', False)):
+                    or admitted_post_only != (admission.post_only if admission is not None else getattr(native, 'is_post_only', False))):
                 raise ValueError('native recovery post-only flag differs from admitted route')
-            if native_controls['reduce_only'] != native.is_reduce_only:
+            validate_extra_control_proof(native_controls,request,native)
+            if native_controls['reduce_only'] != (admission.reduce_only if admission is not None else native.is_reduce_only):
                 raise ValueError('native recovery reduce-only flag differs from admitted route')
             requested = native_controls['position_id']
             if requested is not None:
@@ -691,8 +744,16 @@ class _RuntimeBridge:
                 if not isinstance(requested,str) or not requested or str(actual) != requested:
                     raise ValueError('native recovery position route differs from admitted route')
         binding=self._account_id
-        if binding is not None and (native.account_id is None or str(native.account_id)!=binding):
-            raise ValueError('native recovery account differs from verified binding')
+        if binding is not None:
+            if native.account_id is None:
+                # Before venue submission there is no broker account ACK. Only
+                # a durable admitted route plus this verified single-account
+                # host may restore the local pending object, never infer ACK.
+                if native.status.name not in ('INITIALIZED','EMULATED','RELEASED','DENIED','REJECTED','CANCELED') or native_controls is None:
+                    raise ValueError('native recovery account differs from verified binding')
+                self._assert_account_binding()
+            elif str(native.account_id)!=binding:
+                raise ValueError('native recovery account differs from verified binding')
 
     def lookup_order(self,client_oid):
         # A native object is an existence/recovery witness, never a synthetic ACK.
@@ -717,8 +778,9 @@ class _RuntimeBridge:
 
     def position(self,symbol):
         self._assert_account_binding()
-        positions=[p for p in self.cache.positions_open(instrument_id=self._instrument_ids[symbol],strategy_id=self.strategy_id)
-                   if str(p.account_id)==self._account_id and p.strategy_id==self.strategy_id]
+        identity = _RuntimeBridge._strategy_identity(self)
+        positions=[p for p in _RuntimeBridge._read_cache(self).positions_open(instrument_id=self._instrument_ids[symbol],strategy_id=identity)
+                   if str(p.account_id)==self._account_id and p.strategy_id==identity]
         if len(positions)>1:raise ValueError('hedged positions need explicit position_id routing')
         if not positions:return Position()
         native=positions[0]
@@ -728,32 +790,111 @@ class _RuntimeBridge:
     def account(self):
         # Never infer portfolio equity from wallet/buying power or a quote currency.
         if self._account_provider is None:raise ValueError('explicit authoritative account projection required')
-        return self._account_provider(self.cache,self.portfolio)
+        portfolio = getattr(self, '_callback_portfolio', None)
+        if portfolio is None:
+            portfolio = self.portfolio
+        return self._account_provider(_RuntimeBridge._read_cache(self),portfolio)
 
     def _project_order(self,event):
         from tradelearn.core.strategy_events import assert_observer_allows_mutation
         assert_observer_allows_mutation()
-        order=self.cache.order(event.client_order_id)
+        order=_RuntimeBridge._read_cache(self).order(event.client_order_id)
         if order is None:raise RuntimeError('order event has no authoritative native cache snapshot')
         if not self._owns_native_order(order,event):return
         status=order.status.name
+        if (order.account_id is None and getattr(order,'exec_algorithm_id',None) is not None
+                and type(event).__name__=='OrderUpdated'):
+            # Native algorithm transfers primary quantity into children before
+            # caching each child. This internal transfer is not a venue size
+            # amendment of the admitted BT parent. Observe the atomic group on
+            # subsequent child execution events, never the intermediate zero.
+            return
         if self.frontend_broker is None:
             return  # Startup recovery validates/cache-projects before business begins.
-        fees=list(order.commissions().values())
-        commission=number(fees[0]) if len(fees)==1 else None
+        from .order_fees import cumulative_native_commission
+        commission=cumulative_native_commission(order)
+        projection=self._spawn_projection(order)
+        if projection is not None:
+            oid=projection.pop('client_oid')
+            # Only an existing admitted parent may receive this native group.
+            if oid not in self.frontend_broker._orders:
+                raise RuntimeError('native execution-spawn lacks admitted frontend primary')
+            current=self.frontend_broker._orders[oid]
+            if (current.data._name!=self._symbol(order.instrument_id)
+                    or current.isbuy()!=(order.side==OrderSide.BUY)):
+                raise ValueError('native execution-spawn differs from admitted frontend scope')
+            if (current.info.get('native_evidence')==projection['native_evidence']
+                    and type(event).__name__ not in ('OrderModifyRejected','OrderCancelRejected')):
+                return  # Nested native callbacks can expose the same completed cache view twice.
+            if projection['status'] in ('FILLED','CANCELED','EXPIRED','REJECTED','DENIED') and self.intent_journal is not None:
+                self._schedule(self._persist_terminal_evidence(oid,
+                    dict(status=projection['status'],filled_qty=str(projection['filled_qty']),
+                         native_event_id=str(event.event_id),native_evidence=projection['native_evidence'])))
+            from .notification_evidence import native_event_evidence
+            applied=self.frontend_broker.apply(oid,**projection,event_id=str(event.event_id),
+                native_ts_ns=int(event.ts_event),native_event=native_event_evidence(event))
+            components=getattr(self.frontend,'_cerebro_components',None)
+            if applied and components is not None:
+                components.native_order(event,self.frontend_broker._orders[oid])
+            return
         # Native terminal evidence belongs to durable execution, independently of
         # whether the failed/stopped business runtime can accept a notification.
         if order.is_closed and self.intent_journal is not None:
             self._schedule(self._persist_terminal(str(event.client_order_id),order))
-        from .notification_evidence import notification_evidence
+        from .notification_evidence import notification_evidence, native_event_evidence
         applied=self.frontend_broker.apply(str(event.client_order_id),status=status,
             filled_qty=number(order.filled_qty),avg_price=order.avg_px,
             event_id=str(event.event_id),commission=commission,native_ts_ns=int(event.ts_event),
-            native_evidence=notification_evidence(order),total_qty=number(order.quantity))
+            native_evidence=notification_evidence(order),total_qty=number(order.quantity),
+            native_event=native_event_evidence(event))
         components=getattr(self.frontend,'_cerebro_components',None)
         if applied and components is not None:
             components.native_order(event,self.frontend_broker._orders[str(event.client_order_id)])
 
+    def _project_pending_order(self, event, status):
+        """Pending callbacks run while rc7 mutably borrows its cache.
+
+        The event is authoritative for this control transition only. Reuse the
+        last projected cumulative execution facts; never query/reconstruct the
+        native cache or defer this callback past a later rejection/fill.
+        """
+        from tradelearn.core.strategy_events import assert_observer_allows_mutation
+        from .notification_evidence import native_event_evidence
+        assert_observer_allows_mutation()
+        if self.frontend_broker is None:
+            return  # Startup reconciliation still validates the authoritative cache.
+        if (str(event.account_id) != self._account_id
+                or event.strategy_id != self._callback_strategy_id
+                or event.instrument_id not in self._instrument_ids.values()):
+            return
+        oid = str(event.client_order_id)
+        order = self.frontend_broker._orders.get(oid)
+        if order is None:
+            # A native algorithm child belongs to its admitted primary. Use the
+            # captured cache handle (not the mutably borrowed Strategy getter)
+            # and the same fully scoped native aggregate, never a local fill sum.
+            native=_RuntimeBridge._read_cache(self).order(event.client_order_id)
+            if (native is not None and getattr(native,'exec_spawn_id',None) is not None
+                    and str(native.exec_spawn_id) in self.frontend_broker._orders):
+                return self._project_order(event)
+            raise RuntimeError('pending native event lacks recovered frontend intent')
+        if order.data._name != self._symbol(event.instrument_id):
+            raise ValueError('pending native event differs from admitted instrument')
+        price, fee = order.executed.price, order.executed.comm
+        applied = self.frontend_broker.apply(oid, status=status,
+            filled_qty=abs(order.executed.size), total_qty=abs(order.size),
+            avg_price=price if math.isfinite(price) else None,
+            commission=fee if math.isfinite(fee) else None,
+            event_id=str(event.event_id), native_ts_ns=int(event.ts_event),
+            native_event=native_event_evidence(event))
+        components = getattr(self.frontend, '_cerebro_components', None)
+        if applied and components is not None:
+            components.native_order(event, order)
+
+    def on_strategy_order_pending_update(self,event):self._project_pending_order(event, 'PENDING_UPDATE')
+    def on_strategy_order_pending_cancel(self,event):self._project_pending_order(event, 'PENDING_CANCEL')
+    def on_strategy_order_modify_rejected(self,event):self._project_order(event)
+    def on_strategy_order_cancel_rejected(self,event):self._project_order(event)
     def on_strategy_order_updated(self,event):self._project_order(event)
     def on_strategy_order_triggered(self,event):self._project_order(event)
     def on_strategy_order_accepted(self,event):self._project_order(event)
@@ -765,24 +906,53 @@ class _RuntimeBridge:
 
     def _project_position(self,event,closed=False):
         from tradelearn.core.strategy_events import assert_observer_allows_mutation
+        from tradelearn.backtest.clock import date2num
+        from .position_facts import native_trade_economics
+        import pandas as pd
         assert_observer_allows_mutation()
-        if str(event.account_id)!=self._account_id or event.strategy_id!=self.strategy_id:return
+        if str(event.account_id)!=self._account_id or event.strategy_id!=_RuntimeBridge._strategy_identity(self):return
         if event.instrument_id not in self._instrument_ids.values():return
         key=str(event.event_id)
-        if key in self._position_events:return
+        signature=(type(event).__name__,closed,*(str(getattr(event,name,None)) for name in
+            ('account_id','strategy_id','instrument_id','position_id','opening_order_id','closing_order_id',
+             'signed_qty','avg_px_open','realized_pnl','currency','entry','ts_opened','ts_event','ts_closed')))
+        previous=self._position_events.get(key)
+        if previous is not None:
+            if previous != signature:
+                error=ValueError('conflicting native position event identity')
+                self._worker_error=error
+                raise error
+            return
         symbol=self._symbol(event.instrument_id)
-        trade=Trade(data=self.frontend.feeds[symbol],size=number(event.signed_qty),
+        data=self.frontend.feeds[symbol]
+        cycle=(str(event.position_id),str(event.opening_order_id))
+        opened=type(event).__name__=='PositionOpened'
+        state=self._position_trade_views.get(cycle)
+        if state is None:
+            state=dict(ref=self._next_position_trade_ref,baropen=len(data),
+                       dtopen=date2num(pd.Timestamp(getattr(event,'ts_opened',event.ts_event),unit='ns',tz='UTC')))
+            self._next_position_trade_ref+=1
+            self._position_trade_views[cycle]=state
+        facts=native_trade_economics(_RuntimeBridge._read_cache(self),event,closed)
+        trade=Trade(ref=state['ref'],data=data,size=number(event.signed_qty),
                     price=number(event.avg_px_open),status=Trade.Closed if closed else Trade.Open,
-                    isopen=not closed,isclosed=closed,
-                    pnl=number(event.realized_pnl) if event.realized_pnl is not None else math.nan,
-                    pnlcomm=math.nan,commission=math.nan)
-        # Position event economics are authoritative; net-of-fee economics need
-        # separately qualified complete commission evidence, never assumed zero.
-        trade.info={'native_position_id':str(event.position_id),'native_event_id':key}
-        self._position_events.add(key)
-        self.frontend.step_broker(trade,kind='trade')
-        components=getattr(self.frontend,'_cerebro_components',None)
-        if components is not None:components.trade(trade)
+                    isopen=not closed,isclosed=closed,justopened=opened,
+                    long=event.entry==OrderSide.BUY,
+                    pnl=facts['pnl'],pnlcomm=facts['pnlcomm'],commission=facts['commission'],value=facts['value'],
+                    dtopen=state['dtopen'],baropen=state['baropen'],
+                    barlen=len(data)-state['baropen'],barclose=len(data) if closed else 0,
+                    dtclose=date2num(pd.Timestamp(event.ts_event,unit='ns',tz='UTC')) if closed else 0.)
+        trade.info={'native_position_id':str(event.position_id),'native_event_id':key,
+                    'native_economics_source':facts['source'],'pnl_currency':facts['currency'],
+                    'value_currency':facts['value_currency']}
+        self._position_events[key]=signature
+        if closed:self._position_trade_views.pop(cycle,None)
+        # BT updates its Trade view through partial changes, but notify_trade
+        # and Analyzer trade notices occur only on opening and closing.
+        if opened or closed:
+            self.frontend.step_broker(trade,kind='trade')
+            components=getattr(self.frontend,'_cerebro_components',None)
+            if components is not None:components.trade(trade)
 
     def on_strategy_position_opened(self,event):self._project_position(event)
     def on_strategy_position_changed(self,event):self._project_position(event)
@@ -835,6 +1005,10 @@ class ExecutionHost(_RuntimeBridge, NautilusStrategy):
     on_stop = _RuntimeBridge.on_strategy_stop
     on_quote = _RuntimeBridge.on_strategy_quote
     on_bar = _RuntimeBridge.on_strategy_bar
+    on_order_pending_update = _RuntimeBridge.on_strategy_order_pending_update
+    on_order_pending_cancel = _RuntimeBridge.on_strategy_order_pending_cancel
+    on_order_modify_rejected = _RuntimeBridge.on_strategy_order_modify_rejected
+    on_order_cancel_rejected = _RuntimeBridge.on_strategy_order_cancel_rejected
     on_order_updated = _RuntimeBridge.on_strategy_order_updated
     on_order_triggered = _RuntimeBridge.on_strategy_order_triggered
     on_order_accepted = _RuntimeBridge.on_strategy_order_accepted

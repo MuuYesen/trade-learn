@@ -36,7 +36,10 @@ def _current_bar(data: Any) -> BarSnapshot:
     if source_ns is not None:
         timestamp = pd.Timestamp(source_ns, unit="ns", tz="UTC")
     elif hasattr(data, "_datetime"):
-        timestamp = pd.to_datetime(data._datetime[idx], unit="s", utc=True)
+        if getattr(data, '_clock_unit', 's') == 'ns':
+            timestamp = pd.Timestamp(int(data._clock_timestamps[idx]), unit='ns', tz='UTC')
+        else:
+            timestamp = pd.to_datetime(data._datetime[idx], unit="s", utc=True)
     elif getattr(data, "_buffer", None) is not None:
         raw_timestamp = data._buffer.value("datetime", ago=0)
         timestamp = (pd.to_datetime(raw_timestamp, unit="s", utc=True)
@@ -430,6 +433,13 @@ def _build_equity_returns(
     fills: pd.DataFrame | None = None,
     frame: pd.DataFrame | None = None,
 ) -> tuple[pd.Series, pd.Series]:
+    runtime=getattr(strategy,'_runtime',None)
+    samples=getattr(runtime,'_delivery_equity_samples',None)
+    if samples is not None:
+        if len(samples)!=len(index):raise ValueError('replay account observations do not cover delivery index')
+        equity=pd.Series(samples,index=index,name='equity',dtype=float)
+        returns=equity.pct_change().fillna(0.0);returns.name='returns'
+        return equity,returns
     if fills is not None:
         fill_equity = _build_equity_from_fills(strategy, index, fills, frame)
         if fill_equity is not None:
@@ -660,7 +670,7 @@ def _summary_drawdown_stats(equity: pd.Series) -> dict[str, Any]:
     # Calculate durations
     dd_groups = (dd_mask != dd_mask.shift()).cumsum()
     durations = []
-    for _name, group in dd[dd_mask].groupby(dd_groups):
+    for _name, group in dd[dd_mask].groupby(dd_groups.to_numpy()[dd_mask.to_numpy()]):
         if len(group) > 0:
             durations.append(group.index[-1] - group.index[0])
 
@@ -734,8 +744,11 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
     index = frame.index
     runtime = getattr(strategy, "_runtime", None)
     if runtime is not None and runtime._clock.requires_union:
-        index = pd.to_datetime(runtime._clock.timestamps, unit="s", utc=True)
+        index = pd.to_datetime(runtime._clock.timestamps, unit=runtime._clock.unit, utc=True)
         index = index.tz_convert(frame.index.tz) if frame.index.tz is not None else index.tz_localize(None)
+
+    if getattr(runtime,'_delivery_equity_samples',None) is not None:
+        index=index[:len(runtime._delivery_equity_samples)]
 
     if lazy_artifacts:
         final_cash = float(strategy.broker.getcash())
@@ -915,14 +928,15 @@ def _build_bar_advancers(
     return tuple(bar_advancers)
 
 
-def _build_data_advance_plan(datas: list[Any]) -> Any | None:
+def _build_data_advance_plan(datas: list[Any], *, unit="s") -> Any | None:
     """Build a Rust primary-clock cursor runner for multi-data runs."""
     if len(datas) <= 1:
         return None
-    primary_timestamps = np.asarray(datas[0]._datetime, dtype=np.int64)
+    from .clock import native_timestamps
+    primary_timestamps = native_timestamps(datas[0], unit)
     if all(
         len(data._datetime) == len(primary_timestamps)
-        and np.array_equal(np.asarray(data._datetime, dtype=np.int64), primary_timestamps)
+        and np.array_equal(native_timestamps(data, unit), primary_timestamps)
         for data in datas[1:]
     ):
         return None
@@ -935,11 +949,11 @@ def _build_data_advance_plan(datas: list[Any]) -> Any | None:
             return None
     return RustBarRunner(
         primary_timestamps,
-        [np.asarray(data._datetime, dtype=np.int64) for data in datas[1:]],
+        [native_timestamps(data, unit) for data in datas[1:]],
     )
 
 
-def _build_clocked_multi_data_runner(datas: list[Any]) -> Any | None:
+def _build_clocked_multi_data_runner(datas: list[Any], *, unit="s") -> Any | None:
     """Build the Rust clocked multi-data runner when the feed schema is supported."""
     if len(datas) <= 1:
         return None
@@ -948,6 +962,7 @@ def _build_clocked_multi_data_runner(datas: list[Any]) -> Any | None:
     except (ImportError, AttributeError):
         return None
 
+    from .clock import native_timestamps
     symbols: list[str] = []
     timestamps: list[np.ndarray] = []
     opens: list[np.ndarray] = []
@@ -955,12 +970,14 @@ def _build_clocked_multi_data_runner(datas: list[Any]) -> Any | None:
     lows: list[np.ndarray] = []
     closes: list[np.ndarray] = []
     volumes: list[np.ndarray] = []
+    from .data import native_data_symbols
+    execution_symbols = native_data_symbols(datas)
     for index, data in enumerate(datas):
         required = ("_datetime", "_open", "_high", "_low", "_close", "_volume")
         if not all(hasattr(data, attr) for attr in required):
             return None
-        symbols.append(str(getattr(data, "_name", None) or f"data{index}"))
-        timestamps.append(np.asarray(data._datetime, dtype=np.int64))
+        symbols.append(execution_symbols[index])
+        timestamps.append(native_timestamps(data, unit))
         opens.append(np.asarray(data._open, dtype=np.float64))
         highs.append(np.asarray(data._high, dtype=np.float64))
         lows.append(np.asarray(data._low, dtype=np.float64))
@@ -1019,9 +1036,11 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
 
     if isinstance(cerebro.broker, RustBroker):
         data = cerebro.datas[0]
+        cerebro.broker._clock_unit = runtime._clock.unit
+        from .clock import native_timestamps
         # Robustly handle both native containers and facade data feeds.
         if hasattr(data, "_datetime"):
-            timestamps = data._datetime
+            timestamps = native_timestamps(data, runtime._clock.unit)
             opens = data._open
             highs = data._high
             lows = data._low
@@ -1107,6 +1126,8 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
         for observer in getattr(strategy, "observers", {}).values():
             runtime.invoke_component(observer.start)
     runtime._component_start_callback = start_components
+    install_timers=getattr(cerebro,"_install_timers",None)
+    if callable(install_timers):runtime._component_after_start_callback=lambda:install_timers(runtime)
     runtime.start()
     analyzer_bar_callbacks = _build_analyzer_bar_callbacks(strategy)
     observer_nexts = _build_observer_nexts(strategy)
@@ -1115,18 +1136,23 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
 
     limit = len(runtime._clock)
     broker = cerebro.broker
+    has_cheat_timers=any(timer.p.cheat for timer in getattr(cerebro,'_timers',()))
     use_clocked_multi_data_runner = (
-        isinstance(broker, RustBroker)
+        not has_cheat_timers
+        and isinstance(broker, RustBroker)
         and getattr(broker, "_engine", None) is not None
         and len(cerebro.datas) > 1
         and not runtime._clock.requires_union
+        and not any(hasattr(data, '_execution_quote_values') for data in cerebro.datas)
     )
     clocked_multi_data_runner = (
-        _build_clocked_multi_data_runner(cerebro.datas) if use_clocked_multi_data_runner else None
+        (_build_clocked_multi_data_runner(cerebro.datas) if runtime._clock.unit == 's' else
+         _build_clocked_multi_data_runner(cerebro.datas, unit=runtime._clock.unit)) if use_clocked_multi_data_runner else None
     )
     data_advance_plan = (
         runtime._clock if runtime._clock.requires_union else
-        None if clocked_multi_data_runner is not None else _build_data_advance_plan(cerebro.datas)
+        None if clocked_multi_data_runner is not None else (_build_data_advance_plan(cerebro.datas) if runtime._clock.unit == 's' else
+              _build_data_advance_plan(cerebro.datas, unit=runtime._clock.unit))
     )
     data_advance_methods = tuple(data._advance for data in cerebro.datas)
     bar_advancers = _build_bar_advancers(
@@ -1173,10 +1199,13 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
     strategy_next = lambda name: runtime.invoke_business(name)
 
     use_rust_bar_loop = (
-        isinstance(broker, RustBroker)
+        not has_cheat_timers
+        and isinstance(broker, RustBroker)
         and getattr(broker, "_engine", None) is not None
         and hasattr(broker._engine, "run_bar_loop")
         and len(cerebro.datas) <= 1
+        and not runtime._clock.requires_union
+        and not any(hasattr(data, '_execution_quote_values') for data in cerebro.datas)
         and not bool(getattr(cerebro, "trade_on_close", False))
     )
 
@@ -1228,6 +1257,12 @@ def _run_backtest_runtime(cerebro, runtime, runtime_config, bind_strategy_contex
     def on_bar(i: int) -> list[Any]:
         strategy_pre_next(i)
 
+        # Existing Python coordinator supplies the pre-match timer phase;
+        # the same Rust kernel still owns every order match and account fact.
+        cheat_callback=getattr(runtime,'_timer_cheat_callback',None)
+        if callable(cheat_callback):
+            if broker:broker._curr_idx=i
+            cheat_callback()
         # Broker Match
         if broker:
             broker_step(i)

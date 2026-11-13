@@ -52,9 +52,10 @@ class Drawdown(Analyzer):
         self._pending_value = self._observe_value(fundvalue if self._fundmode else value)
 
     def _before_business(self):
-        broker = self.strategy.broker
-        self._pending_value = self._observe_value(
-            broker.fundvalue if self._fundmode else broker.getvalue())
+        if self._pending_value is None:
+            broker = self.strategy.broker
+            self._pending_value = self._observe_value(
+                broker.fundvalue if self._fundmode else broker.getvalue())
 
     def next(self):
         observation = self._pending_value

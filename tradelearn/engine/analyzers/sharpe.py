@@ -25,8 +25,17 @@ class SharpeRatio(Analyzer):
 
     def start(self):
         if self.p.legacyannual:
-            raise NotImplementedError(
-                "legacyannual Sharpe historical observer profile is not implemented")
+            # BT AnnualReturn observes the primary data year and the Broker
+            # Observer value after business next, not the regular pre-next
+            # account sample. Accumulate completed years without storing bars.
+            self._legacy_year = None
+            self._anchor = self._last_value = None
+            self._count = 0
+            self._mean = self._m2 = 0.0
+            self._factor = None
+            self._rate = self.p.riskfreerate
+            self._observation_started = True
+            return
         self.timeframe = self.p.timeframe or self.data._timeframe
         self.compression = self.p.compression or self.data._compression
         _validate_period(self.timeframe, self.compression)
@@ -63,9 +72,20 @@ class SharpeRatio(Analyzer):
         self._m2 += delta * (excess - self._mean)
 
     def _before_business(self):
-        self._sampled_value = self._value()
+        if not self.p.legacyannual:
+            self._sampled_value = self._value()
 
     def _before_next(self, phase):
+        if self.p.legacyannual:
+            year = self.data.datetime.date().year
+            if self._legacy_year is None:
+                self._anchor = self.strategy.broker.getvalue()
+            elif year > self._legacy_year:
+                self._commit_period()
+                self._anchor = self._last_value
+            self._legacy_year = year
+            self._last_value = self.strategy.broker.getvalue()
+            return True
         # BT TimeFrameAnalyzerBase buckets on Strategy.datetime. A secondary
         # source can arrive behind that clock; its raw event time must stay raw.
         timestamp = self.strategy.datetime.datetime()
@@ -81,6 +101,12 @@ class SharpeRatio(Analyzer):
         if not self._observation_started:
             return
         self._observation_started = False
+        if self.p.legacyannual:
+            if self._legacy_year is not None:
+                self._commit_period()
+            # The legacy BT branch does not suppress zero-variance division.
+            self.ratio = self.rets["sharperatio"] = self._mean / math.sqrt(self._m2 / self._count)
+            return
         if self._last_period is not None:
             self._commit_period()
         denominator = self._count - self.p.stddev_sample

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import math
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
@@ -58,6 +59,18 @@ class RustBroker:
                 f"{sorted(self._RUST_MATCH_MODES)}"
             )
         self._cash = cash
+        self._fundmode = False
+        self._fundstartval = self._fundval = 100.0
+        self._fundshares = cash / self._fundval
+        self._fund_epoch = None
+        self._valuation_epoch=0
+        self._valuation_view_override=None
+        self._setcash_lever_override=None
+        self._cash_control_buffer = []
+        self._pending_cash_requests = {}
+        self._next_cash_command = 1
+        self._setcash_value_override = None
+        self._clock_unit = 's'
         self.commission_ratio = commission
         self._mult = mult
         self.match_mode = match_mode
@@ -67,6 +80,7 @@ class RustBroker:
         self._step_close = None
         self._step_close_compact = None
         self._step_open_bars_compact = None
+        self._step_bars_with_quotes_compact = None
         self._step_close_bars_compact = None
         self._get_new_fills = None
         self._get_new_fills_compact = None
@@ -95,6 +109,9 @@ class RustBroker:
         self._bt_notifications = False
         self._order_notifications = []
         self._trade_notifications = []
+        self._trade_states = {}
+        self._realized_trade_pnl = {}
+        self._next_trade_ref = 1
         self._notification_cycle = None
         self._order_submit_buffer: list[OrderPayload] = []
         # 缓冲旁路：按 order.ref 携带 trail 参数，保持 OrderPayload 7 元组契约不变
@@ -102,6 +119,10 @@ class RustBroker:
         self._cancel_buffer: list[int] = []
         self._bound_orders: set[int] = set()
         self._control_updates: dict[int, Order] = {}
+        self._market_eligibility_updates = {}
+        self._market_close_updates = {}
+        self._submission_checks = {}
+        self._target_expiry_updates = set()
         self._order_owners: dict[int, Strategy] = {}
         self._order_deadlines: dict[int, int | None] = {}
         self._native_order_events: list[tuple[int, str]] = []
@@ -151,20 +172,114 @@ class RustBroker:
     def bind_engine(self, engine: Any) -> None:
         """Bind a Rust engine and cache optional FFI methods once."""
         self._engine = engine
+        # The one runtime constructs this native account from the same cash
+        # configuration; do not add a second FFI account read during binding.
+        self._fundval = self._fundstartval
+        self._fundshares = self._cash / self._fundval
+        self._fund_epoch = None
         self._step_open_collect = getattr(engine, "step_open_collect", None)
         self._step_open_collect_compact = getattr(engine, "step_open_collect_compact", None)
         self._step_close = getattr(engine, "step_close", None)
         self._step_close_compact = getattr(engine, "step_close_compact", None)
         self._step_open_bars_compact = getattr(engine, "step_open_bars_compact", None)
+        self._step_bars_with_quotes_compact = getattr(engine, "step_bars_with_quotes_compact", None)
+        self._step_bars_with_quote_views_compact = getattr(engine, "step_bars_with_quote_views_compact", None)
         self._step_close_bars_compact = getattr(engine, "step_close_bars_compact", None)
         self._get_new_fills = getattr(engine, "get_new_fills", None)
         self._get_new_fills_compact = getattr(engine, "get_new_fills_compact", None)
         self._clear_state_caches()
 
     @observer_mutation_guard
+    def set_fundmode(self, fundmode, fundstartval=None):
+        self._fundmode = fundmode
+        if fundstartval is not None:
+            self.set_fundstartval(fundstartval)
+
+    def get_fundmode(self):
+        return self._fundmode
+
+    fundmode = property(get_fundmode, set_fundmode)
+
+    @observer_mutation_guard
+    def set_fundstartval(self, fundstartval):
+        self._fundstartval = fundstartval
+
+    def get_fundshares(self):
+        return self._fundshares
+
+    fundshares = property(get_fundshares)
+
+    def get_fundvalue(self):
+        if self._engine is None:
+            return self._fundval
+        # Unit metadata is sampled once per actual native bar. Only applied
+        # native deposit/withdrawal acknowledgements change the share count.
+        if self._rust_state_cache is not None and self._fund_epoch != self._curr_idx:
+            self._fundval = RustBroker.getvalue(self) / self._fundshares
+            self._fund_epoch = self._curr_idx
+        return self._fundval
+
+    fundvalue = property(get_fundvalue)
+
+    @observer_mutation_guard
     def setcash(self, cash: float) -> None:
-        self._cash = float(cash)
-        self._active_cash = float(cash)
+        cash=float(cash)
+        if not math.isfinite(cash):raise ValueError('finite cash required')
+        if self._engine is not None:
+            self._setcash_lever_override=(self._valuation_epoch,self.getvalue(lever=True))
+            self._queue_cash_control('set',cash)
+            self._setcash_value_override=(self._curr_idx,cash)
+            if self._rust_state_cache is not None:
+                i,_,size,price=self._rust_state_cache
+                self._rust_state_cache=(i,cash,size,price)
+        self._cash = cash
+        self._active_cash = cash
+
+    @observer_mutation_guard
+    def add_cash(self, cash: float) -> None:
+        cash=float(cash)
+        if not math.isfinite(cash):raise ValueError('finite cash addition required')
+        self._queue_cash_control('add',cash)
+
+    def _queue_cash_control(self,kind,amount):
+        if len(self._pending_cash_requests)>=4096:raise ValueError('cash command capacity exceeded')
+        if self._engine is not None and not callable(getattr(self._engine,'apply_cash_controls',None)):
+            raise RuntimeError('cash mutation requires the matching candidate TL native kernel')
+        cid=self._next_cash_command;self._next_cash_command+=1
+        self._pending_cash_requests[cid]=(kind,amount)
+        self._cash_control_buffer.append((cid,kind,amount))
+        if self._engine is not None and not self._buffer_order_submissions:
+            self._flush_cash_controls()
+
+    def drain_cash_controls(self):
+        commands,self._cash_control_buffer=self._cash_control_buffer,[]
+        return commands
+
+    def receive_cash_events(self,events):
+        shares=self._fundshares;seen=set()
+        for cid,kind,amount,balance in events:
+            if (type(cid) is not int or cid in seen or cid<=0
+                    or self._pending_cash_requests.get(cid)!=(kind,amount)
+                    or kind not in ('set','add') or isinstance(balance,bool)
+                    or not math.isfinite(balance)):
+                raise ValueError('unknown, repeated or conflicting native cash acknowledgement')
+            seen.add(cid)
+            if kind=='add':
+                if not self._fundval:raise ValueError('native cash flow requires a nonzero prior fund unit')
+                shares+=amount/self._fundval
+                if not math.isfinite(shares) or shares==0:
+                    raise ValueError('native cash flow cannot qualify finite nonzero fund units')
+        self._fundshares=shares
+        for cid in seen:del self._pending_cash_requests[cid]
+
+    def _flush_cash_controls(self):
+        commands=self.drain_cash_controls()
+        if commands:
+            apply=getattr(self._engine,'apply_cash_controls',None)
+            if not callable(apply):raise RuntimeError('cash mutation requires the matching candidate TL native kernel')
+            apply(commands)
+        drain=getattr(self._engine,'drain_cash_events',None)
+        if callable(drain):self.receive_cash_events(drain())
 
     @observer_mutation_guard
     def set_cash(self, cash: float) -> None:
@@ -239,17 +354,48 @@ class RustBroker:
     def get_cash(self) -> float:
         return self.getcash()
 
-    def getvalue(self, datas: list[Any] | tuple[Any, ...] | None = None) -> float:
+    def getvalue(self, datas: list[Any] | tuple[Any, ...] | None = None, mkt=False, lever=False) -> float:
         if datas is not None:
-            values = []
-            for data in datas:
-                position = self.getposition(data)
-                if position.size == 0:
-                    values.append(0.0)
-                    continue
-                values.append(position.size * self._current_close(data) * self._mult)
-            return float(sum(values))
+            selected=list(datas)
+            for data in selected:
+                if not any(data is bound for bound in self._active_datas):
+                    raise ValueError('valuation data does not belong to this broker')
+            if self._engine is None:
+                return self._active_cash if len(selected)!=1 else 0.0
+            observe=getattr(self._engine,'observe_valuation',None)
+            if not callable(observe):raise RuntimeError('subset valuation requires the matching candidate TL native kernel')
+            symbols=[self._rust_symbol(data) for data in selected] if selected else None
+            # A single-data BT query settles cash but returns before refreshing
+            # cached total/market valuation or the fund unit value.
+            prior=(self.getvalue(),self.getvalue(mkt=True)) if len(selected)==1 else None
+            self._flush_cash_controls()
+            cash,value,market=observe(symbols,len(selected)!=1,True)
+            self.receive_cash_events(self._engine.drain_cash_events())
+            self._clear_state_caches()
+            if len(selected)!=1:
+                # This is BT's cached valuation view, not a second account.
+                self._valuation_view_override=(self._valuation_epoch,value,market)
+                self._setcash_value_override=None;self._setcash_lever_override=None
+                self._fundval=value/self._fundshares;self._fund_epoch=self._curr_idx
+            elif prior is not None:
+                self._valuation_view_override=(self._valuation_epoch,*prior)
+            return float(value)
 
+        cached=self._valuation_view_override
+        view=cached if cached is not None and cached[0]==self._valuation_epoch else None
+        if mkt:
+            if view is not None:return float(view[2])
+            if self._engine is None:return 0.0
+            observe=getattr(self._engine,'observe_valuation',None)
+            if not callable(observe):raise RuntimeError('market valuation requires the matching candidate TL native kernel')
+            return float(observe(None,False,False)[2])
+        if lever:
+            prior=self._setcash_lever_override
+            if prior is not None and prior[0]==self._valuation_epoch:return float(prior[1])
+        if view is not None and self._setcash_value_override is None:return float(view[1])
+
+        override=self._setcash_value_override
+        if override is not None and override[0]==self._curr_idx:return override[1]
         if self._engine is not None:
             if (
                 self._rust_state_cache is not None
@@ -293,8 +439,8 @@ class RustBroker:
                 val += self._pos.size * current_price * self._mult
         return val
 
-    def get_value(self) -> float:
-        return self.getvalue()
+    def get_value(self, datas=None, mkt=False, lever=False) -> float:
+        return self.getvalue(datas,mkt=mkt,lever=lever)
 
     def _position_view(self,data,size,price):
         if data is None and self._active_datas:
@@ -360,7 +506,9 @@ class RustBroker:
     def _rust_symbol(self, data: Any = None) -> str:
         if data is None or len(self._active_datas) <= 1:
             return "data0"
-        return str(getattr(data, "_name", None) or "data0")
+        from .data import native_data_symbols
+        return next((symbol for candidate, symbol in zip(self._active_datas, native_data_symbols(self._active_datas))
+                     if candidate is data), "data0")
 
     @staticmethod
     def _current_close(data: Any) -> float:
@@ -371,7 +519,7 @@ class RustBroker:
 
     @staticmethod
     def _current_bar_vectors(
-        datas: list[Any],
+        datas: list[Any], *, unit='s',
     ) -> tuple[
         list[str],
         list[int],
@@ -388,14 +536,16 @@ class RustBroker:
         lows: list[float] = []
         closes: list[float] = []
         volumes: list[float] = []
-        single_data = len(datas) <= 1
+        from .data import native_data_symbols
+        execution_symbols = native_data_symbols(datas)
         for index, data in enumerate(datas):
             cursor = getattr(data, "_cursor", -1)
             if cursor < 0:
                 continue
-            symbol = "data0" if single_data else str(getattr(data, "_name", None) or f"data{index}")
+            symbol = execution_symbols[index]
             symbols.append(symbol)
-            timestamps.append(int(data._datetime[cursor]))
+            from .clock import native_timestamps
+            timestamps.append(int(native_timestamps(data, unit)[cursor]))
             opens.append(float(data._open[cursor]))
             highs.append(float(data._high[cursor]))
             lows.append(float(data._low[cursor]))
@@ -431,13 +581,46 @@ class RustBroker:
         return self._closed_trade_count, self._winning_trade_count
 
     def _event_bar_vectors(self):
-        vectors = self._current_bar_vectors(self._active_datas)
+        vectors = (self._current_bar_vectors(self._active_datas) if self._clock_unit == 's' else
+                   self._current_bar_vectors(self._active_datas, unit=self._clock_unit))
         clock = getattr(self, "_event_clock_timestamp", None)
         if clock is None or not vectors[1] or vectors[1][0] == clock:
             return vectors
+        if clock not in vectors[1]:
+            return vectors  # Replay's BT view is distinct from original quote timestamps.
         active = vectors[1].index(clock)
         order = [active, *range(active), *range(active + 1, len(vectors[1]))]
         return tuple([[column[i] for i in order] for column in vectors])
+
+    def _step_event_bars(self, *, trade_on_close=False):
+        vectors = self._event_bar_vectors()
+        quoted = any(hasattr(data, '_execution_quote_values') for data in self._active_datas)
+        if not quoted:
+            step = self._step_close_bars_compact if trade_on_close else self._step_open_bars_compact
+            return step(*vectors)
+        if self._step_bars_with_quotes_compact is None:
+            raise RuntimeError('resample execution ticks require the matching candidate TL native kernel')
+        from .data import native_data_symbols
+        by_symbol = dict(zip(native_data_symbols(self._active_datas), self._active_datas))
+        quotes = [[], [], [], []]
+        for index, symbol in enumerate(vectors[0]):
+            data = by_symbol[symbol]
+            values = getattr(data, '_execution_quote_values', None)
+            row = values[data._cursor] if values is not None else [vectors[field][index] for field in (2, 3, 4, 5)]
+            for column, value in zip(quotes, row):
+                column.append(float(value))
+        views=[]
+        for symbol,data in by_symbol.items():
+            if getattr(data,'_native_delivery_views',False) and data._cursor>=0 and symbol in vectors[0]:
+                # A BT broker turn can revisit a held/withdrawn clone quote
+                # after another feed advances. Identity belongs to this unique
+                # runtime turn; source row identity remains data._cursor.
+                views.append((symbol,self._curr_idx+1,int(data._delivery_date_ranks[data._cursor])))
+        if views:
+            if self._step_bars_with_quote_views_compact is None:
+                raise RuntimeError('configured replay requires the candidate native delivery-view ABI')
+            return self._step_bars_with_quote_views_compact(*vectors,*quotes,trade_on_close,views)
+        return self._step_bars_with_quotes_compact(*vectors, *quotes, trade_on_close)
 
     def _fill_datetime(self, data: Any) -> Any:
         timestamps = getattr(data, "_datetime", None)
@@ -448,6 +631,13 @@ class RustBroker:
             if cursor < 0 or cursor >= len(timestamps):
                 return None
             value = timestamps[cursor]
+            if getattr(data,'_native_delivery_views',False):
+                import pandas as pd
+                return pd.Timestamp(int(data._delivery_datetime[cursor]),unit='ns',tz='UTC')
+            if self._clock_unit == 'ns':
+                import pandas as pd
+                from .clock import native_timestamps
+                return pd.Timestamp(int(native_timestamps(data, 'ns')[cursor]), unit='ns', tz='UTC')
         except (IndexError, TypeError):
             return None
         try:
@@ -479,6 +669,9 @@ class RustBroker:
                 "trade_closed": trade_closed,
             }
         )
+        if getattr(order.data,'_native_delivery_views',False):
+            import pandas as pd
+            self._fills[-1]['source_quote_datetime']=pd.Timestamp(int(order.data._clock_timestamps[order.data._cursor]),unit='ns',tz='UTC')
 
     def _notify_order_event(self, owner: Strategy, order: Order) -> None:
         if order.alive():self._active_orders[order.ref]=order
@@ -489,6 +682,9 @@ class RustBroker:
         self._deliver_order_notification(owner, order)
 
     def _deliver_order_notification(self, owner, order):
+        for observer in getattr(owner, 'observers', {}).values():
+            callback = getattr(observer, '_notify_order', None)
+            if callable(callback):invoke_component(owner, callback, order)
         if (getattr(type(owner), "notify_order", None) is not CoreStrategy.notify_order
                 or has_observers(owner,"business.notify_order")):
             _notify_order(owner, order)
@@ -529,6 +725,9 @@ class RustBroker:
         self._deliver_trade_notification(owner, trade)
 
     def _deliver_trade_notification(self, owner, trade):
+        for observer in getattr(owner, 'observers', {}).values():
+            callback = getattr(observer, '_notify_trade', None)
+            if callable(callback):invoke_component(owner, callback, trade)
         notify_trade = getattr(owner, "notify_trade", None)
         if callable(notify_trade):
             dispatch_callback(owner,"notify_trade",trade)
@@ -560,7 +759,9 @@ class RustBroker:
                 or has_observers(owner,"business.notify_trade"))
 
     def _wants_trade_event(self, owner: Strategy) -> bool:
-        return self._strategy_wants_trade(owner) or bool(self._trade_callbacks(owner))
+        return (self._strategy_wants_trade(owner) or bool(self._trade_callbacks(owner))
+                or any(getattr(observer, '_observes_trades', False)
+                       for observer in getattr(owner, 'observers', {}).values()))
 
     def _get_rust_state(self) -> tuple[int, float, float, float]:
         """Return cached Rust cash/position for the current bar."""
@@ -642,12 +843,11 @@ class RustBroker:
             submitted
             and self._trade_on_close
             and self._engine is not None
+            and not self._bt_notifications  # BT applies COC at the next broker turn.
         ):
             self._clear_state_caches()
             if self._active_datas and self._step_close_bars_compact is not None:
-                fills, cash, size, price = self._step_close_bars_compact(
-                    *self._event_bar_vectors()
-                )
+                fills, cash, size, price = self._step_event_bars(trade_on_close=True)
                 self._step_fills_from_collect = fills
                 self._rust_state_cache = (self._curr_idx, cash, size, price)
             elif self._step_close_compact is not None:
@@ -655,6 +855,8 @@ class RustBroker:
             elif self._step_close is not None:
                 self._step_fills_from_collect = self._step_close(self._curr_idx)
 
+        drain_cash=getattr(self._engine,'drain_cash_events',None)
+        if callable(drain_cash):self.receive_cash_events(drain_cash())
         drain_events = getattr(self._engine, "drain_order_events", None)
         if drain_events is not None:
             self.receive_order_events(drain_events())
@@ -687,7 +889,23 @@ class RustBroker:
         order._native_ref = rust_ref
         self._orders_by_native_ref[rust_ref] = order
         self._bound_orders.add(id(order))
+        owner=self._order_owners.get(id(order))
+        reference=float(order.created.price)
+        if self._bt_notifications and getattr(owner,'_bt_minperiods',False) and math.isfinite(reference):
+            self._submission_checks[rust_ref]=reference
+
         self._control_updates[id(order)] = order
+        if getattr(order, '_bt_dates', False) and self._order_deadlines.get(id(order)) is not None:
+            self._target_expiry_updates.add(rust_ref)
+        if (order.exectype == Order.Market and getattr(order, '_bt_dates', False)
+                and order.created.dt is not None):
+            from .clock import bt_date_upper_tick,bt_date_rank
+            self._market_eligibility_updates[rust_ref] = (bt_date_rank(order.created.dt) if getattr(order.data,'_native_delivery_views',False)
+                                                        else bt_date_upper_tick(order.created.dt, self._clock_unit))
+        if (order.exectype==Order.Market and self._trade_on_close
+                and getattr(order,'_bt_dates',False)):
+            order._bt_coc=True
+            self._market_close_updates[rust_ref]=float(order.created.pclose)
         for other in self._orders if self._oco_order_count else ():
             if other.oco is order and id(other) in self._bound_orders:
                 self._control_updates[id(other)] = other
@@ -916,7 +1134,13 @@ class RustBroker:
     def _submission_datetime(self, owner, data):
         runtime = getattr(owner, "_runtime", None)
         if runtime is not None and runtime.profile == "batch" and runtime._cursor >= 0:
-            return int(runtime._clock.timestamps[runtime._cursor])
+            timeline = (runtime._clock._deliveries if getattr(runtime._clock,'has_delivery_views',False)
+                        else runtime._clock.timestamps)
+            value = int(timeline[runtime._cursor])
+            if runtime._clock.unit == 'ns':
+                import pandas as pd
+                return pd.Timestamp(value, unit='ns', tz='UTC')
+            return value
         clock = getattr(owner, "data", None)
         return self._fill_datetime(clock if clock is not None else data)
 
@@ -1047,8 +1271,8 @@ class RustBroker:
             # Market never expires, and numeric0 is distinct from timedelta DAY.
             if order.exectype == Order.Market or not valid:
                 return None
-            import math
-            return math.floor((float(valid) - 719163.0) * 86400.0)
+            from .clock import bt_date_upper_tick,bt_date_rank
+            return bt_date_rank(valid) if getattr(order.data,'_native_delivery_views',False) else bt_date_upper_tick(valid, self._clock_unit)
         import numbers
 
         import pandas as pd
@@ -1067,7 +1291,7 @@ class RustBroker:
         else:
             raise ValueError("order.valid must be a date, datetime, timedelta or relative seconds")
         deadline = deadline.tz_localize("UTC") if deadline.tzinfo is None else deadline.tz_convert("UTC")
-        return int(deadline.timestamp())
+        return int(deadline.value) if self._clock_unit == 'ns' else int(deadline.timestamp())
 
     def drain_order_controls(self) -> tuple[list[int], list[tuple[int, int | None, int | None]]]:
         updates = []
@@ -1079,14 +1303,48 @@ class RustBroker:
         cancels, self._cancel_buffer = self._cancel_buffer, []
         return [getattr(self._orders_by_ref[ref], "_native_ref", ref) for ref in cancels], updates
 
+    def drain_target_expiry_clocks(self):
+        updates, self._target_expiry_updates = self._target_expiry_updates, set()
+        return list(updates)
+
+    def drain_market_eligibility(self):
+        updates, self._market_eligibility_updates = self._market_eligibility_updates, {}
+        return list(updates.items())
+
+    def drain_submission_checks(self):
+        updates,self._submission_checks=self._submission_checks,{}
+        return list(updates.items())
+
     def _flush_order_controls(self) -> None:
         if self._engine is None:
             return
+        self._flush_cash_controls()
+        checks=self.drain_submission_checks()
+        configure_submission=getattr(self._engine,'configure_submission_check',None)
+        if callable(configure_submission):
+            for ref,price in checks:configure_submission(ref,price)
         cancels, updates = self.drain_order_controls()
         configure = getattr(self._engine, "configure_order", None)
         if configure is not None:
             for update in updates:
                 configure(*update)
+        expiry_updates = self.drain_target_expiry_clocks()
+        configure_expiry_clock = getattr(self._engine, 'configure_order_expiry_clock', None)
+        if expiry_updates and configure_expiry_clock is None:
+            raise RuntimeError('BT ordered-feed expiry requires the matching candidate TL native kernel')
+        for ref in expiry_updates:
+            configure_expiry_clock(ref, True)
+        market_updates = self.drain_market_eligibility()
+        configure_market = getattr(self._engine, 'configure_market_eligibility', None)
+        if market_updates and configure_market is None:
+            raise RuntimeError('BT market eligibility requires the matching candidate TL native kernel')
+        for update in market_updates:
+            configure_market(*update)
+        close_updates,self._market_close_updates=self._market_close_updates,{}
+        configure_close=getattr(self._engine,'configure_market_close_reference',None)
+        if close_updates and configure_close is None:
+            raise RuntimeError('adjusted BT replay COC requires candidate native close references')
+        for ref,price in close_updates.items():configure_close(ref,price)
         cancel = getattr(self._engine, "cancel_order", None)
         if cancel is not None:
             for ref in cancels:
@@ -1100,9 +1358,12 @@ class RustBroker:
         for ref, status in events:
             order = self._orders_by_ref.get(ref)
             if order is not None:
+                if status=='submission_margin':
+                    self._order_notifications=[item for item in self._order_notifications
+                                               if not (item[1] is order and item[2].status==Order.Accepted)]
                 self._finish_order(order, {
                     "expired": Order.Expired, "canceled": Order.Canceled,
-                    "margin": Order.Margin, "rejected": Order.Rejected,
+                    "margin": Order.Margin, "submission_margin":Order.Margin, "rejected": Order.Rejected,
                 }[status], strategy)
                 for child, *_ in self._deferred_child_orders.pop(id(order), ()):
                     self.cancel(child)
@@ -1153,9 +1414,7 @@ class RustBroker:
         self._flush_order_controls()
         if self._engine is not None:
             if self._active_datas and self._step_open_bars_compact is not None:
-                fills, cash, size, price = self._step_open_bars_compact(
-                    *self._event_bar_vectors()
-                )
+                fills, cash, size, price = self._step_event_bars()
                 self._step_fills_from_collect = fills
                 self._rust_state_cache = (self._curr_idx, cash, size, price)
             elif self._step_open_collect_compact is not None:
@@ -1173,6 +1432,8 @@ class RustBroker:
                 self._engine.step_open(i)
                 self._rust_state_cache = None
 
+        drain_cash=getattr(self._engine,'drain_cash_events',None)
+        if callable(drain_cash):self.receive_cash_events(drain_cash())
         drain_events = getattr(self._engine, "drain_order_events", None)
         if drain_events is not None:
             self.receive_order_events(drain_events())
@@ -1267,6 +1528,7 @@ class RustBroker:
             )
 
             order._set_execution_clock(self._fill_datetime(order.data))
+            if getattr(order,'_bt_coc',False):order.executed.dt=order.created.dt
             data = order.data
             requested_size = float(order.size)
             pending = pending_size.get(data, 0.0) - requested_size
@@ -1281,22 +1543,17 @@ class RustBroker:
             new_size = pos.size
 
             trade_closed = old_size != 0 and old_size * new_size <= 0
+            accumulated_pnl = self._realized_trade_pnl.get(data, 0.0) + pnl
             if trade_closed:
                 self._closed_trade_count += 1
-                if pnl > 0:
+                if accumulated_pnl > 0:
                     self._winning_trade_count += 1
-            if wants_trade_event and old_size == 0 and new_size != 0:
-                trade = Trade(data=data, size=new_size, price=price, status=Trade.Open)
-                trade.pnl = 0.0
-                trade.pnlcomm = 0.0
-                trade.isopen = True
-                self._notify_trade_event(strategy, trade)
-            elif wants_trade_event and trade_closed:
-                trade = Trade(data=data, size=new_size, price=old_price, status=Trade.Closed)
-                trade.pnl = pnl
-                trade.pnlcomm = pnl
-                trade.isclosed = True
-                self._notify_trade_event(strategy, trade)
+                self._realized_trade_pnl.pop(data, None)
+            elif new_size:
+                self._realized_trade_pnl[data] = accumulated_pnl
+            if wants_trade_event:
+                self._project_fill_trade(strategy, order, old_size, old_price,
+                                         signed_size, price, comm, pnl, True)
 
             self._record_fill(
                 order,
@@ -1311,6 +1568,63 @@ class RustBroker:
             self._activate_child_orders(strategy, order)
             self._cancel_oco_siblings(strategy, order)
         return filled_order_refs
+
+    def _project_fill_trade(self, owner, order, old_size, old_price,
+                            signed_size, price, commission, pnl, notify):
+        """Accumulate views of authoritative fills; never update account cash.
+
+        A reversal closes the previous Trade and opens a separate Trade. Fees
+        from its one native fill are apportioned by the actual closed/open qty.
+        """
+        from copy import copy
+        data = order.data
+        trade = self._trade_states.get(data)
+        total = abs(signed_size)
+        closing = min(abs(old_size), total) if old_size * signed_size < 0 else 0.0
+        opening = total - closing
+        direction = 1 if signed_size > 0 else -1
+        bar = len(data) if hasattr(data, "__len__") else 0
+        info = self.getcommissioninfo(data)
+        value = getattr(info, "getvaluesize", lambda size, cost: size * cost)
+        close_fee = commission * closing / total if closing else 0.0
+        if closing:
+            if trade is None:
+                raise RuntimeError("native fill closes a position without its trade projection")
+            trade.justopened = False
+            trade.size = old_size + direction * closing
+            trade.commission += close_fee
+            trade.pnl += pnl
+            trade.pnlcomm = trade.pnl - trade.commission
+            trade.value = value(trade.size, trade.price)
+            trade.barlen = bar - trade.baropen
+            trade.isopen = bool(trade.size)
+            trade.isclosed = not trade.isopen
+            if trade.isclosed:
+                trade.status = Trade.Closed
+                trade.dtclose = order.executed.dt
+                trade.barclose = bar
+                self._trade_states.pop(data)
+                if notify:
+                    self._notify_trade_event(owner, copy(trade))
+                trade = None
+        if opening:
+            justopened = trade is None
+            if justopened:
+                trade = Trade(ref=self._next_trade_ref, data=data, status=Trade.Open,
+                              isopen=True, dtopen=order.executed.dt,
+                              long=direction > 0, baropen=bar)
+                self._next_trade_ref += 1
+                self._trade_states[data] = trade
+            old_trade_size = trade.size
+            trade.size += direction * opening
+            trade.price = (old_trade_size * trade.price + direction * opening * price) / trade.size
+            trade.value = value(trade.size, trade.price)
+            trade.commission += commission - close_fee
+            trade.pnlcomm = trade.pnl - trade.commission
+            trade.justopened = justopened
+            trade.barlen = bar - trade.baropen
+            if justopened and notify:
+                self._notify_trade_event(owner, copy(trade))
 
     def _reconcile_unfilled_market_orders(
         self,

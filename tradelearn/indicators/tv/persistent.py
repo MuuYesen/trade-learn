@@ -156,6 +156,21 @@ class PyneState:
         self.index = 0
         self.previous = float("nan")
 
+    def _checkpoint(self):
+        # The pinned native machines implement Pyne's own opaque rollback
+        # protocol; Python deepcopy cannot copy their Cython state vectors.
+        state=import_module('pynecore.core.instance_state')
+        with _LOCK:
+            return self.index,self.previous,state._snap_child((getattr(ta,self.name),self.fn),{})
+
+    def _restore_checkpoint(self, checkpoint):
+        state=import_module('pynecore.core.instance_state')
+        index,previous,payload=checkpoint
+        with _LOCK:
+            entry=state._restore_payload(payload,{})
+            self.fn=entry[1] if entry is not None else _bind_target(getattr(ta,self.name))
+            self.index,self.previous=index,previous
+
     def update(self, *values):
         """Advance this isolated Pyne state once while restoring shared library fields
         afterwards.

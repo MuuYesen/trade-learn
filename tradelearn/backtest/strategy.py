@@ -34,6 +34,7 @@ class Strategy:
             "notify_order",
             "notify_trade",
             "notify_cashvalue",
+            "notify_fund",
             "_pre_next",
         )
         for name in names:
@@ -144,6 +145,10 @@ class Strategy:
         pass
 
     @observer_mutation_guard
+    def notify_fund(self, cash, value, fundvalue, shares):
+        pass
+
+    @observer_mutation_guard
     def _set_bar_advancers(self, advancers: tuple[Any, ...]) -> None:
         """Install the internal per-bar cursor advance plan."""
         self._bar_advancers = advancers
@@ -163,7 +168,7 @@ class Strategy:
             import pandas as pd
             if runtime._cursor < 0:
                 return None
-            stamp = pd.Timestamp(int(runtime._clock.timestamps[runtime._cursor]), unit="s")
+            stamp = pd.Timestamp(int(runtime._clock.timestamps[runtime._cursor]), unit=runtime._clock.unit)
             timezone = self.datas[0]._frame.index.tz
             return stamp.tz_localize("UTC").tz_convert(timezone) if timezone is not None else stamp
         context = getattr(self, "runtime_context", None)

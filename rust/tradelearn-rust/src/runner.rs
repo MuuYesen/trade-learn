@@ -191,23 +191,27 @@ impl RustBarRunner {
     fn run(
         &self,
         py: Python<'_>,
-        mut engine: PyRefMut<'_, RustBacktestEngine>,
+        engine: Py<RustBacktestEngine>,
         broker: Py<PyAny>,
         on_bar: Py<PyAny>,
         start: usize,
         end: usize,
     ) -> PyResult<()> {
-        let stop = end.min(engine.inner.total_bars()).min(self.cursors.len());
+        let stop=end.min(engine.borrow(py).inner.total_bars()).min(self.cursors.len());
         for cursor in start..stop {
-            engine.sync_broker_controls(py, &broker)?;
-            let fill_records = engine.inner.step_open(cursor);
-            engine.deliver_order_events(py, &broker)?;
-            let fills = engine.map_fills_compact(fill_records);
-            let cash = engine.inner.get_cash();
-            let (size, price) = engine.inner.get_position();
-            let data_cursors = self.cursors[cursor].clone();
-            let drained = on_bar.call1(py, (cursor, data_cursors, fills, cash, size, price))?;
-            engine.consume_broker_callback(py, &broker, drained)?;
+            let (fills,cash,size,price)={
+                let mut account=engine.borrow_mut(py);
+                account.sync_broker_controls(py,&broker)?;
+                let records=account.inner.step_open(cursor);
+                account.deliver_order_events(py,&broker)?;
+                let fills=account.map_fills_compact(records);
+                let cash=account.inner.get_cash();
+                let (size,price)=account.inner.get_position();
+                (fills,cash,size,price)
+            };
+            let data_cursors=self.cursors[cursor].clone();
+            let drained=on_bar.call1(py,(cursor,data_cursors,fills,cash,size,price))?;
+            engine.borrow_mut(py).consume_broker_callback(py,&broker,drained)?;
         }
         Ok(())
     }

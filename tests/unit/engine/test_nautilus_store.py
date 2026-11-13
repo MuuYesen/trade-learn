@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 pytest.importorskip('nautilus_trader')
-from tradelearn_runtime import NautilusStore
+from tradelearn.engine.stores import NautilusStore
 from nautilus_trader.adapters.binance import (
     BinanceDataClientConfig, BinanceDataClientFactory, BinanceEnvironment,
     BinanceExecutionClientConfig, BinanceExecutionClientFactory,
@@ -200,9 +200,17 @@ def test_official_bar_replay_uses_one_runtime_and_existing_params(tmp_path, monk
         async def run_async(self):
             native.run()
         def dispose(self):
-            native.dispose()
+            nonlocal native
+            try:
+                native.dispose()
+            finally:
+                # This fixture owns the simulator/class/actor closure cycle.
+                # Release it on the NA owner thread before any sender can GC.
+                self.actor = None
+                native = None
     monkeypatch.setattr(a, '_build_node', ReplayNode)
-    [business] = a.run(engine, monitor=True) if logged == 'plain' else engine.run()
+    [business] = engine.run(monitor=True) if logged == 'plain' else engine.run()
+    assert native is None, 'fixture retained its unsendable simulator'
     assert business.broker is a.getbroker()
     assert isinstance(business.broker, NautilusBroker)
     assert business._runtime is a._host.frontend
@@ -385,9 +393,8 @@ def test_engine_monitor_assembles_one_logger_and_joins_sender(tmp_path, monkeypa
         node.actor.frontend.start()
     node.run_async = run
     monkeypatch.setattr(a, '_build_node', lambda: node)
-    [business] = a.run(engine, monitor=dict(endpoint='https://sqs.ap-southeast-1.amazonaws.com/123456789012/test.fifo',
-        credentials=dict(access_key_id='synthetic',secret_access_key='synthetic'),
-        receipt_origin='https://receipt.invalid',archive_binding_id='test'))
+    [business] = engine.run(monitor=dict(endpoint='https://sqs.ap-southeast-1.amazonaws.com/123456789012/test.fifo',
+        credentials=dict(access_key_id='synthetic',secret_access_key='synthetic')))
     assert calls == ['bootstrap', 'sender-start', 'sender-close']
     assert a._remote_monitor._closed and a._remote_monitor._credentials == {}
 
@@ -410,9 +417,8 @@ def test_monitor_denial_prevents_native_node_and_local_state(tmp_path, monkeypat
     engine = engine_for(a, strategy_base)
     monkeypatch.setattr(a, '_build_node', lambda: pytest.fail('denied monitor reached Node'))
     with pytest.raises(RuntimeError, match='denied'):
-        a.run(engine, monitor=dict(endpoint='https://sqs.ap-southeast-1.amazonaws.com/123456789012/test.fifo',
-            credentials=dict(access_key_id='synthetic',secret_access_key='synthetic'),
-            receipt_origin='https://receipt.invalid',archive_binding_id='test'))
+        engine.run(monitor=dict(endpoint='https://sqs.ap-southeast-1.amazonaws.com/123456789012/test.fifo',
+            credentials=dict(access_key_id='synthetic',secret_access_key='synthetic')))
     assert not list(tmp_path.iterdir())
 
 
