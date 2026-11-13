@@ -49,32 +49,49 @@ class OptunaSearch:
         if self.pruner is not None:
             kwargs["pruner"] = self.pruner
         study = optuna.create_study(**kwargs)
-        from tradelearn.backtest._optimize import execute_trial, _publish_record
         from copy import deepcopy
-        self.trial_records = deepcopy(getattr(study, 'user_attrs', {}).get('tradelearn.trials', []))
+
+        from tradelearn.backtest._optimize import _publish_record, execute_trial
+
+        self.trial_records = deepcopy(getattr(study, "user_attrs", {}).get("tradelearn.trials", []))
         first_new = len(self.trial_records)
+
         def objective(trial):
             def call():
-                from tradelearn.backtest._optimize import current_trial_record, _describe
+                from tradelearn.backtest._optimize import _describe, current_trial_record
+
                 record = current_trial_record()
-                record['trial_number'] = getattr(trial, 'number', len(self.trial_records) - 1)
+                record["trial_number"] = getattr(trial, "number", len(self.trial_records) - 1)
                 try:
                     return self.objective(trial)
                 finally:
-                    record['params'] = _describe(getattr(trial, 'params', record['params']))
-            return execute_trial(self.trial_records, {}, {'objective': 'callable'},
-                call, lambda result: float(result), publish=False)
+                    record["params"] = _describe(getattr(trial, "params", record["params"]))
+
+            return execute_trial(
+                self.trial_records,
+                {},
+                {"objective": "callable"},
+                call,
+                lambda result: float(result),
+                publish=False,
+            )
+
         def finalize():
-            frozen = {trial.number: trial for trial in getattr(study, 'trials', ())}
+            frozen = {trial.number: trial for trial in getattr(study, "trials", ())}
             for record in self.trial_records[first_new:]:
-                trial = frozen.get(record.get('trial_number'))
-                state = getattr(getattr(trial, 'state', None), 'name', None)
-                if record['status'] != 'cancelled' and state in ('COMPLETE', 'FAIL', 'PRUNED'):
-                    record['status'] = {'COMPLETE': 'completed', 'FAIL': 'failed', 'PRUNED': 'pruned'}[state]
-                    record['optimizer_state'] = state
+                trial = frozen.get(record.get("trial_number"))
+                state = getattr(getattr(trial, "state", None), "name", None)
+                if record["status"] != "cancelled" and state in ("COMPLETE", "FAIL", "PRUNED"):
+                    record["status"] = {
+                        "COMPLETE": "completed",
+                        "FAIL": "failed",
+                        "PRUNED": "pruned",
+                    }[state]
+                    record["optimizer_state"] = state
                 _publish_record(record)
-            if hasattr(study, 'set_user_attr'):
-                study.set_user_attr('tradelearn.trials', self.trial_records)
+            if hasattr(study, "set_user_attr"):
+                study.set_user_attr("tradelearn.trials", self.trial_records)
+
         try:
             study.optimize(objective, n_trials=self.n_trials, **optimize_kwargs)
         except BaseException as exc:
@@ -124,19 +141,24 @@ class OptunaBacktestSearch:
             name: _suggest_param(trial, name, spec) for name, spec in self.param_space.items()
         }
         from tradelearn.backtest._optimize import (
-            current_trial_record, historical_template, effective_config, _describe,
+            _describe,
+            current_trial_record,
+            effective_config,
+            historical_template,
         )
+
         record = current_trial_record()
         if record is not None:
-            record['params'] = _describe(params)
+            record["params"] = _describe(params)
         from copy import deepcopy
+
         backtest = self.backtest_factory(deepcopy(params))
-        if hasattr(backtest, 'datas') and hasattr(backtest, 'broker'):
+        if hasattr(backtest, "datas") and hasattr(backtest, "broker"):
             backtest = historical_template(backtest)
             if record is not None:
-                record['config'] = effective_config(backtest)
+                record["config"] = effective_config(backtest)
         elif record is not None:
-            record['config'] = {'factory_result': _describe(backtest)}
+            record["config"] = {"factory_result": _describe(backtest)}
         result = backtest.run() if hasattr(backtest, "run") else backtest(params)
         return _metric_value(result, self.metric)
 

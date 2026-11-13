@@ -41,6 +41,7 @@ def grid_search(
         execute_trial,
         historical_template,
         strategy_config,
+        strategy_defaults,
     )
     grid = expand_grid(param_grid)
     if not grid:
@@ -59,7 +60,7 @@ def grid_search(
             cerebro = deepcopy(template)
             cerebro.strats = []
             cerebro._dooptimize = False
-            cerebro.addstrategy(strategy, **deepcopy(params))
+            cerebro.addstrategy(strategy, **deepcopy({**strategy_defaults(strategy), **params}))
             [instance] = execute_trial(records, params,
                 {**config, "strategies": [strategy_config(strategy, (), params)]}, cerebro.run,
                 lambda value: dict(value[0].stats.summary))

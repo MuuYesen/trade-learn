@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from itertools import product
 from typing import Any
 
@@ -18,9 +19,10 @@ def _describe(value, seen=None):
     """Stable JSON configuration facts; never serialize a runtime or its repr."""
     import dataclasses
     import datetime
-    from decimal import Decimal
     import hashlib
     import math
+    from decimal import Decimal
+
     import numpy as np
     import pandas as pd
 
@@ -94,6 +96,7 @@ _BROKER_CONFIG = (
 def fresh_broker(broker):
     """Copy economic configuration only, never an engine/order/account state."""
     from copy import deepcopy
+
     from tradelearn.backtest.broker import RustBroker
 
     if type(broker) is not RustBroker:
@@ -131,6 +134,7 @@ def historical_template(owner):
             memo[id(runtime)] = None
     template = deepcopy(owner, memo)
     template.broker = broker
+    template.strats = [materialize_spec(spec) for spec in template.strats]
     template._runstop = False
     return template
 
@@ -186,7 +190,7 @@ def _publish_record(record):
 
 
 def execute_trial(records, params, config, execute, evaluate=None, *, publish=True):
-    """One existing historical run, evaluation and durable-in-owner audit fact."""
+    """One existing historical run, evaluation and retained-in-owner audit fact."""
     from copy import deepcopy
 
     record = {
@@ -241,8 +245,6 @@ def cancel_remaining(records, plans):
         _publish_record(record)
 
 
-from contextvars import ContextVar
-
 _ACTIVE_TRIAL = ContextVar("tradelearn_search_trial", default=None)
 
 
@@ -250,15 +252,16 @@ def current_trial_record():
     return _ACTIVE_TRIAL.get()
 
 
-def strategy_config(strategy, args, params):
+def strategy_defaults(strategy):
+    """Resolve declared defaults, without mutating the public strategy class."""
     from tradelearn.backtest.parameters import collect_param_defaults
-
-    defaults = dict(collect_param_defaults(strategy)[1])
     from tradelearn.lite.strategy import Strategy as LiteStrategy
 
+    defaults = dict(collect_param_defaults(strategy)[1])
     if issubclass(strategy, LiteStrategy):
+        framework_bases = set(LiteStrategy.__mro__)
         for cls in reversed(strategy.__mro__):
-            if cls.__module__.startswith("tradelearn."):
+            if cls in framework_bases:
                 continue
             defaults.update(
                 {
@@ -266,11 +269,23 @@ def strategy_config(strategy, args, params):
                     for name, value in vars(cls).items()
                     if not name.startswith("_")
                     and not callable(value)
-                    and not isinstance(value, property)
+                    and not isinstance(value, (property, classmethod, staticmethod))
                 }
             )
+    return defaults
+
+
+def materialize_spec(spec):
+    """Own mutable default and selected values at the trial boundary only."""
+    from copy import deepcopy
+
+    strategy, args, params = spec
+    return strategy, deepcopy(args), deepcopy({**strategy_defaults(strategy), **params})
+
+
+def strategy_config(strategy, args, params):
     return {
         "class": _describe(strategy),
         "args": _describe(args),
-        "params": _describe({**defaults, **params}),
+        "params": _describe({**strategy_defaults(strategy), **params}),
     }

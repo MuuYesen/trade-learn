@@ -97,7 +97,7 @@ Optuna保留独立`OptunaSearch/OptunaBacktestSearch`和原生trial建议接口�
 
 ### 同一冻结 bundle 的推理校验（0.3.5）
 
-本地 `save_bundle/load_bundle(..., trusted=True)` 仍核依赖版本、状态与显式配套代码的 SHA256；hash 完整性不是来源可信证明。`tradelearn.ml.predict_bundle(bundle, bars)` 为研究窗口与 Engine／Lite 策略窗口共用的已拟合推理接缝：先核输入字段／dtype 和 Bars，再仅调用 FeatureSet.transform、Pipeline.transform、Scorer.predict；Scorer 必须引用该 bundle 的 model。输出必须属于输入窗口，当前评分不能来自更早的特征时点，非有限输出明确失败，空窗口／空评分不复用旧评分。该函数不 fit、不取数、不分配订单；需要权重时由原 Allocator 显式处理。现有 `examples/research/_workflow.py` 以及 Engine／Lite 两个研究模板使用此共同接缝。
+本地 `save_bundle/load_bundle(..., trusted=True)` 仍核依赖版本、状态与显式配套代码的 SHA256；hash 完整性不是来源可信证明。`tradelearn.ml.predict_bundle(bundle, bars)` 为研究窗口与 Engine／Lite 策略窗口共用的已拟合推理接缝：先核输入字段／dtype 和 Bars，再仅调用 FeatureSet.transform、Pipeline.transform、Scorer.predict；Scorer 必须引用该 bundle 的 model。输出必须属于输入窗口，当前评分只向 Scorer 提供最新时点特征，MultiIndex 输出也必须标记该最新时点，非有限输出明确失败，空窗口／空评分不复用旧评分。symbol-only 评分的时点边界来自上述输入限制，不代表能审计任意自定义 Scorer 内部是否私藏旧值；使用者仍只加载可信实现。该函数不 fit、不取数、不分配订单；需要权重时由原 Allocator 显式处理。现有 `examples/research/_workflow.py` 以及 Engine／Lite 两个研究模板使用此共同接缝。
 
 ```python
 from tradelearn.ml import load_bundle, predict_bundle

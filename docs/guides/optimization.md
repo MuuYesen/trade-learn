@@ -49,7 +49,7 @@ Lite 简化搜索的参数与返回仍以其当前接口为准；复杂研究使
 
 四个入口保留各自外观：Engine 使用 `cerebro.optstrategy(MyStrategy, period=[10, 20])` 后 `cerebro.run()`，默认返回 `list[list[OptReturn]]`，`optreturn=False` 返回 `list[list[Strategy]]`；Lite `Backtest.optimize()` 仍按 `return_pct` 返回最优 `LiteStats`；独立 `grid_search()` 返回 `list[GridSearchResult]`；Optuna 两种便利对象的 `run()` 仍返回原生 `Study`。参数枚举、空网格和原异常不改成统一 DSL。Optuna 只在实际调用时导入，普通网格无需安装它。
 
-每轮复用原单次历史回测，隔离 feed、broker、费用／滑点模型和策略运行状态，保实际现金、费率、自定义费用／滑点、COC、匹配模式、Sizer、Analyzer、Observer 和已有数据配置。搜索不连接 Store／实时 feed，不执行实时优化；不启动另一撮合循环或进程池。隔离不沙箱化用户代码：用户函数自己写外部文件、修改类级全局变量等副作用仍由用户负责。
+每轮复用原单次历史回测，在试验边界物化完整策略默认参数，再隔离 feed、broker、费用／滑点模型和策略运行状态，保实际现金、费率、自定义费用／滑点、COC、匹配模式、Sizer、Analyzer、Observer 和已有数据配置。搜索不连接 Store／实时 feed，不执行实时优化；不启动另一撮合循环或进程池。隔离不沙箱化用户代码：用户函数自己写外部文件、修改类级全局变量等副作用仍由用户负责。
 
 Engine／Lite 搜索对象的 `trial_records` 保存全部已知候选的记录，独立网格每个结果的 `trial_record` 对应同一结构。记录包括选参、含默认值的策略配置、数据值／索引指纹、列／dtype／来源属性、有效执行配置、评价及结果摘要。失败仍抛出原异常；Engine／Lite 对象保记录，网格的原异常附 `trial_records`，尚未执行的有限网格候选记 `cancelled/search_aborted`，不伪称已运行。`KeyboardInterrupt` 等取消保持原异常。Optuna 保原生失败／剪枝策略；`trial_records` 与 `Study.user_attrs['tradelearn.trials']` 对齐其终态，SQLite 恢复保留旧记录；没有生成的未来 Optuna 参数不编造为试验。
 

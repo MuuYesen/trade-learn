@@ -2,6 +2,7 @@
 
 import pandas as pd
 import pytest
+
 from tradelearn import engine as bt
 from tradelearn.lite import Backtest, Strategy
 from tradelearn.research import ResearchRun
@@ -136,6 +137,7 @@ def test_lite_cancellation_retains_original_and_records_remaining():
 
 def test_optuna_records_pruned_failed_and_success_without_forced_engine_metric():
     import optuna
+
     from tradelearn.optimize import OptunaSearch
 
     def objective(trial):
@@ -176,8 +178,9 @@ def test_optuna_backtest_uses_full_config_and_keeps_factory_owner_pristine():
 
 
 def test_trial_preserves_custom_costs_matches_single_and_does_not_consume_models():
-    from tradelearn.core.costs import FixedCommission, FixedSlippage
     import json
+
+    from tradelearn.core.costs import FixedCommission, FixedSlippage
 
     owner = Backtest(bars(), LiteTrial, cash=500)
     owner.broker.configure_matching(commission=FixedCommission(0.7), slippage=FixedSlippage(0.25))
@@ -235,6 +238,7 @@ def test_lite_effective_broker_cash_and_commission_are_single_run_authority():
 
 def test_optuna_records_survive_study_storage_reload(tmp_path):
     import optuna
+
     from tradelearn.optimize import OptunaSearch
 
     url = "sqlite:///" + str(tmp_path / "study.db")
@@ -275,7 +279,9 @@ def test_optuna_resume_preserves_prior_records_without_republishing_them(tmp_pat
 
 
 def test_optuna_tracking_failure_does_not_mask_original_trial_error(monkeypatch):
-    import sys, types
+    import sys
+    import types
+
     from tradelearn.optimize import OptunaSearch
 
     sentinel = ValueError("primary")
@@ -318,3 +324,49 @@ def test_lite_optimize_no_parameters_does_not_reuse_last_run_parameters():
     owner = Backtest(bars(), LiteTrial)
     owner.run(amount=2)
     assert owner.optimize().strategy.amount == 1
+
+
+@pytest.mark.parametrize("entry", ["engine", "lite", "grid", "optuna"])
+def test_all_searches_materialize_mutable_defaults_without_mutating_class(entry):
+    from tradelearn.integrations.search import grid_search
+    from tradelearn.optimize import OptunaBacktestSearch
+
+    snapshots = []
+    default = {"values": [7]}
+
+    class E(bt.Strategy):
+        params = (("bag", default), ("n", 1))
+
+        def start(self):
+            snapshots.append(list(self.p.bag["values"]))
+            self.p.bag["values"].append(self.p.n)
+
+    class L(Strategy):
+        bag = default
+        n = 1
+
+        def init(self):
+            snapshots.append(list(self.bag["values"]))
+            self.bag["values"].append(self.n)
+
+    def factory(params):
+        c = bt.Cerebro(stdstats=False)
+        c.adddata(bt.feeds.PandasData(dataname=bars()))
+        c.addstrategy(E, **params)
+        return c
+
+    if entry == "engine":
+        c = bt.Cerebro(stdstats=False)
+        c.adddata(bt.feeds.PandasData(dataname=bars()))
+        c.optstrategy(E, n=[1, 2])
+        c.run()
+    elif entry == "lite":
+        Backtest(bars(), L).optimize(n=[1, 2])
+    elif entry == "grid":
+        grid_search(E, bars(), {"n": [1, 2]})
+    else:
+        OptunaBacktestSearch(
+            backtest_factory=factory, param_space={"n": [1, 2]}, metric=lambda r: 1.0, n_trials=2
+        ).run()
+    assert snapshots == [[7], [7]]
+    assert default == {"values": [7]}
