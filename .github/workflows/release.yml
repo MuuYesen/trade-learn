@@ -123,7 +123,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(inputs.consumer_linux_only && '{"include":[{"os":"ubuntu-latest","cibw-archs":"auto64","cibw-build":"cp313-manylinux_x86_64"}]}' || '{"include":[{"os":"ubuntu-latest","cibw-archs":"auto64","cibw-build":"cp310-* cp311-* cp312-* cp313-* cp314-*"},{"os":"ubuntu-latest","cibw-archs":"aarch64","cibw-build":"cp313-*"},{"os":"macos-15","cibw-archs":"arm64","cibw-build":"cp310-* cp311-* cp312-* cp313-* cp314-*"},{"os":"windows-latest","cibw-archs":"AMD64","cibw-build":"cp310-* cp311-* cp312-* cp313-* cp314-*"}]}') }}
+      matrix: ${{ fromJSON(inputs.consumer_linux_only && '{"include":[{"os":"ubuntu-latest","cibw-archs":"auto64","cibw-build":"cp313-manylinux_x86_64"}]}' || '{"include":[{"os":"ubuntu-latest","cibw-archs":"auto64","cibw-build":"cp310-* cp311-* cp312-* cp313-* cp314-*"},{"os":"ubuntu-latest","cibw-archs":"aarch64","cibw-build":"cp313-*"},{"os":"macos-26","cibw-archs":"arm64","cibw-build":"cp310-* cp311-* cp312-* cp313-* cp314-*"},{"os":"windows-latest","cibw-archs":"AMD64","cibw-build":"cp310-* cp311-* cp312-* cp313-* cp314-*"}]}') }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -162,8 +162,8 @@ jobs:
         include:
           - os: ubuntu-latest
             artifact: wheels-ubuntu-latest-auto64
-          - os: macos-15
-            artifact: wheels-macos-15-arm64
+          - os: macos-26
+            artifact: wheels-macos-26-arm64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
