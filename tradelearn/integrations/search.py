@@ -34,8 +34,13 @@ def grid_search(
     """Run a parameter grid; optionally log each existing result after execution."""
 
     from copy import deepcopy
+
     from tradelearn.backtest._optimize import (
-        historical_template, effective_config, execute_trial, cancel_remaining, strategy_config,
+        cancel_remaining,
+        effective_config,
+        execute_trial,
+        historical_template,
+        strategy_config,
     )
     grid = expand_grid(param_grid)
     if not grid:

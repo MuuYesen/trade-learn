@@ -264,22 +264,34 @@ def test_final_cli_default_local_tracking_needs_no_service_and_keeps_active_run(
             os.environ["MLFLOW_TRACKING_URI"] = previous_env
 
 
-def test_search_failure_logs_all_trial_states_and_redacts_secret_keys(tracking,tmp_path):
+def test_search_failure_logs_all_trial_states_and_redacts_secret_keys(tracking, tmp_path):
     import json
     from pathlib import Path
+
     import pandas as pd
+
     from tradelearn.engine import Strategy
     from tradelearn.integrations.search import grid_search
+
     class SometimesFails(Strategy):
-        params=(('n',1),('api_key','never-upload-this'))
+        params = (("n", 1), ("api_key", "never-upload-this"))
+
         def next(self):
-            if self.p.n==2:raise ValueError('deliberate trial failure')
-    data=pd.DataFrame({k:[10.,11.,12.] for k in ('open','high','low','close','volume')},index=pd.date_range('2026-01-01',periods=3))
+            if self.p.n == 2:
+                raise ValueError("deliberate trial failure")
+
+    data = pd.DataFrame(
+        {k: [10.0, 11.0, 12.0] for k in ("open", "high", "low", "close", "volume")},
+        index=pd.date_range("2026-01-01", periods=3),
+    )
     with tracking.start_run() as active:
-        with pytest.raises(ValueError):grid_search(SometimesFails,data,{'n':[1,2,3]},mlflow={})
-        path=tracking.artifacts.download_artifacts(run_id=active.info.run_id,artifact_path='search/trials.json',dst_path=str(tmp_path))
-        content=Path(path).read_text()
-        records=json.loads(content)
-        assert [r['status'] for r in records]==['completed','failed','cancelled']
-        assert 'never-upload-this' not in content
-        assert records[0]['config']['data'][0]['sha256']
+        with pytest.raises(ValueError):
+            grid_search(SometimesFails, data, {"n": [1, 2, 3]}, mlflow={})
+        path = tracking.artifacts.download_artifacts(
+            run_id=active.info.run_id, artifact_path="search/trials.json", dst_path=str(tmp_path)
+        )
+        content = Path(path).read_text()
+        records = json.loads(content)
+        assert [r["status"] for r in records] == ["completed", "failed", "cancelled"]
+        assert "never-upload-this" not in content
+        assert records[0]["config"]["data"][0]["sha256"]

@@ -1,8 +1,9 @@
 import pandas as pd
 import pytest
-from tradelearn.data.providers import _filter_dates
-from tradelearn.data import DuckDBBarsBackend, open_dataset, BarsCache
+
 from tradelearn.core.errors import ContractError
+from tradelearn.data import BarsCache, DuckDBBarsBackend, open_dataset
+from tradelearn.data.providers import _filter_dates
 
 
 def panel():

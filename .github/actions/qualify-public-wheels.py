@@ -66,6 +66,17 @@ TESTS_034 = [
     "tests/test_live_replay_native_clock_checks.py",
     "tests/test_monitor_binding.py",
 ]
+TESTS_035 = [
+    "tests/unit/test_search_trials.py",
+    "tests/unit/test_optimize.py",
+    "tests/unit/lite/test_integration_backtest_contract.py",
+    "tests/unit/integrations/test_mlflow.py",
+    "tests/unit/ml/test_research_artifacts.py",
+    "tests/unit/research/test_connected_templates.py",
+    "tests/unit/data/test_query_shared.py",
+    "tests/unit/data/test_duckdb_backend.py",
+    "tests/unit/data/test_dataset.py",
+]
 PACKAGES = {"tradelearn", "tradelearn_runtime", "leafquant_monitor"}
 
 
@@ -77,6 +88,8 @@ def selected_tests(version):
         tests += TESTS_033
     if release >= (0, 3, 4):
         tests += TESTS_034
+    if release >= (0, 3, 5):
+        tests += TESTS_035
     return tests
 
 
@@ -201,6 +214,8 @@ def installed(args):
         "test_paths": selected_tests(args.tl),
         "own_packages_are_public_final_wheels": not bool(args.candidate_wheel),
         "candidate_wheel": args.candidate_wheel,
+        "research_dependency_scope": ["scikit-learn", "scipy", "optuna", "mlflow", "duckdb", "pyarrow"]
+            if "tests/unit/test_search_trials.py" in selected_tests(args.tl) else [],
     }
     (work / "installed-receipt.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result), flush=True)
@@ -296,6 +311,10 @@ def prepare(args):
         paths += ["tests/unit/backtest/_engine_config.py", "docs/guides/live.md"]
     if "tests/unit/engine/test_public_store_entry.py" in selected_tests(args.tl):
         paths += ["examples/live/ctrader_monitor.py"]
+    if "tests/unit/test_search_trials.py" in selected_tests(args.tl):
+        paths += ["examples/research/__init__.py", "examples/research/_workflow.py",
+                  "examples/research/index_enhance_engine_pipeline.py",
+                  "examples/research/index_enhance_lite_pipeline.py"]
     for name in paths:
         destination = work / name
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -330,6 +349,8 @@ def prepare(args):
             "tl-store==" + args.store,
             "backtrader==1.9.78.123",
             "pytest",
+            *(["scikit-learn", "scipy", "optuna", "mlflow", "duckdb", "pyarrow"]
+              if "tests/unit/test_search_trials.py" in selected_tests(args.tl) else []),
         ],
         check=True,
         timeout=300,

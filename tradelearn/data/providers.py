@@ -13,7 +13,7 @@ from typing import Any, Protocol
 import pandas as pd
 
 from tradelearn.core.logging import get_logger
-from tradelearn.data.bars import Frequency, normalize_bars, _utc_timestamp
+from tradelearn.data.bars import Frequency, _utc_timestamp, normalize_bars
 from tradelearn.utils.console import smart_tqdm as tqdm
 
 LOGGER = get_logger("data.providers")
