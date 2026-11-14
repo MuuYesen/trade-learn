@@ -67,7 +67,11 @@ def test_research_examples_cover_lite_and_engine_workflows() -> None:
     assert _contains_call(train, "ResearchRun") and _contains_call(train, "register")
     assert _contains_call(train, "forward_return") and _contains_call(train, "purged_splits")
     assert "label_end" in workflow and "fit_transform" in workflow
-    assert _contains_call(infer, "transform") and _contains_call(infer, "predict")
+    assert _contains_call(infer, "predict_bundle")
+    bundle_tree = ast.parse((ROOT / "tradelearn/ml/artifacts.py").read_text())
+    prediction = _function(bundle_tree, "predict_bundle")
+    assert _contains_call(prediction, "transform") and _contains_call(prediction, "predict")
+    assert not _contains_call(prediction, "fit")
     assert _contains_call(infer, "build") and not _contains_call(infer, "fit")
     inputs = _function(tree, "inputs")
     assert _contains_call(inputs, "open_dataset")
