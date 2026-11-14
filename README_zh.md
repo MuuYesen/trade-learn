@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/pypi/v/trade-learn?style=flat-square" alt="PyPI version">
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
   <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/source-0.3.1--candidate-blue?style=flat-square" alt="Source version">
+  <img src="https://img.shields.io/badge/release-0.3.5-blue?style=flat-square" alt="Source version">
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
@@ -32,6 +32,8 @@
 在方法论层面，项目同样强调研究的科学性。针对机器学习策略中常见的“伪相关”问题，**trade-learn** 将 **因果推断（Causal Inference）** 深度融入投研流程，通过识别真实的因果驱动路径，降低样本外衰减风险，帮助构建兼具解释性与稳健性的量化策略体系。
 
 ## 实现路径
+
+> **统一改造实际状态（2026-11-13）**：Engine与Lite已共用策略计算生命周期、事件时钟与订单事实，保各自外观；Lite window、共享Indicator、Dataset/DuckDB研究查询、模型产物、共同Reporter与本地MLflow已实现。研究环境采用Jupyter AI Lite/Skills，CLI只保留new/lab/doctor及help/version。完整BT公共调用对齐、NA适用能力承接、tvkit Provider完整替换及剩余原生化仍未完成，不能用显式拒绝代替实现；正式平台/发行/安装资格按精确版本收据分别核验。见[API状态说明](docs/concepts/api-boundary.md#pending-unification-20261111)。
 
 **trade-learn** 拒绝功能的简单堆砌，而是通过Engine与Lite两种外观共用运行内核，在专业深度与研发效率之间构建了平衡。底层通过 **Engine** 深度对齐 Backtrader 语义以夯实逻辑正确性，上层则由 **Lite** 提供极简的 Pythonic 接口，确保了“快”与“准”的统一。
 
@@ -92,14 +94,14 @@
 
 ## 安装
 
-TL `0.3.4` 已正式[发布到PyPI](https://pypi.org/project/trade-learn/0.3.4/)，冻结源码为 `v0.3.4`/`5af840c`；17公开文件已核SHA，Linux全新组合安装已通过。当前说明是冻结源码之后的纯文档更正，旧0.3.2及其固定依赖继续保留。
+当前正式版本为 [0.3.5](https://pypi.org/project/trade-learn/0.3.5/)，发行源码固定为 `v0.3.5`/`250a0678`。16个真实wheel和sdist的17公开文件均已核SHA；Linux公网全新组合569项通过，Mac公开wheel的代码/native与已验实物一致。完整范围见[Release说明](https://github.com/MuuYesen/trade-learn/releases/tag/v0.3.5)。旧版本及其固定字节保留。
 
 ```bash
-pip install trade-learn==0.3.4
+pip install trade-learn==0.3.5
 # 官方NA/cTrader组合需要CPython3.13或3.14及匹配平台wheel
-pip install "trade-learn[nautilus,tl-store]==0.3.4"
+pip install "trade-learn[nautilus,tl-store]==0.3.5"
 # 研究、Jupyter AI Lite/Skills、本地MLflow
-pip install "trade-learn[research]==0.3.4"
+pip install "trade-learn[research]==0.3.5"
 ```
 
 | 安装组 | 当前契约 |
@@ -111,13 +113,13 @@ pip install "trade-learn[research]==0.3.4"
 
 统一`uv.lock`已闭合并过CI，Store a8已公开，不再沿用“a2未公开/锁不可解”的旧状态。Python3.10–3.12安装extra时官方NA会被marker跳过，不能据此使用NA桥。CLI仅`new/lab/doctor`及help/version；`lab`只管理自有Jupyter，不启动MCP/MLflow附带服务。
 
-TL0.3.4真实构建范围为Mac arm64、Windows AMD64、Linux x64的CP310–314及Linux ARM64 CP313。Linux CP313+Storea8+NA2rc7全新安装/RECORD/native/pip check已验；Mac CP313实物与独立差量已验。Store的其他平台构建资格、自然venue和KQ后端分别标注，不从TL wheel标签外推。KQ Windows桥未实现/LinuxARM未验，不表示整个TL不支持Windows或ARM。
+TL0.3.5真实构建范围为Mac arm64、Windows AMD64、Linux x64的CP310–314及Linux ARM64 CP313。Linux CP313+Storea8+NA2rc7全新安装/RECORD/native/pip check已验；Mac CP312研究实物与独立资格已验，公开wheel执行字节一致；Windows/ARM另有构建和原生smoke，不外推为完整公网research环境。Store的其他平台构建资格、自然venue和KQ后端分别标注，不从TL wheel标签外推。KQ Windows桥未实现/LinuxARM未验，不表示整个TL不支持Windows或ARM。
 
-公开用户通过`bt.stores.NautilusStore`配置，普通`bt.Strategy`后唯一`cerebro.run(monitor=...)`；不导入内部runtime或调用`Store.run`。二字段monitor仅endpoint与AccessKey pair，可信发现失败保本地原件。完整例子见[已冻结模板](https://github.com/MuuYesen/trade-learn/blob/d202cc1ab0dfd25f3ada8b25eba3315a84a2e27c/examples/live/ctrader_monitor.py)，边界与历史差异见[0.3.4更正说明](CHANGELOG.md)。真实Sender/归档roundtrip仍单独验收，不把发行当投递成功。 正式cTrader a8执行当前只接普通Market IOC/typed close；通用NA条件单/订单组资格不外推到此适配器。
+公开用户通过`bt.stores.NautilusStore`配置，普通`bt.Strategy`后唯一`cerebro.run(monitor=...)`；不导入内部runtime或调用`Store.run`。二字段monitor仅endpoint与AccessKey pair，可信发现失败保本地原件。完整例子见[公开模板](examples/live/ctrader_monitor.py)，边界与历史差异见[更新日志](CHANGELOG.md)。真实Sender/归档roundtrip仍单独验收，不把发行当投递成功。 正式cTrader a8执行当前只接普通Market IOC/typed close；通用NA条件单/订单组资格不外推到此适配器。
 
 ## 快速上手
 
-以下快速上手示例调用 TradingView、TDX 指标和报表，请先安装 `pip install ".[research]"`。单标的时间序列因子评估见 [Research 指南](./docs/guides/research.md)。
+以下快速上手示例调用 TradingView、TDX 指标和报表，请先安装 `pip install "trade-learn[research]==0.3.5"`。单标的时间序列因子评估见 [Research 指南](./docs/guides/research.md)。
 
 **Lite——最短路径**（适合快速验证、教学、多资产目标权重）：
 
@@ -161,15 +163,14 @@ bt.report("report.html")
 ```python
 import tradelearn.engine as bt
 from tradelearn.data import TradingViewProvider
-from tradelearn.indicators import tdx
 
 
 class SmaCross(bt.Strategy):
     params = (("fast", 10), ("slow", 20))
 
     def __init__(self):
-        self.fast = tdx.MA(self.data.close, N=self.p.fast)
-        self.slow = tdx.MA(self.data.close, N=self.p.slow)
+        self.fast = bt.talib.SMA(self.data.close, timeperiod=self.p.fast)
+        self.slow = bt.talib.SMA(self.data.close, timeperiod=self.p.slow)
 
     def next(self):
         if not self.position and self.fast[0] > self.slow[0]:
@@ -191,7 +192,6 @@ cerebro.addstrategy(SmaCross)
 [strategy] = cerebro.run()
 print(strategy.stats.summary)
 
-cerebro.plot()
 from tradelearn.report import Reporter
 Reporter(strategy.stats).report("report.html")
 ```
@@ -306,4 +306,8 @@ TradeLearn 面向策略研究与回测，不推荐用于真实资金的实盘交
 
 ## 联系方式
 
-微信公众号：知守溪的收纳屋 · 邮箱：muyes88@gmail.com
+问题与建议请提交至 [GitHub Issues](https://github.com/MuuYesen/trade-learn/issues)。
+
+### 研究整合 0.3.5
+
+0.3.5 收拢搜索／模型推理／数据查询共同能力，不覆盖 0.3.4 既有产物。四入口返回、配置隔离、失败／取消和显式记录见[优化指南](docs/guides/optimization.md)，可信本地 bundle 共同推理见[研究指南](docs/guides/research.md)。官方NA与Store a8执行边界不变；SDK仅增加035版本准入，不要求现役消费者升级。

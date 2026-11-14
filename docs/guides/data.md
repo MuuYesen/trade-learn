@@ -1,6 +1,6 @@
 # 数据指南
 
-> **tvkit实际候选资格（2026-11-12，完整迁移未通过）**：固定官方0.18.1已实际安装/导入，内部有限调用适配`data._tvkit`已验证同步/Notebook显式async、UTC/日期端点、超时/取消释放及每实例凭据隔离，不读取浏览器或TVKIT环境凭据。实际API仅支持splits/dividends，不能保现有`adjust="none"`；标的信息/搜索/锚点回放亦缺对等公开API，上游缺volume默认0也不能证明原始量完整。故当前默认Provider仍保原Transport，旧Charting消费者和websocket-client未退休；这不是迁移完成或新实盘数据循环。准确目标/许可边界见[唯一规范](../../../../../docs/系统规范/交易/TradeLearn框架规范.md#tradingview-tvkit-candidate-20261111)。
+> **tvkit实际候选资格（2026-11-12，完整迁移未通过）**：固定官方0.18.1已实际安装/导入，内部有限调用适配`data._tvkit`已验证同步/Notebook显式async、UTC/日期端点、超时/取消释放及每实例凭据隔离，不读取浏览器或TVKIT环境凭据。实际API仅支持splits/dividends，不能保现有`adjust="none"`；标的信息/搜索/锚点回放亦缺对等公开API，上游缺volume默认0也不能证明原始量完整。故当前默认Provider仍保原Transport，旧Charting消费者和websocket-client未退休；这不是迁移完成或新实盘数据循环。该限制不等于TL整体缺少对应平台支持；当前公开Provider契约仍以下文为准。
 
 trade-learn 策略层统一面对 OHLCV DataFrame 或 `MultiIndex(timestamp, symbol)` panel。数据层的目标是：provider 取到的数据可以直接进入 Lite / Engine，不需要用户手工拆成多份 DataFrame。
 
@@ -168,3 +168,7 @@ class MyProvider:
 DataExplorer 的报告表格快照按数据/索引/列类型/来源属性与内部计算版本自动失效；修改返回表不会污染缓存，重复 HTML/Excel 不重做统计。Tushare 默认 HTTP 客户端仅在显式请求时导入 requests；数据 facade 和自定义 transport 不因此要求 requests。缺依赖给出 research 安装提示，凭据及自定义 transport 错误继续脱敏。
 
 固定宽度Rust重采样从真实秒标签重建索引时显式使用纳秒dtype，避免Pandas 2/3默认表示差异；输入s/ms/us/ns按声明单位转换，真实标签和时区不变，不因此声称原数据有纳秒测量精度。
+
+## 0.3.5共同查询边界
+
+Dataset与DuckDB复用时间、标的和字段筛选；BarsCache的筛选读取复用Dataset。Provider获取、缓存TTL/恢复、本地Dataset查询与策略Feed仍分层，不自动联网补数或修原数据。时间筛选共用UTC转换；Provider保原整日end包含全天，本地查询end为精确包含端点，Feed保自己的BT日期与时区语义。DuckDB先校验完整OHLCV再投影，单选close不能掩盖非法high/low；未知字段与空symbol列表明确拒绝。完整训练/推理链路见[研究指南](research.md)。

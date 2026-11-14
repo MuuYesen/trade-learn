@@ -2,7 +2,7 @@
 
 研究输入与输出保持 Pandas。`FeatureSet → Pipeline → ModelScorer → Allocator` 分开定义与执行，学习组件只在成熟的训练样本上 fit，运行时仅 transform/predict。`ResearchResult` 是已有结果的交付对象；上下文不会自动拦截任意 sklearn.fit。
 
-本轮源码实现与正式发行分开：文件 Dataset、窗口与显式追踪、Riskfolio 接线和共同 Reporter 已有源码；真实平台/发行资格见本轮验收记录，不由本指南自动推定。唯一设计约束见[研究依赖规范](../../../../../docs/系统规范/交易/TradeLearn框架规范.md#research-integrations-20261111)。
+0.3.5已正式发行：文件Dataset、共同窗口、trial追踪、可信bundle推理和Reporter接线见本指南及[优化指南](optimization.md)。平台实测范围与既有能力限制见[Release说明](https://github.com/MuuYesen/trade-learn/releases/tag/v0.3.5)，不外推为完整BT/NA或所有模型生态资格。
 
 ## 先定义，再执行
 
@@ -63,11 +63,11 @@ Lite：`self.window(size=4)`默认单源，`data=self.datas`多源。Engine：�
 最短完整模板共用[_workflow.py](../../examples/research/_workflow.py)，分别接[Lite](../../examples/research/index_enhance_lite_pipeline.py)与[Engine](../../examples/research/index_enhance_engine_pipeline.py)：
 
 ```bash
-python -m examples.research.index_enhance_lite_pipeline --data '/authorized/bars/*.parquet' --split 2026-06-01 --output /tmp/research-lite
-python -m examples.research.index_enhance_engine_pipeline --data '/authorized/bars/*.parquet' --split 2026-06-01 --output /tmp/research-engine
+python -m examples.research.index_enhance_lite_pipeline --data 'bars/*.parquet' --split 2026-06-01 --output output/research-lite
+python -m examples.research.index_enhance_engine_pipeline --data 'bars/*.parquet' --split 2026-06-01 --output output/research-engine
 ```
 
-模板不会联网取数。指定`--mlflow-uri sqlite:////tmp/tracking.db`才在运行后实际记录共同MLflow，返回真实run_id/status/error；默认不上传原行情或发布模型。输出目录中的bundle需为空，避免覆盖旧产物。输出`bundle/state.joblib`与`bundle/manifest.json`保留FeatureSet、Pipeline、模型、Scorer、Allocator、窗口、输入schema、依赖版本、标签/purge元数据和SHA256完整性信息，`bundle/code`包含显式指定的特征定义模块；`train-labels.parquet`保留真实训练label_end，`research.json`保留步骤和分区摘要。输入Bars摘要含fingerprint，原行情不自动复制到模型产物。`ml.registry.save_bundle/load_bundle`是显式本地产物接口，加载需`trusted=True`，先核摘要与依赖版本；只加载可信joblib/pickle，恢复依赖同版本Python和研究库；外部定义通过`save_bundle(..., code_paths={"package/module.py": source_path}, dependencies=(...))`显式配套，加载先核代码摘要并将可信code目录加入本会话导入路径。不自动扫描/打包整个仓库或秘密，不是无依赖可执行文件。训练/推理前缀一致性和两个运行时执行由测试核验；保存本地产物不意味着注册模型或部署。
+模板不会联网取数。指定`--mlflow-uri sqlite:///research.db`才在运行后实际记录共同MLflow，返回真实run_id/status/error；默认不上传原行情或发布模型。输出目录中的bundle需为空，避免覆盖旧产物。输出`bundle/state.joblib`与`bundle/manifest.json`保留FeatureSet、Pipeline、模型、Scorer、Allocator、窗口、输入schema、依赖版本、标签/purge元数据和SHA256完整性信息，`bundle/code`包含显式指定的特征定义模块；`train-labels.parquet`保留真实训练label_end，`research.json`保留步骤和分区摘要。输入Bars摘要含fingerprint，原行情不自动复制到模型产物。`ml.registry.save_bundle/load_bundle`是显式本地产物接口，加载需`trusted=True`，先核摘要与依赖版本；只加载可信joblib/pickle，恢复依赖同版本Python和研究库；外部定义通过`save_bundle(..., code_paths={"package/module.py": source_path}, dependencies=(...))`显式配套，加载先核代码摘要并将可信code目录加入本会话导入路径。不自动扫描/打包整个仓库或秘密，不是无依赖可执行文件。训练/推理前缀一致性和两个运行时执行由测试核验；保存本地产物不意味着注册模型或部署。
 
 ## 可选研究组件
 

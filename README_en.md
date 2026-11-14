@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/pypi/v/trade-learn?style=flat-square" alt="PyPI version">
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
   <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/source-0.3.1--candidate-blue?style=flat-square" alt="Source version">
+  <img src="https://img.shields.io/badge/release-0.3.5-blue?style=flat-square" alt="Source version">
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
@@ -86,24 +86,24 @@ Causal/ML research remains part of the strategy workflow. See the [causal guide]
 
 ## Installation
 
-Version `0.3.4` is formally [published on PyPI](https://pypi.org/project/trade-learn/0.3.4/), frozen at `v0.3.4`/`5af840c`. All 17 public files are hash-verified and the fresh Linux combination is qualified. This documentation correction does not change frozen artifacts; existing 0.3.2 remains immutable.
+Version [0.3.5](https://pypi.org/project/trade-learn/0.3.5/) is public, frozen at `v0.3.5`/`250a0678`. All 17 files (16 real wheels and sdist) match the Release digests; fresh Linux qualification passed 569 tests. Mac public execution bytes match the qualified actual wheel. See the [Release scope](https://github.com/MuuYesen/trade-learn/releases/tag/v0.3.5); prior artifacts remain immutable.
 
 ```bash
-pip install trade-learn==0.3.4
+pip install trade-learn==0.3.5
 # Official NA and cTrader require CPython 3.13 or 3.14.
-pip install "trade-learn[nautilus,tl-store]==0.3.4"
-pip install "trade-learn[research]==0.3.4"
+pip install "trade-learn[nautilus,tl-store]==0.3.5"
+pip install "trade-learn[research]==0.3.5"
 ```
 
 The unified lock is resolved and CI-qualified. `[tl-store]` pins public `tl-store==0.2.1a8`; `[nautilus]` pins official `nautilus_trader==2.0.0rc7`. Other Python versions skip NA through metadata markers and cannot run the bridge. The base import is inert. Research includes Jupyter AI Lite/Skills and local MLflow recording; the CLI exposes only `new/lab/doctor`, help and version, without extra service orchestration.
 
-Real TL wheels cover macOS arm64/Windows AMD64/Linux x64 CP310–314 and Linux ARM64 CP313. Fresh Linux CP313+Storea8+NA2rc7 installation, RECORD/native/pip-check and the actual Mac CP313 candidate have been qualified. Other Store platform builds and natural venue behavior are separate. KQ Windows integration is unimplemented and Linux ARM remains unverified; this is not a claim that TL itself lacks those OS targets.
+Real TL wheels cover macOS arm64/Windows AMD64/Linux x64 CP310–314 and Linux ARM64 CP313. Fresh Linux CP313+Storea8+NA2rc7 installation, RECORD/native/pip-check and the actual Mac CP312 research wheel (reused dependency environment) have been qualified. Other Store platform builds and natural venue behavior are separate. KQ Windows integration is unimplemented and Linux ARM remains unverified; this is not a claim that TL itself lacks those OS targets.
 
-The public path is `from tradelearn import engine as bt`, lazy `bt.stores.NautilusStore`, ordinary `bt.Strategy`/`bt.talib.SMA`, standard broker/data/strategy assembly and only `cerebro.run(monitor=...)`. No public `Store.run`, internal runtime import or SDK strategy superclass is required. Monitor exposes endpoint and an access-key pair only; trusted binding failure retains local files. See the [frozen template](https://github.com/MuuYesen/trade-learn/blob/d202cc1ab0dfd25f3ada8b25eba3315a84a2e27c/examples/live/ctrader_monitor.py) and [corrected 0.3.4 changelog](CHANGELOG.md). Real Sender/archive roundtrip remains a separate, unqualified integration gate. Formal cTrader a8 execution admits plain Market IOC/typed close only; generic NA conditional/group qualifications do not extend that adapter.
+The public path is `from tradelearn import engine as bt`, lazy `bt.stores.NautilusStore`, ordinary `bt.Strategy`/`bt.talib.SMA`, standard broker/data/strategy assembly and only `cerebro.run(monitor=...)`. No public `Store.run`, internal runtime import or SDK strategy superclass is required. Monitor exposes endpoint and an access-key pair only; trusted binding failure retains local files. See the [frozen template](examples/live/ctrader_monitor.py) and [corrected 0.3.4 changelog](CHANGELOG.md). Real Sender/archive roundtrip remains a separate, unqualified integration gate. Formal cTrader a8 execution admits plain Market IOC/typed close only; generic NA conditional/group qualifications do not extend that adapter.
 
 ## Quick Start
 
-These examples use indicator providers and reports: install `.[research]` first.
+These examples use indicator providers and reports: install `trade-learn[research]==0.3.5` first.
 
 **Lite — The Shortest Path** (Ideal for rapid validation, teaching, and target-weight portfolios):
 
@@ -145,14 +145,13 @@ bt.report("report.html")
 ```python
 import tradelearn.engine as bt
 from tradelearn.data import TradingViewProvider
-from tradelearn.indicators import tdx
 
 class SmaCross(bt.Strategy):
     params = (("fast", 10), ("slow", 20))
 
     def __init__(self):
-        self.fast = tdx.MA(self.data.close, N=self.p.fast)
-        self.slow = tdx.MA(self.data.close, N=self.p.slow)
+        self.fast = bt.talib.SMA(self.data.close, timeperiod=self.p.fast)
+        self.slow = bt.talib.SMA(self.data.close, timeperiod=self.p.slow)
 
     def next(self):
         if not self.position and self.fast[0] > self.slow[0]:
@@ -173,7 +172,6 @@ cerebro.addstrategy(SmaCross)
 [strategy] = cerebro.run()
 print(strategy.stats.summary)
 
-cerebro.plot()
 from tradelearn.report import Reporter
 Reporter(strategy.stats).report("report.html")
 ```
@@ -285,4 +283,8 @@ This project is for academic research and technical exchange only and does not c
 
 ## Contact
 
-WeChat: 知守溪的收纳屋 · Email: muyes88@gmail.com
+[GitHub Issues](https://github.com/MuuYesen/trade-learn/issues)
+
+### Research integration in 0.3.5
+
+Engine optstrategy, Lite optimize, grid_search and optional Optuna retain their existing returns while sharing isolated historical trials, effective configuration and complete success/failure/cancellation records. ResearchRun and explicit MLflow consume these records. Trusted local bundle inference only transforms/predicts, validates schema/currentness and never refits or reuses old scores. Provider/cache/Dataset/feed retain separate responsibilities and no implicit data retrieval or repair is added. See [optimization](docs/guides/optimization.md), [research](docs/guides/research.md) and [data](docs/guides/data.md). SDK APIv1 only adds explicit035 acceptance; Storea8/officialNA execution limits and existing consumers remain separate. Windows/ARM wheel and native-smoke coverage is not a full public research environment qualification.
