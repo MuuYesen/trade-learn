@@ -257,23 +257,11 @@ def current_trial_record():
 def strategy_defaults(strategy):
     """Resolve declared defaults, without mutating the public strategy class."""
     from tradelearn.backtest.parameters import collect_param_defaults
-    from tradelearn.lite.strategy import Strategy as LiteStrategy
 
     defaults = dict(collect_param_defaults(strategy)[1])
-    if issubclass(strategy, LiteStrategy):
-        framework_bases = set(LiteStrategy.__mro__)
-        for cls in reversed(strategy.__mro__):
-            if cls in framework_bases:
-                continue
-            defaults.update(
-                {
-                    name: value
-                    for name, value in vars(cls).items()
-                    if not name.startswith("_")
-                    and not callable(value)
-                    and not isinstance(value, (property, classmethod, staticmethod))
-                }
-            )
+    hook = getattr(strategy, "_trial_param_defaults", None)
+    if callable(hook):
+        defaults.update(hook())
     return defaults
 
 

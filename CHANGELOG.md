@@ -11,7 +11,7 @@
 - 试验记录复用 ResearchRun 与显式 MLflow，Optuna SQLite 恢复保旧记录；没有强制 Optuna 依赖、新搜索服务、进程池或实时搜索。Lite 单次运行与搜索均使用实际 broker 现金和费率。
 - 本地可信 bundle 共用字段／dtype／Bars／当前时点评分校验，推理只 transform/predict，不 fit／取数／回退旧评分；保本地产物与 Registry 的来源边界。
 - 复用 UTC 查询边界；Dataset／缓存／Provider／Feed 各守原职责。DuckDB 完整 OHLCV 校验在字段投影前，保 Provider 整日 end 和本地精确端点差异，不自动联网或修数据。
-- 官方 NA、TL-Store a8、SDK19 与订单／资金原生实现不改，不要求现役消费者随研究接口升级。原 0.3.4 产物、标签与资格保留。
+- 官方 NA、TL-Store a8 与订单／资金原生实现不改；SDK观测协议仍为APIv1，仅显式增加0.3.5版本准入，未知版本／API继续拒绝，不要求现役消费者随研究接口升级。原 0.3.4 产物、标签与资格保留。
 
 ## [0.3.4] - 2026-11-14
 

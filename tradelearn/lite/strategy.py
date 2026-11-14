@@ -40,6 +40,19 @@ class Strategy(CoreStrategy):
         """Initialize shared streaming lines and strategy-owned state."""
         pass
 
+    @classmethod
+    def _trial_param_defaults(cls):
+        """Supply Lite's declared class-attribute defaults to historical trials."""
+        framework_bases = set(Strategy.__mro__)
+        defaults = {}
+        for base in reversed(cls.__mro__):
+            if base in framework_bases:
+                continue
+            defaults.update({name: value for name, value in vars(base).items()
+                if not name.startswith('_') and not callable(value)
+                and not isinstance(value, (property, classmethod, staticmethod))})
+        return defaults
+
     def _check_params(self, params: dict[str, Any]) -> dict[str, Any]:
         missing = object()
         for key, value in params.items():
