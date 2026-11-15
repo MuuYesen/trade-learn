@@ -1,6 +1,7 @@
 """Smoke-test the installed native wheel, without importing project source files."""
 
 from importlib.metadata import version
+import re
 
 import pandas as pd
 
@@ -29,7 +30,15 @@ def engine():
     )
 
 
-assert __version__ == _rust.tradelearn_rust_version() == version("trade-learn")
+# Cargo uses SemVer prereleases; Python distribution metadata uses PEP 440.
+# Match the exact mapping already enforced by check_release_metadata.py.
+assert __version__ == version("trade-learn")
+release = re.fullmatch(r"(\d+\.\d+\.\d+)(?:(a|b|rc)(\d+))?", __version__)
+assert release is not None
+expected_native = release[1]
+if release[2]:
+    expected_native += "-" + {"a": "alpha", "b": "beta", "rc": "rc"}[release[2]] + "." + release[3]
+assert _rust.tradelearn_rust_version() == expected_native
 position = PositionSnapshot(
     symbol="600028.SH", qty=100.0, avg_price=5.0, ts=pd.Timestamp("2026-10-09T00:00:00Z"),
     market_value=500.0, mark_price=5.0,
