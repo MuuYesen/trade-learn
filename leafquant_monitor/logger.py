@@ -248,12 +248,15 @@ class TradeLogger:
         if len(raw.encode()) + 1 > 96 * 1024:
             self._error = 'RecordExceedsTransportLineLimit'
             raise ValueError('fact exceeds shared complete log-line transport limit')
+        rejection_code = None
         try:
             if not self.recorder.append(raw):
-                self._report_recorder_rejection()
+                rejection_code = self._report_recorder_rejection()
                 raise RuntimeError('monitor record was not accepted')
         except Exception as exc:
-            self._error = type(exc).__name__
+            self._error = ('storage: recorder disk limit exceeded'
+                           if rejection_code == 'RECORDER_DISK_BUDGET_EXHAUSTED'
+                           else type(exc).__name__)
             raise
         return fact
 
@@ -647,6 +650,7 @@ class TradeLogger:
             summary=self.health_summary()
             if summary['recorder_code']=='OK':summary['recorder_code']='APPEND_REJECTED_WITHOUT_NATIVE_ERROR'
             logging.getLogger(__name__).error('monitor_recorder_rejected %s',json.dumps(summary,sort_keys=True,separators=(',',':'),allow_nan=False))
+            return summary['recorder_code']
         except Exception:
             pass
 
@@ -663,6 +667,10 @@ class TradeLogger:
         if result.get('error'):
             self._error = result['error']
             raise RuntimeError('native monitor persistence failed')
+        # A successful native barrier is the only authority for capacity
+        # recovery. Preserve unrelated observation/IO errors.
+        if self._error == 'storage: recorder disk limit exceeded':
+            self._error = None
         return result
 
     def close(self):

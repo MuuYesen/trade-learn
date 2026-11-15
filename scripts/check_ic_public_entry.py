@@ -100,3 +100,7 @@ receipt = {
 }
 (ROOT / "consumer-qualification.json").write_text(json.dumps(receipt, indent=2) + "\n")
 raise SystemExit(result)
+
+# The build-only CP313 consumer also checks the actual new native Recorder.
+import runpy
+runpy.run_path(str(ROOT / "scripts/check_recorder_capacity_wheel.py"), run_name="__main__")

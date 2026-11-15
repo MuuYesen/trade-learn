@@ -138,6 +138,169 @@ mod tests {
         r.barrier(true);
     }
     #[test]
+    fn capacity_flush_retries_original_batches_in_order_after_proven_retirement() {
+        let dir = testdir();
+        let r = Recorder::new(dir.path().to_str().unwrap().into(), 8, 128, 300).unwrap();
+        let line = |n| format!("{{\"n\":{n},\"body\":\"{}\"}}", "x".repeat(80));
+        let mut observed = Vec::new();
+        let retire = |observed: &mut Vec<String>| {
+            let mut logs = fs::read_dir(dir.path()).unwrap().flatten()
+                .filter(|e| e.path().extension().is_some_and(|s| s == "log"))
+                .map(|e| e.path()).collect::<Vec<_>>();
+            logs.sort();
+            assert_eq!(logs.len(), 1);
+            let path = &logs[0];
+            // The fixture verifies the complete sealed bytes before retiring them.
+            observed.push(fs::read_to_string(path).unwrap());
+            fs::remove_file(path).unwrap();
+            fs::remove_file(path.with_extension("native-time.json")).unwrap();
+        };
+        assert!(r.append(line(1)));
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&r.flush()).unwrap()["durable"], 1);
+        assert!(r.append(line(2)));
+        assert!(r.append(line(3))); // Separate segment-sized batches, both already accepted.
+        let failed: serde_json::Value = serde_json::from_str(&r.flush()).unwrap();
+        assert_eq!(failed["accepted"], 3);
+        assert_eq!(failed["durable"], 1);
+        let outstanding = r.shared.state.lock().unwrap().outstanding;
+        assert_eq!(outstanding, 2);
+        assert!(!r.append(line(4)));
+        retire(&mut observed);
+        let partial: serde_json::Value = serde_json::from_str(&r.flush()).unwrap();
+        assert_eq!(partial["durable"], 2);
+        assert!(partial["error"].is_string()); // Later accepted batch still has no room.
+        let outstanding = r.shared.state.lock().unwrap().outstanding;
+        assert_eq!(outstanding, 1);
+        r.flush(); // Repeated full-quota retry must not duplicate the durable batch.
+        retire(&mut observed);
+        let recovered: serde_json::Value = serde_json::from_str(&r.flush()).unwrap();
+        assert_eq!(recovered["accepted"], 3);
+        assert_eq!(recovered["durable"], 3);
+        assert!(recovered["error"].is_null());
+        let outstanding = r.shared.state.lock().unwrap().outstanding;
+        assert_eq!(outstanding, 0);
+        retire(&mut observed);
+        assert_eq!(observed, (1..=3).map(|n| format!("{}\n", line(n))).collect::<Vec<_>>());
+        assert!(r.append(line(4)));
+        let closed: serde_json::Value = serde_json::from_str(&r.close()).unwrap();
+        assert_eq!(closed["accepted"], 4);
+        assert_eq!(closed["durable"], 4);
+        assert!(closed["closed"].as_bool().unwrap());
+    }
+    #[test]
+    fn capacity_close_without_room_keeps_gap_visible_and_creates_no_partial_source() {
+        let dir = testdir();
+        let r = Recorder::new(dir.path().to_str().unwrap().into(), 4, 128, 2).unwrap();
+        assert!(r.append("{}".into()));
+        let closed: serde_json::Value = serde_json::from_str(&r.close()).unwrap();
+        assert_eq!(closed["accepted"], 1);
+        assert_eq!(closed["durable"], 0);
+        assert!(closed["error"].is_string());
+        assert!(!fs::read_dir(dir.path()).unwrap().flatten().any(|e|
+            e.path().extension().is_some_and(|s| s == "log" || s == "pending")));
+    }
+    #[cfg(unix)]
+    #[test]
+    fn native_capacity_retry_keeps_encoded_bytes_clock_and_sequence() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let dir = testdir();
+        fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        let root = fs::canonicalize(dir.path()).unwrap();
+        let r = Recorder::new_native(root.to_str().unwrap().into(), 4, 128, 4400).unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let first = format!("{}\n", "a".repeat(80));
+        let second = format!("{}\n", "b".repeat(80));
+        for (line, clock) in [(first.clone(), 1793059200000000001), (second.clone(), 1793059200000000002)] {
+            let calls = calls.clone();
+            assert!(r.append_native(move || { calls.fetch_add(1, Ordering::SeqCst); line }, clock));
+            r.flush();
+        }
+        let failed: serde_json::Value = serde_json::from_str(&r.status()).unwrap();
+        assert_eq!(failed["durable"], 1);
+        assert_eq!(failed["error"], DISK_BUDGET_ERROR);
+        let name = format!("{}-00000000000000000000.log", r.shared.run_id);
+        let source = root.join(format!("{name}.source.json"));
+        let proof: serde_json::Value = serde_json::from_slice(&fs::read(&source).unwrap()).unwrap();
+        assert_eq!(proof["sealed"], true);
+        assert_eq!(fs::read_to_string(root.join(&name)).unwrap(), first);
+        fs::remove_file(root.join(name)).unwrap();
+        fs::remove_file(source).unwrap();
+        let recovered: serde_json::Value = serde_json::from_str(&r.flush()).unwrap();
+        assert_eq!(recovered["accepted"], 2);
+        assert_eq!(recovered["durable"], 2);
+        assert!(recovered["error"].is_null());
+        assert_eq!(calls.load(Ordering::SeqCst), 2); // Formatter never runs again on retry.
+        let name = format!("{}-00000000000000000001.log", r.shared.run_id);
+        assert_eq!(fs::read_to_string(root.join(&name)).unwrap(), second);
+        let source: serde_json::Value = serde_json::from_slice(&fs::read(root.join(format!("{name}.source.json"))).unwrap()).unwrap();
+        assert_eq!(source["native_time_anchor"]["start_ts_ns"], 1793059200000000002u64);
+        r.close();
+    }
+    #[test]
+    fn partial_io_failure_never_retries_and_recovery_preserves_original_bytes() {
+        let dir = testdir();
+        let r = Recorder::new(dir.path().to_str().unwrap().into(), 4, 128, 65536).unwrap();
+        let stem = format!("{}-00000000000000000000", r.shared.run_id);
+        let final_path = dir.path().join(format!("{stem}.log"));
+        // Force rename to fail after real anchor/pending writes and fsync.
+        fs::create_dir(&final_path).unwrap();
+        assert!(r.append("{\"original\":1}".into()));
+        let failed: serde_json::Value = serde_json::from_str(&r.flush()).unwrap();
+        assert_eq!(failed["durable"], 0);
+        assert!(failed["error"].is_string());
+        assert_ne!(failed["error"], DISK_BUDGET_ERROR);
+        let pending = dir.path().join(format!("{stem}.pending"));
+        let original = fs::read(&pending).unwrap();
+        assert_eq!(original, b"{\"original\":1}\n");
+        fs::remove_dir(&final_path).unwrap();
+        let retried: serde_json::Value = serde_json::from_str(&r.flush()).unwrap();
+        assert_eq!(retried["durable"], 0);
+        assert_eq!(retried["error"], failed["error"]);
+        assert_eq!(fs::read(&pending).unwrap(), original);
+        assert!(!final_path.exists());
+        r.close(); drop(r);
+        // Existing startup recovery, rather than an unsafe write retry, promotes
+        // the preserved pending bytes without claiming old accepted counts.
+        let reopened = Recorder::new(dir.path().to_str().unwrap().into(), 4, 128, 65536).unwrap();
+        assert_eq!(fs::read(final_path).unwrap(), original);
+        let status: serde_json::Value = serde_json::from_str(&reopened.status()).unwrap();
+        assert_eq!(status["accepted"], 0);
+        assert_eq!(status["durable"], 0);
+        reopened.close();
+    }
+    #[test]
+    fn window_capacity_flush_retries_only_after_verified_sealed_retirement() {
+        let dir = testdir();
+        let r = Recorder::new_windowed(dir.path().to_str().unwrap().into(), 4,
+            768, 9000, Duration::from_secs(300)).unwrap();
+        let line = |n| format!("{{\"n\":{n},\"body\":\"{}\"}}", "x".repeat(680));
+        assert!(r.append(line(1)));
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&r.flush()).unwrap()["durable"], 1);
+        assert!(r.append(line(2)));
+        let failed: serde_json::Value = serde_json::from_str(&r.flush()).unwrap();
+        assert_eq!(failed["accepted"], 2);
+        assert_eq!(failed["durable"], 1);
+        assert_eq!(failed["error"], DISK_BUDGET_ERROR);
+        let name = format!("{}-00000000000000000000.log", r.shared.run_id);
+        let source = dir.path().join(format!("{name}.source.json"));
+        let sealed: serde_json::Value = serde_json::from_slice(&fs::read(&source).unwrap()).unwrap();
+        assert_eq!(sealed["sealed"], true);
+        assert_eq!(fs::read_to_string(dir.path().join(&name)).unwrap(), format!("{}\n", line(1)));
+        fs::remove_file(dir.path().join(&name)).unwrap();
+        fs::remove_file(dir.path().join(&name).with_extension("native-time.json")).unwrap();
+        fs::remove_file(source).unwrap();
+        let recovered: serde_json::Value = serde_json::from_str(&r.flush()).unwrap();
+        assert_eq!(recovered["accepted"], 2);
+        assert_eq!(recovered["durable"], 2);
+        assert!(recovered["error"].is_null());
+        r.close();
+        let name = format!("{}-00000000000000000001.log", r.shared.run_id);
+        assert_eq!(fs::read_to_string(dir.path().join(&name)).unwrap(), format!("{}\n", line(2)));
+        let sealed: serde_json::Value = serde_json::from_slice(&fs::read(dir.path().join(format!("{name}.source.json"))).unwrap()).unwrap();
+        assert_eq!(sealed["sealed"], true);
+    }
+    #[test]
     fn recovery_preserves_sealed_and_unknown_unanchored_pending() {
         let dir = testdir();
         std::fs::write(dir.path().join("old-000.log"), "{}\n").unwrap();
@@ -154,6 +317,7 @@ mod tests {
 }
 
 use std::{
+    collections::VecDeque,
     fs::{self, File, OpenOptions},
     io::{Read,Write},
     path::PathBuf,
@@ -494,7 +658,7 @@ fn persist(
     if native_start == 0 || native_start > i64::MAX as u64 {return Err(std::io::Error::other("invalid native producer clock"));}
     // Native enqueue-time is persisted before creating or writing raw bytes.
     let anchor = serde_json::json!({"schema_version":1,"start_ts_ns":native_start,"end_ts_ns":null,"source_schema":"native-log-file.v1"}).to_string();
-    if disk_usage(path)?.saturating_add(size).saturating_add(anchor.len() as u64).saturating_add(if native_text {4096} else {0})>max_disk {return Err(std::io::Error::other("recorder disk limit exceeded"));}
+    if disk_usage(path)?.saturating_add(size).saturating_add(anchor.len() as u64).saturating_add(if native_text {4096} else {0})>max_disk {return Err(disk_budget_exceeded());}
     let mut metadata=platform::create_new(&path.join(format!("{stem}.native-time.json")))?;
     #[cfg(unix)] {use std::os::unix::fs::PermissionsExt;metadata.set_permissions(fs::Permissions::from_mode(0o600))?;}
     metadata.write_all(anchor.as_bytes())?;metadata.sync_all()?;#[cfg(unix)] platform::sync_directory(path)?;
@@ -584,6 +748,68 @@ fn materialize(command: Command, segment_bytes: usize) -> Command {
         other => other,
     }
 }
+// Only this typed pre-write quota rejection is retryable. In particular an
+// ENOSPC/IO error after creating an anchor or writing bytes is never retried.
+const DISK_BUDGET_ERROR: &str = "storage: recorder disk limit exceeded";
+#[derive(Debug)]
+struct DiskBudgetExceeded;
+impl std::fmt::Display for DiskBudgetExceeded {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("recorder disk limit exceeded")
+    }
+}
+impl std::error::Error for DiskBudgetExceeded {}
+fn disk_budget_exceeded() -> std::io::Error { std::io::Error::other(DiskBudgetExceeded) }
+struct RetainedBatch {
+    records: Vec<String>,
+    native_start: u64,
+    native_text: bool,
+    sequence: u64,
+    started: Instant,
+}
+fn storage_error(shared: &Shared, error: &std::io::Error) {
+    let mut state = shared.state.lock().unwrap();
+    if !state.error.as_ref().is_some_and(|e| e.starts_with("storage:") && e != DISK_BUDGET_ERROR) {
+        state.error = Some(format!("storage: {error}"));
+    }
+}
+fn drain_retained(
+    batches: &mut VecDeque<RetainedBatch>,
+    shared: &Shared,
+    mut write: impl FnMut(&RetainedBatch) -> std::io::Result<Option<String>>,
+) {
+    if shared.state.lock().unwrap().error.as_ref()
+        .is_some_and(|e| e.starts_with("storage:") && e != DISK_BUDGET_ERROR) { return; }
+    while let Some(batch) = batches.front() {
+        match write(batch) {
+            Ok(name) => {
+                let count = batch.records.len();
+                batches.pop_front();
+                let mut state = shared.state.lock().unwrap();
+                state.outstanding -= count;
+                state.durable += count as u64;
+                if let Some(name) = name { state.segments.push(name); }
+            }
+            Err(error) => {
+                // Retain the encoded bytes, sequence and producer clock. Keep
+                // their capacity reservations until actual persistence succeeds.
+                let retryable = error.get_ref().is_some_and(|e| e.is::<DiskBudgetExceeded>());
+                storage_error(shared, &error);
+                if !retryable {
+                    // Even an identical error message from another IO site must
+                    // not accidentally authorize replay of a possibly partial write.
+                    let mut state = shared.state.lock().unwrap();
+                    if state.error.as_deref() == Some(DISK_BUDGET_ERROR) {
+                        state.error = Some("storage: non-retryable persistence failure".into());
+                    }
+                }
+                return;
+            }
+        }
+    }
+    let mut state = shared.state.lock().unwrap();
+    if state.error.as_deref() == Some(DISK_BUDGET_ERROR) { state.error = None; }
+}
 fn worker(
     path: PathBuf,
     rx: mpsc::Receiver<Command>,
@@ -595,6 +821,7 @@ fn worker(
     let mut lock = Some(lock);
     let mut sequence = 0;
     let mut pending = None;
+    let mut retained = VecDeque::new();
     loop {
         let command = pending.take().map(Ok).unwrap_or_else(|| rx.recv()).map(|c|materialize(c,segment_bytes));
         match command {
@@ -622,30 +849,15 @@ fn worker(
                         }
                     }
                 }
-                // Capacity errors do not discard records already accepted.
-                let failed = shared
-                    .state
-                    .lock()
-                    .unwrap()
-                    .error
-                    .as_ref()
-                    .is_some_and(|e| e.starts_with("storage:"));
-                let result = if failed {
-                    Err(std::io::Error::other("storage already failed"))
-                } else {
-                    persist(&path, &shared, sequence, &records, max_disk, native_start, native_text)
-                };
+                retained.push_back(RetainedBatch { records, native_start, native_text,
+                    sequence, started: Instant::now() });
                 sequence += 1;
-                let mut s = shared.state.lock().unwrap();
-                s.outstanding -= records.len();
-                match result {
-                    Ok(name) => {
-                        s.durable += records.len() as u64;
-                        s.segments.push(name);
-                    }
-                    Err(e) => {
-                        if !failed { s.error = Some(format!("storage: {e}")); }
-                    }
+                // Once quota-blocked, later accepted commands stay behind that
+                // batch. Only an explicit flush/close retries after sender GC.
+                if shared.state.lock().unwrap().error.as_deref() != Some(DISK_BUDGET_ERROR) {
+                    drain_retained(&mut retained, &shared, |batch| persist(&path, &shared,
+                        batch.sequence, &batch.records, max_disk, batch.native_start,
+                        batch.native_text).map(Some));
                 }
             }
             Ok(Command::InvalidNative) => {
@@ -654,9 +866,15 @@ fn worker(
             }
             Ok(Command::Native(_, _)) => unreachable!("native payload is materialized once by this worker"),
             Ok(Command::Barrier(done)) => {
+                drain_retained(&mut retained, &shared, |batch| persist(&path, &shared,
+                    batch.sequence, &batch.records, max_disk, batch.native_start,
+                    batch.native_text).map(Some));
                 let _ = done.send(());
             }
             Ok(Command::Close(done)) => {
+                drain_retained(&mut retained, &shared, |batch| persist(&path, &shared,
+                    batch.sequence, &batch.records, max_disk, batch.native_start,
+                    batch.native_text).map(Some));
                 drop(lock.take());
                 shared.state.lock().unwrap().closed = true;
                 shared.completion.notify_all();
@@ -750,14 +968,46 @@ fn window_seal(path:&PathBuf, shared:&Shared, active:&mut Option<WindowFile>) ->
     }
     Ok(())
 }
+fn persist_window_batch(path: &PathBuf, shared: &Shared, active: &mut Option<WindowFile>,
+    sequence: &mut u64, segment_bytes: usize, max_disk: u64,
+    batch: &RetainedBatch) -> std::io::Result<()> {
+    let records = &batch.records;
+    let clock = batch.native_start;
+    let size: usize = records.iter().map(|r| r.len()+1).sum();
+    let batch_start = batch.started;
+    if clock==0 || clock>i64::MAX as u64 {return Err(std::io::Error::other("invalid producer clock"));}
+    if active.as_ref().is_some_and(|a|a.anchor/86_400_000_000_000!=clock/86_400_000_000_000 || a.file.metadata().map_or(true,|m|m.len()+size as u64>segment_bytes as u64)) {window_seal(path,shared,active)?;}
+    if disk_usage(path)?.saturating_add(size as u64).saturating_add(8192)>max_disk {return Err(disk_budget_exceeded());}
+    if active.is_none() {
+        let stem=format!("{}-{:020}",shared.run_id,*sequence);*sequence+=1;let name=format!("{stem}.log");
+        let marker=platform::create_new(&path.join(format!("{stem}.window")))?;
+        marker.sync_all()?;#[cfg(unix)] platform::sync_directory(path)?;
+        let anchor_path=path.join(format!("{stem}.native-time.json"));
+        let mut anchor_file=platform::create_new(&anchor_path)?;
+        anchor_file.write_all(serde_json::json!({"schema_version":1,"start_ts_ns":clock,"end_ts_ns":null,"source_schema":"native-log-file.v1"}).to_string().as_bytes())?;
+        anchor_file.sync_all()?;#[cfg(unix)] platform::sync_directory(path)?;
+        let temp=path.join(format!("{stem}.pending"));let mut file=platform::create_new(&temp)?;
+        for r in records {file.write_all(r.as_bytes())?;file.write_all(b"\n")?;}file.sync_all()?;
+        window_publication(path,&name,&file,&shared.run_id,clock,1,false)?;
+        platform::move_file(&temp,&path.join(&name),false)?;#[cfg(unix)] platform::sync_directory(path)?;
+        shared.state.lock().unwrap().segments.push(name.clone());
+        *active=Some(WindowFile{file,name,anchor:clock,seq:1,started:batch_start});
+    } else {
+        let a=active.as_mut().unwrap();for r in records {a.file.write_all(r.as_bytes())?;a.file.write_all(b"\n")?;}a.file.sync_all()?;
+        a.seq=a.seq.checked_add(1).ok_or_else(||std::io::Error::other("publication sequence overflow"))?;
+        window_publication(path,&a.name,&a.file,&shared.run_id,a.anchor,a.seq,false)?;
+    }
+    if active.as_ref().is_some_and(|a|a.seq>=192 || a.file.metadata().map_or(true,|m|m.len()>=segment_bytes as u64)) {window_seal(path,shared,active)?;}Ok(())
+}
 fn window_worker(path:PathBuf,rx:mpsc::Receiver<Command>,shared:Arc<Shared>,segment_bytes:usize,max_disk:u64,lock:File,window:Duration) {
     let mut active:Option<WindowFile>=None;let mut sequence=0u64;let mut clean=Instant::now();let mut pending=None;let mut held_lock=Some(lock);
+    let mut retained = VecDeque::new();
     loop {
         let timeout=active.as_ref().map(|a|window.saturating_sub(a.started.elapsed()).min(Duration::from_secs(1))).unwrap_or(Duration::from_secs(1));
         let cmd=match pending.take() {Some(c)=>Ok(c),None=>rx.recv_timeout(timeout)};
         if clean.elapsed()>=Duration::from_secs(60) {shared.state.lock().unwrap().segments.retain(|n|path.join(n).is_file());clean=Instant::now();}
         if active.as_ref().is_some_and(|a|a.started.elapsed()>=window || native_clock_ns()/86_400_000_000_000>a.anchor/86_400_000_000_000) {
-            if let Err(e)=window_seal(&path,&shared,&mut active) {shared.state.lock().unwrap().error.get_or_insert(format!("storage: {e}"));}
+            if let Err(e)=window_seal(&path,&shared,&mut active) {storage_error(&shared, &e);}
         }
         match cmd {
             Ok(Command::Record(first,clock,false)) => {
@@ -767,36 +1017,22 @@ fn window_worker(path:PathBuf,rx:mpsc::Receiver<Command>,shared:Arc<Shared>,segm
                 while let Ok(next)=rx.recv_timeout(batch_deadline.saturating_duration_since(Instant::now())) {
                     match next {Command::Record(line,t,false) if t/86_400_000_000_000==clock/86_400_000_000_000 && size+line.len()+1<=segment_bytes=>{size+=line.len()+1;records.push(line);}, other=>{pending=Some(other);break}}
                 }
-                let result=(|| -> std::io::Result<()> {
-                    if clock==0 || clock>i64::MAX as u64 {return Err(std::io::Error::other("invalid producer clock"));}
-                    if shared.state.lock().unwrap().error.as_ref().is_some_and(|e|e.starts_with("storage:")) {return Err(std::io::Error::other("storage already failed"));}
-                    if active.as_ref().is_some_and(|a|a.anchor/86_400_000_000_000!=clock/86_400_000_000_000 || a.file.metadata().map_or(true,|m|m.len()+size as u64>segment_bytes as u64)) {window_seal(&path,&shared,&mut active)?;}
-                    if disk_usage(&path)?.saturating_add(size as u64).saturating_add(8192)>max_disk {return Err(std::io::Error::other("recorder disk limit exceeded"));}
-                    if active.is_none() {
-                        let stem=format!("{}-{sequence:020}",shared.run_id);sequence+=1;let name=format!("{stem}.log");
-                        let marker=platform::create_new(&path.join(format!("{stem}.window")))?;
-                        marker.sync_all()?;#[cfg(unix)] platform::sync_directory(&path)?;
-                        let anchor_path=path.join(format!("{stem}.native-time.json"));
-                        let mut anchor_file=platform::create_new(&anchor_path)?;
-                        anchor_file.write_all(serde_json::json!({"schema_version":1,"start_ts_ns":clock,"end_ts_ns":null,"source_schema":"native-log-file.v1"}).to_string().as_bytes())?;
-                        anchor_file.sync_all()?;#[cfg(unix)] platform::sync_directory(&path)?;
-                        let temp=path.join(format!("{stem}.pending"));let mut file=platform::create_new(&temp)?;
-                        for r in &records {file.write_all(r.as_bytes())?;file.write_all(b"\n")?;}file.sync_all()?;
-                        window_publication(&path,&name,&file,&shared.run_id,clock,1,false)?;
-                        platform::move_file(&temp,&path.join(&name),false)?;#[cfg(unix)] platform::sync_directory(&path)?;
-                        shared.state.lock().unwrap().segments.push(name.clone());
-                        active=Some(WindowFile{file,name,anchor:clock,seq:1,started:batch_start});
-                    } else {
-                        let a=active.as_mut().unwrap();for r in &records {a.file.write_all(r.as_bytes())?;a.file.write_all(b"\n")?;}a.file.sync_all()?;
-                        a.seq=a.seq.checked_add(1).ok_or_else(||std::io::Error::other("publication sequence overflow"))?;
-                        window_publication(&path,&a.name,&a.file,&shared.run_id,a.anchor,a.seq,false)?;
-                    }
-                    if active.as_ref().is_some_and(|a|a.seq>=192 || a.file.metadata().map_or(true,|m|m.len()>=segment_bytes as u64)) {window_seal(&path,&shared,&mut active)?;}Ok(())
-                })();
-                let mut s=shared.state.lock().unwrap();s.outstanding-=records.len();match result {Ok(())=>s.durable+=records.len() as u64,Err(e)=>{s.error.get_or_insert(format!("storage: {e}"));}}
+                retained.push_back(RetainedBatch { records, native_start: clock,
+                    native_text: false, sequence: 0, started: batch_start });
+                if shared.state.lock().unwrap().error.as_deref() != Some(DISK_BUDGET_ERROR) {
+                    drain_retained(&mut retained, &shared, |batch| persist_window_batch(
+                        &path, &shared, &mut active, &mut sequence, segment_bytes, max_disk, batch).map(|()| None));
+                }
             }
-            Ok(Command::Barrier(done)) => {let _=done.send(());}
-            Ok(Command::Close(done)) => {if let Err(e)=window_seal(&path,&shared,&mut active){shared.state.lock().unwrap().error.get_or_insert(format!("storage: {e}"));}drop(active.take());drop(held_lock.take());shared.state.lock().unwrap().closed=true;shared.completion.notify_all();let _=done.send(());break;}
+            Ok(Command::Barrier(done)) => {
+                drain_retained(&mut retained, &shared, |batch| persist_window_batch(
+                    &path, &shared, &mut active, &mut sequence, segment_bytes, max_disk, batch).map(|()| None));
+                let _=done.send(());
+            }
+            Ok(Command::Close(done)) => {
+                drain_retained(&mut retained, &shared, |batch| persist_window_batch(
+                    &path, &shared, &mut active, &mut sequence, segment_bytes, max_disk, batch).map(|()| None));
+                if let Err(e)=window_seal(&path,&shared,&mut active){storage_error(&shared, &e);}drop(active.take());drop(held_lock.take());shared.state.lock().unwrap().closed=true;shared.completion.notify_all();let _=done.send(());break;}
             Ok(_) => {shared.state.lock().unwrap().error.get_or_insert("storage: invalid window command".into());}
             Err(mpsc::RecvTimeoutError::Timeout)=>{},
             Err(mpsc::RecvTimeoutError::Disconnected)=>{let _=window_seal(&path,&shared,&mut active);shared.state.lock().unwrap().closed=true;shared.completion.notify_all();break;}

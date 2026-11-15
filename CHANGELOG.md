@@ -1,3 +1,7 @@
+# 0.3.7rc1 — local recorder capacity recovery candidate
+
+Only typed pre-write disk-budget rejection retains FIFO encoded batches for existing flush/close retry. No quota expansion or recovery of historical lost records. Not released or deployed.
+
 # 更新日志 (Changelog)
 
 本项目的所有重大变更都将记录在此文件中。

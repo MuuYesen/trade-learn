@@ -6543,7 +6543,7 @@ wheels = [
 
 [[package]]
 name = "trade-learn"
-version = "0.3.6"
+version = "0.3.7rc1"
 source = { editable = "." }
 dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
