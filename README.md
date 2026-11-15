@@ -313,3 +313,5 @@ TradeLearn 面向策略研究与回测，不推荐用于真实资金的实盘交
 ### 研究整合 0.3.5
 
 0.3.5 收拢搜索／模型推理／数据查询共同能力，不覆盖 0.3.4 既有产物。四入口返回、配置隔离、失败／取消和显式记录见[优化指南](docs/guides/optimization.md)，可信本地 bundle 共同推理见[研究指南](docs/guides/research.md)。NA／Store／SDK与现役消费者不因该研究候选变化。
+
+当前未发行源码：`NautilusStore(logging=...)`为所有NA适配器提供INFO控制台及有界诊断文件默认（10MiB/5备份），支持DEBUG、目录与轮转配置及显式关闭默认文件；独立于SDK监控原件。配置与NA覆盖规则见[通用运行诊断日志](docs/guides/live.md#native-diagnostics)。

@@ -5,6 +5,12 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
+## [0.3.6] - 2026-11-15（发行准备，尚未公开发布）
+
+- NautilusStore为官方及独立适配器提供共同原生诊断默认：INFO控制台和有界文件；可配DEBUG、路径、大小、备份数，显式关闭默认文件不影响monitor。
+- 尊重官方LoggerConfig及Node已有非默认配置；cTrader私有运行层复用公共入口，保持部署路径和轮转。普通回测不导入NA或创建日志。
+- SDK仅增加0.3.6 observer API v1显式准入；原生记录器、可靠发送、原件回收与磁盘额度不变。未声称现役部署或全平台发行已完成。
+
 ## [0.3.5] - 2026-11-14
 
 - 四搜索入口共用已有单次历史回测试验执行与完整记录；保 Engine 的 BT 嵌套返回、Lite 最优 Stats、网格结果和 Optuna 原生 Study。隔离每轮数据、broker、费用／滑点及运行状态，保默认值与有效配置；失败／取消保持原异常，未执行的有限候选明确取消。

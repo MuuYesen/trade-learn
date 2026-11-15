@@ -81,7 +81,38 @@ engine.addstrategy(MyStrategy)
 engine.run()
 ```
 
-普通 `bt.Strategy` 不需要日志基类。上例未传 monitor，默认不创建日志器；可选日志接线见下节，用户无需手工创建 Runtime、Node 或 Sender。最终简洁 cTrader 用户例的唯一源码为 [ctrader_monitor.py](../../examples/live/ctrader_monitor.py)；其客户端已接固定受信服务契约；真实服务部署和最终安装资格仍待，不能称已可用于生产远程发送。
+普通 `bt.Strategy` 不需要日志基类。上例未传 monitor，默认不创建SDK结构化记录器或Sender；原生运行诊断日志独立配置，见下节。可选日志接线见下节，用户无需手工创建 Runtime、Node 或 Sender。最终简洁 cTrader 用户例的唯一源码为 [ctrader_monitor.py](../../examples/live/ctrader_monitor.py)；其客户端已接固定受信服务契约；真实服务部署和最终安装资格仍待，不能称已可用于生产远程发送。
+
+<a id="native-diagnostics"></a>
+
+### 通用运行诊断日志（2026-11-15源码，尚未发行）
+
+0.3.6本地Mac arm64 CP313 wheel与标准sdist已构建，实际离线安装、版本/native/RECORD、诊断轮转和原记录器smoke通过；产物位于`dist/0.3.6-local-mac/`。其他平台、本版本公网PyPI/GitHub发布及私有IC运行镜像尚未完成，不以本机资格代替。
+
+所有使用NautilusStore的官方NA适配器和独立适配器共用原生LoggerConfig；
+默认INFO控制台及工作目录下`logs`文件，每文件10MiB、5份备份加当前文件，
+总量约60MiB（以完整日志行为边界）。目录由NA启动装配时创建，构造Store不写盘，
+不添加Python全局handler。IC部署通过同一配置入口提供`/app/logs`默认目录。
+
+```python
+store = NautilusStore(config, data_factories=data_factories, exec_factories=exec_factories,
+    logging={"stdout_level": "INFO", "fileout_level": "DEBUG", "directory": "logs/debug",
+             "max_bytes": 10 * 1024 * 1024, "backup_count": 5})
+```
+
+`logging=None`使用上述默认；`logging=False`仅关闭TL默认诊断文件，保留INFO控制台。
+字典还可指定`file_name`（默认`strategy.log`，NA加UTC轮转时间戳）及`is_colored`；
+级别接受官方LogLevel或级别名称，大小须正整数、备份份数须非负整数（0不保备份）。
+直接传官方`LoggerConfig`完全按原对象配置，包括显式关闭控制台或全部原生日志。
+未传Store日志选项时，非默认`LiveNodeConfig.logging`原样保留；NA不保留构造时是否
+显式传入默认LoggerConfig的标记，因此该对象与省略不可区分。若要求完全保留NA默认，
+使用`NautilusStore(..., logging=LoggerConfig())`。显式Store配置优先于Node配置，
+不改原LiveNodeConfig的其他设置。NA进程级logger的多Node限制仍按上游能力处理。
+
+这些文件只用于运行与调试，可滚动删除。SDK结构化交易原件、远程monitor和可靠发送
+保持独立；`logging=False`不关闭monitor，`monitor`也不控制诊断文件。SDK源段达到
+额度后不能照此覆盖：须核验完整回执并保存恢复索引后回收。记录器storage错误保持，
+已接收未持久化的差额须保留为故障证据，不能清空error伪造恢复。
 
 ### 参数归属与限制
 
@@ -93,7 +124,7 @@ engine.run()
 | `getbroker()` | 返回该实例唯一的 `NautilusBroker`；启动时直接绑定 ExecutionHost，无 Store 逐笔转发。启动前读取现金/持仓显式失败。 |
 | `account_provider(cache, portfolio)` | 可选，沿用执行桥已有权威账户投影；涉及现金/权益读取时需要提供合格投影，缺失即拒绝，不推测余额等于权益。使用资格由具体来源验收。 |
 | `state_dir` | 本地状态根目录；按 trader/account/strategy 身份摘要隔离意图与日志。意图复用现有 `IntentJournal` 的独占锁与恢复检查，不是第二订单账本。重启须保留状态并完成原生订单核对，不能清空目录解除未知订单阻断。 |
-| `NautilusStore(..., buffer_capacity=512)` | 传递已有 Runtime 滚动容量；策略参数和 `addsizer()` 沿用原入口。 |
+| `NautilusStore(..., buffer_capacity=512, logging=None)` | 传递已有 Runtime 滚动容量；策略参数和 `addsizer()` 沿用原入口。 |
 | `stop()` / `engine.runstop()` | 请求 NA handle 停止；`run()` 负责等待退出、停止同一 Runtime、drain 持久化任务、dispose Node 并关闭本地日志。异常清理保留主异常。 |
 | `get_notifications()` | 消费本实例状态队列，返回 `(message, args, kwargs)`：`STARTING`、Runtime 成功启动后的 `RUNNING`、`STOPPED` 或 `FAILED`。这是 Store 生命周期状态，不是券商连接/重连成功证明。 |
 
