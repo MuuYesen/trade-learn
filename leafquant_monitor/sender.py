@@ -158,9 +158,30 @@ def client_from_config(path):
 
 
 class BackgroundSender:
+    @staticmethod
+    def _configured_interval(default):
+        """Operator-tunable shipping cadence; default and bounds stay fixed.
+
+        One ship per second turns a low-rate log into many tiny FIFO messages,
+        so the receiver pays per-message cost instead of per-byte. Raising the
+        interval only batches more complete lines into the same bounded chunk;
+        it never changes chunk limits, ordering or delivery guarantees.
+        """
+        import os
+        raw = os.environ.get('LEAFQUANT_MONITOR_SEND_INTERVAL_SECONDS')
+        if raw is None or raw == '':
+            return default
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            raise ValueError('invalid monitor send interval') from None
+        if not 0.1 <= value <= 60:
+            raise ValueError('monitor send interval out of range')
+        return value
+
     def __init__(self, settings, client_factory=None, queue_url=None, *, interval=1, flush=None):
         self.settings, self.factory, self.queue_url = settings, client_factory, queue_url
-        self.interval, self.flush = interval, flush
+        self.interval, self.flush = self._configured_interval(interval), flush
         self.stop = threading.Event()
         self.thread = None
         self._state = {'running': False, 'error': None, 'sent': 0, 'checked_at': None}

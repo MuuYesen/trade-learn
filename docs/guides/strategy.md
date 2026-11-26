@@ -6,7 +6,7 @@
 - Lite使用类属性与init，保留window/record/equity/target_weights等便利入口，见[Lite指南](lite.md)和[实际API](lite-api.md)。
 - 指标使用同一个Indicator与共同Lines，选择真实合格的来源，见[指标指南](indicators.md)。旧I与PTA已退出本轮候选。
 - 研究组件在外定义也须显式登记及执行，用户参数/bundle显式接入；不由基类注入research_result，见[研究指南](research.md)。
-- 实时从tradelearn_runtime.NautilusStore组装，沿getdata/getbroker与Cerebro.run使用唯一官方NA宿主；带监控的独立配置用store.run(engine,monitor=...)，见[实时指南](live.md)。
+- 实时从bt.stores.NautilusStore组装，沿getdata/getbroker与Cerebro.run使用唯一官方NA宿主；带监控沿engine.run(monitor=...)，不公开Store.run（源码候选），见[实时指南](live.md)。
 
 notify_order/notify_trade可以覆盖，框架订单状态和独立观察链不依赖super调用。持仓只反映成交；在途意图与活动订单分开。错误、未知提交、取消中和恢复未决不能当成交或自动重发。运行后独立Reporter/MLflow记录已有结果，不在导出时重跑策略或补算未提供输入。
 

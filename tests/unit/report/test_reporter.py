@@ -726,3 +726,39 @@ class _FactorAnalyzerStub:
     def summary(self) -> dict[str, float]:
         """Return scalar factor diagnostics for reporter tests."""
         return {"ic_mean": 0.12, "rank_ic_mean": 0.23}
+
+
+def test_intraday_returns_are_not_annualised_as_trading_days():
+    """A minute-bar backtest used to be annualised about 1,400x too small."""
+    import numpy as np
+
+    from tradelearn.report.reporter import _infer_periods
+
+    n = 4353
+    index = pd.date_range("2026-10-18 22:02", periods=n, freq="min")
+    returns = pd.Series(np.full(n, (1 - 0.0019) ** (1 / n) - 1), index=index)
+
+    assert _infer_periods(returns) == 525_600
+    assert Reporter({"returns": returns}).periods == 525_600
+    # under the old default the same three-day run read as -0.01% a year
+    assert metrics.annual_return(returns, periods=252) > -0.001
+    assert metrics.annual_return(returns, periods=_infer_periods(returns)) < -0.15
+
+
+def test_daily_and_slower_returns_keep_the_252_convention():
+    """A business-day index spans fewer calendar days than it has bars."""
+    import numpy as np
+
+    from tradelearn.report.reporter import _infer_periods
+
+    for freq, n in (("B", 252), ("D", 365), ("W", 52), ("ME", 12)):
+        index = pd.date_range("2026-01-01", periods=n, freq=freq)
+        assert _infer_periods(pd.Series(np.zeros(n), index=index)) == 252
+
+
+def test_explicit_periods_still_wins_over_inference():
+    import numpy as np
+
+    index = pd.date_range("2026-10-18", periods=600, freq="min")
+    returns = pd.Series(np.zeros(600), index=index)
+    assert Reporter({"returns": returns}, periods=252).periods == 252

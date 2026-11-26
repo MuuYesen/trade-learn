@@ -3183,3 +3183,81 @@ def _add_close_hover(plot, renderers) -> None:
 def _add_passive_hover(plot, hover: HoverTool) -> None:
     """Attach hover behavior to a plot."""
     plot.add_tools(hover)
+
+
+def _attribution_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return a date-column copy with timezone-naive timestamps for Bokeh."""
+    result = frame.reset_index().rename(columns={frame.index.name or "index": "date"})
+    if isinstance(result["date"].dtype, pd.DatetimeTZDtype):
+        result["date"] = result["date"].dt.tz_convert("UTC").dt.tz_localize(None)
+    return result
+
+
+def _attribution_lines(frame: pd.DataFrame, *, title: str, percent: bool):
+    """Return one line per column of a dated wide frame."""
+    data = _attribution_frame(frame)
+    plot = figure(
+        title=title,
+        x_axis_type="datetime",
+        height=240,
+        sizing_mode="stretch_width",
+    )
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+    for index, name in enumerate(frame.columns):
+        plot.line(
+            data["date"],
+            data[name],
+            line_width=2,
+            color=colors[index % len(colors)],
+            legend_label=str(name),
+        )
+    if percent:
+        plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+    _make_static_chart(plot)
+    return plot
+
+
+def attribution_exposures(exposures: pd.DataFrame):
+    """Return daily portfolio factor exposures over time."""
+    return _attribution_lines(exposures, title="Factor Exposures", percent=False)
+
+
+def attribution_cumulative(contributions: pd.DataFrame):
+    """Return compounded return contribution per factor."""
+    cumulative = (1.0 + contributions.fillna(0.0)).cumprod() - 1.0
+    return _attribution_lines(cumulative, title="Cumulative Attribution", percent=True)
+
+
+def attribution_common_specific(attribution: pd.DataFrame):
+    """Return compounded common, specific and total returns."""
+    columns = [
+        name
+        for name in ("common_returns", "specific_returns", "total_returns")
+        if name in attribution.columns
+    ]
+    frame = attribution.loc[:, columns]
+    cumulative = (1.0 + frame.fillna(0.0)).cumprod() - 1.0
+    return _attribution_lines(cumulative, title="Common vs Specific", percent=True)
+
+
+def attribution_summary_bar(exposure_summary: pd.DataFrame):
+    """Return cumulative return contribution by factor."""
+    frame = pd.DataFrame(exposure_summary).copy()
+    column = "cumulative_return_contribution"
+    if column not in frame:
+        frame[column] = pd.Series(dtype="float64")
+    frame = frame.reset_index().rename(columns={frame.index.name or "index": "factor"})
+    frame["factor"] = frame["factor"].astype(str)
+    frame["color"] = [MARKET_UP if value >= 0 else MARKET_DOWN for value in frame[column]]
+    plot = figure(
+        title="Return Contribution by Factor",
+        x_range=list(frame["factor"]),
+        height=300,
+        sizing_mode="stretch_width",
+        toolbar_location=None,
+    )
+    if not frame.empty:
+        plot.vbar("factor", 0.7, column, source=ColumnDataSource(frame), color="color")
+    plot.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+    _make_static_chart(plot)
+    return plot

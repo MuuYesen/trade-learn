@@ -3,7 +3,7 @@ from tests.unit.backtest._engine_config import feed as _as_feed
 from types import SimpleNamespace
 import pytest
 pytest.importorskip("nautilus_trader")
-from tradelearn_runtime import NautilusStore
+from tradelearn.engine.stores import NautilusStore
 from tradelearn import engine as bt
 from tradelearn_runtime.broker import NautilusBroker
 

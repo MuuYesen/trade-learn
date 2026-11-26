@@ -562,14 +562,9 @@ class FactorAnalyzer:
         if self.forward_returns is not None:
             return self.forward_returns
         if self.prices is not None:
-            forward = (
-                self.prices.groupby(level=1, group_keys=False)
-                .pct_change()
-                .groupby(level=1)
-                .shift(-1)
-            )
-            forward.name = "forward_returns"
-            return forward
+            return factor_metrics._forward_returns_from_prices(
+                self.prices, periods=self.return_period
+            ).rename("forward_returns")
         raise ValueError("FactorAnalyzer requires forward_returns or prices")
 
     def _aligned_quantiles(self) -> tuple[pd.DataFrame, pd.Series]:

@@ -191,6 +191,26 @@ def test_factor_clean_data_accepts_multiple_factors() -> None:
     assert ("reverse_score", 2) in analyzer.summary().index
 
 
+def test_price_and_explicit_return_ic_match_each_prediction_horizon() -> None:
+    dates = pd.date_range("2024-01-01", periods=3)
+    index = pd.MultiIndex.from_product([dates, ["A", "B", "C"]], names=["date", "symbol"])
+    prices = pd.Series([100, 100, 100, 110, 120, 130, 130, 120, 110], index=index)
+    factor = pd.Series([1, 2, 3], index=index[:3], name="score")
+    clean = clean_factor_and_forward_returns(
+        factor.to_frame(), factor="score", prices=prices, periods=(1, 2), quantiles=3
+    )
+    by_period = FactorAnalyzer.from_clean_factor_data(clean)
+    for period, expected_ic in [(1, 1.0), (2, -1.0)]:
+        direct = FactorAnalyzer(factor, prices=prices, return_period=period)
+        explicit = FactorAnalyzer(
+            factor, forward_returns=clean[f"forward_return_{period}"], return_period=period
+        )
+        for analyzer in [direct, explicit, by_period[period]]:
+            assert analyzer.ic().loc[dates[0]] == pytest.approx(expected_ic)
+            rank_ic = analyzer.factor_information_coefficient()
+            assert rank_ic.loc[dates[0]] == pytest.approx(expected_ic)
+
+
 def test_factor_analyzer_builds_period_analyzers_from_clean_factor_data() -> None:
     """FactorAnalyzer can expose separate 1D/5D/10D analyzers from clean factor data."""
     factor, _ = _factor_and_forward_returns()
@@ -894,3 +914,19 @@ def test_factor_report_tables_keep_time_and_quantile_identity():
     assert (ic.index.name or "index") in result["tables"]["Information Coefficient"].columns
     stats = analyzer.quantile_stats()
     assert (stats.index.name or "index") in result["tables"]["Quantile Statistics"].columns
+
+
+def test_price_derived_returns_respect_dates_and_missing_endpoints():
+    prices = _series([
+        ("2025-01-03", "A", 120), ("2025-01-02", "B", 50),
+        ("2025-01-01", "A", 100), ("2025-01-03", "B", 100),
+        ("2025-01-02", "A", float("nan")), ("2025-01-01", "B", 25),
+    ])
+    analyzer = FactorAnalyzer(factor=prices, prices=prices)
+    daily = analyzer._forward_returns()
+    assert daily.index.equals(prices.index)
+    assert daily.xs("A", level="symbol").isna().all()
+    assert daily.loc[pd.Timestamp("2025-01-01"), "B"] == 1.0
+    assert pd.isna(daily.loc[pd.Timestamp("2025-01-03"), "B"])
+    two = FactorAnalyzer(factor=prices, prices=prices, return_period=2)._forward_returns()
+    assert two.loc[pd.Timestamp("2025-01-01"), "A"] == pytest.approx(0.2)

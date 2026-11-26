@@ -76,10 +76,13 @@ class NautilusStore:
 
     def __init__(self, config=None, *, adapter=None, data_factories=None,
                  exec_factories=None, strategy_config=None,
-                 state_dir=None, account_provider=None, buffer_capacity=512, **adapter_parameters):
+                 state_dir=None, account_provider=None, buffer_capacity=512, logging=None, **adapter_parameters):
         if type(buffer_capacity) is not int or buffer_capacity < 2:
             raise ValueError("buffer_capacity must be an integer at least two")
         self.buffer_capacity = buffer_capacity
+        from .diagnostics import diagnostic_config
+        diagnostic_config(logging)  # Validate without I/O or global logger changes.
+        self._diagnostic_logging = logging
         if adapter_parameters and adapter is None:
             raise TypeError('unknown native Store parameters; select an adapter for simple configuration')
         if adapter_parameters and config is not None:
@@ -346,10 +349,17 @@ class NautilusStore:
         if self._driver is not None:
             self._driver.validate(self, engine)
 
+    def get_logging_config(self, *, directory='logs'):
+        """Official native diagnostics config; adapter assembly may supply its directory."""
+        from .diagnostics import diagnostic_config
+        native = getattr(getattr(self, 'config', None), 'logging', None)
+        return diagnostic_config(self._diagnostic_logging, native=native, directory=directory)
+
     def _build_node(self):
-        from nautilus_trader.live import LiveNode
-        return LiveNode.build('TradeLearn', self.config,
-                              data_factories=self.data_factories, exec_factories=self.exec_factories)
+        from nautilus_trader.live import LiveNodeBuilder
+        return LiveNodeBuilder.from_config('TradeLearn', self.config,
+            data_factories=self.data_factories, exec_factories=self.exec_factories
+        ).with_logging(self.get_logging_config()).build()
 
     def _prepare_runtime(self, runtime):
         from tradelearn.core.strategy_events import ObserverSpec

@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import MutableMapping
+import marshal
+import zlib
 from dataclasses import dataclass
 import json
 import hashlib
@@ -15,6 +18,38 @@ import uuid
 from tradelearn.core.observation_clock import monotonic_ns
 
 from .snapshots import account_evidence, framework_snapshot, public_fields, public_value, native_info_value
+
+
+
+class _PackedHistory(MutableMapping):
+    """Lossless in-process history. Values are decoded only when read."""
+    def __init__(self):
+        self._rows = OrderedDict()
+
+    def __getitem__(self, key):
+        return marshal.loads(zlib.decompress(self._rows[key]))
+
+    def __setitem__(self, key, value):
+        self._rows[key] = zlib.compress(marshal.dumps(value), 1)
+
+    def __delitem__(self, key):
+        del self._rows[key]
+
+    def __contains__(self, key):
+        return key in self._rows
+
+    def __iter__(self):
+        return iter(self._rows)
+
+    def __len__(self):
+        return len(self._rows)
+
+    def move_to_end(self, key):
+        self._rows.move_to_end(key)
+
+    def popitem(self, last=True):
+        k, data = self._rows.popitem(last=last)
+        return k, marshal.loads(zlib.decompress(data))
 
 
 class _AccountEventScan:
@@ -120,11 +155,11 @@ class TradeLogger:
         self._monotonic_ns = monotonic_ns
         self._error = None
         self._order_traces = {}
-        self._order_references = {}
+        self._order_references = _PackedHistory()
         self._active_calculation = None
         self._pending_submits = {}
-        self._fill_events = OrderedDict()
-        self._fills = OrderedDict()
+        self._fill_events = _PackedHistory()
+        self._fills = _PackedHistory()
         self._account_events = OrderedDict()
         self._account_info_carriers = {}
         self._pending_account_scan = None
@@ -248,12 +283,15 @@ class TradeLogger:
         if len(raw.encode()) + 1 > 96 * 1024:
             self._error = 'RecordExceedsTransportLineLimit'
             raise ValueError('fact exceeds shared complete log-line transport limit')
+        rejection_code = None
         try:
             if not self.recorder.append(raw):
-                self._report_recorder_rejection()
+                rejection_code = self._report_recorder_rejection()
                 raise RuntimeError('monitor record was not accepted')
         except Exception as exc:
-            self._error = type(exc).__name__
+            self._error = ('storage: recorder disk limit exceeded'
+                           if rejection_code == 'RECORDER_DISK_BUDGET_EXHAUSTED'
+                           else type(exc).__name__)
             raise
         return fact
 
@@ -647,6 +685,7 @@ class TradeLogger:
             summary=self.health_summary()
             if summary['recorder_code']=='OK':summary['recorder_code']='APPEND_REJECTED_WITHOUT_NATIVE_ERROR'
             logging.getLogger(__name__).error('monitor_recorder_rejected %s',json.dumps(summary,sort_keys=True,separators=(',',':'),allow_nan=False))
+            return summary['recorder_code']
         except Exception:
             pass
 
@@ -663,6 +702,10 @@ class TradeLogger:
         if result.get('error'):
             self._error = result['error']
             raise RuntimeError('native monitor persistence failed')
+        # A successful native barrier is the only authority for capacity
+        # recovery. Preserve unrelated observation/IO errors.
+        if self._error == 'storage: recorder disk limit exceeded':
+            self._error = None
         return result
 
     def close(self):

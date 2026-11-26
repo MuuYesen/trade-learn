@@ -553,16 +553,11 @@ def autocorrelation(
 
 
 def _forward_returns_from_prices(prices: pd.Series, periods: int = 1) -> pd.Series:
-    """Compute next-period returns per symbol from MultiIndex prices."""
+    """Return each symbol's endpoint price change over chronological observations."""
     _validate_multiindex(prices)
-    forward = (
-        prices.groupby(level=1, group_keys=False)
-        .pct_change(periods=periods)
-        .groupby(level=1)
-        .shift(-periods)
-    )
-    forward.name = "returns"
-    return forward
+    ordered = prices.sort_index()
+    future = ordered.groupby(level=1).shift(-periods)
+    return (future / ordered - 1).reindex(prices.index).rename("returns")
 
 
 def _factor_names(factor: str | Sequence[str]) -> tuple[str, ...]:

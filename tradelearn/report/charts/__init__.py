@@ -2,6 +2,10 @@
 
 __all__ = [
     "annual_returns",
+    "attribution_common_specific",
+    "attribution_cumulative",
+    "attribution_exposures",
+    "attribution_summary_bar",
     "drawdown",
     "equity_curve",
     "daily_volume",

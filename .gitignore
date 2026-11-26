@@ -208,3 +208,9 @@ zoo/
 /ops/n8n/*.after.json
 /ops/sentinel-production/
 /tests/unit/strategy/fixtures/qmt_20260908_rejections.json
+
+# Persistent local qualification environments; never release inputs.
+/.qualification/
+
+# 本地实验产物
+mlruns/
