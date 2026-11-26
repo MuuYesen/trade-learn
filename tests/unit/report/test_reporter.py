@@ -729,7 +729,7 @@ class _FactorAnalyzerStub:
 
 
 def test_intraday_returns_are_not_annualised_as_trading_days():
-    """A minute-bar backtest used to be annualised ~1,400x too small."""
+    """A minute-bar backtest used to be annualised about 1,400x too small."""
     import numpy as np
 
     from tradelearn.report.reporter import _infer_periods
@@ -740,13 +740,13 @@ def test_intraday_returns_are_not_annualised_as_trading_days():
 
     assert _infer_periods(returns) == 525_600
     assert Reporter({"returns": returns}).periods == 525_600
-    # the same three-day sample under the old default read as -0.01% a year
+    # under the old default the same three-day run read as -0.01% a year
     assert metrics.annual_return(returns, periods=252) > -0.001
     assert metrics.annual_return(returns, periods=_infer_periods(returns)) < -0.15
 
 
-def test_daily_returns_keep_the_252_trading_day_convention():
-    """Business-day indexes span fewer calendar days than they have bars."""
+def test_daily_and_slower_returns_keep_the_252_convention():
+    """A business-day index spans fewer calendar days than it has bars."""
     import numpy as np
 
     from tradelearn.report.reporter import _infer_periods

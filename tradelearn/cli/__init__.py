@@ -76,79 +76,77 @@ def _new(name: str, directory: Path) -> None:
         "# " + name + "\n\nstrategy.py defines an example Strategy; "
         "import it into Cerebro with your own Bars.\n"
         "Start `tradelearn lab --notebook-dir .` from this directory. No YAML is required.\n"
-        "The research Skill is written to .agents/skills (read by Codex and "
-        "other agent tools) and mirrored at _agents/skills for AI Lite and "
-        "Jupyter, which hide dotted paths. Run `tradelearn skills --refresh` "
-        "after upgrading trade-learn to rewrite it for the installed version.\n"
+        "The research Skill is written to .agents/skills, which Codex and other "
+        "agent tools read, and mirrored at _agents/skills for AI Lite and Jupyter, "
+        "which hide dotted paths. After upgrading trade-learn run "
+        "`tradelearn skills --refresh` to rewrite it for the installed version.\n"
         "MLflow uses local sqlite:///mlflow.db by default; no server is started.\n",
         encoding="utf-8",
     )
     print(f"Created tradelearn project: {project}")
 
 
-_VERSION_LINE = re.compile(r"Target package: trade-learn [^.]*(?:\.[^.]*)*?\. Check the installed version")
+_VERSION_LINE = re.compile(r"Target package: trade-learn \S+ Check the installed version")
 
-# Skill placement. The real directory is dotted `.agents/skills`, which Codex
-# and other agent tools read. Jupyter and AI Lite hide dotted paths, so `_agents`
-# mirrors it; a symlink keeps one source of truth, and platforms that refuse
+# The real Skill directory is the dotted `.agents/skills` that Codex and other
+# agent tools read. Jupyter and AI Lite hide dotted paths, so `_agents` mirrors
+# it; a symlink keeps a single source of truth and platforms that refuse
 # symlinks fall back to a copy that `--refresh` rewrites. `.claude/skills` holds
-# the per-skill link Claude Code reads.
+# the per-skill entry Claude Code reads.
 SKILL_NAME = "tradelearn-research"
 _REAL_SKILL_PARENT = (".agents", "skills")
-_MIRROR_DIRS = ("_agents",)
 
 
-def _link_or_copy(link: Path, target: Path, *, relative_to: Path) -> str:
-    """Point `link` at `target`, copying when the platform refuses symlinks."""
+def _link_or_copy(link: Path, target: Path, *, relative_to: Path) -> None:
+    """Point `link` at `target`, copying where the platform refuses symlinks."""
     import os
     import shutil
 
-    if link.is_symlink() or link.exists():
-        if link.is_symlink() or link.is_file():
-            link.unlink()
-        else:
-            shutil.rmtree(link)
+    if link.is_symlink() or link.is_file():
+        link.unlink()
+    elif link.exists():
+        shutil.rmtree(link)
     link.parent.mkdir(parents=True, exist_ok=True)
     try:
         link.symlink_to(os.path.relpath(target, relative_to), target_is_directory=target.is_dir())
-        return "linked"
     except (OSError, NotImplementedError):
-        if target.is_dir():
-            shutil.copytree(target, link)
-        else:
-            shutil.copy2(target, link)
-        return "copied"
+        shutil.copytree(target, link) if target.is_dir() else shutil.copy2(target, link)
 
 
 def _write_skill(project: Path) -> Path:
-    """Write SKILL.md for the installed version and expose it to every tool."""
+    """Write SKILL.md for the installed version and expose it to every agent tool."""
     real = project.joinpath(*_REAL_SKILL_PARENT, SKILL_NAME)
     real.mkdir(parents=True, exist_ok=True)
     skill_file = real / "SKILL.md"
     skill_file.write_text(_starter_skill(), encoding="utf-8")
-    for mirror in _MIRROR_DIRS:
-        _link_or_copy(project / mirror, project / _REAL_SKILL_PARENT[0], relative_to=project)
+    _link_or_copy(project / "_agents", project / _REAL_SKILL_PARENT[0], relative_to=project)
     claude = project / ".claude" / "skills" / SKILL_NAME
     _link_or_copy(claude, real, relative_to=claude.parent)
     return skill_file
 
 
 def _skills(directory: Path, refresh: bool) -> int:
+    """Report, or rewrite, the project Skill for the installed version."""
     project = directory.resolve()
     if not project.is_dir():
         raise ValueError(f"not a directory: {project}")
     skill_file = project.joinpath(*_REAL_SKILL_PARENT, SKILL_NAME, "SKILL.md")
     if refresh:
-        written = _write_skill(project)
-        print(f"skill={written}")
+        print(f"skill={_write_skill(project)}")
         print(f"written_for=trade-learn {__version__}")
         return 0
     if not skill_file.is_file():
         print(f"skill=not found under {project}")
         print("run tradelearn skills --refresh to write it")
         return 1
-    first = skill_file.read_text(encoding="utf-8").splitlines()
-    stamped = next((ln for ln in first if ln.startswith("Target package: trade-learn ")), "")
+    stamped = next(
+        (
+            line
+            for line in skill_file.read_text(encoding="utf-8").splitlines()
+            if line.startswith("Target package: trade-learn ")
+        ),
+        "",
+    )
     recorded = stamped.split()[3].rstrip(".") if stamped else "unknown"
     print(f"skill={skill_file}")
     print(f"written_for=trade-learn {recorded}")
@@ -220,9 +218,9 @@ def _starter_strategy() -> str:
 def _starter_skill() -> str:
     """Return the published research Skill, stamped with the installed version.
 
-    The body lives in skill_template.md so the file shipped in the wheel, the
-    copy published for download at .agents/skills/tradelearn-research, and the
-    copy written into a new project are all the same text.
+    The body lives in skill_template.md so that the copy published for download
+    at .agents/skills/tradelearn-research, the copy shipped inside the wheel and
+    the copy written into a new project are all the same text.
     """
     template = (Path(__file__).parent / "skill_template.md").read_text(encoding="utf-8")
     return _VERSION_LINE.sub(
