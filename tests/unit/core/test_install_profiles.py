@@ -53,5 +53,6 @@ def test_symbolic_versions_match_the_real_python_boundary():
         # Python 3.11+ is the floor, so gplearn is pinned once without a version marker.
         for python in ('3.11', '3.14'):
             selected = [str(value.specifier) for value in symbolic
-                        if value.marker is None or value.marker.evaluate({'python_version': python})]
+                        if value.marker is None
+                        or value.marker.evaluate({'python_version': python})]
             assert selected == ['==0.4.3']
