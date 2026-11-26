@@ -8,6 +8,7 @@ factor returns, covariance, and specific risk when those data are available.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -161,6 +162,85 @@ class PerformanceAttribution:
         )
         exposure_summary.index.name = "factor"
         return summary, exposure_summary
+
+    def plot(self):
+        """Return a Bokeh column of attribution charts.
+
+        Mirrors FactorAnalyzer.plot(): every chart is built from the already
+        computed frames, and an empty input yields an empty layout instead of
+        a placeholder series.
+        """
+        from bokeh.layouts import column as bk_column
+
+        from tradelearn.report import charts
+
+        items = []
+        exposures = self.exposures()
+        if not exposures.empty and not exposures.dropna(how="all").empty:
+            items.append(charts.attribution_exposures(exposures))
+        frame = self.attribution()
+        factor_columns = [
+            name
+            for name in frame.columns
+            if name not in ("common_returns", "specific_returns", "total_returns")
+        ]
+        if factor_columns and not frame.empty:
+            items.append(charts.attribution_cumulative(frame.loc[:, factor_columns]))
+        if not frame.empty:
+            items.append(charts.attribution_common_specific(frame))
+        _, exposure_summary = self.summary()
+        if not exposure_summary.empty:
+            items.append(charts.attribution_summary_bar(exposure_summary))
+        return bk_column(*items, sizing_mode="stretch_width")
+
+    def to_analysis(self, *, include_figures: bool = False) -> dict:
+        """Compute the attribution tables for the common report renderer."""
+        from tradelearn.factor.analyzer import _identity_table
+
+        frame = self.attribution()
+        exposures = self.exposures()
+        summary, exposure_summary = self.summary()
+        tables = {
+            "Attribution Summary": pd.DataFrame([summary]),
+            "Factor Exposures": exposures,
+            "Return Attribution": frame,
+            "Exposure Summary": exposure_summary,
+        }
+        result = {
+            "title": "TradeLearn Performance Attribution",
+            "tables": {name: _identity_table(table) for name, table in tables.items()},
+            "metrics": {
+                name: {
+                    "value": value if np.isfinite(value) else None,
+                    "unit": "ratio",
+                    "reason": "" if np.isfinite(value) else "not_computable_for_sample",
+                }
+                for name, value in summary.items()
+            },
+            "metadata": {
+                "evaluation": "return_attribution",
+                "factors": list(exposure_summary.index),
+                "observations": int(len(frame)),
+                "positions_in_dollars": bool(self.pos_in_dollars),
+            },
+            "figures": {},
+        }
+        if include_figures:
+            result["figures"] = {"Attribution charts": self.plot()}
+        return result
+
+    def html(self, path: str) -> Path:
+        """Compatibility entry routed to the common renderer."""
+        return self.report(path, format="html")
+
+    def report(self, path: str, format: str | None = None) -> Path:
+        """Render the attribution through the shared Reporter."""
+        from tradelearn.report import Reporter
+        from tradelearn.research._analysis_snapshot import wants_figures
+
+        return Reporter.from_analysis(
+            self.to_analysis(include_figures=wants_figures(path, format))
+        ).report(path, format=format)
 
 
 def _coerce_series(values: pd.Series | dict[str, float], *, name: str) -> pd.Series:

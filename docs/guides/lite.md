@@ -18,7 +18,7 @@ class Cross(tl.Strategy):
 result = tl.Backtest(bars, Cross, cash=100_000).run(period=20)
 ```
 
-`tl.Indicator is tradelearn.engine.Indicator`。简单表达式在init定义后随事件推进；复杂状态可以继承同一个Indicator。旧`I`任意向量/预计算包装及Lite独立IndicatorProxy已退出，现成来源指标直接调用；普通Pandas研究仍在Research层显式执行。init没有未来Bar；运行时只读已交付前缀。`addminperiod(n)`为共同暖机入口，旧start_on_bar(n)迁为addminperiod(n+1)。
+`tl.Indicator is tradelearn.engine.Indicator`。简单表达式在init定义后随事件推进；复杂状态可以继承同一个Indicator。旧`I`任意向量/预计算包装及Lite独立IndicatorProxy已退出，现成来源指标直接调用；普通Pandas研究仍在Research层显式执行。init没有未来Bar；运行时只读已交付前缀。Lite Strategy的`addminperiod(n)`显式增加便利暖机，旧start_on_bar(n)迁为addminperiod(n+1)。Engine按固定BT的数据/指标最小周期决定资格；直接Strategy.addminperiod仅作用自有线，不作为全局暖机开关。共同Indicator自身的addminperiod语义保持。
 
 `self.window(size=n)`返回当前feed时间索引OHLCV快照，attrs保symbol；`data=self.datas`返回(timestamp,symbol)面板。`ago=-1`排除当前Bar，拒绝正ago、非法size和未来数据。历史不足返回已有行；快照修改不影响feed，不补Bar/填值/联网。实现唯一委托[共同窗口](research.md)。
 

@@ -40,11 +40,10 @@ def _infer_periods(returns: Any, fallback: int = 252) -> int:
     """Infer periods-per-year from the return index sampling rate.
 
     Annualisation needs the number of observations in a year. Assuming 252
-    silently treats every bar as a trading day, so a minute-bar backtest was
-    annualised about 1,400x too small: a -0.19% run over three days reported
-    -0.01% a year. Counting observations against the calendar span they cover
-    works for daily and intraday data alike and needs no assumption about
-    session length.
+    silently treats every bar as a trading day, so a minute-bar backtest is
+    annualised about 1,400x too small. Counting observations against the
+    calendar span they cover works for daily and intraday data alike and needs
+    no assumption about session length.
     """
     try:
         index = getattr(returns, "index", None)
@@ -54,7 +53,7 @@ def _infer_periods(returns: Any, fallback: int = 252) -> int:
         span = (values[-1] - values[0]).total_seconds()
         if not np.isfinite(span) or span <= 0:
             return fallback
-        step = float(np.median(np.diff(values.asi8))) / 1e9
+        step = float(np.median(np.diff(values.asi8))) / 1e9 if len(values) > 1 else 0.0
         if not np.isfinite(step) or step <= 0 or step >= 24 * 3600:
             # Daily and slower series keep the 252 trading-day convention: a
             # business-day index spans fewer calendar days than it has bars, so
@@ -66,6 +65,7 @@ def _infer_periods(returns: Any, fallback: int = 252) -> int:
         return int(round(per_year))
     except (TypeError, ValueError):
         return fallback
+
 
 
 class Reporter:

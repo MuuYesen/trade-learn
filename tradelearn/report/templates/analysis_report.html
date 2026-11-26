@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>{{ title }}</title>
+  {{ bokeh_resources | safe }}
+  {% include "_report_style.html" %}
+</head>
+
+<body>
+  <main class="shell">
+    <header>
+      <div class="report-header">
+        <div>
+          <p class="eyebrow">TradeLearn Report</p>
+          <h1>{{ title }}</h1>
+        </div>
+        <div class="meta-grid">
+          {% for item in metadata_items %}
+          <div class="meta-item">
+            <div class="meta-label">{{ item.label }}</div>
+            <div class="meta-value">{{ item.value }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </header>
+
+    <div class="report-layout">
+      {% if metric_cards %}
+      <section class="compact-section">
+        <h2>Metrics</h2>
+        <p class="section-note">Values computed by the analysis; units and missing reasons are carried as given.</p>
+        {{ metric_cards | safe }}
+      </section>
+      {% endif %}
+
+      {% for table in tables %}
+      <section class="compact-section">
+        <h2>{{ table.name }}</h2>
+        {{ table.html | safe }}
+      </section>
+      {% endfor %}
+
+      {% for figure in figures %}
+      <section class="chart">
+        <h2>{{ figure.name }}</h2>
+        {{ figure.html | safe }}
+      </section>
+      {% endfor %}
+
+      {{ extra_sections | safe }}
+    </div>
+  </main>
+  {{ figure_scripts | safe }}
+</body>
+
+</html>

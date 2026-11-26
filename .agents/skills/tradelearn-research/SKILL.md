@@ -3,7 +3,7 @@ name: tradelearn-research
 description: Use for local TradeLearn research notebooks, reports and experiment logging.
 ---
 
-Target package: trade-learn 0.3.5. Check the installed version before using this reference.
+Target package: trade-learn 0.3.6. Check the installed version before using this reference.
 Keep Bars/features as Pandas objects. Split time and purge using actual label_end before fitting.
 Define components before execution; explicitly register them and record actual calls in ResearchRun:
 

@@ -2,7 +2,7 @@ from tests.unit.backtest._engine_config import feed as _as_feed
 """Installed adapter binding reuses the native driver, without polling."""
 import pytest
 pytest.importorskip('nautilus_trader')
-from tradelearn_runtime import NautilusStore
+from tradelearn.engine.stores import NautilusStore
 from nautilus_trader.live import LiveNodeConfig
 from nautilus_trader.config import DataClientConfig, ExecutionClientConfig
 from nautilus_trader.live.clients import DataClientFactory, ExecutionClientFactory

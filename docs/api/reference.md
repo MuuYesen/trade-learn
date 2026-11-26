@@ -21,17 +21,17 @@
 | 模块 | 用途 | 常用入口 | 完整 Reference |
 |---|---|---|---|
 | `tradelearn.lite` | Lightweight Tradelearn 1.x style API. | `Backtest`, `Strategy`, `Indicator`, `TargetOrderConstraints` | [Lite](reference/lite.md) |
-| `tradelearn.engine` | Backtrader-style advanced event-driven API. | `Cerebro`, `OptReturn`, `CommInfoBase`, `LineSeries`, `Order`, `Position`, `Sizer`, `Timer`, `timer`, `SESSION_START`, ... (+34) | [Engine](reference/engine.md) |
+| `tradelearn.engine` | Backtrader-style advanced event-driven API. | `Cerebro`, `OptReturn`, `CommInfoBase`, `LineSeries`, `Order`, `Position`, `Sizer`, `Strategy`, `Trade`, `Indicator`, ... (+30) | [Engine](reference/engine.md) |
 | `tradelearn.data` | OHLCV data providers, caching, and resampling utilities. | `BarsCache`, `CacheEntry`, `CacheExpiredError`, `CacheMissError`, `DataExplorer`, `DataProvider`, `DuckDBBarsBackend`, `TdxProvider`, `TushareProvider`, `TradingViewProvider`, ... (+2) | [Data](reference/data.md) |
 | `tradelearn.indicators` | Qualified TA-Lib, TDX and TradingView indicators with stateful execution. | `DEFAULT_SOURCE`, `FunctionIndicator`, `Indicator`, `IndicatorState` | [Indicators](reference/indicators.md) |
 | `tradelearn.metrics` | Return, risk, drawdown, trade, and factor evaluation metrics. | `cash_flow_return`, `alpha`, `annual_return`, `autocorrelation`, `avg_loss`, `avg_win`, `beta`, `calmar`, `cum_returns`, `cvar`, ... (+25) | [Metrics](reference/metrics.md) |
-| `tradelearn.factor` | Alpha formulas and factor analysis tools. | `FactorAnalyzer`, `MultiFactorAnalyzer`, `MultiPeriodFactorAnalyzer`, `FactorRiskModel`, `PerformanceAttribution`, `alpha101`, `alpha191`, `clean_factor_and_forward_returns` | [Factor](reference/factor.md) |
+| `tradelearn.factor` | Alpha formulas and factor analysis tools. | `FactorAnalyzer`, `alphas` | [Factor](reference/factor.md) |
 | `tradelearn.report` | HTML, Excel, and research report export utilities. | `Reporter`, `ReportContext`, `ReportSection` | [Report](reference/report.md) |
 | `tradelearn.research` | Research workflow tracking, preprocessing, and portfolio construction tools. | `Pipeline`, `FeatureBuilder`, `FeatureSet`, `ModelScorer`, `ResearchResult`, `ResearchRun`, `ResearchStep`, `Transformer`, `current_run`, `derive`, ... (+13) | [Research](reference/research.md) |
 | `tradelearn.integrations.search` | Explicit parameter grid execution outside the Engine and core runtime. | `grid_search`, `GridSearchResult` | [Search](reference/search.md) |
 | `tradelearn.integrations.mlflow` | Explicit post-run recording of completed results; native Run ownership. | `log`, `LogResult` | [MLflow](reference/mlflow.md) |
 | `tradelearn.engine.stores` | Lazy public Store namespace; Cerebro owns the single official Nautilus driver. | `NautilusStore` | [Stores](reference/stores.md) |
-| `tradelearn.ml` | Machine learning, model registry, and feature selection utilities. | `CausalSelector`, `ModelLoader`, `ModelRegistry`, `model_uri`, `save_bundle`, `load_bundle`, `predict_bundle` | [ML](reference/ml.md) |
+| `tradelearn.ml` | Machine learning, model registry, and feature selection utilities. | `CausalSelector`, `ModelLoader`, `ModelRegistry`, `model_uri`, `save_bundle`, `load_bundle` | [ML](reference/ml.md) |
 
 ## 按模块列出公开符号
 
@@ -41,7 +41,7 @@
 
 ### [`tradelearn.engine`](reference/engine.md)
 
-`Cerebro`, `OptReturn`, `CommInfoBase`, `LineSeries`, `Order`, `Position`, `Sizer`, `Timer`, `timer`, `SESSION_START`, `SESSION_END`, `Strategy`, `Trade`, `Indicator`, `TimeFrame`, `Analyzer`, `feeds`, `indicators`, `ind`, `analyzers`, `observers`, `sizers`, `stores`, `Observer`, `obs`, `CommissionInfo`, `Signal`, `SignalStrategy`, `SIGNAL_NONE`, `SIGNAL_LONGSHORT`, `SIGNAL_LONG`, `SIGNAL_LONG_INV`, `SIGNAL_LONG_ANY`, `SIGNAL_SHORT`, `SIGNAL_SHORT_INV`, `SIGNAL_SHORT_ANY`, `SIGNAL_LONGEXIT`, `SIGNAL_LONGEXIT_INV`, `SIGNAL_LONGEXIT_ANY`, `SIGNAL_SHORTEXIT`, ... (+4)
+`Cerebro`, `OptReturn`, `CommInfoBase`, `LineSeries`, `Order`, `Position`, `Sizer`, `Strategy`, `Trade`, `Indicator`, `TimeFrame`, `Analyzer`, `feeds`, `indicators`, `ind`, `analyzers`, `observers`, `sizers`, `stores`, `Observer`, `obs`, `CommissionInfo`, `Signal`, `SignalStrategy`, `SIGNAL_NONE`, `SIGNAL_LONGSHORT`, `SIGNAL_LONG`, `SIGNAL_LONG_INV`, `SIGNAL_LONG_ANY`, `SIGNAL_SHORT`, `SIGNAL_SHORT_INV`, `SIGNAL_SHORT_ANY`, `SIGNAL_LONGEXIT`, `SIGNAL_LONGEXIT_INV`, `SIGNAL_LONGEXIT_ANY`, `SIGNAL_SHORTEXIT`, `SIGNAL_SHORTEXIT_INV`, `SIGNAL_SHORTEXIT_ANY`, `num2date`, `date2num`
 
 ### [`tradelearn.data`](reference/data.md)
 
@@ -57,7 +57,7 @@
 
 ### [`tradelearn.factor`](reference/factor.md)
 
-`FactorAnalyzer`, `MultiFactorAnalyzer`, `MultiPeriodFactorAnalyzer`, `FactorRiskModel`, `PerformanceAttribution`, `alpha101`, `alpha191`, `clean_factor_and_forward_returns`
+`FactorAnalyzer`, `alphas`
 
 ### [`tradelearn.report`](reference/report.md)
 
@@ -81,4 +81,4 @@
 
 ### [`tradelearn.ml`](reference/ml.md)
 
-`CausalSelector`, `ModelLoader`, `ModelRegistry`, `model_uri`, `save_bundle`, `load_bundle`, `predict_bundle`
+`CausalSelector`, `ModelLoader`, `ModelRegistry`, `model_uri`, `save_bundle`, `load_bundle`

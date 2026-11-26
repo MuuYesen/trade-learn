@@ -2,7 +2,7 @@
 
 本页对应未发布源码候选。Engine以固定Backtrader源码为对照；实际已支持和明确拒绝的能力见[Engine指南](engine.md)。Lite共用Runtime、Lines、指标状态与订单事实，保留便利外观。
 
-实时使用`from tradelearn_runtime import NautilusStore`，沿`getdata/getbroker`组装Cerebro，通常`engine.run()`；额外监控参数使用`store.run(engine, monitor=...)`。只有一个官方NA宿主，配置与能力边界见[执行接入指南](live.md)。
+实时使用`from tradelearn.engine.stores import NautilusStore`，沿`getdata/getbroker`组装Cerebro，唯一启动入口为`engine.run()`；监控使用`engine.run(monitor=...)`（源码候选，正式032保持历史字节）。只有一个官方NA宿主，配置与能力边界见[执行接入指南](live.md)。
 
 ## Lite / Engine 总览
 
@@ -33,7 +33,7 @@ for symbol, frame in panel.groupby(level="symbol"):
 
 ## 暖机与窗口
 
-在初始化中建立指标依赖。共享Runtime按各依赖minimum_period调用prenext、nextstart、next。Engine多Feed恰处最小周期边界时可连续调用nextstart，符合固定BT；Lite首次可运行回调只调一次nextstart。Lite可用`addminperiod(20)`显式要求20条数据；旧`start_on_bar(n)`对应n+1条。
+在初始化中建立指标依赖。共享Runtime按各依赖minimum_period调用prenext、nextstart、next。Engine多Feed恰处最小周期边界时可连续调用nextstart，符合固定BT；Lite首次可运行回调只调一次nextstart。Lite可用`addminperiod(20)`显式要求20条数据；旧`start_on_bar(n)`对应n+1条。Engine直接`Strategy.addminperiod`不覆盖数据/指标决定的回调资格，与固定BT一致；需要指标暖机时由Indicator声明，Lite便利开关不外推为Engine语义。
 
 Lite的`self.window(20)`返回当前已交付前缀的独立快照，单feed为时间索引，多feed为timestamp/symbol面板。Engine窗口使用独立`tradelearn.backtest.history.window(strategy, size=20)`，不扩展BT策略基类。正ago、未来数据和无效窗口参数拒绝；详细语义见[Lite指南](lite.md)。
 

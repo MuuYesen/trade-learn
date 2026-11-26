@@ -20,8 +20,16 @@ def test_html_template_exists() -> None:
 
 
 def test_html_template_uses_modern_responsive_report_layout() -> None:
-    """HTML template keeps summary metrics readable in narrow report columns."""
-    text = files("tradelearn.report").joinpath("templates/tear_sheet.html").read_text()
+    """HTML template keeps summary metrics readable in narrow report columns.
+
+    The stylesheet lives in the shared ``_report_style.html`` partial so the
+    analysis reports render with the same chrome; assert on the template plus
+    what it includes rather than on one file's raw text.
+    """
+    templates = files("tradelearn.report").joinpath("templates")
+    text = templates.joinpath("tear_sheet.html").read_text()
+    assert '{% include "_report_style.html" %}' in text
+    text += templates.joinpath("_report_style.html").read_text()
 
     assert "kpi-grid" in text
     assert "report-layout" in text

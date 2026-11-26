@@ -5,7 +5,9 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
-## [0.3.6] - 2026-11-15（发行准备，尚未公开发布）
+## [0.3.6] - 2026-11-15
+
+正式源码固定`6f50f6f68a50aaa21460efa2166bb29d2bc69ca0`（`v0.3.6`）；精确CI 20/20与原四平台/native-indicators/OIDC发行成功，PyPI/GitHub全部17文件SHA一致。公网Mac CP313独立安装与诊断/原记录器smoke通过。此为发布后状态同步，不移动tag或重写已发字节；私有IC镜像和SDK额度恢复候选不在本次发行内。
 
 - NautilusStore为官方及独立适配器提供共同原生诊断默认：INFO控制台和有界文件；可配DEBUG、路径、大小、备份数，显式关闭默认文件不影响monitor。
 - 尊重官方LoggerConfig及Node已有非默认配置；cTrader私有运行层复用公共入口，保持部署路径和轮转。普通回测不导入NA或创建日志。

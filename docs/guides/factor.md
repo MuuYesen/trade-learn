@@ -21,6 +21,10 @@ fa = FactorAnalyzer.from_clean_factor_data(clean)
 fa.report("factor_report.html")
 ```
 
+直接调用 `FactorAnalyzer(factor, prices=prices, return_period=h)` 时，分析器按交易日期排列各标的的价格，再将结果对齐原索引。起点或终点价格缺失时，该笔收益为空。分析器用同一标的第 `h` 根后续价格计算 `P[t+h] / P[t] - 1`，据此计算当期截面的 IC 和 Rank IC。每个标的最后 `h` 行缺少未来价格，无法形成该期限的标签。
+
+传入 `forward_returns=` 时，分析器直接使用调用者提供的收益序列。比较多个期限时应为每个期限提供对应的收益，或使用上面的清洗入口自动生成 `forward_return_1`、`forward_return_5` 等列。`return_period` 还决定累计收益计算的非重叠采样间隔，`periods` 在单个 `FactorAnalyzer` 上表示年化期数。
+
 ## 单因子与多因子
 
 - 单因子会进入多周期分析。

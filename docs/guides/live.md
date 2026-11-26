@@ -85,9 +85,9 @@ engine.run()
 
 <a id="native-diagnostics"></a>
 
-### 通用运行诊断日志（2026-11-15源码，尚未发行）
+### 通用运行诊断日志（0.3.6，2026-11-15正式发行）
 
-0.3.6本地Mac arm64 CP313 wheel与标准sdist已构建，实际离线安装、版本/native/RECORD、诊断轮转和原记录器smoke通过；产物位于`dist/0.3.6-local-mac/`。其他平台、本版本公网PyPI/GitHub发布及私有IC运行镜像尚未完成，不以本机资格代替。
+0.3.6已通过原精确提交20项CI、四平台构建和Linux/Mac原生指标资格，并在[PyPI](https://pypi.org/project/trade-learn/0.3.6/)及[GitHub Release](https://github.com/MuuYesen/trade-learn/releases/tag/v0.3.6)正式发行，源码固定`6f50f6f68a50aaa21460efa2166bb29d2bc69ca0`。公开16个wheel与sdist共17文件的两站SHA、源码/RECORD闭包已核；公网Mac arm64 CP313包已实际独立安装验证6项诊断、原Recorder并发关闭/崩溃恢复及回测可选依赖边界。其他平台按正式构建与原资格报告，不外推全部NA venue实盘；私有IC运行镜像尚未因此切换。已发tag和产物保持冻结，本段为发布后状态同步。
 
 所有使用NautilusStore的官方NA适配器和独立适配器共用原生LoggerConfig；
 默认INFO控制台及工作目录下`logs`文件，每文件10MiB、5份备份加当前文件，

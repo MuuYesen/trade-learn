@@ -76,50 +76,114 @@ def snapshot(result: Any) -> dict[str, Any]:
     }
 
 
+DISPLAY_DIGITS = 6
+
+
+def _display(value: Any) -> tuple[str, str]:
+    """Return (display text, exact text) for one cell.
+
+    The HTML is for reading; Excel stays the lossless channel. The full
+    repr is still carried on the cell so no precision is lost on screen.
+    """
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return "NA", ""
+    if isinstance(value, float):
+        exact = format(value, ".17g")
+        shown = f"{value:.{DISPLAY_DIGITS}f}" if abs(value) < 1e9 else format(value, ".6g")
+        shown = shown.rstrip("0").rstrip(".") if "." in shown else shown
+        return (shown or "0"), ("" if shown == exact else exact)
+    if isinstance(value, pd.Timestamp):
+        text = str(value.tz_convert(None) if value.tzinfo is not None else value).split(".")[0]
+        return text, ""
+    return str(value), ""
+
+
+def _cell(value: Any) -> str:
+    shown, exact = _display(value)
+    title = f' title="{escape(exact)}"' if exact else ""
+    return f"<td{title}>{escape(shown)}</td>"
+
+
+def _table_html(frame: pd.DataFrame) -> str:
+    """Render a frame with the shared report table styling."""
+    table = pd.DataFrame(frame)
+    if table.empty:
+        return '<div class="table-scroll"><table><tbody></tbody></table></div>'
+    headers = "".join(f"<th>{escape(str(column))}</th>" for column in table.columns)
+    rows = "".join(
+        "<tr>" + "".join(_cell(value) for value in row) + "</tr>"
+        for row in table.itertuples(index=False, name=None)
+    )
+    return (
+        f'<div class="table-scroll"><table><thead><tr>{headers}</tr></thead>'
+        f"<tbody>{rows}</tbody></table></div>"
+    )
+
+
+def _metric_cards(metrics: Any) -> str:
+    """Render analysis metrics as the shared KPI cards."""
+    frame = pd.DataFrame(metrics)
+    if frame.empty:
+        return ""
+    cards = []
+    for row in frame.itertuples(index=False, name=None):
+        values = dict(zip(frame.columns, row, strict=False))
+        shown, exact = _display(values.get("value"))
+        if values.get("value") is None or shown == "NA":
+            shown = "not_calculable"
+        note = " · ".join(
+            str(values[key]) for key in ("unit", "reason") if values.get(key) not in (None, "")
+        )
+        title = f' title="{escape(exact)}"' if exact else ""
+        cards.append(
+            '<div class="kpi-card">'
+            f'<div class="kpi-label">{escape(str(values.get("name", "")))}</div>'
+            f'<div class="kpi-value"{title}>{escape(shown)}</div>'
+            + (f'<div class="kpi-delta">{escape(note)}</div>' if note else "")
+            + "</div>"
+        )
+    return f'<div class="kpi-grid">{"".join(cards)}</div>'
+
+
 def write_html(reporter: Any, path: str | Path, sections: Any = None) -> Path:
     """Write domain facts without executing their producer."""
+    from bokeh.embed import components
+    from bokeh.resources import INLINE
+
+    from tradelearn.report.html import _template_environment
+
     result = reporter._analysis
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
-    parts = [
-        "<!doctype html><html><head><meta charset='utf-8'><title>",
-        escape(result["title"]),
-        "</title></head><body><h1>",
-        escape(result["title"]),
-        "</h1>",
-    ]
-    tables = {
-        "metadata": pd.DataFrame(
-            [{"key": key, "value": value} for key, value in result["metadata"].items()]
-        ),
-        "metrics": result["metrics"],
-        **result["tables"],
-    }
-    for name, table in tables.items():
-        parts.extend(
-            [
-                "<h2>",
-                escape(name),
-                "</h2>",
-                table.to_html(
-                    escape=True, na_rep="NA", float_format=lambda value: format(value, ".17g")
-                ),
-            ]
-        )
-    figures = {name: figure for name, figure in result["figures"].items() if figure is not None}
-    for name, figure in result["figures"].items():
-        if figure is None:
-            parts.extend(["<h2>", escape(str(name)), "</h2><p>Not provided</p>"])
-    if figures:
-        from bokeh.embed import components
-        from bokeh.resources import INLINE
 
-        parts.append(INLINE.render())
-        for name, figure in figures.items():
-            script, div = components(figure)
-            parts.extend(["<h2>", escape(str(name)), "</h2>", div, script])
-    parts.extend([render_html_sections(sections, build_context(reporter)), "</body></html>"])
-    output.write_text("".join(parts), encoding="utf-8")
+    figures = {name: item for name, item in result["figures"].items() if item is not None}
+    rendered: list[dict[str, str]] = []
+    scripts: list[str] = []
+    for name, item in result["figures"].items():
+        if item is None:
+            rendered.append({"name": str(name), "html": "<p>Not provided</p>"})
+    for name, item in figures.items():
+        script, div = components(item)
+        rendered.append({"name": str(name), "html": div})
+        scripts.append(script)
+
+    template = _template_environment().get_template("analysis_report.html")
+    content = template.render(
+        title=result["title"],
+        metadata_items=[
+            {"label": str(key), "value": str(value)} for key, value in result["metadata"].items()
+        ],
+        metric_cards=_metric_cards(result["metrics"]),
+        tables=[
+            {"name": str(name), "html": _table_html(table)}
+            for name, table in result["tables"].items()
+        ],
+        figures=rendered,
+        extra_sections=render_html_sections(sections, build_context(reporter)),
+        bokeh_resources=INLINE.render() if figures else "",
+        figure_scripts="".join(scripts),
+    )
+    output.write_text(content, encoding="utf-8")
     return output
 
 
