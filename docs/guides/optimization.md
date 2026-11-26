@@ -81,3 +81,13 @@ tracking = log(result, uri="sqlite:///research.db")
 ```
 
 `ResearchRun` 的 `search.trial` 步骤保全部记录。显式 MLflow `log()` 将完整脱敏记录写为 `search/trials.json`（凭据字段剔除），沿既有 Run 复用／冲突规则；独立网格的 `mlflow={...}` 同样记录完成、失败及取消候选。追踪写入状态与试验本身状态分别保留；追踪错误不覆盖已发生的原试验异常。默认不创建 MLflow Run、不联网、不上传原行情。
+
+## Optuna API签名
+
+::: tradelearn.optimize.OptunaSearch
+    options:
+      show_source: false
+
+::: tradelearn.optimize.OptunaBacktestSearch
+    options:
+      show_source: false

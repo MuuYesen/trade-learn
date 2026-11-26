@@ -5,24 +5,24 @@
 直接安装：
 
 ```bash
-pip install trade-learn
+pip install trade-learn==0.3.5
 ```
 
 下面的快速示例使用 TradingView 数据源、内置 TDX 指标及报告；如果要直接运行示例，请安装对应 extras：
 
 ```bash
-pip install ".[research]"  # 当前源码根目录；需要Rust/maturin，PyPI 0.2.9保留原extras
+pip install "trade-learn[research]==0.3.5"
 ```
 
 推荐使用虚拟环境（如 `uv`）：
 
 ```bash
-uv pip install trade-learn
+uv pip install trade-learn==0.3.5
 # 或者克隆源码开发模式
 uv pip install ".[research]"
 ```
 
-当前通用 `uv.lock` 因尚未公开的 tl-store 0.2.1a2 无法更新；选定 research 组安装与完整全组锁定是不同验收，本轮不将旧锁文件视为新 profile 的冻结结果。
+0.3.5的统一`uv.lock`已通过检查，Store0.2.1a8已公开。PyPI wheel无需本机Rust工具链；只有源码开发才执行下面的maturin步骤。官方NA/Store组合需要CP313/314，见[执行接入](guides/live.md)。
 
 如果需要开发 Rust 扩展：
 
@@ -81,15 +81,14 @@ stats.config
 ```python
 import tradelearn.engine as bt
 from tradelearn.data import TradingViewProvider
-from tradelearn.indicators import tdx
 
 
 class SmaCross(bt.Strategy):
     params = (("fast", 10), ("slow", 20))
 
     def __init__(self):
-        self.fast = tdx.MA(self.data.close, N=self.p.fast)
-        self.slow = tdx.MA(self.data.close, N=self.p.slow)
+        self.fast = bt.talib.SMA(self.data.close, timeperiod=self.p.fast)
+        self.slow = bt.talib.SMA(self.data.close, timeperiod=self.p.slow)
 
     def next(self):
         if self.fast[0] != self.fast[0] or self.slow[0] != self.slow[0]:
@@ -113,7 +112,6 @@ cerebro.addstrategy(SmaCross)
 [strategy] = cerebro.run()
 
 print(strategy.stats.summary)
-cerebro.plot()
 from tradelearn.report import Reporter
 Reporter(strategy.stats).report("report.html")
 ```
@@ -132,14 +130,15 @@ stats.config
 
 ## 多标的数据
 
-Provider 可以直接返回 `MultiIndex(timestamp, symbol)` 的 panel。Engine 的 `adddata()` 会自动按 symbol 拆分：
+Provider 可以直接返回 `MultiIndex(timestamp, symbol)` 的 panel。Engine 按标的显式装配原生 Feed：
 
 ```python
 symbols = ["NASDAQ:AAPL", "NASDAQ:MSFT", "NASDAQ:GOOG"]
 bars = provider.history_ohlc(symbols, start="2023-01-01", end="2024-01-01")
 
 cerebro = bt.Cerebro()
-cerebro.adddata(bars)  # 自动按 symbol 拆成多个 feed
+for symbol in bars.index.get_level_values("symbol").unique():
+    cerebro.adddata(bt.feeds.PandasData(dataname=bars.xs(symbol, level="symbol")), name=symbol)
 ```
 
 Lite 同样可以直接接收 panel：
@@ -174,3 +173,5 @@ tdx.MA(self.data.close, N=20)       # Engine
 | 理解 Stats 返回对象 | [Stats 结果对象](concepts/stats.md) |
 | 做因子和机器学习研究 | [研究指南](guides/research.md) |
 | 查看性能和对齐结果 | [性能基线](benchmarks.md) |
+
+搜索、完整trial记录与有效配置隔离见[优化指南](guides/optimization.md)；已拟合bundle推理和当前评分边界见[研究指南](guides/research.md)。示例中的Provider请求需要相应数据授权；也可直接使用[本地Dataset](guides/data.md)，框架不会为本地查询自动取数。

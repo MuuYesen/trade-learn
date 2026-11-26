@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/pypi/v/trade-learn?style=flat-square" alt="PyPI version">
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
   <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/source-0.3.1--candidate-blue?style=flat-square" alt="Source version">
+  <img src="https://img.shields.io/badge/release-0.3.5-blue?style=flat-square" alt="Source version">
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
@@ -86,24 +86,24 @@
 
 ## インストール
 
-`0.3.4`は[PyPI](https://pypi.org/project/trade-learn/0.3.4/)へ正式公開済みです。固定ソースは`v0.3.4`/`5af840c`、公開17ファイルのSHAとLinux fresh組合せを検証済みです。この文書修正は固定配布物と既存0.3.2を変更しません。
+正式版[0.3.5](https://pypi.org/project/trade-learn/0.3.5/)は公開済みです。固定ソースは`v0.3.5`/`250a0678`、16wheelとsdistの17ファイルを検証済みで、Linux fresh資格は569項目合格です。Mac公開wheelの実行コード/nativeは検証済み実物と同一です。[Releaseの範囲](https://github.com/MuuYesen/trade-learn/releases/tag/v0.3.5)を参照してください。旧配布物は変更しません。
 
 ```bash
-pip install trade-learn==0.3.4
+pip install trade-learn==0.3.5
 # 公式NA/cTraderにはCPython3.13または3.14が必要です。
-pip install "trade-learn[nautilus,tl-store]==0.3.4"
-pip install "trade-learn[research]==0.3.4"
+pip install "trade-learn[nautilus,tl-store]==0.3.5"
+pip install "trade-learn[research]==0.3.5"
 ```
 
 統一lockと必須CIは合格済みです。`[tl-store]`は公開`tl-store==0.2.1a8`、`[nautilus]`は公式`nautilus_trader==2.0.0rc7`に固定します。他のPython ABIではNAがmarkerで除外され、ブリッジは実行できません。CLIは`new/lab/doctor`とhelp/versionのみです。研究環境はJupyter AI Lite/SkillsとローカルMLflow記録を提供し、追加サービスを自動起動しません。
 
-実wheelはMac arm64/Windows AMD64/Linux x64のCP310–314、Linux ARM64のCP313を対象とします。Linux CP313+Storea8+NA2rc7のfreshインストールとMac CP313実物を検証済みです。Storeの他OSビルド、自然venue、KQのWindows未実装/LinuxARM未検証は区別します。
+実wheelはMac arm64/Windows AMD64/Linux x64のCP310–314、Linux ARM64のCP313を対象とします。Linux CP313+Storea8+NA2rc7のfreshインストールとMac CP312研究実物を検証済みです。Storeの他OSビルド、自然venue、KQのWindows未実装/LinuxARM未検証は区別します。
 
-公開入口は`bt.stores.NautilusStore`と通常の`bt.Strategy`、唯一の`cerebro.run(monitor=...)`です。内部runtime、SDK戦略基底クラス、公開`Store.run`は使用しません。monitorはendpointとAccessKey pairだけを受け取り、信頼できるbindingがなければ原本をローカルに保持します。[固定テンプレート](https://github.com/MuuYesen/trade-learn/blob/d202cc1ab0dfd25f3ada8b25eba3315a84a2e27c/examples/live/ctrader_monitor.py)と[0.3.4更新ログ](CHANGELOG.md)を参照してください。実Sender/アーカイブroundtripは別途未検証であり、配布完了を送信成功とは扱いません。cTrader a8の執行範囲は通常Market IOC/typed closeのみで、汎用NAの条件注文/注文グループ資格を外挿しません。
+公開入口は`bt.stores.NautilusStore`と通常の`bt.Strategy`、唯一の`cerebro.run(monitor=...)`です。内部runtime、SDK戦略基底クラス、公開`Store.run`は使用しません。monitorはendpointとAccessKey pairだけを受け取り、信頼できるbindingがなければ原本をローカルに保持します。[固定テンプレート](examples/live/ctrader_monitor.py)と[0.3.4更新ログ](CHANGELOG.md)を参照してください。実Sender/アーカイブroundtripは別途未検証であり、配布完了を送信成功とは扱いません。cTrader a8の執行範囲は通常Market IOC/typed closeのみで、汎用NAの条件注文/注文グループ資格を外挿しません。
 
 ## クイックスタート
 
-以下は指標とレポートを使用します。先に `.[research]` をインストールしてください。
+以下は指標とレポートを使用します。先に `trade-learn[research]==0.3.5` をインストールしてください。
 
 **Lite — 最短パス**（迅速な検証、教育、ターゲットウェイト戦略に最適）：
 
@@ -145,14 +145,13 @@ bt.report("report.html")
 ```python
 import tradelearn.engine as bt
 from tradelearn.data import TradingViewProvider
-from tradelearn.indicators import tdx
 
 class SmaCross(bt.Strategy):
     params = (("fast", 10), ("slow", 20))
 
     def __init__(self):
-        self.fast = tdx.MA(self.data.close, N=self.p.fast)
-        self.slow = tdx.MA(self.data.close, N=self.p.slow)
+        self.fast = bt.talib.SMA(self.data.close, timeperiod=self.p.fast)
+        self.slow = bt.talib.SMA(self.data.close, timeperiod=self.p.slow)
 
     def next(self):
         if not self.position and self.fast[0] > self.slow[0]:
@@ -173,7 +172,6 @@ cerebro.addstrategy(SmaCross)
 [strategy] = cerebro.run()
 print(strategy.stats.summary)
 
-cerebro.plot()
 from tradelearn.report import Reporter
 Reporter(strategy.stats).report("report.html")
 ```
@@ -293,4 +291,8 @@ tradelearn doctor
 
 ## お問い合わせ
 
-WeChat: 知守溪の收纳屋 · Email: muyes88@gmail.com
+[GitHub Issues](https://github.com/MuuYesen/trade-learn/issues)
+
+### 0.3.5の研究統合
+
+Engine optstrategy、Lite optimize、grid_search、任意Optunaは既存の戻り値を維持し、独立した履歴trial、有効設定、成功/失敗/取消記録を共有します。ResearchRunと明示的MLflowが記録を利用します。信頼したローカルbundleはschema/現在時点を検証してtransform/predictだけを実行し、再学習や過去スコアへのfallbackは行いません。Provider/cache/Dataset/feedの責務は分離し、暗黙の取得/修復は追加しません。[最適化](docs/guides/optimization.md)、[研究](docs/guides/research.md)、[データ](docs/guides/data.md)を参照してください。SDK APIv1は035を明示的に追加しただけで、Storea8/公式NAの執行範囲と現役consumerは別です。Windows/ARMのwheel/native-smokeを完全な公開research環境検証へ外挿しません。

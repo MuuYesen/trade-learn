@@ -6,7 +6,7 @@
 
 欢迎来到 **trade-learn** 官方文档。
 
-本手册对应 **0.2.9**。默认研究与外部 paper/live 共享策略协调，实际安装版本、平台支持和发行状态须另行核对。先阅读[架构与边界](concepts/architecture.md)，再按需选择研究或[外部执行接入](guides/live.md)。
+本手册对应正式 **0.3.5**，源码固定为`v0.3.5`/`250a0678`。历史研究与可选外部执行共用策略协调，执行仍由固定官方NA及适配器负责。平台与验证范围见[Release](https://github.com/MuuYesen/trade-learn/releases/tag/v0.3.5)。先阅读[架构与边界](concepts/architecture.md)，再按需选择研究或[外部执行接入](guides/live.md)。
 本手册说明研究回测、可选外部执行及日志接入；具体来源与生产使用需要单独验收。
 
 ---
@@ -46,7 +46,7 @@
 *   **[API 边界](concepts/api-boundary.md)**：公开 facade 与内部实现层的划分。
 *   **[Lite 入门](guides/lite.md)**：最简单的策略书写方式。
 *   **[Engine 指南](guides/engine.md)**：Backtrader 风格的高级策略控制。
-*   **[执行接入与 Store](guides/live.md)**：DefaultStore 扩展、官方 NA 配置、Cerebro 组装、生命周期及本地新增未发布边界。
+*   **[执行接入与 Store](guides/live.md)**：公开NautilusStore、官方NA配置、Cerebro组装、生命周期及适配器能力边界。
 *   **[指标生态](guides/indicators.md)**：支持 TDX、TradingView、TA-Lib 等口径。
 
 ### 2. 量化投研 (Research & ML)
@@ -64,7 +64,7 @@
 
 ## 社区与支持
 *   **GitHub**: [MuuYesen/trade-learn](https://github.com/MuuYesen/trade-learn)
-*   **联系作者**: muyes88@gmail.com
+*   **问题与建议**: [GitHub Issues](https://github.com/MuuYesen/trade-learn/issues)
 
 !!! note
     本文档持续随项目迭代更新。如果您发现任何描述不清或示例错误，欢迎在 GitHub 上提交 Issue 或 PR。

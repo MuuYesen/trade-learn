@@ -34,7 +34,7 @@ theme:
     - search.share
   icon:
     repo: fontawesome/brands/github-alt
-edit_uri: edit/main/docs
+edit_uri: edit/master/docs
 copyright: Copyright &copy; 2026 trade-learn
 extra:
   social:

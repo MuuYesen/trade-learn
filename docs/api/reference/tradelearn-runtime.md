@@ -1,17 +1,5 @@
-# Runtime Reference
+# Store公开入口
 
-Independent official Nautilus execution host and Store integration.
+用户通过`from tradelearn import engine as bt`与`bt.stores.NautilusStore`装配，唯一启动入口为`cerebro.run()`。`tradelearn_runtime`属于内部宿主，不是用户接线入口。
 
-[Back to API Reference](../reference.md)
-
-::: tradelearn_runtime
-    options:
-      show_source: false
-      show_root_heading: false
-      show_root_toc_entry: false
-      show_root_full_path: false
-      show_object_full_path: false
-      show_bases: false
-      show_signature_annotations: true
-      separate_signature: true
-      members_order: source
+参见[Stores API](stores.md)、[执行指南](../../guides/live.md)与[API索引](../reference.md)。
