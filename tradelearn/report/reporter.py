@@ -54,7 +54,7 @@ def _infer_periods(returns: Any, fallback: int = 252) -> int:
         span = (values[-1] - values[0]).total_seconds()
         if not np.isfinite(span) or span <= 0:
             return fallback
-        step = float(np.median(np.diff(values.asi8))) / 1e9
+        step = float(np.median(np.diff(values.as_unit("ns").asi8))) / 1e9
         if not np.isfinite(step) or step <= 0 or step >= 24 * 3600:
             # Daily and slower series keep the 252 trading-day convention: a
             # business-day index spans fewer calendar days than it has bars, so
