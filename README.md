@@ -15,7 +15,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/pypi/v/trade-learn?style=flat-square" alt="PyPI version">
-  <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square" alt="Python versions">
   <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
   <img src="https://img.shields.io/badge/source-0.3.1--candidate-blue?style=flat-square" alt="Source version">
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
@@ -111,7 +111,7 @@ pip install "trade-learn[research]==0.3.5"
 | `[nautilus]` | 精确官方`nautilus_trader==2.0.0rc7`与按需云发送依赖；执行ABI限CP313/314 |
 | `[tl-store]` | 精确公开`tl-store==0.2.1a8`；唯一实现命名`tl_store.ctrader`，不保旧adapter别名 |
 
-统一`uv.lock`已闭合并过CI，Store a8已公开，不再沿用“a2未公开/锁不可解”的旧状态。Python3.10–3.12安装extra时官方NA会被marker跳过，不能据此使用NA桥。CLI仅`new/lab/doctor`及help/version；`lab`只管理自有Jupyter，不启动MCP/MLflow附带服务。
+统一`uv.lock`已闭合并过CI，Store a8已公开，不再沿用“a2未公开/锁不可解”的旧状态。Python3.11–3.12安装extra时官方NA会被marker跳过，不能据此使用NA桥。CLI仅`new/lab/doctor`及help/version；`lab`只管理自有Jupyter，不启动MCP/MLflow附带服务。
 
 TL0.3.4真实构建范围为Mac arm64、Windows AMD64、Linux x64的CP310–314及Linux ARM64 CP313。Linux CP313+Storea8+NA2rc7全新安装/RECORD/native/pip check已验；Mac CP313实物与独立差量已验。Store的其他平台构建资格、自然venue和KQ后端分别标注，不从TL wheel标签外推。KQ Windows桥未实现/LinuxARM未验，不表示整个TL不支持Windows或ARM。
 

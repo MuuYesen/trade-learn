@@ -15,7 +15,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/pypi/v/trade-learn?style=flat-square" alt="PyPI version">
-  <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python versions">
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square" alt="Python versions">
   <img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License">
   <img src="https://img.shields.io/badge/release-0.3.5-blue?style=flat-square" alt="Source version">
   <a href="https://discord.gg/JbqZ7p33ra"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
