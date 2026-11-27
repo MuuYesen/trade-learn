@@ -38,6 +38,7 @@
 1. **研究フロー Skill を導入する**：このリポジトリの [`.agents/skills/tradelearn-research/`](https://github.com/MuuYesen/trade-learn/tree/master/.agents/skills/tradelearn-research) ディレクトリをまるごとスキルディレクトリに置いてください（例：`git clone --depth 1 https://github.com/MuuYesen/trade-learn` の後にコピー）。サンプル分割、コスト、頑健性検証、結論の段階付け、実運用レビューの手順を定めています。本文は中国語です。返答はユーザーの言語で行ってください。
 2. **仮想環境に `trade-learn` をインストールする**。システムの Python は PEP 668 によりインストールを拒否することが多いため、回避しないでください。実験記録や研究ツールが必要な場合は `trade-learn[research]` を入れます。
 3. **API はインストール済みのバージョンを正とし**、不明な点は `help()` で確認してください。古いチュートリアルをそのまま使わないでください。
+4. **AI アシスタントも共通の Python ワークフローを使います。** Skill は既存の TradeLearn API を選び、ローカルデータや過去の研究成果物を読み取り、構造化された結果と再実行コマンドを返します。利用するリリースタグまたはソースのコミットから Skill 一式を取得し、実行前に利用可能な API を確認してください。[前回の研究を続ける例](.agents/skills/tradelearn-research/references/experiment-log.md#七从上次结果继续)を参照してください。
 
 ## 実現パス
 

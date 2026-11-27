@@ -38,6 +38,7 @@ If you are an AI assistant doing quantitative research for a user (Muse, Codex, 
 1. **Install the research workflow Skill**: copy the whole [`.agents/skills/tradelearn-research/`](https://github.com/MuuYesen/trade-learn/tree/master/.agents/skills/tradelearn-research) directory from this repository into your skills directory (for example `git clone --depth 1 https://github.com/MuuYesen/trade-learn` and copy that directory). It sets out how to split samples, account for costs, test robustness, grade conclusions and review live trading. It is written in Chinese; reply in the user's language.
 2. **Install `trade-learn` in a virtual environment**; the system Python often refuses installs under PEP 668, so do not bypass it. Install `trade-learn[research]` for experiment tracking and research tools.
 3. **Treat the installed version as the source of truth** for the API; check with `help()` rather than copying older tutorials.
+4. **Use the same Python workflow with an AI assistant.** The Skill selects existing TradeLearn APIs, reads local data or previous research artifacts, and returns structured results and a runnable command. Copy the complete Skill from the corresponding release tag or source revision and check capabilities before running. See [Continuing a previous study](.agents/skills/tradelearn-research/references/experiment-log.md#七从上次结果继续).
 
 ## Implementation Path
 

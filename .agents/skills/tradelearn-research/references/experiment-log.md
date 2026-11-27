@@ -89,3 +89,29 @@
 - **MLflow 只在用户指定了跟踪目标时用**：`Backtest.log_mlflow(..., uri=用户给的地址)` 或 `tradelearn.integrations.mlflow.log(结果, research_result=..., uri=用户给的地址)`，显式传 `uri`。省略 `uri` 会沿用环境变量里的跟踪地址，可能把记录写到远端。
 - 之后要对比时直接取记录，不要重跑旧方案。
 - 接口以已安装版本为准，拿不准时用 `help()` 或 `inspect` 查签名。
+
+
+## 七、从上次结果继续
+
+例如用户说「沿用上次的数据和策略，把手续费翻倍，再跟原结果比」。
+
+1. 用 `load_bundle` 读原产物，找出原手续费率及实际输入。仅看原结果时，直接读数。续跑前核对数据指纹、策略来源、包版本和依赖。变更影响了撮合或计量口径时，报告写明。
+2. 单次回测是普通 Python 函数 `evaluate(bars, settings)`，内部调用原来的 Lite 或 Engine 入口并返回完整 Stats。状态、窗口、随机种子、参数与成本应来自显式配置或固定代码。用 `route_examples.record_backtest` 把这次运行、实际输入指纹、JSON 设置、入口文件 SHA-256 和人可执行的命令记在新目录。入口文件之外的代码、依赖、外部配置和模型须另行固定并记录。清单里的命令是交接材料，使用前核对来源。
+3. 用 `rerun_backtest` 传入原目录、原行情、经核验的入口函数、新值和新目录。它只替换一个已记录的顶层设置。例如将 `commission` 从旧值改为两倍，由原 Python 回测函数设置百分比手续费。用户要翻倍的是滑点时，按[组合及执行](routes.md#六组合及执行)查撮合资格。用户要换区间、换策略或换数据时，按相应路径登记新的研究输入。
+4. 读回两份产物，核对实际成交、费用、收益、回撤与年化口径，按用户关心的变化交付。结论标明沿用已查看的样本。旧产物缺少输入或配置证据时，能读出的数字直接引用，受影响的续跑标受阻。
+
+```python
+# 将已安装 Skill 的 scripts 目录加到 Python 导入路径。
+from route_examples import record_backtest, rerun_backtest
+
+# evaluate 是用户原来的 Python 回测函数，bars 是经审计的实际输入。
+record_backtest(
+    bars, evaluate=evaluate, settings=settings, command=baseline_command,
+    directory="research/original", timeframe="30",
+)
+rerun_backtest(
+    "research/original", bars, evaluate=evaluate,
+    setting="commission", value=2 * settings["commission"],
+    directory="research/commission-double", command=scenario_command,
+)
+```

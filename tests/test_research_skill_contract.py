@@ -371,3 +371,91 @@ def test_failed_local_evidence_write_does_not_leave_partial_bundle(tmp_path, mon
         checks.save_local_evidence(destination, stats=object())
     assert not destination.exists()
     assert checks.save_local_evidence(destination) == [destination / "manifest.json"]
+
+
+def _run_lite(data, settings):
+    from tradelearn.lite import Backtest, Strategy
+
+    class Hold(Strategy):
+        def next(self):
+            if not self.position():
+                self.buy(size=1)
+
+    return Backtest(data, Hold, **settings).run()
+
+
+def _run_engine(data, settings):
+    from tradelearn.engine import Cerebro, Strategy
+    from tradelearn.engine.feeds import PandasData
+
+    class Hold(Strategy):
+        def next(self):
+            if not self.position:
+                self.buy(size=1)
+
+    engine = Cerebro(periods=settings["periods"])
+    engine.broker.setcash(settings["cash"])
+    engine.broker.setcommission(commission=settings["commission"])
+    engine.adddata(PandasData(dataname=data))
+    engine.addstrategy(Hold)
+    return engine.run()[0].stats
+
+
+@pytest.mark.parametrize("evaluate", [_run_lite, _run_engine], ids=["lite", "engine"])
+def test_follow_up_reuses_real_run_and_preserves_source(
+    monkeypatch, tmp_path, evaluate,
+):
+    import pandas as pd
+    from tradelearn.research.validation import load_bundle
+
+    monkeypatch.syspath_prepend(str(SKILL / "scripts"))
+    from route_examples import record_backtest, rerun_backtest
+
+    frame = pd.DataFrame(
+        {**{name: [100.0, 101.0, 104.0, 103.0, 105.0, 106.0]
+            for name in ("open", "high", "low", "close")}, "volume": 100.0},
+        index=pd.date_range("2024-01-01", periods=6, tz="UTC"),
+    )
+    baseline = tmp_path / "original"
+    changed = tmp_path / "new"
+    settings = {"cash": 1000, "commission": 0.001, "periods": 365}
+    changed_setting = "commission"
+    expected = evaluate(frame, settings)
+    record_backtest(
+        frame, settings=settings, evaluate=evaluate, command="python research.py",
+        directory=baseline, timeframe="1D",
+    )
+    original_files = {path.name: path.read_bytes() for path in baseline.iterdir()}
+
+    rerun_backtest(baseline, frame, evaluate=evaluate, setting=changed_setting,
+                   value=0.002, directory=changed, command="python research.py --scenario doubled")
+
+    before, after = load_bundle(baseline), load_bundle(changed)
+    assert float(before.summary["return_pct"]) == pytest.approx(expected.summary["return_pct"])
+    assert float(after.summary["return_pct"]) < float(before.summary["return_pct"])
+    assert len(before.tables["fills"]) == len(after.tables["fills"]) > 0
+    before_fees = before.tables["fills"]["commission"].sum()
+    after_fees = after.tables["fills"]["commission"].sum()
+    assert before_fees > 0
+    assert after_fees == pytest.approx(2 * before_fees)
+    assert after.manifest["backtest_run"]["settings"] == {**settings, changed_setting: 0.002}
+    assert after.manifest["comparison"]["change"] == {
+        "setting": changed_setting, "before": 0.001, "after": 0.002,
+    }
+    assert after.manifest["comparison"]["baseline"] == str(baseline.resolve())
+    assert {path.name: path.read_bytes() for path in baseline.iterdir()} == original_files
+
+    altered = frame.copy()
+    altered.iloc[0] += 1
+    for supplied_data, callback, setting, error in [
+        (altered, evaluate, changed_setting, "sha256"),
+        (frame, lambda *_: None, changed_setting, "entrypoint"),
+        (frame, evaluate, "unrecorded", "unrecorded"),
+    ]:
+        with pytest.raises(ValueError, match=error):
+            rerun_backtest(baseline, supplied_data, evaluate=callback, setting=setting,
+                           value=0.003, directory=tmp_path / "rejected", command="python research.py")
+    assert not (tmp_path / "rejected").exists()
+    with pytest.raises(FileExistsError):
+        rerun_backtest(baseline, frame, evaluate=evaluate, setting=changed_setting,
+                       value=0.003, directory=baseline, command="python research.py")

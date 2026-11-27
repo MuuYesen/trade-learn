@@ -38,6 +38,7 @@
 1. **装上研究流程 Skill**：把本仓库的 [`.agents/skills/tradelearn-research/`](https://github.com/MuuYesen/trade-learn/tree/master/.agents/skills/tradelearn-research) 整个目录放进你的技能目录（例如 `git clone --depth 1 https://github.com/MuuYesen/trade-learn` 后复制该目录）。它规定了样本切分、成本、稳健性检验、结论分级和实盘复盘的流程。
 2. **在虚拟环境里安装** `trade-learn`；系统 Python 常因 PEP 668 拒绝安装，不要绕过。需要实验记录和研究工具时安装 `trade-learn[research]`。
 3. **接口以已安装的版本为准**，拿不准时用 `help()` 查，不要照搬旧教程。
+4. **让 AI 沿用人的工作流**。Skill 按用户目标选择现有 Python API，读取本地数据或已有研究目录，交回结构化产物和重跑命令。优先从所用版本的发行标签或源码提交复制完整 Skill，并在运行前核验能力。示例见 [从上次结果继续](.agents/skills/tradelearn-research/references/experiment-log.md#七从上次结果继续)。
 
 ## 实现路径
 

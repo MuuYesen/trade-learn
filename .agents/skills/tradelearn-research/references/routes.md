@@ -2,11 +2,11 @@
 
 用户的一句话先归到下面一条路径（可以同时属于几条，按顺序各自完成）。每条写明：**运行入口**（实际调用的 TradeLearn 接口）、**最少证据**（不齐就不能给结论）、**关卡**（禁止的错误结论）、**缺证状态**（证据缺了结论最高到哪一级）。结论分级、方法状态（通过 / 不过 / 不适用 / 受阻 / 未检验）和阈值只在 `gates.md` 维护。
 
-统计计算只用已安装 TradeLearn 的实现，一处算法；本 Skill 的脚本不另写一份。可运行的接线示例在 [route_examples.py](../scripts/route_examples.py)：比较、成本情景、搜索、IC 标准误、读回，各函数先做能力核验，缺接口时返回"受阻"，`self_test(目录)` 在合成数据上走一遍写入与读回（只验证接线，不是研究证据）。
+统计计算只用已安装 TradeLearn 的实现，一处算法；本 Skill 的脚本不另写一份。可运行的接线示例在 [route_examples.py](../scripts/route_examples.py)：比较、成本情景、搜索、IC 标准误、读回和同配置续跑，各函数先做能力核验，缺接口时返回"受阻"，`self_test(目录)` 在合成数据上走一遍写入与读回（只验证接线，不是研究证据）。
 
 ## 零、每次都做：版本、能力与口径
 
-1. **版本**：`importlib.metadata.version("trade-learn")`，记进清单。
+1. **版本**：记录正在执行的 `tradelearn.__version__` 与 `tradelearn.__file__`，版本字符串相同的源码构建还要记录 Git 提交或安装包指纹。若 `importlib.metadata.version("trade-learn")` 与实际导入来源不同，先确定本次要用的环境。Skill 优先从该发行标签或源码提交获取。
 2. **能力核验**：把 [backtest_checks.py](../scripts/backtest_checks.py) 加到导入路径：
    - `capabilities()` 只看名字在不在，不调用；
    - `native_known_answers()` 用冻结输入核对已安装的 `sharpe_se`、`paired_sharpe_diff`、`probabilistic_sharpe`、`deflated_sharpe`、`minimum_track_record_length`，结果为 通过 / 不过 / 受阻。
@@ -26,13 +26,14 @@
 - `trial_records` 和 `ResearchRun(...).finish()` 的 `to_dict()` 写成 JSON；
 - 一份清单：数据 sha256、TradeLearn 版本、年化期数及来源、标准误口径、尝试数 N 的取法、成本情景、运行命令。
 
-`save_local_evidence()` 一次写完后两样和 bundle。**MLflow 只在用户指定了跟踪目标时用**，调用时显式传 `uri`（例如用户给的本地 `sqlite:///research.db`）；省略 `uri` 会沿用环境变量里可能指向远端的地址。
+`save_local_evidence()` 一次写完后两样和 bundle。用户读数优先从 `Reporter(stats).metric_facts()` 或 `stats.json` 取未舍入的数值、单位、缺失原因和年化口径。已有的因子、归因等结构化领域结果交给 `Reporter.from_analysis(result)`，一次计算可再次导出。**MLflow 只在用户指定了跟踪目标时用**，调用时显式传 `uri`（例如用户给的本地 `sqlite:///research.db`）；省略 `uri` 会沿用环境变量里可能指向远端的地址。
 
 ## 一、读取/复现
 
-**触发**：「上次那个结果再看看」「这个结论能复现吗」「对一下别人的回测」。
+**触发**：「上次那个结果再看看」「这个结论能复现吗」「对一下别人的回测」「沿用上次设置，只把手续费翻倍」。
 
 - **运行入口**：`tradelearn.research.validation.load_bundle(目录, expect_version=...)` 读回 bundle 与 `validation.json`（新增；拒绝未知 schema 与混合版本），`verify_inputs(bundle 或 trial_record, data=..., config=...)` 列出与当前数据、配置不一致的字段（`route_examples.read_back`）。缺失时手工读 `stats.json`、`trial_records.json`、清单并比对 sha256。模型用 `tradelearn.ml.load_bundle(路径, trusted=True)`（核对依赖版本与代码 SHA256）。用户指定了 MLflow 目标时，按用户给的 `uri` 读取对应 Run。
+- **续跑**：先读清单与原指标，确认要改的设置。对已记录的单次回测，用 `route_examples.rerun_backtest` 传入经核验的本地 Python 回测函数与原输入，只替换一个已记录设置，写入新的目录。用结构化产物做前后对照，交回产物路径、变更和可重跑命令。缺原策略或设置时标受阻。复用的样本按已查看处理。用法见 [实验记录](experiment-log.md#七从上次结果继续)。
 - **最少证据**：数据 sha256 一致、版本一致或差异已列出、参数与成本配置一致；每个比对指标事先写好比对规则（`experiment-log.md` 第五节）。
 - **关卡**：`verify_inputs` 返回非空时不得称"已复现"；不能换一份替代数据再称复现成功；结构化结果与文字报告冲突时以结构化结果为准，冲突标"未解决"。
 - **缺证状态**：找不到原产物 → "受阻"，只能重跑并标"重新测量"，不是复现；部分指标缺比对规则 → "部分"。
@@ -41,7 +42,9 @@
 
 **触发**：「跑一次回测」「这个数字对吗」「为什么没成交」。
 
-- **运行入口**：`tradelearn.lite.Backtest(data, Strategy, cash=..., commission=...)` 的 `run()`；需要限价、止损、部分成交或路径相关规则时用 `tradelearn.engine.Cerebro(slippage=..., commission=...)`。结果取 `stats.fills`、`stats.orders`、`stats.positions`、`stats.equity`、`stats.returns`、`stats.metric_metadata`。
+- **运行入口**：`tradelearn.lite.Backtest(data, Strategy, cash=..., commission=...)` 的 `run()`；需要 Engine 的订单规则时用 `tradelearn.engine.Cerebro(periods=...)`，并通过 `cerebro.broker.setcommission(commission=...)` 设置百分比费用。结果取 `stats.fills`、`stats.orders`、`stats.positions`、`stats.equity`、`stats.returns`、`stats.metric_metadata`。
+- **本地数据**：用 `tradelearn.data.open_dataset(用户给的文件)` 读取 CSV/Parquet，调用 `read(symbols=..., start=..., end=...)` 获取显式时区的 UTC 行情，使用同一查询的 `profile(...)` 检查行数、时间边界和质量。单标的策略需从面板显式选择标的。已有缓存用 `BarsCache.read` 读已知快照，记录文件、查询、时区、行情指纹和实际输入指纹。字段映射或时区需要转换时按 [行情审计](data-audit.md) 处理，再进入回测。
+- **信号与订单**：先从所装版本的 `tradelearn.indicators` 及其 `capabilities.json` 查 `talib`、`tdx`、`tv` 的可用实现。Lite 用 `Strategy.window`，Engine 可用 `tradelearn.backtest.history.window` 取历史窗口。按指标需要设置 `addminperiod`，记录预热长度、第一笔有效信号与下单时点。成交异常时沿信号 → `orders`（状态、时间、数量）→ `fills` → `positions` 核对。
 - **最少证据**：
   - 成本已显式设置（默认手续费是 0）；
   - 信号次根成交；
@@ -100,7 +103,7 @@
   - IC 均值的标准误：`tradelearn.metrics.hac_mean_se(逐期 IC, bandwidth=...)`（新增，Bartlett 核，输出与 IC 同单位），传按规则时钟对齐的逐期 IC。它**只用于均值**；带解释变量的回归系数（例如对基准回归的 alpha）需要回归 HAC，不能用它验证。缺失时 IC 显著性一项"受阻"。示例见 `route_examples.ic_mean_with_hac`。
   - 时序标签：`tradelearn.research.temporal.forward_return(bars, horizon=...)`（输出 `forward_return` 与 `label_end`），再用 `purged_splits` 切分。它只切分，不训练、不评分。`temporal.assessment` 给分块 IC；`walk_forward` 的 `labels=` 按标签区间剔除跨界训练样本（新增）。
   - 预处理与中性化：用 `tradelearn.research.preprocess` 中只在训练段拟合的转换器（如 `Neutralizer`）。
-  - 模型：用 `ResearchRun` 的 `register`/`call` 记录，`tradelearn.ml.save_bundle` 冻结，`predict_bundle` 推理。
+  - 模型：按 [ML 样本外流程](ml.md) 将 `FeatureSet.transform` 的特征与 `forward_return` 的标签分别准备，按 `purged_splits` 切分。每折新建 Pipeline，仅在训练片段 `fit`，再对训练与测试片段分别 `transform`。在训练特征和标签上拟合模型，用 `ModelScorer(current=False, ...).predict` 对完整测试面板评分。用 `ResearchRun.register` / `call` / `finish` 记训练与验证步骤，`tradelearn.ml.save_bundle` 冻结，`predict_bundle` 推理。保存折号与预测时点，评分、组合目标与实际净收益各自留证。
 - **最少证据**：因子时点（发布时间）核对、IC 均值与 HAC 标准误、分组单调性、扣成本多空、样本外 IC；模型另需"预测为 0"基线和训练段内拟合的预处理。
 - **关卡**：未过四道检查不称 alpha（`factor.md`）；全样本拟合的标准化或特征选择 → 验证链路"无法判断"。
 - **缺证状态**：没有发布时间元数据 → "无法判断"时点项；只做了样本内 IC → "证据不足"。
@@ -109,7 +112,8 @@
 
 **触发**：「多标的怎么配」「成本和滑点怎么设」「容量够吗」「A 股能成交吗」。
 
-- **运行入口**：`tradelearn.research.portfolio` 的 `TopK`、`EqualWeight`、`Constraints`、`Allocator`、`RiskfolioOptimizer`；执行成本用 Engine 的 `slippage=`、`commission=`，模型取自 `tradelearn.core.costs`（`FixedCommission`、`PercentCommission`、`CNAStockCommission`、`FixedSlippage`、`PercentSlippage`、`BarRangeSlippage`，以已安装版本为准）。成本情景同第三节 `run_scenarios`。A 股 T+1、涨跌停、停牌的成交约束在框架中未找到现成实现，按 `china-market.md` 自行检查并写明。
+- **运行入口**：`tradelearn.research.portfolio` 的 `TopK`、`EqualWeight`、`Constraints`、`Allocator`、`RiskfolioOptimizer`；Engine/Lite 百分比费用用第二节已核验的入口。成本情景同第三节 `run_scenarios`。要求改变撮合滑点时，先用小样本确认成交价按预期变化。当前 Engine Python 路径未接通自定义滑点，`core.costs` 中的模型类存在也不足以证明撮合生效。无法确认时把滑点情景标「受阻」。A 股 T+1、涨跌停、停牌的成交约束在框架中未找到现成实现，按 `china-market.md` 自行检查并写明。
+- **组合归因**：`Allocator.build(scores)` 产出目标权重，实际敞口从成交与持仓重建。提供逐期组合收益、对应期初权重、同频因子回报及有时点覆盖的因子载荷后，用 `tradelearn.factor.PerformanceAttribution.attribution()`，或其 `to_analysis()` 接 `Reporter.from_analysis` 出表。先检查日期、因子列与持有标的覆盖率，缺失输入标注为证据缺口。该接口会将缺失的因子回报或载荷补零，残差由总收益减共同收益定义。
 - **最少证据**：权重合计、约束生效的核对；成本依据；A 股成交可行性四层检查；换手与容量估算。
 - **关卡**：不给真实资金的仓位或杠杆建议；越过涨跌停成交、违反 T+1 未修正前不谈收益。
 - **缺证状态**：没有容量或冲击模型 → 容量一项"受阻"，最高"证据不足"。

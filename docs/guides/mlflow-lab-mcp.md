@@ -38,7 +38,7 @@ logged = log(result, log_report=True,
 
 目标安装组统一为 default / research / nautilus / tl-store，原 lab 依赖并入 research。研究环境采用 JupyterLab 与 MLflow；Jupyter AI Lite 已移除（用户自带的 AI 助手更强，且能直接执行代码）；不默认附加 jupyterlab-git、PyGWalker ；TL自建MCP服务与公开入口已删除。环境计划/CLI 的迁移和真实 Notebook/provider 验收须单独通过，安装包存在不证明已连接付费 provider。
 
-研究流程 Skill 放在仓库 `.agents/skills/tradelearn-research/`（中文，主文件加四份参考：样本切分、中文市场规则、实盘复盘、报告格式），由用户在 Muse、Codex、Claude、WorkBuddy 等 AI 助手里自行安装；它只规定研究流程，接口以已安装版本为准，不自动执行实盘。`tradelearn new` 不再生成 Skill，`tradelearn skills` 命令已删除。API/provider 配置由用户在各自工具里完成，不在仓库或报告内保存密钥。TL不再提供MCP启动入口或自建MCP服务。第三方AI工具自身的MCP依赖不受此删除影响。
+研究流程 Skill 放在仓库 `.agents/skills/tradelearn-research/`（中文，包含七条研究路径、证据规则和 Python 接线示例），由用户在 Muse、Codex、Claude、WorkBuddy 等 AI 助手里自行安装；它按用户目标调用同一套 Python API，并默认输出本地结构化产物。按当前 TradeLearn 的发行标签或源码提交选取 Skill，再核验实际接口。实盘复盘使用已有的只读证据。`tradelearn new` 不再生成 Skill，`tradelearn skills` 命令已删除。API/provider 配置由用户在各自工具里完成，不在仓库或报告内保存密钥。TL不再提供MCP启动入口或自建MCP服务。第三方AI工具自身的MCP依赖不受此删除影响。
 
 
 CLI仅保留`tradelearn new 项目名`、`tradelearn lab`、`tradelearn doctor`及`--help/--version`。基础命令和new不要求Typer/PyYAML；new创建策略定义、说明与Notebook起点，不生成Skill、不强制生成YAML。策略定义需由用户给出Bars后加入Cerebro，不宣传为自动联网或实盘脚本。

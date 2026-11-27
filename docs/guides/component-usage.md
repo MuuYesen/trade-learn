@@ -68,7 +68,7 @@ self.mixed = (self.data.high + self.data.low) / 2
 
 完整已平仓交易摘要使用含费用`pnlcomm`，并在metric_metadata显式标记；无亏损分母的profit_factor不可计算，保NaN。Reporter仅沿生产者显式基准消费，保原gross列。
 
-摘要`annual_return`、`volatility`使用小数比例；`max_drawdown`是带负号的小数比例。不可计算的Sharpe/Sortino/Calmar等保NaN，不补零。底层`Stats.metric_metadata`记录单位、缺失原因和年化参数。当前摘要使用252的逐Bar默认profile，不能据此宣称输入已满足交易日日历；其他频率应在独立`Reporter(stats, periods=...)`明确提供年化参数。价格与收益样本须由调用方先核资格。
+摘要`annual_return`、`volatility`使用小数比例；`max_drawdown`是带负号的小数比例。不可计算的Sharpe/Sortino/Calmar等保NaN，不补零。底层`Stats.metric_metadata`记录单位、缺失原因和年化参数。摘要与 Reporter 共用 [年化期数规则](report.md)。按市场时钟在 `Backtest(..., periods=...)` 或 `Cerebro(..., periods=...)` 显式设置，全天候日线可传 365。缺少明确口径时，观察密度或 252 回退都不能作为交易日历证明。价格与收益样本须由调用方先核资格。
 
 ```python
 from tradelearn.report import Reporter

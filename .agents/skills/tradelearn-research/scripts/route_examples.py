@@ -10,10 +10,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
+import inspect
+import json
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pandas import DataFrame
 
 
 def _need(*dotted: str) -> list[str]:
@@ -49,6 +55,120 @@ def read_back(directory: str | Path, *, expect_version: str | None = None,
     bundle = v.load_bundle(directory, expect_version=expect_version)
     mismatches = v.verify_inputs(bundle, data=data) if data is not None else []
     return {"状态": "已读回", "bundle": bundle, "不一致": mismatches}
+
+
+def _entrypoint(evaluate: Callable[..., Any]) -> dict[str, str]:
+    source = inspect.getsourcefile(evaluate)
+    if source is None:
+        raise ValueError("backtest entrypoint must come from a local Python file")
+    return {
+        "name": evaluate.__qualname__,
+        "sha256": hashlib.sha256(Path(source).read_bytes()).hexdigest(),
+    }
+
+
+def _settings_snapshot(settings: Mapping[str, Any]) -> dict[str, Any]:
+    snapshot = json.loads(json.dumps(dict(settings), allow_nan=False))
+    if snapshot != settings:
+        raise ValueError("backtest settings must round-trip as JSON")
+    return snapshot
+
+
+def record_backtest(
+    data: DataFrame,
+    *,
+    settings: Mapping[str, Any],
+    evaluate: Callable[..., Any],
+    command: str,
+    directory: str | Path,
+    timeframe: str | None = None,
+    manifest: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run the user's ordinary Python entrypoint and export a replayable backtest.
+
+    The entrypoint accepts (DataFrame, settings) and returns full TradeLearn
+    stats. Record imported helper/config versions in the manifest as needed.
+    """
+    missing = _need("tradelearn.core.trial_records._describe",
+                    "tradelearn.report.artifacts.write_artifact_bundle")
+    if missing:
+        return _blocked(missing)
+    from tradelearn import __version__
+    from backtest_checks import save_local_evidence
+
+    target = Path(directory)
+    if target.exists():
+        raise FileExistsError(target)
+    if not command.strip():
+        raise ValueError("backtest command is required")
+    snapshot = _settings_snapshot(settings)
+    run = {
+        "entrypoint": _entrypoint(evaluate),
+        "settings": snapshot,
+        "command": command,
+        "timeframe": timeframe,
+    }
+    info = {**(manifest or {}), "backtest_run": run, "trade_learn_version": __version__}
+    stats = evaluate(data.copy(deep=True), _settings_snapshot(snapshot))
+    if not getattr(stats, "summary", None):
+        raise ValueError("backtest entrypoint must return full TradeLearn stats")
+    files = save_local_evidence(target, stats=stats, data=data, manifest=info, timeframe=timeframe)
+    return {"状态": "已运行", "stats": stats, "目录": target, "文件": files}
+
+
+def rerun_backtest(
+    baseline: str | Path,
+    data: DataFrame,
+    *,
+    evaluate: Callable[..., Any],
+    setting: str,
+    value: Any,
+    directory: str | Path,
+    command: str,
+) -> dict[str, Any]:
+    """Run one recorded setting change against the same data and entrypoint."""
+    missing = _need("tradelearn.research.validation.load_bundle",
+                    "tradelearn.research.validation.verify_inputs")
+    if missing:
+        return _blocked(missing)
+    from tradelearn import __version__
+    from tradelearn.research.validation import load_bundle, verify_inputs
+
+    source = Path(baseline).resolve()
+    target = Path(directory).resolve()
+    if target.exists():
+        raise FileExistsError(target)
+    if source in target.parents:
+        raise ValueError("select an output directory outside the baseline")
+    original = load_bundle(source, expect_version=__version__)
+    run = original.manifest.get("backtest_run")
+    if not original.stats or not isinstance(run, dict) or not isinstance(run.get("settings"), dict):
+        raise ValueError("baseline has no recorded backtest entrypoint and settings")
+    fingerprint = original.manifest.get("input_fingerprint")
+    if not fingerprint:
+        raise ValueError("baseline has no input fingerprint")
+    mismatches = verify_inputs({"config": {"data": fingerprint}}, data=data)
+    if mismatches:
+        raise ValueError("; ".join(mismatches))
+    if run.get("entrypoint") != _entrypoint(evaluate):
+        raise ValueError("backtest entrypoint differs from baseline")
+    settings = run["settings"]
+    if setting not in settings:
+        raise ValueError(f"unrecorded setting: {setting}")
+    if settings[setting] == value:
+        raise ValueError(f"setting already has the requested value: {setting}")
+
+    change = {"setting": setting, "before": settings[setting], "after": value}
+    provenance = {
+        "baseline": str(source),
+        "baseline_manifest_sha256": hashlib.sha256((source / "manifest.json").read_bytes()).hexdigest(),
+        "change": change,
+    }
+    info = {**original.manifest, "comparison": provenance}
+    return record_backtest(
+        data, settings={**settings, setting: value}, evaluate=evaluate,
+        command=command, directory=target, timeframe=run.get("timeframe"), manifest=info,
+    )
 
 
 # ---------------------------------------------------------------------------
