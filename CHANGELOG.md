@@ -11,6 +11,9 @@
 - 研究流程 Skill（`.agents/skills/tradelearn-research/`，中文）：综合多个公开量化研究 Skill 与相关文献（出处见 `references/sources.md`），规定事先立题、样本外只用一次、参数曲面与稳定区域、紧缩夏普与 PBO、成本压力测试、三级结论与实盘停用条件，另附中文市场规则（A 股、港股、加密货币）与报告格式；并吸收社区方法补充统一的默认阈值与判定顺序、数据审计、实验与数据使用记录、流程自检、因子与机器学习检验，以及实盘先核账、分层排查与改动验证。由用户在 Muse、Codex、Claude、WorkBuddy 等 AI 助手里自行安装；更新 Skill 不需要等版本发布。
 - README 开头新增「给 AI 助手」一节，说明如何安装 Skill 与 TradeLearn。
 
+### Fixed
+- 研究流程 Skill 在轻量和完整回测中按候选与区间核对零成交，并对报告所用的夏普标准误执行已知答案测试和独立复算。
+
 ### Removed
 - **Jupyter AI Lite**：从 `[research]` 移除，连带去掉其十余个传递依赖；`tradelearn lab` 只启动 JupyterLab。用户自带的 AI 助手更强，且能直接执行代码。
 - **接口说明型 Skill**：原先按版本号生成的接口用法 Skill 被研究流程 Skill 取代。

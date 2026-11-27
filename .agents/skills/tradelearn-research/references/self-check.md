@@ -72,3 +72,24 @@
 - **阴性对照**：每次只改一个口径生成数据，必须判为"不一致"。阴性对照产生 0 条差异，说明这个对照没生效（例如样本太小，改动没触发任何交易），计为失败。
 - 用工具自己合成的数据去测工具，结论只能是"无法判断"：这只证明链路接通。
 - 每条记录带来源标记，跟着数据走；改文件名或换目录不能把合成数据变成真实数据。
+
+## 八、回测出数前的两项自检
+
+轻量回测也执行。先对齐候选与评估区间，再引用指标。判读见 [gates.md](gates.md)。
+
+1. **成交**。对每个要报告的候选和区间，记录期初持仓、预热后应改变目标持仓的信号次数、实际成交通知数及最长空仓期。成交次数从该区间的成交记录数出来，区分成交和往返交易。区间内有改变仓位的意图却零成交时，对照首个应下单的信号，追踪委托是否产生、拒单原因、下单单位、最小数量、可用资金和费用。有意空仓、跨区间沿用持仓、真实市场约束下无法成交，都写清依据。未查明前，该候选该区间的结果不得进入策略评价或排名。
+   - TradeLearn Lite 0.3.6 中，`buy()` 默认数量为 1，`order_target_percent()` 会将目标数量截成整数。用小额资金跑高单价标的时，先查当前安装版本的真实签名和成交明细，按标的单位验证小数数量或合适的交易单位确实能成交。
+   - 连续运行的策略在报告测试段时，从连续成交与权益序列按时间切片，保留期初持仓。若研究设计要求重置资金或持仓，事先记录重置规则，并提供指标所需的预热数据。
+2. **夏普标准误**。报告标准误时，先确认夏普的频率和年化期数与输入收益序列一致。把下面的测试接到本次实际生成报告的计算函数，先跑已知答案，再用同一输入与参考函数核对实际值。公式适用范围见 [validation.md](validation.md#三有效观测数与显著性)。
+
+把 [backtest_checks.py](../scripts/backtest_checks.py) 加到本次研究脚本的导入路径。下面的示例可在 Skill 的 `scripts/` 目录运行。实际研究用生成报告的计算函数替换 `report_se`，成交检查输入应来自同一个候选与区间。
+
+```python
+from math import isclose
+from backtest_checks import annual_sharpe_se, needs_fill_review
+
+report_se = annual_sharpe_se
+assert isclose(report_se(1.0, 1460, 365), 0.500342348545, abs_tol=1e-9)
+assert needs_fill_review(position_change_expected=True, fill_count=0)
+assert not needs_fill_review(position_change_expected=False, fill_count=0)
+```
