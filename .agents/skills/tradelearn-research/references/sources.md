@@ -15,6 +15,27 @@
 | [wshobson/agents](https://github.com/wshobson/agents) `backtesting-frameworks` | 偏差分类（前视、幸存者、过拟合、选择、成本）、事先登记、容量 |
 | [quantskills/skill-backtest](https://github.com/quantskills/skill-backtest) | A 股截面回测约定：T+1 开盘成交、涨跌停与停牌剔除、滚动持仓 |
 
+## QuantSkills 社区（[github.com/quantskills](https://github.com/quantskills)，2026-11 检索）
+
+组织下 260 余个仓库，大部分是具体因子、数据接口和盯盘工具；下面这些方法论类的被吸收：
+
+| Skill | 主要吸收的内容 |
+|---|---|
+| `skill-backtest-overfit` | 紧缩夏普、PBO、多重检验折扣、最短样本长度（MinTRL）；诚实申报尝试次数；用每期夏普 |
+| `skill-a-share-tradability-auditor` | A 股成交可行性四层约束、不复权判断涨跌停、"市场不会给你的收益"占比、先扣假收益再做统计检验 |
+| `skill-factor-mason` | 因子先当嫌疑人、时点/样本/成本/样本外四道检查、中性化要有动机、失效归因、下一步实验最多三个 |
+| `skill-factor-orthogonalize` | 逐日截面回归、不能向收益正交、正交前后并列 |
+| `skill-factor-ic-decay`、`skill-signal-stability-audit` | IC 半衰期、样本护栏、秩自相关与头部重合度换算换手 |
+| `skill-walk-forward-validator` | 按标签跨度剔除并加间隔、分折汇总 |
+| `skill-a-share-pit-fundamental-vintage-builder` | 财报按首次披露版本、披露日顺延一个交易日、不用最新版本 |
+| `skill-survivorship-universe-auditor` | 历史股票池重建、退市收益不能用 0 代替、稳定证券标识 |
+| `skill-intraday-data-quality-auditor`、`skill-futures-roll-auditor` | 行情不变量与缺口待核查；换月规则、信号用连续价、盈亏用真实合约 |
+| `skill-quant-research` | 用一句话写事件时序、安慰剂对照、无成本结果标为毛收益、复现信息 |
+| `skill-quant-research-experiment-registry` | 记录数据快照、代码与依赖版本；冲突数值不默默取舍 |
+| `skill-transaction-cost-analysis`、`skill-transaction-cost-calibration`、`skill-strategy-capacity-tca` | 执行缺口五项分解、用成交校准成本且不外推、容量曲线与参与率 |
+| `skill-quant-strategy-diagnostics`、`skill-strategy-lifecycle` | 近期与等长历史窗口对比、事实与假设分开；停用规则只用当时数据并报告机会成本 |
+| 各审计类 Skill 的共同约定 | 已证实问题与缺失证据分开报告，缺失证据不写成通过 |
+
 ## 研究文献
 
 - Bailey, D. & López de Prado, M. (2014). The Deflated Sharpe Ratio. *Journal of Portfolio Management*.
@@ -25,3 +46,5 @@
 - White, H. (2000). A Reality Check for Data Snooping. *Econometrica*.
 - Newey, W. & West, K. (1987). A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix. *Econometrica*.
 - Grinold, R. & Kahn, R. (2000). *Active Portfolio Management*.（IC 与主动管理基本定律）
+- Perold, A. (1988). The Implementation Shortfall: Paper versus Reality. *Journal of Portfolio Management*.
+- Almgren, R. et al. (2005). Direct Estimation of Equity Market Impact. *Risk*.（平方根冲击）
