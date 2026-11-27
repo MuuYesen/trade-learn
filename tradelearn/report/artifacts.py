@@ -135,6 +135,12 @@ def _artifact_sheets(
     if timeframe is not None:
         sheets["metadata"].loc[len(sheets["metadata"])] = {"key": "timeframe", "value": timeframe}
     reporter = Reporter(stats)
+    # Annualization actually used by the report's metric facts, with its source.
+    for key, value in (
+        ("annualization_periods", reporter.periods),
+        ("annualization_period_source", reporter.period_source),
+    ):
+        sheets["metadata"].loc[len(sheets["metadata"])] = {"key": key, "value": str(value)}
     summary = _stats_field(stats, "summary", {})
     if summary:
         sheets["summary"] = pd.DataFrame(

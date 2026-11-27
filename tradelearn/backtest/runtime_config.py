@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from tradelearn.core.annualization import validate_periods
+
 
 @dataclass(frozen=True)
 class BacktestRuntimeConfig:
@@ -23,6 +25,7 @@ class BacktestRuntimeConfig:
     exactbars: bool = False
     stdstats: bool = True
     stats_mode: str = "full"
+    periods: int | None = None
 
     @classmethod
     def from_owner(cls, owner: Any) -> "BacktestRuntimeConfig":
@@ -45,4 +48,13 @@ class BacktestRuntimeConfig:
             exactbars=bool(getattr(owner, "exactbars", False)),
             stdstats=bool(getattr(owner, "stdstats", True)),
             stats_mode=str(getattr(owner, "stats_mode", "full")),
+            periods=_owner_periods(owner),
         )
+
+
+def _owner_periods(owner: Any) -> int | None:
+    """Explicit annualization periods from a Lite attribute or Engine params."""
+    periods = getattr(owner, "periods", None)
+    if periods is None:
+        periods = getattr(getattr(owner, "p", None), "periods", None)
+    return validate_periods(periods)

@@ -79,6 +79,17 @@ python -m examples.research.index_enhance_engine_pipeline --data 'bars/*.parquet
 
 Optuna保留独立`OptunaSearch/OptunaBacktestSearch`和原生trial建议接口；时间验证、完整trial、失败与预算证据由调用方及搜索集成负责，Test不得参与选型。无自动Experiment DSL。
 
+## 回测验证与本地证据
+
+`tradelearn.research.validation` 组织现有 Lite、Engine 和研究调用。每次评估由调用者提供执行函数，并用同一时间窗口、成本和实际成交产物复核。路径、结论分级及方法的适用条件见 [研究 Skill](../../.agents/skills/tradelearn-research/SKILL.md)。
+
+- **候选与成本。** `compare_candidates(returns, baseline=..., periods=..., block_length=...)` 对齐候选与基准收益，记录失配和共同区间，给出候选减基准的配对夏普差。`run_scenarios(evaluate, scenarios, periods=...)` 用具名配置运行各场景并保留失败记录。每个成本情景应真正进入引擎配置。事先约定对齐策略及覆盖，避免把删掉的期间当成连续收益。
+- **滚动验证。** `walk_forward_folds(index, train=..., test=..., holdout_start=...)` 生成非重叠的样本外窗口。`walk_forward(data, folds, evaluate=..., holdout_start=...)` 运行固定配置或只在训练窗口选择候选。执行函数接收该折切片和窗口，每次独立初始化。用 `warmup` 提供历史，用 `clock` 声明评分频率。声明的评分时间缺失、出现非有限收益或候选失败时，保留该折的状态。只把 `complete` 的运行当成完整验证。需要跨窗口保持原资金及持仓时，先进行连续回测，再从实际权益切片。
+- **搜索。** `tradelearn.research.parameter_surface.stable_region` 在事前指定的轴与训练评分上平滑，并返回稳定区域、连通分量、贴边格和不可用格。调用者提供适用于比较口径的标准误并冻结分量选择规则。使用 `walk_forward` 的 `select` 调用在训练态选区域，由原策略和执行函数在测试段实际运行所选配置。 `cpcv_splits` 生成净化后的切分，`cpcv_paths` 给出组合路径分配。 `pbo` 用对齐的候选收益评估样本内选择在样本外的相对排名。默认选择样本内最大夏普。自定义的 `select` 只收到样本内收益，并返回确实回测过的候选列标签。
+- **本地证据。** 使用 `tradelearn.report.artifacts.write_artifact_bundle` 保存已有回测，`write_validation` 把验证实例放到同一目录的 `validation.json`，然后用 `load_bundle` 和 `verify_inputs` 读取及核对版本、数据和配置。也可读仅包含清单、试验 JSON 或研究结果 JSON 的目录。输入不一致或缺少指纹时，记录为未复现。验证目录每次仅接受一个写入者。进程异常退出留下锁时，确认没有活动写入者再清理锁。`ResearchRun.finish().to_dict()` 提供研究步骤和配置。MLflow 保持显式调用，传入用户指定的 `uri`。
+
+夏普标准误、配对区间及搜索折扣的输入与假设见 [Metrics Reference](../api/reference/metrics.md#sharpe-inference)。
+
 ## 报告、记录和模型加载
 
 数据探索及因子`report`委托共同`Reporter.from_analysis(completed_tables)`；`to_analysis()`可先获得可检查结果。HTML/Excel使用同一表格，图表在HTML保留，Excel明确图形表示限制，不在渲染中fit/回测/联网。

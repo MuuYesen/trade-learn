@@ -42,6 +42,12 @@ __all__ = [
     "var",
     "volatility",
     "win_rate",
+    "sharpe_se",
+    "hac_mean_se",
+    "paired_sharpe_diff",
+    "probabilistic_sharpe",
+    "deflated_sharpe",
+    "minimum_track_record_length",
 ]
 
 _MODULES = {
@@ -68,6 +74,12 @@ _MODULES = {
     "information_ratio": "risk",
     "max_drawdown": "risk",
     "omega": "risk",
+    "sharpe_se": "sharpe_inference",
+    "hac_mean_se": "sharpe_inference",
+    "paired_sharpe_diff": "sharpe_inference",
+    "probabilistic_sharpe": "sharpe_inference",
+    "deflated_sharpe": "sharpe_inference",
+    "minimum_track_record_length": "sharpe_inference",
     "sharpe": "risk",
     "sortino": "risk",
     "tail_ratio": "risk",

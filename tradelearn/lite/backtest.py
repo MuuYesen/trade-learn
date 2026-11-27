@@ -16,6 +16,7 @@ from tradelearn.backtest.models import Stats, SummaryDict
 from tradelearn.backtest._optimize import expand_grid
 from tradelearn.backtest.reporting import reporter_from_stats
 from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
+from tradelearn.core.annualization import validate_periods
 from tradelearn.core.logging import get_logger
 from tradelearn.utils.console import smart_tqdm as tqdm, smart_print
 
@@ -101,7 +102,8 @@ class Backtest:
         fail_fast: bool = True,
         stats_mode: str = "full",
         storage: dict | None = None,
-        match_mode: str = 'exact' # Default to exact for alignment
+        match_mode: str = 'exact', # Default to exact for alignment
+        periods: int | None = None,
     ):
         unsupported = {
             "margin": margin != 1.,
@@ -115,6 +117,10 @@ class Backtest:
         for name, requested in unsupported.items():
             if requested:
                 raise NotImplementedError(f"Lite Backtest does not implement non-default {name}")
+        # Return observations per year for annualized summary metrics. Unset
+        # infers intraday frequency and keeps 252 for daily data; pass 365 for
+        # markets trading every calendar day.
+        self.periods = validate_periods(periods)
         self._data = data
         self._strategy_cls = strategy
         self._cash = cash

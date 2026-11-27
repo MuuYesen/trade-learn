@@ -77,19 +77,29 @@
 
 轻量回测也执行。先对齐候选与评估区间，再引用指标。判读见 [gates.md](gates.md)。
 
-1. **成交**。对每个要报告的候选和区间，记录期初持仓、预热后应改变目标持仓的信号次数、实际成交通知数及最长空仓期。成交次数从该区间的成交记录数出来，区分成交和往返交易。区间内有改变仓位的意图却零成交时，对照首个应下单的信号，追踪委托是否产生、拒单原因、下单单位、最小数量、可用资金和费用。有意空仓、跨区间沿用持仓、真实市场约束下无法成交，都写清依据。未查明前，该候选该区间的结果不得进入策略评价或排名。
-   - TradeLearn Lite 0.3.6 中，`buy()` 默认数量为 1，`order_target_percent()` 会将目标数量截成整数。用小额资金跑高单价标的时，先查当前安装版本的真实签名和成交明细，按标的单位验证小数数量或合适的交易单位确实能成交。
+1. **成交**。对每个要报告的候选和区间，记录期初持仓、预热后应改变目标持仓的信号次数、实际成交通知数及最长空仓期。成交次数从该区间的成交记录（`stats.fills`）数出来，区分成交和往返交易。区间内有改变仓位的意图却零成交时，对照首个应下单的信号，追踪委托是否产生（`stats.orders`）、拒单原因、下单单位、最小数量、可用资金和费用。有意空仓、跨区间沿用持仓、真实市场约束下无法成交，都写清依据。未查明前，该候选该区间的结果不得进入策略评价或排名。
+   - TradeLearn Lite 0.3.6 中，`buy()` 默认数量为 1，按目标比例下单会把数量截成整数（`backtest/targets.py` 取 `int()`），Lite 不支持非默认 `lot_size`。用小额资金跑高单价标的时，先查当前安装版本的真实签名和成交明细，按标的单位验证小数数量（例如 `self.buy(size=现金 / 价格)`）或合适的交易单位确实能成交。前一轮实测中固定买入 1 BTC 导致现金不足、测试段零成交，就是这一类。
    - 连续运行的策略在报告测试段时，从连续成交与权益序列按时间切片，保留期初持仓。若研究设计要求重置资金或持仓，事先记录重置规则，并提供指标所需的预热数据。
-2. **夏普标准误**。报告标准误时，先确认夏普的频率和年化期数与输入收益序列一致。把下面的测试接到本次实际生成报告的计算函数，先跑已知答案，再用同一输入与参考函数核对实际值。公式适用范围见 [validation.md](validation.md#三有效观测数与显著性)。
+2. **年化期数**。报告任何年化指标前，用 `periods_per_year(市场, bar)` 得到按市场时钟的期数，用 `metric_periods_ok(stats.metric_metadata, "sharpe", 期数)` 核对框架结果；不一致（例如 0.3.6 日内回测的 `period_source = default_per_bar_profile`、periods = 252）时，用 `tradelearn.metrics.sharpe(returns, periods=期数)` 重算并在口径表里写明。
+3. **夏普标准误与推断接口**。报告标准误时，先写明口径（IID、HAC 或块自助，见 [validation.md](validation.md#三有效观测数与显著性)），确认夏普的频率和年化期数与输入收益序列一致。统计只用已安装 TradeLearn 的实现；出数前用 `native_known_answers()` 以冻结输入核对它们（HAC 的冻结答案、配对差方向为候选 − 基准、N = 1 时 DSR 必须拒绝、MinTRL 的冻结答案）。结果为"不过"时停下报告；为"受阻"（旧版本没有该接口）时，只能报 IID 口径（`annual_sharpe_se`），HAC、配对差、PSR/DSR 记"受阻"。
 
-把 [backtest_checks.py](../scripts/backtest_checks.py) 加到本次研究脚本的导入路径。下面的示例可在 Skill 的 `scripts/` 目录运行。实际研究用生成报告的计算函数替换 `report_se`，成交检查输入应来自同一个候选与区间。
+把 [backtest_checks.py](../scripts/backtest_checks.py) 加到本次研究脚本的导入路径。下面的示例可在 Skill 的 `scripts/` 目录运行；成交检查输入应来自同一个候选与区间。
 
 ```python
 from math import isclose
-from backtest_checks import annual_sharpe_se, needs_fill_review
+from backtest_checks import (
+    annual_sharpe_se, native_known_answers, needs_fill_review,
+    periods_per_year, metric_periods_ok,
+)
 
-report_se = annual_sharpe_se
-assert isclose(report_se(1.0, 1460, 365), 0.500342348545, abs_tol=1e-9)
+# 已知答案：4 年、加密货币日频、年化夏普 1.0 → 0.5003423；
+# 漏除 q 的错误写法 sqrt((1 + S²/2) / T_年) 会得到 0.6123724。
+assert isclose(annual_sharpe_se(1.0, 1460, 365), 0.500342348545, abs_tol=1e-9)
+
+status = native_known_answers()   # 例：{"sharpe_se": "通过", "paired_sharpe_diff": "通过", ...}
+assert "不过" not in status.values(), status
+
+assert not metric_periods_ok({"sharpe": {"periods": 252}}, "sharpe", periods_per_year("crypto", "30min"))
 assert needs_fill_review(position_change_expected=True, fill_count=0)
 assert not needs_fill_review(position_change_expected=False, fill_count=0)
 ```

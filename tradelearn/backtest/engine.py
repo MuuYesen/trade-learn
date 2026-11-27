@@ -10,6 +10,7 @@ import pandas as pd
 from tradelearn.backtest.models import BarSnapshot, Stats, SummaryDict
 from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
+from tradelearn.core.annualization import resolve_periods
 from tradelearn.utils.console import smart_tqdm as tqdm
 
 
@@ -467,7 +468,11 @@ def _build_equity_returns(
     return equity, returns
 
 
-def _stats_config(cerebro: Any) -> dict[str, Any]:
+def _stats_config(
+    cerebro: Any,
+    periods: int | None = None,
+    period_source: str | None = None,
+) -> dict[str, Any]:
     config = BacktestRuntimeConfig.from_owner(cerebro)
     
     # Extract strategy name from cerebro's strategy list if available.
@@ -477,7 +482,7 @@ def _stats_config(cerebro: Any) -> dict[str, Any]:
         if hasattr(strategy_cls, "__name__"):
             strategy_name = strategy_cls.__name__
 
-    return {
+    result = {
         "strategy": strategy_name,
         "callback_batch": getattr(cerebro, "callback_batch", 1),
         "trade_on_close": config.trade_on_close,
@@ -488,6 +493,9 @@ def _stats_config(cerebro: Any) -> dict[str, Any]:
             "commission": config.commission,
         },
     }
+    if periods is not None:
+        result["annualization"] = {"periods": periods, "period_source": period_source}
+    return result
 
 
 def _return_pct(final_value: float, broker: Any) -> float:
@@ -777,6 +785,9 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
         eager_trades = _trades_frame(eager_fills)
         eager_positions = _positions_frame(strategy, eager_fills, index)
         eager_equity, eager_returns = _build_equity_returns(strategy, index, eager_fills, frame)
+        periods, period_source = resolve_periods(
+            eager_returns, BacktestRuntimeConfig.from_owner(cerebro).periods
+        )
         total_trades, winning_trades = _trade_summary(strategy.broker, eager_trades)
 
         def equity_factory() -> pd.Series:
@@ -809,11 +820,11 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
             "final_value": final_value,
             "peak_value": float(eager_equity.max()) if not eager_equity.empty else final_value,
             "return_pct": _return_pct(final_value, strategy.broker),
-            "annual_return": _summary_annual_return(eager_returns),
-            "volatility": _summary_volatility(eager_returns),
-            "sharpe": _summary_sharpe(eager_returns),
-            "sortino": _summary_sortino(eager_returns),
-            "calmar": _summary_calmar(eager_returns),
+            "annual_return": _summary_annual_return(eager_returns, periods),
+            "volatility": _summary_volatility(eager_returns, periods),
+            "sharpe": _summary_sharpe(eager_returns, periods),
+            "sortino": _summary_sortino(eager_returns, periods),
+            "calmar": _summary_calmar(eager_returns, periods),
             "max_drawdown": _canonical_drawdown(eager_returns),
             "avg_drawdown": dd_stats["avg_drawdown"],
             "max_dd_duration": dd_stats["max_dd_duration"],
@@ -840,13 +851,18 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
             orders=lambda: _orders_frame(strategy.broker),
             summary=summary,
             analyzers={},
-            config=_stats_config(cerebro),
+            config=_stats_config(cerebro, periods, period_source),
+            periods=periods,
+            period_source=period_source,
             fills=fills_factory,
         )
         return stats
 
     fills = _fills_frame(strategy.broker)
     equity, returns = _build_equity_returns(strategy, index, fills, frame)
+    periods, period_source = resolve_periods(
+        returns, BacktestRuntimeConfig.from_owner(cerebro).periods
+    )
     trades = _trades_frame(fills)
     orders = _orders_frame(strategy.broker)
     positions = _positions_frame(strategy, fills, index)
@@ -869,11 +885,11 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
         "final_value": final_value,
         "peak_value": float(equity.max()) if not equity.empty else final_value,
         "return_pct": _return_pct(final_value, strategy.broker),
-        "annual_return": _summary_annual_return(returns),
-        "volatility": _summary_volatility(returns),
-        "sharpe": _summary_sharpe(returns),
-        "sortino": _summary_sortino(returns),
-        "calmar": _summary_calmar(returns),
+        "annual_return": _summary_annual_return(returns, periods),
+        "volatility": _summary_volatility(returns, periods),
+        "sharpe": _summary_sharpe(returns, periods),
+        "sortino": _summary_sortino(returns, periods),
+        "calmar": _summary_calmar(returns, periods),
         "max_drawdown": _canonical_drawdown(returns),
         "avg_drawdown": dd_stats["avg_drawdown"],
         "max_dd_duration": dd_stats["max_dd_duration"],
@@ -903,7 +919,9 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
         orders=orders,
         summary=summary,
         analyzers={},
-        config=_stats_config(cerebro),
+        config=_stats_config(cerebro, periods, period_source),
+        periods=periods,
+        period_source=period_source,
         fills=fills,
     )
     return stats

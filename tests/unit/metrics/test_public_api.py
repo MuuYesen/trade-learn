@@ -49,7 +49,16 @@ def test_metrics_public_api_matches_documented_inventory() -> None:
         "win_rate",
     }
 
+    expected_inference = {
+        "sharpe_se",
+        "hac_mean_se",
+        "paired_sharpe_diff",
+        "probabilistic_sharpe",
+        "deflated_sharpe",
+        "minimum_track_record_length",
+    }
     expected = expected_returns | expected_risk | expected_factor | expected_trade
+    expected |= expected_inference
 
     assert set(metrics.__all__) == expected
     assert len(metrics.__all__) == len(expected)

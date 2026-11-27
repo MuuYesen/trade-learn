@@ -11,6 +11,13 @@ import numpy as np
 import pandas as pd
 
 import tradelearn.metrics as metrics
+from tradelearn.core.annualization import (
+    SOURCE_EXPLICIT,
+    infer_periods,
+    periods_from_metadata,
+    resolve_periods,
+    validate_periods,
+)
 from tradelearn.core.logging import get_logger
 from tradelearn.report import charts
 from tradelearn.report.analytics import (
@@ -39,33 +46,10 @@ LOGGER = get_logger("report")
 def _infer_periods(returns: Any, fallback: int = 252) -> int:
     """Infer periods-per-year from the return index sampling rate.
 
-    Annualisation needs the number of observations in a year. Assuming 252
-    silently treats every bar as a trading day, so a minute-bar backtest was
-    annualised about 1,400x too small: a -0.19% run over three days reported
-    -0.01% a year. Counting observations against the calendar span they cover
-    works for daily and intraday data alike and needs no assumption about
-    session length.
+    Kept for compatibility; the shared rule lives in
+    :mod:`tradelearn.core.annualization` so summaries and reports agree.
     """
-    try:
-        index = getattr(returns, "index", None)
-        if index is None or len(index) < 3:
-            return fallback
-        values = pd.DatetimeIndex(index)
-        span = (values[-1] - values[0]).total_seconds()
-        if not np.isfinite(span) or span <= 0:
-            return fallback
-        step = float(np.median(np.diff(values.as_unit("ns").asi8))) / 1e9
-        if not np.isfinite(step) or step <= 0 or step >= 24 * 3600:
-            # Daily and slower series keep the 252 trading-day convention: a
-            # business-day index spans fewer calendar days than it has bars, so
-            # measuring its rate would drift to ~261 for no benefit.
-            return fallback
-        per_year = (len(values) - 1) * (365.0 * 24 * 3600) / span
-        if not np.isfinite(per_year) or per_year <= 0:
-            return fallback
-        return int(round(per_year))
-    except (TypeError, ValueError):
-        return fallback
+    return infer_periods(returns, fallback=fallback)
 
 
 class Reporter:
@@ -112,6 +96,13 @@ class Reporter:
             return stats.get("returns")
         return getattr(stats, "returns", None)
 
+    @staticmethod
+    def _metadata_of(stats: Any) -> Any:
+        """Read producer metric metadata out of a Stats-like object or mapping."""
+        if isinstance(stats, dict):
+            return stats.get("metric_metadata")
+        return getattr(stats, "metric_metadata", None)
+
     def __init__(
         self,
         stats: Any,
@@ -121,11 +112,21 @@ class Reporter:
         """Create a reporter from a Stats-like object or mapping.
 
         `periods` is the number of observations per year used to annualise.
-        Leave it unset to infer it from the return index, which keeps intraday
-        backtests from being annualised as if every bar were a trading day.
+        Leave it unset to reuse the periods the backtest summary resolved
+        (explicit or inferred, recorded in ``metric_metadata``); otherwise it is
+        inferred from the return index, so intraday backtests are not
+        annualised as if every bar were a trading day. Daily data defaults to
+        252; pass ``periods=365`` for markets that trade every calendar day.
         """
         self.stats = stats
-        self.periods = periods if periods is not None else _infer_periods(self._returns_of(stats))
+        explicit = validate_periods(periods)
+        recorded = None if explicit is not None else periods_from_metadata(self._metadata_of(stats))
+        if explicit is not None:
+            self.periods, self.period_source = explicit, SOURCE_EXPLICIT
+        elif recorded is not None:
+            self.periods, self.period_source = recorded
+        else:
+            self.periods, self.period_source = resolve_periods(self._returns_of(stats))
         self.market_data = self._market_data_copy(market_data)
         self._summary_cache: dict[Any, dict[str, Any]] = {}
 

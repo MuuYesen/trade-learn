@@ -1,6 +1,6 @@
 """Strategy research workflow helpers."""
 
-from tradelearn.research import derive, explore, portfolio, preprocess, split
+from tradelearn.research import derive, explore, portfolio, preprocess, split, validation
 from tradelearn.research.features import FeatureBuilder, FeatureSet
 from tradelearn.research.pipeline import Pipeline, Transformer
 from tradelearn.research.portfolio import (
@@ -39,6 +39,7 @@ __all__ = [
     "split_bars",
     "time_split",
     "tracked",
+    "validation",
 ]
 
 __all__ += ["Allocator", "TopK", "EqualWeight", "Constraints", "RiskfolioOptimizer"]

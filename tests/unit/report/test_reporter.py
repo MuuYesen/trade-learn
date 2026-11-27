@@ -738,11 +738,22 @@ def test_intraday_returns_are_not_annualised_as_trading_days():
     index = pd.date_range("2026-10-18 22:02", periods=n, freq="min")
     returns = pd.Series(np.full(n, (1 - 0.0019) ** (1 / n) - 1), index=index)
 
-    assert _infer_periods(returns) == 525_600
-    assert Reporter({"returns": returns}).periods == 525_600
-    # under the old default the same three-day run read as -0.01% a year
+    # Three days is shorter than the one-week inference window: keep the
+    # compatible 252 value but label it, and let explicit periods annualise.
+    short = Reporter({"returns": returns})
+    assert (short.periods, short.period_source) == (252, "insufficient_intraday_coverage")
+    assert Reporter({"returns": returns}, periods=525_600).periods == 525_600
+    # under the 252 fallback the three-day run reads as -0.01% a year
     assert metrics.annual_return(returns, periods=252) > -0.001
-    assert metrics.annual_return(returns, periods=_infer_periods(returns)) < -0.15
+    assert metrics.annual_return(returns, periods=525_600) < -0.15
+
+    # A full week of continuous minute bars is measured from the time axis.
+    week = 7 * 24 * 60 + 1
+    week_returns = pd.Series(
+        np.zeros(week), index=pd.date_range("2026-10-18 22:02", periods=week, freq="min")
+    )
+    assert _infer_periods(week_returns) == 525_600
+    assert Reporter({"returns": week_returns}).periods == 525_600
 
 
 def test_daily_and_slower_returns_keep_the_252_convention():

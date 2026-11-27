@@ -8,6 +8,7 @@ from typing import Any
 
 import pandas as pd
 
+from tradelearn.core.annualization import ANNUALIZED_SUMMARY_METRICS, DEFAULT_PERIODS, SOURCE_DEFAULT
 from tradelearn.core.broker_contracts import Fill, OrderRequest
 
 
@@ -189,6 +190,8 @@ class Stats:
         analyzers: dict[str, Any],
         config: dict[str, Any],
         fills: pd.DataFrame | Callable[[], pd.DataFrame],
+        periods: int = DEFAULT_PERIODS,
+        period_source: str = SOURCE_DEFAULT,
     ) -> None:
         self._returns = returns
         self._equity = equity
@@ -200,7 +203,11 @@ class Stats:
         self.config = config
         self._fills = fills
         # Summary retains legacy key spellings, with canonical numeric units.
-        # 252 is the existing per-bar summary profile, not inferred calendar proof.
+        # Annualized metrics carry the periods the summary actually used
+        # (resolved by tradelearn.core.annualization); 252 with
+        # default_per_bar_profile is the daily fallback, not calendar proof.
+        self.periods = periods
+        self.period_source = period_source
         units = {"annual_return": "ratio", "volatility": "ratio",
                  "sharpe": "dimensionless", "sortino": "dimensionless",
                  "calmar": "dimensionless", "max_drawdown": "ratio",
@@ -208,12 +215,14 @@ class Stats:
                  "win_rate_pct": "percent"}
         self.metric_metadata = {
             key: {"unit": unit,
-                  "reason": "not_calculable" if value is None or not math.isfinite(float(value)) else "",
-                  "periods": 252,
-                  "period_source": "default_per_bar_profile"}
+                  "reason": "not_calculable" if value is None or not math.isfinite(float(value)) else ""}
             for key, unit in units.items() if key in summary
             for value in (summary[key],)
         }
+        for key in ANNUALIZED_SUMMARY_METRICS:
+            if key in self.metric_metadata:
+                self.metric_metadata[key]["periods"] = periods
+                self.metric_metadata[key]["period_source"] = period_source
         for key in ("profit_factor", "expectancy", "win_rate_pct"):
             if key in self.metric_metadata:
                 self.metric_metadata[key]["pnl_basis"] = "pnlcomm"

@@ -37,6 +37,12 @@ from tradelearn.report import Reporter
 Reporter.from_returns(returns, positions=positions, transactions=trades).report("report.html")
 ```
 
+## 年化口径
+
+`lite.Backtest(..., periods=...)` 或 `engine.Cerebro(periods=...)` 接收每年收益观测数。应按所用的真实收益频率和交易日历给值。例如日频全天候市场用 365，完整的 30 分钟 7×24 序列用 17,520。省略时，日内回测至少覆盖一个完整的周周期才按观测密度推断。日内覆盖不足时保留 252 的兼容值并标为 `insufficient_intraday_coverage`，需显式指定市场口径后才能引用。日频或无法推断时保留 252 的兼容默认值。推断值和默认值不能据此证明交易日历。
+
+年化的摘要指标带 `metric_metadata` 中的 `periods` 和 `period_source`。Reporter、回测产物、搜索结果和显式 MLflow 记录沿用同一运行的数值与可用元数据。读取旧结果时留意当时的年化口径。调用 `Reporter.from_returns` 分析另一频率的显式收益序列时独立指定 `periods`。
+
 ## 组合报告
 
 当 `report()` 接收到多个有效数据源和多资产持仓时，HTML 报告会自动使用组合回放视图，而不是把所有资产的 K 线和交易点挤在同一个 OHLC 坐标里。

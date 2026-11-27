@@ -79,6 +79,13 @@
 
 ## 六、TradeLearn 的写法
 
-- Lite 回测用 `Backtest.log_mlflow(...)`，其他结果用 `tradelearn.integrations.mlflow.log(...)`，连同尝试计数、失败的方案和数据使用记录一起记。
+- **默认写本地研究目录**，每次运行一个新目录，不覆盖：
+  - 回测产物：`tradelearn.report.artifacts.write_artifact_bundle(stats, 目录, timeframe=...)`；
+  - 尝试台账：搜索对象的 `trial_records`（格式 `tradelearn.search.trial.v1`，带数据 sha256、执行配置和状态）；
+  - 研究步骤：`ResearchRun(...).finish().to_dict()`；
+  - 滚动验证、情景、比较：结果对象的 `.write(目录)` 合并进 `validation.json`（新增接口）；
+  - 清单：数据 sha256、版本、年化期数及来源、标准误口径、N 的取法、成本情景、运行命令。
+  `scripts/backtest_checks.py` 的 `save_local_evidence(目录, stats=..., trial_records=..., research_result=..., manifest=...)` 一次写完前面几样；读回用 `tradelearn.research.validation.load_bundle` 与 `verify_inputs`（新增）。
+- **MLflow 只在用户指定了跟踪目标时用**：`Backtest.log_mlflow(..., uri=用户给的地址)` 或 `tradelearn.integrations.mlflow.log(结果, research_result=..., uri=用户给的地址)`，显式传 `uri`。省略 `uri` 会沿用环境变量里的跟踪地址，可能把记录写到远端。
 - 之后要对比时直接取记录，不要重跑旧方案。
 - 接口以已安装版本为准，拿不准时用 `help()` 或 `inspect` 查签名。

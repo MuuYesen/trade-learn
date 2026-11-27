@@ -6,6 +6,7 @@ from typing import Any
 from tradelearn.backtest.feed import is_panel_ohlcv_frame, panel_symbol_level
 from tradelearn.backtest.reporting import reporter_from_results
 from tradelearn.backtest.runtime_config import BacktestRuntimeConfig
+from tradelearn.core.annualization import validate_periods
 from tradelearn.core.costs import FixedCommission, FixedSlippage
 from tradelearn.core.logging import get_logger
 from tradelearn.core.strategy_events import invoke_component
@@ -44,14 +45,16 @@ class Cerebro:
         oldbuysell=False, oldtrades=False, lookahead=0, exactbars=False,
         optdatas=True, optreturn=True, objcache=False, live=False, writer=False,
         tradehistory=False, oldsync=False, tz=None, cheat_on_open=False,
-        broker_coo=True, quicknotify=False)
+        broker_coo=True, quicknotify=False, periods=None)
 
     @classmethod
     def _validate_options(cls, options):
         unknown = options.keys() - cls._bt_defaults.keys()
         if unknown:
             raise TypeError(f"unknown Cerebro parameters: {sorted(unknown)}")
-        supported = {"stdstats", "optreturn", "runonce", "maxcpus"}
+        supported = {"stdstats", "optreturn", "runonce", "maxcpus", "periods"}
+        # Annualization periods for summary metrics (TradeLearn extension).
+        validate_periods(options.get("periods"))
         for key, value in options.items():
             if key not in supported and value != cls._bt_defaults[key]:
                 raise NotImplementedError(f"Cerebro {key}={value!r} is not implemented")
