@@ -56,8 +56,7 @@ cash_flow_return(begin, finish, *, net_flow=None, events=(), start=None, end=Non
 | `tradelearn.report.templates` | 报告模板 |
 | `tradelearn.engine.*` | engine facade 的实现细节 |
 | `tradelearn.utils` | 内部工具 |
-| `tradelearn.query` | 数据查询实现细节 |
-| `tradelearn.strategy` | 旧策略/实验性实现 |
+| `tradelearn.integrations` | 可选外部宿主集成（如 `nautilus` / `tradelearn_runtime` 桥接） |
 | `tradelearn.cli` | new/lab/doctor命令行实现；TL自建MCP已退役 |
 
 ## 实盘适配器边界

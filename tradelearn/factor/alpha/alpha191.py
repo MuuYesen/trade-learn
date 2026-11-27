@@ -1,4 +1,10 @@
-"""Alpha191 formulas migrated into the v2 factor layer."""
+"""Alpha191 formulas migrated into the v2 factor layer.
+
+This module provides the Pandas/Numba batch research implementation for
+cross-sectional panel evaluation (all 191 formulas). For compiled/streaming
+factor graphs used in incremental runtime execution, see the KunQuant bridge
+in ``tradelearn.indicators._kunquant`` (82 Alpha101 / 158 Alpha158 items).
+"""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 # 架构与边界
 
-当前已正式发行版本为 **0.3.1**，后续 **0.3.2** 为独立候选；正式发布与安装状态按精确产物收据核验。TradeLearn 使用 Python 表达策略与研究流程，使用 Rust 支撑原生回测内核，并通过内部 `tradelearn.backtest.event_runtime.StrategyRuntime` 协调默认研究、事件回放和外部驱动的 paper/live 生命周期。
+当前源码版本以 `pyproject.toml`（现为 **0.3.6**）及精确产物收据为准；正式发布与安装状态按对应构建产物核验。TradeLearn 使用 Python 表达策略与研究流程，使用 Rust 支撑原生回测内核，并通过内部 `tradelearn.backtest.event_runtime.StrategyRuntime` 协调默认研究、事件回放和外部驱动的 paper/live 生命周期。
 
 Analyzer集合由共同运行层的`tradelearn.backtest.components`维护，Engine与回测都复用，核心不反向导入Engine/Lite。`tradelearn.backtest._bt_datetime`只转换Engine的公开日期读视图：预载与增量路径共用BT日期数与date/time/datetime参数，内部Unix秒/ns与Lite便利外观保持。NA Bar缺openinterest时显示NaN，不补零；自定义预载Line和OI列同样受已交付prefix约束。以上后续候选仍须新版本构建/安装资格，不外推为完整BT、子秒回测或全部原生化。
 
@@ -54,7 +54,7 @@ flowchart TB
 | Observers | 只读观察生命周期、业务和意图事件 | 不提供商业 SDK、可靠日志存储、网络发送或第二份成交事实 |
 | 研究与报告 | 数据整理、因子、模型、研究追踪和结果导出 | 可独立使用；扩展依赖按 extras 安装 |
 
-Python/Rust 扩展由 maturin/PyO3 构建，数组及绑定实现以源码为准，不把所有交互概括成 Arrow 零拷贝。原生回测所需扩展必须与 Python 包版本、平台及 Python ABI 匹配。
+Python/Rust 扩展由 maturin/PyO3 构建：行情数组优先通过连续 NumPy 缓冲区的 `PyReadonlyArray1::as_slice()` 整块拷贝传入 Rust，热循环前一次性探测 broker 能力并通过 `drain_rust_controls()` 降低每 bar 的 FFI 往返次数，不把跨语言交互概括成 Arrow 零拷贝。原生回测所需扩展必须与 Python 包版本、平台及 Python ABI 匹配。
 
 ## 研究与实盘共享的范围
 

@@ -2,8 +2,32 @@ from typing import Any
 
 import pandas as pd
 
+from tradelearn.core.annualization import (
+    periods_from_metadata,
+    resolve_periods,
+    validate_periods,
+)
 from tradelearn.metrics.returns import cum_returns
 from tradelearn.metrics.risk import drawdown_from_equity
+
+
+def _resolve_sharpe_periods(
+    stats: Any, returns: pd.Series, params_raw: Any, req_params: Any
+) -> int:
+    """Resolve annualization periods consistently with backtest summaries and Reporter."""
+    explicit = None
+    if hasattr(params_raw, "periods"):
+        explicit = params_raw.periods
+    elif isinstance(req_params, dict) and "periods" in req_params:
+        explicit = req_params["periods"]
+    if explicit is not None:
+        return validate_periods(explicit)
+    from_meta = periods_from_metadata(getattr(stats, "metric_metadata", None))
+    if from_meta is not None:
+        return from_meta[0]
+    stats_periods = validate_periods(getattr(stats, "periods", None))
+    periods, _ = resolve_periods(returns, stats_periods)
+    return periods
 
 
 class MetricsEngine:
@@ -60,7 +84,8 @@ class MetricsEngine:
                     rf = 0.0
                 from tradelearn.metrics import sharpe
 
-                self.results[inst_id] = {"sharperatio": sharpe(returns, rf=rf, periods=252)}
+                periods = _resolve_sharpe_periods(stats, returns, params_raw, req_params)
+                self.results[inst_id] = {"sharperatio": sharpe(returns, rf=rf, periods=periods)}
 
             elif metric == "drawdown":
                 if "drawdowns" in base_cache and not base_cache["drawdowns"].empty:

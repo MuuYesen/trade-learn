@@ -59,3 +59,52 @@ def test_broker_position_cache_reuses_symbol_lookup_within_bar() -> None:
     broker._clear_state_caches()
     assert broker.getposition(first).size == 2.0
     assert engine.position_calls == 2
+
+
+def test_broker_drain_rust_controls_fast_path_idle_and_populated() -> None:
+    broker = RustBroker()
+    # Idle state should short-circuit to None with no allocations.
+    assert broker.drain_rust_controls() is None
+
+    broker._queue_cash_control("add", 500.0)
+    controls = broker.drain_rust_controls()
+    assert controls is not None
+    cash, checks, cancels, updates, expiry, market = controls
+    assert len(cash) == 1
+    assert checks == []
+    assert cancels == []
+    assert updates == []
+    assert expiry == []
+    assert market == []
+
+    # Subsequent call when idle returns None again.
+    assert broker.drain_rust_controls() is None
+
+
+def test_rust_backtest_engine_accepts_contiguous_and_strided_numpy_arrays() -> None:
+    import numpy as np
+    from tradelearn._rust import RustBacktestEngine
+
+    ts = np.array([1_700_000_000_000_000_000, 1_700_086_400_000_000_000], dtype=np.int64)
+    prices = np.array([10.0, 11.0], dtype=np.float64)
+    vol = np.array([1000.0, 1200.0], dtype=np.float64)
+    kwargs = (100_000.0, 0.0, False, False, False, 0.0, 0.0, True, True, False)
+
+    eng_contig = RustBacktestEngine(ts, prices, prices, prices, prices, vol, *kwargs)
+    assert eng_contig.get_cash() == 100_000.0
+
+    # Non-contiguous strided views should seamlessly fall back without error.
+    ts_strided = np.repeat(ts, 2)[::2]
+    prices_strided = np.repeat(prices, 2)[::2]
+    vol_strided = np.repeat(vol, 2)[::2]
+    assert not ts_strided.flags["C_CONTIGUOUS"]
+    eng_strided = RustBacktestEngine(
+        ts_strided,
+        prices_strided,
+        prices_strided,
+        prices_strided,
+        prices_strided,
+        vol_strided,
+        *kwargs,
+    )
+    assert eng_strided.get_cash() == 100_000.0

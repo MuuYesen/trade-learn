@@ -7,6 +7,19 @@ import math
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
+from tradelearn.backtest._broker_helpers import (
+    _EMPTY_ORDER_BUFFER,
+    _ORDER_TYPE_TO_RUST,
+    CompactFillBatch,
+    OrderPayload,
+    _CommissionInfoView,
+    current_bar_vectors,
+    event_bar_vectors,
+    fill_batch_len,
+    is_compact_fill_batch,
+    iter_rust_fills,
+    project_fill_trade,
+)
 from tradelearn.backtest.models import ExecutedInfo, Order, Position, Trade, _notify_order
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
 from tradelearn.core.broker_events import BrokerEventPump
@@ -17,28 +30,6 @@ from tradelearn.core.strategy_events import (
 
 if TYPE_CHECKING:
     from tradelearn.backtest.strategy import Strategy
-
-OrderPayload = tuple[int, str, str, str, float, float | None, float | None]
-_EMPTY_ORDER_BUFFER: tuple[()] = ()
-CompactFillBatch = tuple[list[int], list[float], list[float], list[float], list[float], list[float]]
-_ORDER_TYPE_TO_RUST = {
-    Order.Market: "market", Order.Close: "market", Order.Limit: "limit",
-    Order.Stop: "stop", Order.StopLimit: "stop_limit",
-    Order.StopTrail: "stop_trail", Order.StopTrailLimit: "stop_trail_limit",
-}
-
-
-class _CommissionInfoView:
-    """Facade-only fallback for Backtrader-style commission info."""
-
-    def __init__(self, ratio: float):
-        self.p = self.params = type("Params", (), {"commission": ratio})()
-
-    def getcommission(self, size: float, price: float) -> float:
-        return abs(size) * price * self.p.commission
-
-    def getsize(self, price, cash):
-        return int(cash // price)
 
 
 class RustBroker:
@@ -556,7 +547,7 @@ class RustBroker:
 
     @staticmethod
     def _current_bar_vectors(
-        datas: list[Any], *, unit='s',
+        datas: list[Any], *, unit="s",
     ) -> tuple[
         list[str],
         list[int],
@@ -566,29 +557,7 @@ class RustBroker:
         list[float],
         list[float],
     ]:
-        symbols: list[str] = []
-        timestamps: list[int] = []
-        opens: list[float] = []
-        highs: list[float] = []
-        lows: list[float] = []
-        closes: list[float] = []
-        volumes: list[float] = []
-        from .data import native_data_symbols
-        execution_symbols = native_data_symbols(datas)
-        for index, data in enumerate(datas):
-            cursor = getattr(data, "_cursor", -1)
-            if cursor < 0:
-                continue
-            symbol = execution_symbols[index]
-            symbols.append(symbol)
-            from .clock import native_timestamps
-            timestamps.append(int(native_timestamps(data, unit)[cursor]))
-            opens.append(float(data._open[cursor]))
-            highs.append(float(data._high[cursor]))
-            lows.append(float(data._low[cursor]))
-            closes.append(float(data._close[cursor]))
-            volumes.append(float(data._volume[cursor]))
-        return symbols, timestamps, opens, highs, lows, closes, volumes
+        return current_bar_vectors(datas, unit=unit)
 
     @observer_mutation_guard
     def drain_proxy_events(self) -> list[Any]:
@@ -618,16 +587,11 @@ class RustBroker:
         return self._closed_trade_count, self._winning_trade_count
 
     def _event_bar_vectors(self):
-        vectors = (self._current_bar_vectors(self._active_datas) if self._clock_unit == 's' else
-                   self._current_bar_vectors(self._active_datas, unit=self._clock_unit))
-        clock = getattr(self, "_event_clock_timestamp", None)
-        if clock is None or not vectors[1] or vectors[1][0] == clock:
-            return vectors
-        if clock not in vectors[1]:
-            return vectors  # Replay's BT view is distinct from original quote timestamps.
-        active = vectors[1].index(clock)
-        order = [active, *range(active), *range(active + 1, len(vectors[1]))]
-        return tuple([[column[i] for i in order] for column in vectors])
+        return event_bar_vectors(
+            self._active_datas,
+            clock_unit=self._clock_unit,
+            event_clock_timestamp=getattr(self, "_event_clock_timestamp", None),
+        )
 
     def _step_event_bars(self, *, trade_on_close=False):
         vectors = self._event_bar_vectors()
@@ -1370,6 +1334,24 @@ class RustBroker:
         updates,self._submission_checks=self._submission_checks,{}
         return list(updates.items())
 
+    def drain_rust_controls(self):
+        """Return all pending native control batches in one FFI call, or None if idle."""
+        if not (
+            self._cash_control_buffer
+            or self._submission_checks
+            or self._control_updates
+            or self._cancel_buffer
+            or self._target_expiry_updates
+            or self._market_eligibility_updates
+        ):
+            return None
+        cash = self.drain_cash_controls()
+        checks = self.drain_submission_checks()
+        cancels, updates = self.drain_order_controls()
+        expiry = self.drain_target_expiry_clocks()
+        market = self.drain_market_eligibility()
+        return (cash, checks, cancels, updates, expiry, market)
+
     def _flush_order_controls(self) -> None:
         if self._engine is None:
             return
@@ -1495,15 +1477,11 @@ class RustBroker:
 
     @staticmethod
     def _fill_batch_len(fills: Any) -> int:
-        if fills is None:
-            return 0
-        if RustBroker._is_compact_fill_batch(fills):
-            return len(fills[0])
-        return len(fills)
+        return fill_batch_len(fills)
 
     @staticmethod
     def _is_compact_fill_batch(fills: Any) -> bool:
-        return isinstance(fills, tuple) and len(fills) == 6
+        return is_compact_fill_batch(fills)
 
     @observer_mutation_guard
     def process_fills(self, strategy: Strategy, i: int) -> None:
@@ -1548,14 +1526,7 @@ class RustBroker:
             self._authoritative_terminal_refs = previous_terminal_refs
 
     def _iter_rust_fills(self, fills: Any):
-        if self._is_compact_fill_batch(fills):
-            order_ids, sizes, prices, comms, _slippages, pnls = fills
-            return ((self._public_order_ref(ref), size, price, comm, pnl)
-                    for ref, size, price, comm, pnl in zip(order_ids, sizes, prices, comms, pnls, strict=True))
-        return (
-            (self._public_order_ref(fill[0]), fill[2], fill[3], fill[4], fill[6])
-            for fill in fills
-        )
+        return iter_rust_fills(fills, self._public_order_ref)
 
     def _process_rust_fills_batch(self, strategy: Strategy, fills: Any) -> set[int]:
         """Synchronize a batch of Rust fills while preserving notification order."""
@@ -1626,60 +1597,10 @@ class RustBroker:
 
     def _project_fill_trade(self, owner, order, old_size, old_price,
                             signed_size, price, commission, pnl, notify):
-        """Accumulate views of authoritative fills; never update account cash.
-
-        A reversal closes the previous Trade and opens a separate Trade. Fees
-        from its one native fill are apportioned by the actual closed/open qty.
-        """
-        from copy import copy
-        data = order.data
-        trade = self._trade_states.get(data)
-        total = abs(signed_size)
-        closing = min(abs(old_size), total) if old_size * signed_size < 0 else 0.0
-        opening = total - closing
-        direction = 1 if signed_size > 0 else -1
-        bar = len(data) if hasattr(data, "__len__") else 0
-        info = self.getcommissioninfo(data)
-        value = getattr(info, "getvaluesize", lambda size, cost: size * cost)
-        close_fee = commission * closing / total if closing else 0.0
-        if closing:
-            if trade is None:
-                raise RuntimeError("native fill closes a position without its trade projection")
-            trade.justopened = False
-            trade.size = old_size + direction * closing
-            trade.commission += close_fee
-            trade.pnl += pnl
-            trade.pnlcomm = trade.pnl - trade.commission
-            trade.value = value(trade.size, trade.price)
-            trade.barlen = bar - trade.baropen
-            trade.isopen = bool(trade.size)
-            trade.isclosed = not trade.isopen
-            if trade.isclosed:
-                trade.status = Trade.Closed
-                trade.dtclose = order.executed.dt
-                trade.barclose = bar
-                self._trade_states.pop(data)
-                if notify:
-                    self._notify_trade_event(owner, copy(trade))
-                trade = None
-        if opening:
-            justopened = trade is None
-            if justopened:
-                trade = Trade(ref=self._next_trade_ref, data=data, status=Trade.Open,
-                              isopen=True, dtopen=order.executed.dt,
-                              long=direction > 0, baropen=bar)
-                self._next_trade_ref += 1
-                self._trade_states[data] = trade
-            old_trade_size = trade.size
-            trade.size += direction * opening
-            trade.price = (old_trade_size * trade.price + direction * opening * price) / trade.size
-            trade.value = value(trade.size, trade.price)
-            trade.commission += commission - close_fee
-            trade.pnlcomm = trade.pnl - trade.commission
-            trade.justopened = justopened
-            trade.barlen = bar - trade.baropen
-            if justopened and notify:
-                self._notify_trade_event(owner, copy(trade))
+        project_fill_trade(
+            self, owner, order, old_size, old_price,
+            signed_size, price, commission, pnl, notify,
+        )
 
     def _reconcile_unfilled_market_orders(
         self,

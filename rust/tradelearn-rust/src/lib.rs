@@ -133,12 +133,12 @@ impl RustBacktestEngine {
     #[pyo3(signature = (timestamps, opens, highs, lows, closes, volumes, cash, commission_ratio, trade_on_close, cheat_on_close, cheat_on_open, slip_perc, slip_fixed, slip_match, slip_limit, slip_out, mult=1.0, margin=1.0, smart_matching=false, cn_a_stock_commission=false, cn_commission_rate=0.00025, cn_min_commission=5.0, cn_stamp_tax_rate=0.001, cn_transfer_fee_rate=0.00002))]
     #[allow(clippy::too_many_arguments)]
     fn new(
-        timestamps: Vec<i64>,
-        opens: Vec<f64>,
-        highs: Vec<f64>,
-        lows: Vec<f64>,
-        closes: Vec<f64>,
-        volumes: Vec<f64>,
+        timestamps: &Bound<'_, PyAny>,
+        opens: &Bound<'_, PyAny>,
+        highs: &Bound<'_, PyAny>,
+        lows: &Bound<'_, PyAny>,
+        closes: &Bound<'_, PyAny>,
+        volumes: &Bound<'_, PyAny>,
         cash: f64,
         commission_ratio: f64,
         trade_on_close: bool,
@@ -157,8 +157,14 @@ impl RustBacktestEngine {
         cn_min_commission: f64,
         cn_stamp_tax_rate: f64,
         cn_transfer_fee_rate: f64,
-    ) -> Self {
-        Self {
+    ) -> PyResult<Self> {
+        let timestamps = runner::extract_i64_vec(timestamps)?;
+        let opens = runner::extract_f64_vec(opens)?;
+        let highs = runner::extract_f64_vec(highs)?;
+        let lows = runner::extract_f64_vec(lows)?;
+        let closes = runner::extract_f64_vec(closes)?;
+        let volumes = runner::extract_f64_vec(volumes)?;
+        Ok(Self {
             inner: BacktestEngine::new(
                 timestamps,
                 opens,
@@ -185,7 +191,7 @@ impl RustBacktestEngine {
                 cn_stamp_tax_rate,
                 cn_transfer_fee_rate,
             ),
-        }
+        })
     }
 
     fn total_bars(&self) -> usize {
@@ -337,12 +343,13 @@ impl RustBacktestEngine {
         end: usize,
     ) -> PyResult<()> {
         let stop = end.min(slf.borrow(py).inner.total_bars());
+        let caps = BrokerCapabilities::probe(py, &broker)?;
         for cursor in start..stop {
             let (fills,cash,size,price) = {
                 let mut engine=slf.borrow_mut(py);
-                engine.sync_broker_controls(py,&broker)?;
+                engine.sync_broker_controls_with(py,&broker,&caps)?;
                 let records=engine.inner.step_open(cursor);
-                engine.deliver_order_events(py,&broker)?;
+                engine.deliver_order_events_with(py,&broker,&caps)?;
                 let fills=engine.map_fills_compact(records);
                 let cash=engine.inner.get_cash();
                 let (size,price)=engine.inner.get_position();
@@ -351,7 +358,7 @@ impl RustBacktestEngine {
             // No mutable owner loan spans arbitrary Python business. Public
             // BT reads/explicit valuation still address this exact account.
             let drained=on_bar.call1(py,(cursor,fills,cash,size,price))?;
-            slf.borrow_mut(py).consume_broker_callback(py,&broker,drained)?;
+            slf.borrow_mut(py).consume_broker_callback_with(py,&broker,drained,&caps)?;
         }
         Ok(())
     }
@@ -676,8 +683,75 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+pub(crate) struct BrokerCapabilities {
+    has_fast_controls: bool,
+    has_receive_order_events: bool,
+    has_pop_trail_params: bool,
+}
+
+impl BrokerCapabilities {
+    pub(crate) fn probe(py: Python<'_>, broker: &Py<PyAny>) -> PyResult<Self> {
+        let bound = broker.bind(py);
+        Ok(Self {
+            has_fast_controls: bound.hasattr("drain_rust_controls")?,
+            has_receive_order_events: bound.hasattr("receive_order_events")?,
+            has_pop_trail_params: bound.hasattr("pop_trail_params")?,
+        })
+    }
+}
+
+type FastControlBatch = (
+    Vec<(u64, String, f64)>,
+    Vec<(u64, f64)>,
+    Vec<u64>,
+    Vec<(u64, Option<i64>, Option<u64>)>,
+    Vec<u64>,
+    Vec<(u64, i64)>,
+);
+
 // Every runner consumes the same broker command boundary, including empty callbacks.
 impl RustBacktestEngine {
+    pub(crate) fn sync_broker_controls_with(
+        &mut self,
+        py: Python<'_>,
+        broker: &Py<PyAny>,
+        caps: &BrokerCapabilities,
+    ) -> PyResult<()> {
+        if !caps.has_fast_controls {
+            return self.sync_broker_controls(py, broker);
+        }
+        let raw = broker.call_method0(py, "drain_rust_controls")?;
+        if raw.is_none(py) {
+            return Ok(());
+        }
+        let (commands, checks, cancels, updates, expiry_updates, market_updates): FastControlBatch =
+            raw.extract(py)?;
+        if !commands.is_empty() {
+            self.inner
+                .apply_cash_controls(commands)
+                .map_err(PyValueError::new_err)?;
+            self.deliver_cash_events(py, broker)?;
+        }
+        for (id, price) in checks {
+            self.inner
+                .configure_submission_check(id, price)
+                .map_err(PyValueError::new_err)?;
+        }
+        for (order_id, deadline, peer) in updates {
+            self.inner.configure_order(order_id, deadline, peer);
+        }
+        for order_id in cancels {
+            self.inner.remove_order(order_id);
+        }
+        for order_id in expiry_updates {
+            self.inner.configure_order_expiry_clock(order_id, true);
+        }
+        for (order_id, after) in market_updates {
+            self.inner.configure_market_eligibility(order_id, after);
+        }
+        Ok(())
+    }
+
     pub(crate) fn sync_broker_controls(
         &mut self,
         py: Python<'_>,
@@ -724,14 +798,15 @@ impl RustBacktestEngine {
         Ok(())
     }
 
-    pub(crate) fn deliver_order_events(
+    pub(crate) fn deliver_order_events_with(
         &mut self,
         py: Python<'_>,
         broker: &Py<PyAny>,
+        caps: &BrokerCapabilities,
     ) -> PyResult<()> {
         self.deliver_cash_events(py, broker)?;
         let events = self.inner.drain_order_events();
-        if !events.is_empty() && broker.bind(py).hasattr("receive_order_events")? {
+        if !events.is_empty() && caps.has_receive_order_events {
             broker.call_method1(py, "receive_order_events", (events,))?;
         }
         Ok(())
@@ -745,19 +820,19 @@ impl RustBacktestEngine {
         Ok(())
     }
 
-    pub(crate) fn consume_broker_callback(
+    pub(crate) fn consume_broker_callback_with(
         &mut self,
         py: Python<'_>,
         broker: &Py<PyAny>,
         drained: Py<PyAny>,
+        caps: &BrokerCapabilities,
     ) -> PyResult<()> {
         if !drained.is_none(py) {
             let orders: Vec<(u64, String, String, String, f64, Option<f64>, Option<f64>)> =
                 drained.extract(py)?;
             let mut bindings = Vec::with_capacity(orders.len());
-            let has_trails = broker.bind(py).hasattr("pop_trail_params")?;
             for (provisional, symbol, side, kind, size, limit, stop) in orders {
-                let (amount, percent): (Option<f64>, Option<f64>) = if has_trails {
+                let (amount, percent): (Option<f64>, Option<f64>) = if caps.has_pop_trail_params {
                     broker
                         .call_method1(py, "pop_trail_params", (provisional,))?
                         .extract(py)?
@@ -780,7 +855,7 @@ impl RustBacktestEngine {
                 broker.call_method1(py, "bind_rust_order_refs", (bindings,))?;
             }
         }
-        self.sync_broker_controls(py, broker)
+        self.sync_broker_controls_with(py, broker, caps)
     }
 }
 

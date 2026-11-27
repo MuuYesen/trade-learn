@@ -107,8 +107,11 @@ fn build_primary_clock_cursors(
     cursors
 }
 
-fn extract_i64_vec(obj: &Bound<'_, PyAny>) -> PyResult<Vec<i64>> {
+pub(crate) fn extract_i64_vec(obj: &Bound<'_, PyAny>) -> PyResult<Vec<i64>> {
     if let Ok(array) = obj.extract::<PyReadonlyArray1<i64>>() {
+        if let Ok(slice) = array.as_slice() {
+            return Ok(slice.to_vec());
+        }
         return Ok(array.as_array().iter().copied().collect());
     }
     obj.extract::<Vec<i64>>()
@@ -122,8 +125,11 @@ fn extract_i64_matrix(obj: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<i64>>> {
     Ok(rows)
 }
 
-fn extract_f64_vec(obj: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
+pub(crate) fn extract_f64_vec(obj: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
     if let Ok(array) = obj.extract::<PyReadonlyArray1<f64>>() {
+        if let Ok(slice) = array.as_slice() {
+            return Ok(slice.to_vec());
+        }
         return Ok(array.as_array().iter().copied().collect());
     }
     obj.extract::<Vec<f64>>()
@@ -198,12 +204,13 @@ impl RustBarRunner {
         end: usize,
     ) -> PyResult<()> {
         let stop=end.min(engine.borrow(py).inner.total_bars()).min(self.cursors.len());
+        let caps = crate::BrokerCapabilities::probe(py, &broker)?;
         for cursor in start..stop {
             let (fills,cash,size,price)={
                 let mut account=engine.borrow_mut(py);
-                account.sync_broker_controls(py,&broker)?;
+                account.sync_broker_controls_with(py,&broker,&caps)?;
                 let records=account.inner.step_open(cursor);
-                account.deliver_order_events(py,&broker)?;
+                account.deliver_order_events_with(py,&broker,&caps)?;
                 let fills=account.map_fills_compact(records);
                 let cash=account.inner.get_cash();
                 let (size,price)=account.inner.get_position();
@@ -211,7 +218,7 @@ impl RustBarRunner {
             };
             let data_cursors=self.cursors[cursor].clone();
             let drained=on_bar.call1(py,(cursor,data_cursors,fills,cash,size,price))?;
-            engine.borrow_mut(py).consume_broker_callback(py,&broker,drained)?;
+            engine.borrow_mut(py).consume_broker_callback_with(py,&broker,drained,&caps)?;
         }
         Ok(())
     }
@@ -305,13 +312,14 @@ impl RustClockedMultiDataRunner {
         end: usize,
     ) -> PyResult<()> {
         let stop = end.min(self.cursors.len());
+        let caps = crate::BrokerCapabilities::probe(py, &broker)?;
         for cursor in start..stop {
             let (fills, cash, size, price) = {
                 let mut engine_ref = engine.borrow_mut(py);
-                engine_ref.sync_broker_controls(py, &broker)?;
+                engine_ref.sync_broker_controls_with(py, &broker, &caps)?;
                 let bars = self.active_bars_at(cursor);
                 let fill_records = engine_ref.inner.step_open_bars(bars);
-                engine_ref.deliver_order_events(py, &broker)?;
+                engine_ref.deliver_order_events_with(py, &broker, &caps)?;
                 let fills = engine_ref.map_fills_compact(fill_records);
                 let cash = engine_ref.inner.get_cash();
                 let (size, price) = engine_ref.inner.get_position();
@@ -321,7 +329,7 @@ impl RustClockedMultiDataRunner {
             let drained = on_bar.call1(py, (cursor, data_cursors, fills, cash, size, price))?;
             engine
                 .borrow_mut(py)
-                .consume_broker_callback(py, &broker, drained)?;
+                .consume_broker_callback_with(py, &broker, drained, &caps)?;
         }
         Ok(())
     }

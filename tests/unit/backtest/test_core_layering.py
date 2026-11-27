@@ -151,10 +151,13 @@ def test_backtest_runtime_modules_are_flattened() -> None:
     backtest_root = root / "tradelearn" / "backtest"
     expected_modules = {
         "__init__.py",
+        "_broker_helpers.py",
+        "_bt_datetime.py",
+        "_optimize.py",
+        "_stats.py",
         "broker.py",
         "clock.py",
         "components.py",
-        "_bt_datetime.py",
         "data.py",
         "engine.py",
         "event_runner.py",
@@ -166,7 +169,6 @@ def test_backtest_runtime_modules_are_flattened() -> None:
         "parameters.py",
         "lines.py",
         "models.py",
-        "_optimize.py",
         "reporting.py",
         "runtime_config.py",
         "sizer.py",

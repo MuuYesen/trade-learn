@@ -45,3 +45,50 @@ def test_engine_keeps_sharpe_instances_and_first_registration_independent():
             sharpe(returns, rf=rf, periods=252)
         )
     assert engine.results["higher_rf"]["sharperatio"] < engine.results["base"]["sharperatio"]
+
+
+def test_engine_resolves_sharpe_periods_from_params_metadata_and_index():
+    class ParamObj:
+        riskfreerate = 0.0
+        periods = 365
+
+        def asdict(self):
+            return {"riskfreerate": self.riskfreerate, "periods": self.periods}
+
+    index = pd.date_range("2025-01-01", periods=400, freq="30min", tz="UTC")
+    returns = pd.Series([0.001, -0.0005] * 200, index=index)
+
+    engine = MetricsEngine()
+    engine.request("inferred", "sharpe")
+    engine.request("explicit_dict", "sharpe", {"riskfreerate": 0.0, "periods": 52})
+    engine.request("explicit_obj", "sharpe", ParamObj())
+    engine.request("explicit_none", "sharpe", {"periods": None})
+
+    engine.compute(SimpleNamespace(returns=returns))
+    assert engine.results["inferred"]["sharperatio"] == pytest.approx(
+        sharpe(returns, rf=0.0, periods=17520)
+    )
+    assert engine.results["explicit_dict"]["sharperatio"] == pytest.approx(
+        sharpe(returns, rf=0.0, periods=52)
+    )
+    assert engine.results["explicit_obj"]["sharperatio"] == pytest.approx(
+        sharpe(returns, rf=0.0, periods=365)
+    )
+    assert engine.results["explicit_none"]["sharperatio"] == pytest.approx(
+        sharpe(returns, rf=0.0, periods=17520)
+    )
+
+    meta_stats = SimpleNamespace(
+        returns=returns,
+        metric_metadata={"sharpe": {"periods": 365, "period_source": "explicit"}},
+    )
+    engine.compute(meta_stats)
+    assert engine.results["inferred"]["sharperatio"] == pytest.approx(
+        sharpe(returns, rf=0.0, periods=365)
+    )
+
+    attr_stats = SimpleNamespace(returns=pd.Series([0.01, -0.02, 0.03]), periods=12)
+    engine.compute(attr_stats)
+    assert engine.results["inferred"]["sharperatio"] == pytest.approx(
+        sharpe(attr_stats.returns, rf=0.0, periods=12)
+    )

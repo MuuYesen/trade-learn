@@ -72,7 +72,6 @@ pub struct BacktestEngine {
     cash_error: bool,
     submission_checks: HashMap<OrderId, f64>,
     market_close_references: HashMap<OrderId, f64>,
-    activation_bar: usize,
 
     // Records
     results: BacktestResults,
@@ -158,7 +157,6 @@ impl BacktestEngine {
             cash_error: false,
             submission_checks: HashMap::new(),
             market_close_references: HashMap::new(),
-            activation_bar: 1,
             results: BacktestResults::default(),
         }
     }

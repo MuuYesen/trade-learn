@@ -10,7 +10,7 @@
 
 ```mermaid
 sequenceDiagram
-    participant D as Data Feed (Arrow)
+    participant D as Data Feed (Preloaded Arrays)
     participant R as Rust Runner
     participant B as Rust Broker
     participant P as Python Strategy
@@ -52,9 +52,9 @@ sequenceDiagram
     开启 `trade_on_close=True` 时，务必确保你的决策信号不是直接基于当前 Bar 的 Close 衍生出的极短线指标（如：当日涨幅 > 9% 下单），否则会引入潜在的先验偏差。
 
 ### 3. 多数据源对齐 (Multi-Data Alignment)
-在处理多资产组合（如标的 A 和标的 B 时间戳不完全一致）时，`trade-learn` 遵循 **Primary-Clock (主时钟)** 机制：
-- **主数据源**：`datas[0]` 决定了 `next()` 触发的频率。
-- **最新可见原则 (Latest-at-or-before)**：当主时钟走到时间 $T$ 时，副数据源通过 Line 协议返回其在 $T$ 时刻或 $T$ 之前最新的那一根 Bar。
+在处理多资产组合（如标的 A 和标的 B 时间戳不完全一致）时，默认批量回测采用 **全局时钟对齐（`RustClockedMultiDataRunner`）** 机制：
+- **全局并集时钟**：内核按各标的时间戳构建有序全局时钟，在每个时间步 $T$ 将当日/当刻活跃的标的合步推进，并触发一次 `next()`。
+- **最新可见原则 (Latest-at-or-before)**：当全局时钟走到时间 $T$ 时，当前步未更新的标的通过 Line 协议返回其在 $T$ 时刻或 $T$ 之前最新的那一根 Bar。
 - **防止窥视**：绝不会返回 $T$ 之后的数据。
 
 ### 4. 保留参数 (`callback_batch`)
@@ -65,9 +65,9 @@ sequenceDiagram
 
 ## Python ↔ Rust 数据交互
 
-由于回测内核在 Rust 侧，系统通过 **Apache Arrow** 实现高效的跨语言通信：
-- **行情数据**：一次性通过 Zero-copy 传递给 Rust。
-- **订单/持仓**：通过 FFI 暴露精简的 C-接口，确保 Python 侧访问 `self.position` 时几乎无开销。
+由于回测内核在 Rust 侧，系统通过 **PyO3 原生扩展** 实现高效的跨语言通信：
+- **行情数据**：启动前对连续 NumPy 缓冲区通过 `PyReadonlyArray1::as_slice()` 整块拷贝至 Rust 连续数组，避免逐元素 Python 拆箱开销。
+- **控制指令与状态同步**：Rust Runner 在循环启动前探测 Broker 能力，循环内通过 `drain_rust_controls()` 单次 FFI 排空控制指令（空闲时直接返回 `None`），并将撮合成交与持仓投影回 Python 侧。
 
 !!! warning
     **不要在 `next()` 之外维护持久化持仓状态**

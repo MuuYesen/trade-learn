@@ -2,6 +2,7 @@
 
 from contextvars import ContextVar
 
+
 def _describe(value, seen=None):
     """Stable JSON configuration facts; never serialize a runtime or its repr."""
     import dataclasses

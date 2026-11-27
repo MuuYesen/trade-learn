@@ -14,10 +14,10 @@
 - **维度二 (symbol)**：资产标识。
 - **Columns**：标准的 OHLCV + 自定义因子。
 
-### 2. 内存中的 Panel 布局
-在 Rust 侧，数据不再是零散的 DataFrame，而是一个连续的内存块（Buffer）。
-- **零拷贝 (Zero-copy)**：利用 Apache Arrow，数据直接从内存映射到 Rust 内核，避免了 Python 对象序列化的巨大开销。
-- **Clocked Alignment**：内核通过全局时钟推进，自动处理不同标的时间戳不齐（Missing Bars）的情况，确保回测的严谨性。
+### 2. 内存中的连续数组布局
+在 Rust 侧，行情数据不再是零散的 Python DataFrame，而是预载为连续的内存数组（`Vec<i64>` / `Vec<f64>`）。
+- **连续缓冲区直传**：入口层对连续 NumPy `ndarray` 优先通过 PyO3 `PyReadonlyArray1::as_slice()` 整块拷贝进入 Rust 内核，避免了逐元素 Python 对象拆箱开销（非连续序列自动回退到通用迭代提取）。
+- **Clocked Alignment**：多标的模式下，内核通过全局时钟推进，自动处理不同标的时间戳不齐（Missing Bars）的情况，确保回测的严谨性。
 
 ---
 
@@ -29,7 +29,7 @@
 - **Bar (K 线/棒)**：数据推进的最小时间单位。
 - **Warmup (暖机期)**：策略启动初期，为了让长周期指标（如 MA200）计算就绪而预留的观测期。在此期间不触发 `next()`。
 - **Next (步进)**：事件循环中调用策略逻辑的动作，代表处理“当前时刻可见数据”的机会。
-- **Primary Feed (主数据源)**：`datas[0]`，决定了回测引擎的全局心钟。
+- **Primary Feed (主数据源)**：`datas[0]`，策略默认引用的主数据源（`self.data`）；多标的回测时内核按全局时间戳时钟对齐各活跃标的并同步推进。
 
 ### 交易与账户类
 - **Order Intent (订单意图)**：用户在 `next()` 中提交的请求，尚未被内核接受。
@@ -48,12 +48,12 @@
 ## 数据的生命周期
 
 ```text
-Provider (拉取) -> Parquet (缓存) -> Arrow (内存) -> Rust Core (计算) -> Stats (输出)
+Provider (拉取) -> Parquet (缓存) -> Pandas / NumPy (内存预载) -> Rust Core (连续数组计算) -> Stats (输出)
 ```
 
 !!! note
     **统一的数据视口**
-    无论你的数据源是 CSV、Parquet 还是数据库，Tradelearn 都会在进入内核前将其统一转化为内存中的 Arrow 格式，以确保策略执行时的高效。
+    无论你的数据源是 CSV、Parquet 还是数据库，TradeLearn 都会在进入回测内核前将其规范化为连续的 NumPy 数组并通过 PyO3 载入 Rust 侧，以确保策略执行时的高效。
 
 !!! tip
     所有的术语在 `tradelearn.core` 契约中都有对应的代码对象定义。深入了解这些对象字段，请参阅 [核心契约](../internals/contracts.md)。

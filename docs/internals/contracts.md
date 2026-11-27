@@ -145,7 +145,7 @@ class Broker(Protocol):
 
 `Broker` 是 backtest / paper / live 共同的目标协议。回测内部可以有更丰富的 `Order` / `Trade` 状态机，但跨 broker 边界只通过这些中性类型通信。
 
-Rust 回测 broker 不需要强行实现这个 Protocol；它是 `tradelearn.backtest` 的高性能实现。QMT / IB / CTP 等实盘适配器应实现 `Broker` Protocol，并通过 `BrokerEventPump` 回流事件。实盘执行器需要等待委托回报时，应优先使用 `order_statuses(...)` 批量查询，避免逐单轮询放大延迟。
+Rust 回测 broker 不需要强行实现这个 Protocol；它是 `tradelearn.backtest` 的高性能实现。当前官方实盘/仿真宿主装配主路径为 `tradelearn.integrations.nautilus`（`NautilusStore` / `tradelearn_runtime` 桥接）；自定义外部实盘适配器（如 QMT / IB / CTP）仍可实现 `Broker` Protocol，并通过 `BrokerEventPump` 回流事件。实盘执行器需要等待委托回报时，应优先使用 `order_statuses(...)` 批量查询，避免逐单轮询放大延迟。
 
 辅助类型：
 
