@@ -385,6 +385,7 @@ def _run_lite(data, settings):
 
 
 def _run_engine(data, settings):
+    from tradelearn.core.costs import PercentSlippage
     from tradelearn.engine import Cerebro, Strategy
     from tradelearn.engine.feeds import PandasData
 
@@ -396,14 +397,20 @@ def _run_engine(data, settings):
     engine = Cerebro(periods=settings["periods"])
     engine.broker.setcash(settings["cash"])
     engine.broker.setcommission(commission=settings["commission"])
+    if "slippage_rate" in settings:
+        engine.broker.configure_matching(slippage=PercentSlippage(settings["slippage_rate"]))
     engine.adddata(PandasData(dataname=data))
     engine.addstrategy(Hold)
     return engine.run()[0].stats
 
 
-@pytest.mark.parametrize("evaluate", [_run_lite, _run_engine], ids=["lite", "engine"])
+@pytest.mark.parametrize(("evaluate", "changed_setting"), [
+    pytest.param(_run_lite, "commission", id="lite-commission"),
+    pytest.param(_run_engine, "commission", id="engine-commission"),
+    pytest.param(_run_engine, "slippage_rate", id="engine-slippage"),
+])
 def test_follow_up_reuses_real_run_and_preserves_source(
-    monkeypatch, tmp_path, evaluate,
+    monkeypatch, tmp_path, evaluate, changed_setting,
 ):
     import pandas as pd
     from tradelearn.research.validation import load_bundle
@@ -419,7 +426,7 @@ def test_follow_up_reuses_real_run_and_preserves_source(
     baseline = tmp_path / "original"
     changed = tmp_path / "new"
     settings = {"cash": 1000, "commission": 0.001, "periods": 365}
-    changed_setting = "commission"
+    settings[changed_setting] = 0.001
     expected = evaluate(frame, settings)
     record_backtest(
         frame, settings=settings, evaluate=evaluate, command="python research.py",
@@ -437,7 +444,13 @@ def test_follow_up_reuses_real_run_and_preserves_source(
     before_fees = before.tables["fills"]["commission"].sum()
     after_fees = after.tables["fills"]["commission"].sum()
     assert before_fees > 0
-    assert after_fees == pytest.approx(2 * before_fees)
+    if changed_setting == "commission":
+        assert after_fees == pytest.approx(2 * before_fees)
+    else:
+        before_fill = before.tables["fills"]["price"].iloc[0]
+        after_fill = after.tables["fills"]["price"].iloc[0]
+        assert after_fill > before_fill
+        assert after_fees == pytest.approx(after_fill * settings["commission"])
     assert after.manifest["backtest_run"]["settings"] == {**settings, changed_setting: 0.002}
     assert after.manifest["comparison"]["change"] == {
         "setting": changed_setting, "before": 0.001, "after": 0.002,

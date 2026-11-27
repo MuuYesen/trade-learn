@@ -414,6 +414,19 @@ impl RustBacktestEngine {
         self.inner.configure_market_close_reference(order_id,price).map_err(pyo3::exceptions::PyValueError::new_err)
     }
 
+    fn _configure_slippage(&mut self, kind: &str, value: f64) -> PyResult<()> {
+        if !value.is_finite() || value < 0.0 {
+            return Err(PyValueError::new_err("slippage must be finite and non-negative"));
+        }
+        let model = match kind {
+            "fixed" => SlippageModel::Fixed(FixedSlippage { amount: value }),
+            "percent" if value < 1.0 => SlippageModel::Percent(PercentSlippage { ratio: value }),
+            _ => return Err(PyValueError::new_err("invalid slippage type or percentage")),
+        };
+        self.inner.configure_slippage(model);
+        Ok(())
+    }
+
     fn _configure_bt_precision(&mut self, preserve: bool) {
         self.inner.configure_bt_precision(preserve);
     }

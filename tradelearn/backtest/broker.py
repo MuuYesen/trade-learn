@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from tradelearn.backtest.models import ExecutedInfo, Order, Position, Trade, _notify_order
 from tradelearn.backtest.strategy import Strategy as CoreStrategy
 from tradelearn.core.broker_events import BrokerEventPump
+from tradelearn.core.costs import FixedSlippage, PercentSlippage
 from tradelearn.core.strategy_events import (
     dispatch_callback, has_observers, invoke_component, observer_mutation_guard,
 )
@@ -149,12 +150,37 @@ class RustBroker:
         commission: Any | None = None,
     ) -> None:
         """Configure matching options exposed to facade runners."""
+        if slippage is not None:
+            if self._engine is not None:
+                raise NotImplementedError("slippage changes after native initialization are not implemented")
+            kind, value = self._slippage_parameters(slippage)
+            slippage = FixedSlippage(value) if kind == "fixed" else PercentSlippage(value)
         if trade_on_close is not None:
             self._trade_on_close = bool(trade_on_close)
         if slippage is not None:
             self._slippage_model = slippage
         if commission is not None:
             self._commission_model = commission
+
+    @staticmethod
+    def _slippage_parameters(model: Any) -> tuple[str, float]:
+        if type(model) is FixedSlippage:
+            kind, value = "fixed", float(model.amount)
+        elif type(model) is PercentSlippage:
+            kind, value = "percent", float(model.ratio)
+        else:
+            raise NotImplementedError(
+                "native slippage requires FixedSlippage or PercentSlippage"
+            )
+        if not math.isfinite(value) or value < 0 or (kind == "percent" and value >= 1):
+            raise ValueError("slippage must be finite and non-negative, with a percent ratio below 1")
+        return kind, value
+
+    def _configured_slippage(self) -> tuple[str, float] | None:
+        if self._slippage_model is None:
+            return None
+        kind, value = self._slippage_parameters(self._slippage_model)
+        return (kind, value) if value else None
 
     @observer_mutation_guard
     def set_storage(self, storage: dict[str, Any] | None) -> None:
@@ -176,6 +202,12 @@ class RustBroker:
             raise RuntimeError('BT input precision requires the matching candidate TL native kernel')
         if callable(precision):
             precision(bool(self._bt_notifications))
+        slippage = self._configured_slippage()
+        if slippage is not None:
+            configure_slippage = getattr(engine, "_configure_slippage", None)
+            if not callable(configure_slippage):
+                raise RuntimeError("slippage requires the matching TradeLearn native kernel")
+            configure_slippage(*slippage)
         self._engine = engine
         # The one runtime constructs this native account from the same cash
         # configuration; do not add a second FFI account read during binding.

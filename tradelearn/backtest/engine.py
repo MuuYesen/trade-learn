@@ -493,6 +493,11 @@ def _stats_config(
             "commission": config.commission,
         },
     }
+    configured_slippage = getattr(getattr(cerebro, "broker", None), "_configured_slippage", None)
+    slippage = configured_slippage() if callable(configured_slippage) else None
+    if slippage is not None:
+        kind, value = slippage
+        result["broker"]["slippage"] = {"kind": kind, "value": value}
     if periods is not None:
         result["annualization"] = {"periods": periods, "period_source": period_source}
     return result

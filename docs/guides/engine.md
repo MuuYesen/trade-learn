@@ -58,7 +58,23 @@ Engine的order_target_size/value按BT已成交仓位与comminfo.getsize计算；
 
 统一收口中的未发行源码已补历史bar子秒时钟：全整秒输入保留既有秒轴；含子秒时将本次运行所有Feed归一到精确int64纳秒轴，公开日期继续BT ordinal，不改持久协议或NA事件时钟。500ms、微秒日期/窗口、混合精度多Feed、有效期量化和重复可交付时点已与固定BT对照。默认跨日session end保留23:59:59.999990及显式EOF；EOF执行tick与新bar估值分开送入同一个TL Rust撮合周期，不改行情OHLCV或另造循环。该能力需要本次匹配的候选TL native，不属于正式032；Ticks、live变换、其他session/calendar及replay仍未因此合格。
 
-broker.setcommission使用BT完整参数入口并规范化percabs；实际原生回测目前合格的是默认股票百分比费用。固定/保证金/乘数/杠杆/利息/分标的费用与任意Python override在准入前明确拒绝，不能接受后忽略。CommInfoBase/CommissionInfo的独立公式仍保固定BT计算语义；内部旧Rust经济profile继续独立保留，不伪装成BT执行资格。 Engine 的 Cerebro 构造器没有 commission、slippage 参数。`core.costs` 的 Python 滑点对象可独立计算，当前 Engine 原生回测路径没有把该对象传给撮合层。应用滑点情景时须以实际成交价变化核验生效。
+broker.setcommission使用BT完整参数入口并规范化percabs；实际原生回测目前合格的是默认股票百分比费用。固定/保证金/乘数/杠杆/利息/分标的费用与任意Python override在准入前明确拒绝，不能接受后忽略。CommInfoBase/CommissionInfo的独立公式仍保固定BT计算语义；内部旧Rust经济profile继续独立保留，不伪装成BT执行资格。
+
+### 配置回测滑点
+
+在首次运行前，通过 Broker 选择 `tradelearn.core.costs.FixedSlippage(amount)`（报价货币金额）或 `PercentSlippage(ratio)`（比例，如 `0.001` 表示 0.1%）。
+
+```python
+from tradelearn.core.costs import PercentSlippage
+from tradelearn.engine import Cerebro
+
+cerebro = Cerebro()
+cerebro.broker.setcommission(commission=0.001)
+cerebro.broker.configure_matching(slippage=PercentSlippage(0.001))
+# 添加 feed 和策略后执行 cerebro.run()
+```
+
+模型在 Rust 撮合时对买入加价、对卖出减价。限价单及触发后的限价单仍受限价约束，手续费按最终成交价计算。模型模拟额外成本，市价和止损单的滑点价可能超出 Bar 的最高或最低价。滑点后价格若无法形成正的有限成交价，该订单当次不成交。自定义 Python 模型和旧原生扩展会明确报错，使用源码时需构建同版本原生扩展。新情景使用独立 Broker。
 
 
 ## 后续BT兼容修复（尚未发布，不能外推0.3.0）

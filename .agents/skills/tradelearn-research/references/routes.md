@@ -112,7 +112,7 @@
 
 **触发**：「多标的怎么配」「成本和滑点怎么设」「容量够吗」「A 股能成交吗」。
 
-- **运行入口**：`tradelearn.research.portfolio` 的 `TopK`、`EqualWeight`、`Constraints`、`Allocator`、`RiskfolioOptimizer`；Engine/Lite 百分比费用用第二节已核验的入口。成本情景同第三节 `run_scenarios`。要求改变撮合滑点时，先用小样本确认成交价按预期变化。当前 Engine Python 路径未接通自定义滑点，`core.costs` 中的模型类存在也不足以证明撮合生效。无法确认时把滑点情景标「受阻」。A 股 T+1、涨跌停、停牌的成交约束在框架中未找到现成实现，按 `china-market.md` 自行检查并写明。
+- **运行入口**：`tradelearn.research.portfolio` 的 `TopK`、`EqualWeight`、`Constraints`、`Allocator`、`RiskfolioOptimizer`；Engine/Lite 百分比费用用第二节已核验的入口。成本情景同第三节 `run_scenarios`。Engine 固定和百分比滑点用 `cerebro.broker.configure_matching(slippage=...)`，模型为 `tradelearn.core.costs.FixedSlippage` 或 `PercentSlippage`，运行前设置。新版需匹配的原生扩展，自定义模型未支持；先用小样本验证成交价按预期变化，再做完整情景。无法确认时把滑点情景标「受阻」。A 股 T+1、涨跌停、停牌的成交约束在框架中未找到现成实现，按 `china-market.md` 自行检查并写明。
 - **组合归因**：`Allocator.build(scores)` 产出目标权重，实际敞口从成交与持仓重建。提供逐期组合收益、对应期初权重、同频因子回报及有时点覆盖的因子载荷后，用 `tradelearn.factor.PerformanceAttribution.attribution()`，或其 `to_analysis()` 接 `Reporter.from_analysis` 出表。先检查日期、因子列与持有标的覆盖率，缺失输入标注为证据缺口。该接口会将缺失的因子回报或载荷补零，残差由总收益减共同收益定义。
 - **最少证据**：权重合计、约束生效的核对；成本依据；A 股成交可行性四层检查；换手与容量估算。
 - **关卡**：不给真实资金的仓位或杠杆建议；越过涨跌停成交、违反 T+1 未修正前不谈收益。

@@ -327,8 +327,9 @@ impl BacktestEngine {
                 continue;
             }
             if let Some((rank, raw_price)) = smart_match_price(order, bar, options) {
-                let fill_event = fill_from_raw_price(order, raw_price, bar, options);
-                candidates.push((rank, smart_order_priority(order), idx, fill_event));
+                if let Some(fill_event) = fill_from_raw_price(order, raw_price, bar, options) {
+                    candidates.push((rank, smart_order_priority(order), idx, fill_event));
+                }
             }
         }
         candidates.sort_by(|a, b| {
@@ -721,6 +722,10 @@ impl BacktestEngine {
         }
         self.market_close_references.insert(order_id,price);
         Ok(())
+    }
+
+    pub(crate) fn configure_slippage(&mut self, model: SlippageModel) {
+        self.options.slippage = model;
     }
 
     pub fn configure_bt_precision(&mut self, preserve: bool) {

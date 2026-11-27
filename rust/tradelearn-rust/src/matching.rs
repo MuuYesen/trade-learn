@@ -102,8 +102,8 @@ pub fn match_order_at_price(
     })
 }
 
-fn apply_slippage(price: f64, side: OrderSide, model: SlippageModel, preserve: bool) -> (f64, f64) {
-    let adjusted = match model {
+fn slipped_price(price: f64, side: OrderSide, model: SlippageModel) -> f64 {
+    match model {
         SlippageModel::Fixed(model) => match side {
             OrderSide::Buy => price + model.amount,
             OrderSide::Sell => price - model.amount,
@@ -112,10 +112,7 @@ fn apply_slippage(price: f64, side: OrderSide, model: SlippageModel, preserve: b
             OrderSide::Buy => price * (1.0 + model.ratio),
             OrderSide::Sell => price * (1.0 - model.ratio),
         },
-    };
-    if preserve { return (adjusted, adjusted - price); }
-    let rounded = round_precision(adjusted);
-    (rounded, round_precision(rounded - price))
+    }
 }
 
 pub(crate) fn fill_from_raw_price(
@@ -123,10 +120,24 @@ pub(crate) fn fill_from_raw_price(
     raw_price: f64,
     bar: &BarEvent,
     options: &ExecutionOptions,
-) -> FillEvent {
+) -> Option<FillEvent> {
     let size = execution_precision(signed_order_size(order), options);
-    let (fill_price, slippage) = apply_slippage(raw_price, order.side, options.slippage, options.preserve_input_precision);
-    FillEvent {
+    let adjusted = slipped_price(raw_price, order.side, options.slippage);
+    let mut fill_price = execution_precision(adjusted, options);
+    if adjusted != raw_price && matches!(
+        order.order_type, OrderType::Limit | OrderType::StopLimit | OrderType::StopTrailLimit
+    ) {
+        let limit = order.limit_price?;
+        fill_price = match order.side {
+            OrderSide::Buy => fill_price.min(limit),
+            OrderSide::Sell => fill_price.max(limit),
+        };
+    }
+    if !fill_price.is_finite() || fill_price <= 0.0 {
+        return None;
+    }
+    let slippage = execution_precision(fill_price - raw_price, options);
+    Some(FillEvent {
         order_id: order.order_id,
         symbol: order.symbol.clone(),
         size,
@@ -140,7 +151,7 @@ pub(crate) fn fill_from_raw_price(
         ), options),
         slippage,
         ts: bar.ts,
-    }
+    })
 }
 
 pub fn match_order(
@@ -214,7 +225,7 @@ pub fn match_order(
         OrderType::StopTrailLimit => smart_match_price(order, bar, options).map(|(_, price)| price),
     }?;
 
-    Some(fill_from_raw_price(order, raw_price, bar, options))
+    fill_from_raw_price(order, raw_price, bar, options)
 }
 
 pub fn match_order_smart(
@@ -223,7 +234,7 @@ pub fn match_order_smart(
     options: &ExecutionOptions,
 ) -> Option<FillEvent> {
     let raw_price = smart_match_price(order, bar, options)?.1;
-    Some(fill_from_raw_price(order, raw_price, bar, options))
+    fill_from_raw_price(order, raw_price, bar, options)
 }
 
 pub(crate) fn smart_match_price(
