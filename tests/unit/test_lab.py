@@ -59,7 +59,7 @@ def test_lab_launch_failure_does_not_start_fallback_services():
 def test_lab_dependency_discovery_is_explicit():
     from tradelearn.lab import check_lab_dependencies, required_lab_packages
 
-    assert required_lab_packages() == ("jupyterlab", "ipywidgets", "jupyter-ai-lite")
+    assert required_lab_packages() == ("jupyterlab", "ipywidgets")
     assert check_lab_dependencies(find_spec=lambda name: None) == required_lab_packages()
 
 

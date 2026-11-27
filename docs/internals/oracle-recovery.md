@@ -25,7 +25,7 @@ restore historical market parquet files or the 100 real Golden outputs.
 `python scripts/check_golden_readiness.py --json` reports those separately;
 passing the Golden test suite does not imply those real-data artifacts exist.
 
-The TL-owned MCP implementation and its tests were retired by the final CLI decision on 2026-11-12. AI Lite uses its upstream tools and version-matched Skills; do not reinstall the old MCP test dependency.
+The TL-owned MCP implementation and its tests were retired by the final CLI decision on 2026-11-12. Jupyter AI Lite was later removed as well; the research workflow Skill lives in `.agents/skills` and is installed by the user's own AI assistant. Do not reinstall the old MCP test dependency.
 
 ## Real-data release gates and test discovery
 

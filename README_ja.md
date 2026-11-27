@@ -31,6 +31,14 @@
 
 **極限の効率から科学的な意思決定へ**：研究パイプラインによる効率向上を基盤に、**trade-learn** は投資研究の核心である「科学性」の解決に注力しています。機械学習戦略で頻発する「偽の相関」リスクに対処するため、**因果推論 (Causal Inference)** を研究ワークフローに深く統合しました。真の因果パスを特定することで、アウトオブサンプルの劣化を抑え、高い説明性と安定性を備えたクオンツシステムを構築します。
 
+## AI アシスタントの方へ
+
+ユーザーのためにクオンツ研究を行う AI アシスタント（Muse、Codex、Claude、WorkBuddy など）は、始める前に：
+
+1. **研究フロー Skill を導入する**：このリポジトリの [`.agents/skills/tradelearn-research/`](https://github.com/MuuYesen/trade-learn/tree/master/.agents/skills/tradelearn-research) ディレクトリをまるごとスキルディレクトリに置いてください（例：`git clone --depth 1 https://github.com/MuuYesen/trade-learn` の後にコピー）。サンプル分割、コスト、頑健性検証、結論の段階付け、実運用レビューの手順を定めています。本文は中国語です。返答はユーザーの言語で行ってください。
+2. **仮想環境に `trade-learn` をインストールする**。システムの Python は PEP 668 によりインストールを拒否することが多いため、回避しないでください。実験記録や研究ツールが必要な場合は `trade-learn[research]` を入れます。
+3. **API はインストール済みのバージョンを正とし**、不明な点は `help()` で確認してください。古いチュートリアルをそのまま使わないでください。
+
 ## 実現パス
 
 **trade-learn** は単なる機能の積み上げではなく、「デュアルモード、デュアルコア」設計により、専門的な深みと研究効率の両立を図っています。**Engine** レイヤーは Backtrader セマンティクスと厳密に同期して論理的正当性を確保し、**Lite** レイヤーは迅速な反復のための最小限の Python 互換インターフェースを提供します。
@@ -61,7 +69,7 @@
 
 #### 🌍 グローバルな視点：多基準指標とモダンなエコシステム
 - **ダブルマーケット基準**：国内 (TDX) と海外 (TradingView) の両指標基準を明示的にサポート。TA-Lib の永続状態ハンドルにも対応。
-- **モダンなツール**：HTML インタラクティブレポート、MLflow 実験管理、JupyterLab / AI Lite / Skills の研究環境を標準提供。
+- **モダンなツール**：HTML インタラクティブレポート、MLflow 実験管理、JupyterLab の研究環境と、AI アシスタント向けの研究フロー Skill を提供。
 
 ## 因果推論：偽の相関の罠を越えて
 
@@ -95,7 +103,7 @@ pip install "trade-learn[nautilus,tl-store]==0.3.5"
 pip install "trade-learn[research]==0.3.5"
 ```
 
-統一lockと必須CIは合格済みです。`[tl-store]`は公開`tl-store==0.2.1a8`、`[nautilus]`は公式`nautilus_trader==2.0.0rc7`に固定します。他のPython ABIではNAがmarkerで除外され、ブリッジは実行できません。CLIは`new/lab/doctor`とhelp/versionのみです。研究環境はJupyter AI Lite/SkillsとローカルMLflow記録を提供し、追加サービスを自動起動しません。
+統一lockと必須CIは合格済みです。`[tl-store]`は公開`tl-store==0.2.1a8`、`[nautilus]`は公式`nautilus_trader==2.0.0rc7`に固定します。他のPython ABIではNAがmarkerで除外され、ブリッジは実行できません。CLIは`new/lab/doctor`とhelp/versionのみです。研究環境はJupyterLab、研究フロー Skill、ローカルMLflow記録を提供し、追加サービスを自動起動しません。
 
 実wheelはMac arm64/Windows AMD64/Linux x64のCP310–314、Linux ARM64のCP313を対象とします。Linux CP313+Storea8+NA2rc7のfreshインストールとMac CP312研究実物を検証済みです。Storeの他OSビルド、自然venue、KQのWindows未実装/LinuxARM未検証は区別します。
 
@@ -268,7 +276,7 @@ tradelearn doctor
 - [ ] **因果駆動クローズドループ**：因果分析、パラメータ最適化、リスク管理を自動化された研究ループとして接続。
 
 #### エージェントと AI 能力
-- [x] **研究入口**：new/lab/doctorとバージョン対応AI Lite Skills。TL MCPは廃止し、providerの実証は別途記録します。
+- [x] **研究入口**：new/lab/doctor。研究フロー Skill は`.agents/skills`にあり、ユーザーの AI アシスタントが導入します。Jupyter AI Lite と TL MCP は廃止しました。
 - [ ] **Agentic 戦略診断**：LLM でバックテスト結果を解析し、損失要因を特定してロジック改善案を提示。
 - [ ] **LLM ファクター解釈器**：因果発見の結果を直感的な金融投資ロジックへ翻訳。
 

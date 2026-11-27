@@ -165,4 +165,4 @@ finally:
 
 当前源码启用默认SQS发送但缺SDK时，TradeLogger在创建Recorder/state/线程前明确拒绝并给出匹配本地wheel的`[nautilus]`安装指引。受信注入sender factory/client不强制SDK；未配置发送时不加载SDK，执行身份与恢复保护不依赖日志/远程监控。
 
-当前源码默认安装含tqdm/TA-Lib，公开extra为research（研究库及JupyterLab/AI Lite/Skills/MLflow）、nautilus（官方NT+SDK）、tl-store（当前按需cTrader组件，仅已验证CPython3.13 Mac arm64/Linux x86_64）。TL+cTrader推荐目标命令为 `pip install "trade-learn[nautilus,tl-store]"`，由extra自动锁定实际adapter发行包，实际依赖本地构建的tl-store发行候选；新组合仍是未公开发行候选。完整研究工具使用research；CLI仅new/lab/doctor，lab只启动Jupyter；TL MCP和MLflow服务包装已删除，实验默认本地SQLite记录；开发/文档工具通过uv dependency-groups。已发0.2.9保持历史安装契约。
+当前源码默认安装含tqdm/TA-Lib，公开extra为research（研究库及JupyterLab/MLflow）、nautilus（官方NT+SDK）、tl-store（当前按需cTrader组件，仅已验证CPython3.13 Mac arm64/Linux x86_64）。TL+cTrader推荐目标命令为 `pip install "trade-learn[nautilus,tl-store]"`，由extra自动锁定实际adapter发行包，实际依赖本地构建的tl-store发行候选；新组合仍是未公开发行候选。完整研究工具使用research；CLI仅new/lab/doctor，lab只启动Jupyter；TL MCP和MLflow服务包装已删除，实验默认本地SQLite记录；开发/文档工具通过uv dependency-groups。已发0.2.9保持历史安装契约。

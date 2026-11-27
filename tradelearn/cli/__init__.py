@@ -20,7 +20,6 @@ COMPONENTS = (
     "TA-Lib",
     "jupyterlab",
     "ipywidgets",
-    "jupyter-ai-lite",
     "mlflow",
     "duckdb",
     "scikit-learn",
@@ -68,7 +67,6 @@ def _new(name: str, directory: Path) -> None:
     project.mkdir(parents=True, exist_ok=False)
     notebooks = project / "notebooks"
     notebooks.mkdir()
-    _write_skill(project)
     (project / "strategy.py").write_text(_starter_strategy(), encoding="utf-8")
     for filename, title in _starter_notebooks().items():
         (notebooks / filename).write_text(_starter_notebook(title), encoding="utf-8")
@@ -76,83 +74,10 @@ def _new(name: str, directory: Path) -> None:
         "# " + name + "\n\nstrategy.py defines an example Strategy; "
         "import it into Cerebro with your own Bars.\n"
         "Start `tradelearn lab --notebook-dir .` from this directory. No YAML is required.\n"
-        "The research Skill is written to .agents/skills, which Codex and other "
-        "agent tools read, and mirrored at _agents/skills for AI Lite and Jupyter, "
-        "which hide dotted paths. After upgrading trade-learn run "
-        "`tradelearn skills --refresh` to rewrite it for the installed version.\n"
         "MLflow uses local sqlite:///mlflow.db by default; no server is started.\n",
         encoding="utf-8",
     )
     print(f"Created tradelearn project: {project}")
-
-
-_VERSION_LINE = re.compile(r"Target package: trade-learn \S+ Check the installed version")
-
-# The real Skill directory is the dotted `.agents/skills` that Codex and other
-# agent tools read. Jupyter and AI Lite hide dotted paths, so `_agents` mirrors
-# it; a symlink keeps a single source of truth and platforms that refuse
-# symlinks fall back to a copy that `--refresh` rewrites. `.claude/skills` holds
-# the per-skill entry Claude Code reads.
-SKILL_NAME = "tradelearn-research"
-_REAL_SKILL_PARENT = (".agents", "skills")
-
-
-def _link_or_copy(link: Path, target: Path, *, relative_to: Path) -> None:
-    """Point `link` at `target`, copying where the platform refuses symlinks."""
-    import os
-    import shutil
-
-    if link.is_symlink() or link.is_file():
-        link.unlink()
-    elif link.exists():
-        shutil.rmtree(link)
-    link.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        link.symlink_to(os.path.relpath(target, relative_to), target_is_directory=target.is_dir())
-    except (OSError, NotImplementedError):
-        shutil.copytree(target, link) if target.is_dir() else shutil.copy2(target, link)
-
-
-def _write_skill(project: Path) -> Path:
-    """Write SKILL.md for the installed version and expose it to every agent tool."""
-    real = project.joinpath(*_REAL_SKILL_PARENT, SKILL_NAME)
-    real.mkdir(parents=True, exist_ok=True)
-    skill_file = real / "SKILL.md"
-    skill_file.write_text(_starter_skill(), encoding="utf-8")
-    _link_or_copy(project / "_agents", project / _REAL_SKILL_PARENT[0], relative_to=project)
-    claude = project / ".claude" / "skills" / SKILL_NAME
-    _link_or_copy(claude, real, relative_to=claude.parent)
-    return skill_file
-
-
-def _skills(directory: Path, refresh: bool) -> int:
-    """Report, or rewrite, the project Skill for the installed version."""
-    project = directory.resolve()
-    if not project.is_dir():
-        raise ValueError(f"not a directory: {project}")
-    skill_file = project.joinpath(*_REAL_SKILL_PARENT, SKILL_NAME, "SKILL.md")
-    if refresh:
-        print(f"skill={_write_skill(project)}")
-        print(f"written_for=trade-learn {__version__}")
-        return 0
-    if not skill_file.is_file():
-        print(f"skill=not found under {project}")
-        print("run tradelearn skills --refresh to write it")
-        return 1
-    stamped = next(
-        (
-            line
-            for line in skill_file.read_text(encoding="utf-8").splitlines()
-            if line.startswith("Target package: trade-learn ")
-        ),
-        "",
-    )
-    recorded = stamped.split()[3].rstrip(".") if stamped else "unknown"
-    print(f"skill={skill_file}")
-    print(f"written_for=trade-learn {recorded}")
-    print(f"installed=trade-learn {__version__}")
-    print("status=" + ("current" if recorded == __version__ else "stale (run --refresh)"))
-    return 0 if recorded == __version__ else 1
 
 
 def main() -> None:
@@ -161,14 +86,9 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command")
     doctor = commands.add_parser("doctor", help="Check configuration and all installed components")
     doctor.add_argument("--config", type=Path)
-    new = commands.add_parser("new", help="Create a minimal project and version-matched Skills")
+    new = commands.add_parser("new", help="Create a minimal project with starter notebooks and an example strategy")
     new.add_argument("name")
     new.add_argument("--directory", "-d", type=Path, default=Path("."))
-    skills = commands.add_parser(
-        "skills", help="Show or rewrite the project research Skill for the installed version"
-    )
-    skills.add_argument("--directory", "-d", type=Path, default=Path("."))
-    skills.add_argument("--refresh", action="store_true")
     lab = commands.add_parser("lab", help="Start only JupyterLab")
     lab.add_argument("--config", type=Path)
     lab.add_argument("--host", default="127.0.0.1")
@@ -181,8 +101,6 @@ def main() -> None:
             raise SystemExit(_doctor(args.config))
         elif args.command == "new":
             _new(args.name, args.directory)
-        elif args.command == "skills":
-            raise SystemExit(_skills(args.directory, args.refresh))
         elif args.command == "lab":
             from tradelearn.lab import build_lab_plan, check_lab_dependencies, start_lab_stack
 
@@ -212,19 +130,6 @@ def _starter_strategy() -> str:
         "    def next(self) -> None:\n"
         "        if not self.position:\n"
         "            self.buy(size=self.p.size)\n"
-    )
-
-
-def _starter_skill() -> str:
-    """Return the published research Skill, stamped with the installed version.
-
-    The body lives in skill_template.md so that the copy published for download
-    at .agents/skills/tradelearn-research, the copy shipped inside the wheel and
-    the copy written into a new project are all the same text.
-    """
-    template = (Path(__file__).parent / "skill_template.md").read_text(encoding="utf-8")
-    return _VERSION_LINE.sub(
-        f"Target package: trade-learn {__version__}. Check the installed version", template
     )
 
 

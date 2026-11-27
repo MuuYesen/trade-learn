@@ -176,7 +176,7 @@ def run_jupyterlab_tutorial() -> dict[str, Any]:
     plan = build_lab_plan(
         TradelearnConfig(mlflow_tracking_uri="file:///tmp/tradelearn-mlflow"),
         no_browser=True,
-        missing_packages=("jupyter-ai-lite",),
+        missing_packages=("ipywidgets",),
     )
     return {
         "jupyter_command": list(plan.jupyter.args),

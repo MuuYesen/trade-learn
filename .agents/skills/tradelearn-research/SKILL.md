@@ -1,34 +1,83 @@
 ---
 name: tradelearn-research
-description: Use for local TradeLearn research notebooks, reports and experiment logging.
+description: 做量化策略研究时使用：因子检验、回测、参数调整、多方案比较、实盘复盘。按样本切分、计入成本、稳健性检验、结论分级的专业流程进行。适用于 TradeLearn，也适用于其他 Python 回测框架。
 ---
 
-Target package: trade-learn 0.3.6. Check the installed version before using this reference.
-Keep Bars/features as Pandas objects. Split time and purge using actual label_end before fitting.
-Define components before execution; explicitly register them and record actual calls in ResearchRun:
+# 量化研究流程
 
-```python
-from tradelearn.research import ResearchRun
-with ResearchRun("validation") as run:
-    run.register("model", model)
-    run.call("model", "fit", X_train, y_train)
-```
+这份 Skill 规定**怎么做研究**，不讲接口细节。接口以当前安装的 TradeLearn 为准：先读 README，拿不准时用 `help()` 或 `inspect` 查已安装版本的真实签名，不要照搬旧教程。
 
-Use `tradelearn.lite.Backtest` for convenience or Backtrader-shaped `tradelearn.engine` for control.
-A report consumes completed facts. For a completed strategy result:
+用用户的语言回复。
 
-```python
-from tradelearn.report import Reporter
-Reporter(result).report("report.html")
-from tradelearn.integrations.mlflow import log
-logged = log(result, research_result=research_result)
-```
+## 开始之前
 
-Use Reporter.from_analysis for completed domain tables/metrics/metadata.
-Do not fit or refetch during rendering.
-MLflow records only supplied results. Reuse compatible native active runs.
-Do not start nested runs automatically.
-Model publication and attachments are explicit.
-Preserve fitted Pipeline/FeatureSet/schema/versions for restoration.
-Work on local research inputs under the user's task authorization.
-Do not start live trading or paid provider calls from this skill.
+**环境**
+- Python 3.11 及以上，在虚拟环境里安装 `trade-learn`。系统 Python 常因 PEP 668 拒绝安装，直接建虚拟环境，不要绕过系统保护。
+- 需要实验记录、因子检验、研究工具时，安装 `trade-learn[research]`。
+
+**用户没说清的，先用默认值开始，不要先反问**，并在报告开头写明用了哪些默认值：
+
+| 未指定 | 默认 |
+|---|---|
+| 区间 | 最近 5 年；数据不足就用全部 |
+| 频率 | 日线 |
+| 成本 | 该市场的常见费率，另加滑点（见 `references/china-market.md`）。**TradeLearn 的回测默认手续费是 0，必须显式设置** |
+| 基准 | 同一标的买入持有 |
+
+**判断你在哪种环境**
+- 能 `from tradelearn import sentinel`，并且环境变量里有 `LEAFQUANT_ENDPOINT`：你在用户跑实盘的服务器上，可以做实盘复盘。
+- 否则（例如 Muse 这类云电脑）：只做研究。用户要复盘时，告诉他复盘要在跑实盘的那台机器上进行。
+
+## 流程
+
+**1. 定问题**
+把用户的话变成一个可检验的问题：什么标的、什么信号、和什么比、怎样算更好。比较多个方案时，事先写下"用哪个指标判定胜负"，不要看完结果再挑指标。
+
+**2. 数据**
+写明来源、是否复权及复权方式、时区、频率、区间与根数、缺失情况。成交量为 0 的 bar 要指出来——这类 bar 上的订单可能永远不成交。数据来源由用户或你选择，但必须交代清楚。
+
+**3. 切样本**
+参数只在训练段选，测试段只用来验证、只用一次。简单切分用 `from tradelearn.research import time_split`；标签跨期（例如用未来 N 天收益做标签）时用 `from tradelearn.research.temporal import purged_splits`，按标签的真实结束时间剔除跨界样本。详见 `references/validation.md`。
+
+**4. 回测**
+显式设置手续费和滑点；同时跑基准；期末仍持仓要单独说明（未实现盈亏会让结果偏高或偏低）。只做多、按收盘价成交等假设都要写明。
+
+**5. 稳健性**
+看结果是不是碰巧：最优参数的邻近参数是否也好、分年度是否稳定、换几个相近标的是否成立。比较了多组参数时，要考虑尝试次数对结论的折扣。详见 `references/validation.md`。
+
+**6. 下结论**
+按 `references/report.md` 写报告。**结论要分级**：
+- 只有样本内结果：只能写"样本内表现更好"，不能写"更优"或"有效"
+- 样本外也成立：可以写"样本外得到验证"，同时写明样本区间
+- 任何情况下都写明局限
+
+**7. 记录**
+每次运行都记进实验记录：Lite 回测用 `Backtest.log_mlflow(...)`，其他结果用 `tradelearn.integrations.mlflow.log(...)`。之后要对比时直接取记录，不要重跑旧方案。
+
+**8. 实盘复盘**
+拉取实盘事实，和回测时的假设对照，找出偏差，再回到研究里改进。详见 `references/live-review.md`。
+
+## 报告里的数字
+
+报告由你自由组织，可以加解读，但：
+- 收益、夏普、回撤等指标**引用 TradeLearn 的计算结果**，写明口径（年化用了多少期、是否扣无风险利率）
+- 再用权益曲线**独立复算一遍关键指标**作为核对；对不上就说出来，不要选一个好看的
+- 有 Sentinel 数据时，实盘数字**以 Sentinel 的口径为准**
+
+## 边界（任何时候都适用）
+
+- **不发起实盘交易。** 改动实盘的任何东西——策略代码、参数、重启——都要用户对每一次改动明确确认。
+- 不调用付费数据源，除非用户明确要求。
+- **不要把任何凭据写进你会读或会改的文件。** 凭据只通过环境变量交给实盘进程。
+- 这是研究工具，不给投资建议，不预测收益。
+
+## 参考文件
+
+按需读取，不必一次读完：
+
+| 文件 | 什么时候读 |
+|---|---|
+| `references/validation.md` | 切样本、调参、比较多个方案时 |
+| `references/china-market.md` | 标的是 A 股、港股或加密货币时；设置成本时 |
+| `references/live-review.md` | 用户要复盘实盘时 |
+| `references/report.md` | 写报告时 |
