@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import importlib.metadata
 import platform
-import re
 from pathlib import Path
 
 from tradelearn import __version__
@@ -86,7 +85,9 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command")
     doctor = commands.add_parser("doctor", help="Check configuration and all installed components")
     doctor.add_argument("--config", type=Path)
-    new = commands.add_parser("new", help="Create a minimal project with starter notebooks and an example strategy")
+    new = commands.add_parser(
+        "new", help="Create a minimal project with starter notebooks and an example strategy"
+    )
     new.add_argument("name")
     new.add_argument("--directory", "-d", type=Path, default=Path("."))
     lab = commands.add_parser("lab", help="Start only JupyterLab")
