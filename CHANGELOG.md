@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-27
+
+### Changed
+- **Python 3.11+**：`requires-python` 提升为 `>=3.11`，不再提供 CP310 wheel。
+
+### Fixed
+- **年化口径**：报告按收益序列的实际采样频率推断年化期数（`_infer_periods`），不再把每根 bar 当作一天；30 分钟等日内周期的夏普、波动率不再失真。
+- **`final_unrealized_pnl`**：普通与惰性统计均按每个品种在回测期间最后一笔有效收盘价、乘合约乘数对未平仓头寸估值并汇总；此前读逐笔成交持仓快照的最后一行，期末持仓会给出 0 或缺字段。逐笔成交快照保留原口径。
+- SDK 观测协议仍为 API v1，仅显式增加 0.4.0 版本准入；未知版本/API 继续拒绝。
+
 ### Added
 - 研究流程 Skill（`.agents/skills/tradelearn-research/`，中文）：规定样本切分、成本、稳健性检验、结论分级与实盘复盘的流程，另附中文市场规则（A 股、港股、加密货币）与报告格式。由用户在 Muse、Codex、Claude、WorkBuddy 等 AI 助手里自行安装；更新 Skill 不需要等版本发布。
 - README 开头新增「给 AI 助手」一节，说明如何安装 Skill 与 TradeLearn。

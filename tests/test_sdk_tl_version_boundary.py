@@ -9,7 +9,7 @@ from leafquant_monitor import tradelearn as sdk
 from tests.windows_private_directory import make_private_test_directory
 
 
-@pytest.mark.parametrize("version", ["0.2.9", "0.3.0", "0.3.1", "0.3.2", "0.3.3", "0.3.4", "0.3.5", "0.3.6"])
+@pytest.mark.parametrize("version", ["0.2.9", "0.3.0", "0.3.1", "0.3.2", "0.3.3", "0.3.4", "0.3.5", "0.3.6", "0.4.0"])
 def test_qualified_versions_assemble_real_local_logger(version, monkeypatch, tmp_path):
     make_private_test_directory(tmp_path)
     monkeypatch.setattr(sdk.tradelearn, "__version__", version)
@@ -47,7 +47,9 @@ def test_qualified_versions_assemble_real_local_logger(version, monkeypatch, tmp
         ("0.3.6+unknown", 1),
         ("0.3.5", 2),
         ("0.3.5+unknown", 1),
-        ("0.4.0", 1),
+        ("0.4.1", 1),
+        ("0.4.0", 2),
+        ("0.4.0+unknown", 1),
         ("0.3.0+unknown", 1),
         ("0.2.9", 2),
         ("0.3.0", 2),
