@@ -31,9 +31,17 @@
 
 在方法论层面，项目同样强调研究的科学性。针对机器学习策略中常见的“伪相关”问题，**trade-learn** 将 **因果推断（Causal Inference）** 深度融入投研流程，通过识别真实的因果驱动路径，降低样本外衰减风险，帮助构建兼具解释性与稳健性的量化策略体系。
 
+## 给 AI 助手
+
+如果你是帮用户做量化研究的 AI 助手（Muse、Codex、Claude、WorkBuddy 等），开始前：
+
+1. **装上研究流程 Skill**：把本仓库的 [`.agents/skills/tradelearn-research/`](https://github.com/MuuYesen/trade-learn/tree/master/.agents/skills/tradelearn-research) 整个目录放进你的技能目录（例如 `git clone --depth 1 https://github.com/MuuYesen/trade-learn` 后复制该目录）。它规定了样本切分、成本、稳健性检验、结论分级和实盘复盘的流程。
+2. **在虚拟环境里安装** `trade-learn`；系统 Python 常因 PEP 668 拒绝安装，不要绕过。需要实验记录和研究工具时安装 `trade-learn[research]`。
+3. **接口以已安装的版本为准**，拿不准时用 `help()` 查，不要照搬旧教程。
+
 ## 实现路径
 
-> **统一改造实际状态（2026-11-13）**：Engine与Lite已共用策略计算生命周期、事件时钟与订单事实，保各自外观；Lite window、共享Indicator、Dataset/DuckDB研究查询、模型产物、共同Reporter与本地MLflow已实现。研究环境采用Jupyter AI Lite/Skills，CLI只保留new/lab/doctor及help/version。完整BT公共调用对齐、NA适用能力承接、tvkit Provider完整替换及剩余原生化仍未完成，不能用显式拒绝代替实现；正式平台/发行/安装资格按精确版本收据分别核验。见[API状态说明](docs/concepts/api-boundary.md#pending-unification-20261111)。
+> **统一改造实际状态（2026-11-13）**：Engine与Lite已共用策略计算生命周期、事件时钟与订单事实，保各自外观；Lite window、共享Indicator、Dataset/DuckDB研究查询、模型产物、共同Reporter与本地MLflow已实现。研究环境采用JupyterLab与研究流程Skill，CLI只保留new/lab/doctor及help/version。完整BT公共调用对齐、NA适用能力承接、tvkit Provider完整替换及剩余原生化仍未完成，不能用显式拒绝代替实现；正式平台/发行/安装资格按精确版本收据分别核验。见[API状态说明](docs/concepts/api-boundary.md#pending-unification-20261111)。
 
 **trade-learn** 拒绝功能的简单堆砌，而是通过Engine与Lite两种外观共用运行内核，在专业深度与研发效率之间构建了平衡。底层通过 **Engine** 深度对齐 Backtrader 语义以夯实逻辑正确性，上层则由 **Lite** 提供极简的 Pythonic 接口，确保了“快”与“准”的统一。
 
@@ -64,7 +72,7 @@
 
 #### 🌍 全球视野：多口径指标与现代生态
 - **双市场口径**：显式支持 TDX (国内) 和 TradingView (国外) 指标口径，同时接入 TA-Lib 持续状态句柄。
-- **现代投研工具**：开箱即用的 HTML 交互式报告、MLflow 实验追踪以及 JupyterLab / AI Lite / Skills 研究环境。
+- **现代投研工具**：开箱即用的 HTML 交互式报告、MLflow 实验追踪以及 JupyterLab 研究环境，以及给 AI 助手用的研究流程 Skill。
 
 ## 因果投研：跨越“伪相关”陷阱
 
@@ -100,14 +108,14 @@
 pip install trade-learn==0.3.5
 # 官方NA/cTrader组合需要CPython3.13或3.14及匹配平台wheel
 pip install "trade-learn[nautilus,tl-store]==0.3.5"
-# 研究、Jupyter AI Lite/Skills、本地MLflow
+# 研究工具、JupyterLab、本地MLflow
 pip install "trade-learn[research]==0.3.5"
 ```
 
 | 安装组 | 当前契约 |
 |---|---|
 | 默认 | Engine/Lite、共同Runtime和本地日志；不自动连接账户、交易或发送日志 |
-| `[research]` | 数据查询/指标后端/因子/模型/报表与JupyterLab、AI Lite/Skills；MLflow默认本地记录，不编排服务 |
+| `[research]` | 数据查询/指标后端/因子/模型/报表与JupyterLab；MLflow默认本地记录，不编排服务 |
 | `[nautilus]` | 精确官方`nautilus_trader==2.0.0rc7`与按需云发送依赖；执行ABI限CP313/314 |
 | `[tl-store]` | 精确公开`tl-store==0.2.1a8`；唯一实现命名`tl_store.ctrader`，不保旧adapter别名 |
 
@@ -281,7 +289,7 @@ TradeLearn 面向策略研究与回测，不推荐用于真实资金的实盘交
 - [ ] **因果驱动闭环**：将因果分析与参数优化、风险控制形成自动化的研发闭环。
 
 #### 智能体与 AI 能力
-- [x] **研究入口**：CLI仅new/lab/doctor，AI Lite使用版本匹配Skills；TL自建MCP已退役。AI/provider真实资格另行记录。
+- [x] **研究入口**：CLI仅new/lab/doctor；研究流程Skill放在仓库`.agents/skills`，由用户的AI助手自行安装；Jupyter AI Lite与TL自建MCP已退役。
 - [ ] **Agentic 策略诊断**：利用 LLM 自动解析回测结果，识别亏损动因并给出逻辑优化建议。
 - [ ] **LLM 因子解释器**：利用大模型将因果发现结果转化为直观的金融投资逻辑。
 

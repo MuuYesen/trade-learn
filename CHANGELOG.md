@@ -5,6 +5,17 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 并且本项目遵循 [语义化版本 (Semantic Versioning)](https://semver.org/spec/v2.0.0.html)。
 
+## [Unreleased]
+
+### Added
+- 研究流程 Skill（`.agents/skills/tradelearn-research/`，中文）：规定样本切分、成本、稳健性检验、结论分级与实盘复盘的流程，另附中文市场规则（A 股、港股、加密货币）与报告格式。由用户在 Muse、Codex、Claude、WorkBuddy 等 AI 助手里自行安装；更新 Skill 不需要等版本发布。
+- README 开头新增「给 AI 助手」一节，说明如何安装 Skill 与 TradeLearn。
+
+### Removed
+- **Jupyter AI Lite**：从 `[research]` 移除，连带去掉其十余个传递依赖；`tradelearn lab` 只启动 JupyterLab。用户自带的 AI 助手更强，且能直接执行代码。
+- **接口说明型 Skill**：原先按版本号生成的接口用法 Skill 被研究流程 Skill 取代。
+- **`tradelearn skills` 命令**，以及 `tradelearn new` 写入 `.agents`、`_agents`、`.claude` 技能目录和软链接的逻辑。`tradelearn new` 现在只创建示例策略、说明和三个起步笔记本。
+
 ## [0.3.6] - 2026-11-15
 
 正式源码固定`6f50f6f68a50aaa21460efa2166bb29d2bc69ca0`（`v0.3.6`）；精确CI 20/20与原四平台/native-indicators/OIDC发行成功，PyPI/GitHub全部17文件SHA一致。公网Mac CP313独立安装与诊断/原记录器smoke通过。此为发布后状态同步，不移动tag或重写已发字节；私有IC镜像和SDK额度恢复候选不在本次发行内。

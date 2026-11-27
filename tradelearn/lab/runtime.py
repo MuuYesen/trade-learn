@@ -18,7 +18,6 @@ from tradelearn.core.config import TradelearnConfig
 LAB_MODULES = {
     "jupyterlab": "jupyterlab",
     "ipywidgets": "ipywidgets",
-    "jupyter-ai-lite": "jupyternaut_lite",
 }
 
 

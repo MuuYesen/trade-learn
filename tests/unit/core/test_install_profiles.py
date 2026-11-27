@@ -18,8 +18,9 @@ def test_three_public_profiles_and_explicit_development_groups():
     assert {'dev','docs','ci','oracle'} <= set(data['dependency-groups'])
     assert {'Riskfolio-Lib','optuna','numba>=0.65.1','duckdb'} <= set(extras['research'])
     assert 'mlflow' in extras['research']
-    assert 'jupyter-ai-lite==0.21.0' in extras['research']
-    assert not {'jupyterlab-git','pygwalker','mcp','jupyter-ai'} & set(extras['research'])
+    assert 'jupyterlab>=4.5' in extras['research']
+    retired={'jupyterlab-git','pygwalker','mcp','jupyter-ai','jupyter-ai-lite==0.21.0'}
+    assert not retired & set(extras['research'])
     assert {'boto3==1.41.2','botocore==1.41.6'} <= set(extras['nautilus'])
 
 

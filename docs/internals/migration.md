@@ -53,7 +53,7 @@ Engine中`bt.talib`采用BT类及输出别名（例如MACD的macdsignal/macdhist
 
 -   `rust/tradelearn-rust/`: 核心 Rust 代码。
 -   `tradelearn/engine/`与`tradelearn/lite/`: 两种外观共用`tradelearn/backtest/`核心。
--   AI Lite通过工作区`_agents/skills/`加载版本匹配研究技能；TL自建MCP已退役。
+-   研究流程 Skill 放在仓库 `.agents/skills/tradelearn-research/`，由用户的 AI 助手自行安装；Jupyter AI Lite 与 TL 自建 MCP 均已退役。
 -   `tradelearn/lab/`: 交互式投研环境。
 
 !!! tip
@@ -66,8 +66,8 @@ Engine中`bt.talib`采用BT类及输出别名（例如MACD的macdsignal/macdhist
 |---|---|---|
 | **行情拉取** | `yfinance` (已移除) | `opentdx` / `tvdatafeed` |
 | **实验记录** | 无 | `[research]` 内的独立运行后集成 |
-| **AI 研究** | 无 | AI Lite/Skills；TL MCP与服务包装已删除 |
-| **研究环境** | 独立脚本 | **`[research]` extras** (JupyterLab/AI Lite/Skills/MLflow) |
+| **AI 研究** | 无 | 研究流程 Skill（用户的 AI 助手安装）；AI Lite、TL MCP 与服务包装已删除 |
+| **研究环境** | 独立脚本 | **`[research]` extras** (JupyterLab/MLflow) |
 
 ## 数据缓存路径
 

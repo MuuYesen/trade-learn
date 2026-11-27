@@ -31,6 +31,14 @@ Beyond high performance, **trade-learn** provides a complete research infrastruc
 
 **From Extreme Efficiency to Scientific Decision-Making**: Building on the efficiency gains of the research pipeline, **trade-learn** further addresses the core "scientific rigor" of quantitative research. To combat the "pseudo-correlation" risks common in machine learning strategies, we have deeply integrated **Causal Inference** into the research workflow. By identifying true causal driving paths, it reduces out-of-sample decay risks and helps build highly explainable and robust quantitative strategy systems.
 
+## For AI assistants
+
+If you are an AI assistant doing quantitative research for a user (Muse, Codex, Claude, WorkBuddy and so on), before you start:
+
+1. **Install the research workflow Skill**: copy the whole [`.agents/skills/tradelearn-research/`](https://github.com/MuuYesen/trade-learn/tree/master/.agents/skills/tradelearn-research) directory from this repository into your skills directory (for example `git clone --depth 1 https://github.com/MuuYesen/trade-learn` and copy that directory). It sets out how to split samples, account for costs, test robustness, grade conclusions and review live trading. It is written in Chinese; reply in the user's language.
+2. **Install `trade-learn` in a virtual environment**; the system Python often refuses installs under PEP 668, so do not bypass it. Install `trade-learn[research]` for experiment tracking and research tools.
+3. **Treat the installed version as the source of truth** for the API; check with `help()` rather than copying older tutorials.
+
 ## Implementation Path
 
 **trade-learn** rejects the simple stacking of features. Instead, it balances professional depth with research efficiency through a unique "Dual-Mode, Dual-Core" design. The **Engine** layer strictly aligns with Backtrader semantics for logic correctness, while the **Lite** layer provides a minimal Pythonic interface for rapid iteration.
@@ -61,7 +69,7 @@ In terms of ecosystem, **trade-learn** provides comprehensive indicator support,
 
 #### 🌍 Global Vision: Multi-Standard Indicators & Modern Ecosystem
 - **Dual-Market Standards**: Explicit support for TDX (China) and TradingView (International) indicator standards, with persistent TA-Lib state handles.
-- **Modern Tools**: Out-of-the-box HTML interactive reports, MLflow experiment tracking, and JupyterLab / AI Lite / Skills research environment.
+- **Modern Tools**: Out-of-the-box HTML interactive reports, MLflow experiment tracking, and JupyterLab research environment, plus a research workflow Skill for AI assistants.
 
 ## Causal Quant: Bridging the "Pseudo-Correlation" Trap
 
@@ -95,7 +103,7 @@ pip install "trade-learn[nautilus,tl-store]==0.3.5"
 pip install "trade-learn[research]==0.3.5"
 ```
 
-The unified lock is resolved and CI-qualified. `[tl-store]` pins public `tl-store==0.2.1a8`; `[nautilus]` pins official `nautilus_trader==2.0.0rc7`. Other Python versions skip NA through metadata markers and cannot run the bridge. The base import is inert. Research includes Jupyter AI Lite/Skills and local MLflow recording; the CLI exposes only `new/lab/doctor`, help and version, without extra service orchestration.
+The unified lock is resolved and CI-qualified. `[tl-store]` pins public `tl-store==0.2.1a8`; `[nautilus]` pins official `nautilus_trader==2.0.0rc7`. Other Python versions skip NA through metadata markers and cannot run the bridge. The base import is inert. Research includes JupyterLab, a research workflow Skill and local MLflow recording; the CLI exposes only `new/lab/doctor`, help and version, without extra service orchestration.
 
 Real TL wheels cover macOS arm64/Windows AMD64/Linux x64 CP310–314 and Linux ARM64 CP313. Fresh Linux CP313+Storea8+NA2rc7 installation, RECORD/native/pip-check and the actual Mac CP312 research wheel (reused dependency environment) have been qualified. Other Store platform builds and natural venue behavior are separate. KQ Windows integration is unimplemented and Linux ARM remains unverified; this is not a claim that TL itself lacks those OS targets.
 
@@ -260,7 +268,7 @@ Based on the current engineering plan, **trade-learn** evolves along these core 
 - [ ] **Causal Closed Loop**: Automate the loop across causal analysis, parameter optimization, and risk control.
 
 #### Agent & AI Capabilities
-- [x] **Research entry points**: new/lab/doctor and version-matched AI Lite Skills. TL MCP is retired; provider qualification is tracked separately.
+- [x] **Research entry points**: new/lab/doctor; the research workflow Skill lives in `.agents/skills` and is installed by the user's AI assistant. Jupyter AI Lite and the TL MCP are retired.
 - [ ] **Agentic Strategy Diagnosis**: Use LLMs to analyze backtest results, identify loss drivers, and suggest logic improvements.
 - [ ] **LLM Factor Interpreter**: Translate causal discovery results into intuitive financial investment logic.
 

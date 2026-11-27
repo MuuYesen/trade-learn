@@ -61,7 +61,6 @@ research = [
     "gplearn==0.4.3",
     "jupyterlab>=4.5",
     "ipywidgets",
-    "jupyter-ai-lite==0.21.0",
     "mlflow",
 ]
 nautilus = [
@@ -130,8 +129,6 @@ python-source = "."
 python-packages = ["tradelearn", "tradelearn_runtime", "leafquant_monitor"]
 features = ["extension-module"]
 include = [
-    { path = "tradelearn/cli/skill_template.md", format = ["sdist", "wheel"] },
-    { path = ".agents/skills/tradelearn-research/SKILL.md", format = "sdist" },
     { path = "scripts/build_release.py", format = "sdist" },
     { path = "scripts/finalize_wheel.py", format = "sdist" },
     { path = "scripts/check_release_closure.py", format = "sdist" },

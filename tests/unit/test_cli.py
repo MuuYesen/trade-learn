@@ -35,7 +35,8 @@ def test_basic_help_version_doctor_need_no_typer_yaml_or_optional_imports(tmp_pa
         assert result.returncode == 0, result.stderr
     result = invoke("doctor", cwd=tmp_path, block_optional=True)
     assert "python=" in result.stdout and "trade-learn=" in result.stdout
-    assert "jupyter-ai-lite=" in result.stdout and "tl-store=" in result.stdout
+    assert "jupyterlab=" in result.stdout and "tl-store=" in result.stdout
+    assert "jupyter-ai-lite" not in result.stdout
     assert "mlflow_tracking=local" in result.stdout
 
 
@@ -55,18 +56,23 @@ def test_retired_commands_and_flags_are_rejected(args):
     assert result.returncode == 2, result.stdout
 
 
-def test_new_project_without_yaml_and_skill_visible_to_default_contents(tmp_path):
+def test_new_project_without_yaml_or_agent_skill_directories(tmp_path):
+    """The research Skill is installed by the user's AI from the repository, not scaffolded."""
     result = invoke("new", "demo", "-d", str(tmp_path), block_optional=True)
     assert result.returncode == 0, result.stderr
     root = tmp_path / "demo"
     assert not (root / ".tradelearn/config.yaml").exists()
-    skill = root / "_agents/skills/tradelearn-research/SKILL.md"
-    assert skill.is_file()
-    assert (
-        "ResearchRun" in skill.read_text() and "tradelearn.integrations.mlflow" in skill.read_text()
-    )
+    assert sorted(p.name for p in (root / "notebooks").iterdir()) == [
+        "01_explore.ipynb", "02_factor.ipynb", "03_backtest.ipynb",
+    ]
+    for hidden in (".agents", "_agents", ".claude"):
+        assert not (root / hidden).exists()
     compile((root / "strategy.py").read_text(), str(root / "strategy.py"), "exec")
     assert invoke("new", "demo", "-d", str(tmp_path)).returncode != 0
+
+
+def test_skills_command_is_retired():
+    assert invoke("skills").returncode == 2
 
 
 def test_mcp_public_implementation_is_retired():
@@ -99,54 +105,3 @@ def test_doctor_optional_absence_succeeds_but_missing_base_is_failure(monkeypatc
     monkeypatch.setattr(cli.importlib.metadata, "version", missing)
     assert cli._doctor(None) == 1
     assert "MISSING (base requirement)" in capsys.readouterr().out
-
-
-def test_new_exposes_one_skill_at_every_agent_tool_location(tmp_path):
-    """Codex reads .agents/skills, Claude Code .claude/skills, Jupyter _agents/skills."""
-    assert invoke("new", "demo", "-d", str(tmp_path), block_optional=True).returncode == 0
-    root = tmp_path / "demo"
-    real = root / ".agents/skills/tradelearn-research/SKILL.md"
-    assert real.is_file() and not real.is_symlink()
-    for mirror in ("_agents/skills/tradelearn-research", ".claude/skills/tradelearn-research"):
-        assert (root / mirror / "SKILL.md").read_text() == real.read_text()
-    sources = {p.resolve() for p in root.rglob("SKILL.md")}
-    assert sources == {real.resolve()}, "the Skill must have a single source of truth"
-
-
-def test_skills_reports_stale_after_upgrade_and_refresh_rewrites_it(tmp_path):
-    from tradelearn import __version__
-
-    assert invoke("new", "demo", "-d", str(tmp_path), block_optional=True).returncode == 0
-    root = tmp_path / "demo"
-    real = root / ".agents/skills/tradelearn-research/SKILL.md"
-
-    current = invoke("skills", "-d", str(root), block_optional=True)
-    assert current.returncode == 0 and "status=current" in current.stdout
-
-    real.write_text(
-        real.read_text().replace(
-            f"Target package: trade-learn {__version__}", "Target package: trade-learn 0.0.1"
-        )
-    )
-    stale = invoke("skills", "-d", str(root), block_optional=True)
-    assert stale.returncode == 1 and "stale" in stale.stdout
-
-    assert invoke("skills", "-d", str(root), "--refresh", block_optional=True).returncode == 0
-    assert f"Target package: trade-learn {__version__}" in real.read_text()
-    assert (root / "_agents/skills/tradelearn-research/SKILL.md").read_text() == real.read_text()
-
-
-def test_skills_without_a_project_reports_missing(tmp_path):
-    missing = invoke("skills", "-d", str(tmp_path), block_optional=True)
-    assert missing.returncode == 1 and "not found" in missing.stdout
-
-
-def test_published_skill_matches_the_one_shipped_in_the_package():
-    """The copy offered for download must not drift from the packaged template."""
-    from tradelearn import __version__
-
-    repo = Path(__file__).resolve().parents[2]
-    packaged = repo / "tradelearn/cli/skill_template.md"
-    published = repo / ".agents/skills/tradelearn-research/SKILL.md"
-    assert published.read_text() == packaged.read_text()
-    assert f"Target package: trade-learn {__version__}." in published.read_text()
