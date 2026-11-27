@@ -515,10 +515,10 @@ def _win_rate_pct(total_trades: float, wins: float) -> float:
     return wins / total_trades * 100.0 if total_trades else float("nan")
 
 
-def _summary_pnl(positions: pd.DataFrame) -> tuple[float, float, float]:
-    """Read realized/unrealized pnl and margin from the last positions row."""
+def _summary_pnl(positions: pd.DataFrame) -> tuple[float, float]:
+    """Read realized P&L and margin from the last fill-time position row."""
     if positions is None or positions.empty:
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0
     last = positions.iloc[-1]
 
     def _f(value: Any) -> float:
@@ -534,9 +534,25 @@ def _summary_pnl(positions: pd.DataFrame) -> tuple[float, float, float]:
 
     return (
         _f(last.get("realized_pnl", 0.0)),
-        _f(last.get("unrealized_pnl", 0.0)),
         _f(last.get("margin_used", 0.0)),
     )
+
+
+def _final_unrealized_pnl(strategy: Any) -> float:
+    """Mark open broker positions using each feed's last observed finite close."""
+    pnl = 0.0
+    for data in strategy.datas:
+        position = strategy.broker.getposition(data)
+        if not position.size:
+            continue
+        for age in range(len(data.close)):
+            close = float(data.close[-age])
+            if math.isfinite(close):
+                pnl += (close - position.price) * position.size * strategy.broker.get_mult(data)
+                break
+        else:
+            return math.nan
+    return pnl
 
 
 def _canonical_drawdown(returns: pd.Series) -> float:
@@ -750,6 +766,7 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
     if getattr(runtime,'_delivery_equity_samples',None) is not None:
         index=index[:len(runtime._delivery_equity_samples)]
 
+    unrealized_pnl = _final_unrealized_pnl(strategy)
     if lazy_artifacts:
         final_cash = float(strategy.broker.getcash())
         final_value = float(strategy.broker.getvalue())
@@ -761,7 +778,6 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
         eager_positions = _positions_frame(strategy, eager_fills, index)
         eager_equity, eager_returns = _build_equity_returns(strategy, index, eager_fills, frame)
         total_trades, winning_trades = _trade_summary(strategy.broker, eager_trades)
-        realized_pnl, unrealized_pnl, margin_used = _summary_pnl(eager_positions)
 
         def equity_factory() -> pd.Series:
             return eager_equity
@@ -813,6 +829,7 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
             "avg_trade_duration": ext_trade_stats["avg_trade_duration"],
             "sqn": ext_trade_stats["sqn"],
             "kelly_criterion": ext_trade_stats["kelly_criterion"],
+            "final_unrealized_pnl": unrealized_pnl,
         })
         
         stats = Stats(
@@ -836,7 +853,7 @@ def _build_stats(cerebro: Any, strategy: Any, *, lazy_artifacts: bool = False) -
     final_cash = float(strategy.broker.getcash())
     final_value = float(strategy.broker.getvalue())
     total_trades, winning_trades = _trade_summary(strategy.broker, trades)
-    realized_pnl, unrealized_pnl, margin_used = _summary_pnl(positions)
+    realized_pnl, margin_used = _summary_pnl(positions)
     trade_metrics = _summary_trade_metrics(trades)
     dd_stats = _summary_drawdown_stats(equity)
     initial_cash = float(strategy.broker._cash)

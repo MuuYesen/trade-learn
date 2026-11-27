@@ -15,6 +15,8 @@ Engine 和 Lite 都使用同一套 `Stats` 口径。Lite 返回 `LiteStats`，�
 | `orders` | 订单明细 |
 | `config` | 本次运行配置 |
 
+`summary["final_unrealized_pnl"]` 对回测结束时的所有未平仓头寸按各自最后一个有效收盘价估值，再汇总多空盈亏。没有未平仓头寸时为零。有未平仓头寸缺少有效收盘价时为 `NaN`。`positions` 保留逐笔成交时的持仓快照。
+
 Lite:
 
 ```python
